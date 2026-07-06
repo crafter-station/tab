@@ -142,7 +142,7 @@ function rowToDevice(row: Record<string, unknown>): Device {
     appVersion: String(row.app_version),
     createdAt: new Date(String(row.created_at)),
     lastSeenAt: new Date(String(row.last_seen_at)),
-    revoked: Boolean(row.revoked),
+    revoked: row.revoked === true || row.revoked === 1 || row.revoked === "1",
   };
 }
 

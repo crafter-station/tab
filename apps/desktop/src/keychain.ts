@@ -1,7 +1,7 @@
-import { exec } from "node:child_process";
+import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-const execAsync = promisify(exec);
+const execFileAsync = promisify(execFile);
 
 export interface Keychain {
   set(service: string, account: string, value: string): Promise<void>;
@@ -13,15 +13,27 @@ export function createMacOSKeychain(): Keychain {
   return {
     async set(service, account, value) {
       // -U updates an existing item so the call is idempotent.
-      await execAsync(
-        `security add-generic-password -s "${service}" -a "${account}" -w "${value.replace(/"/g, '\\"')}" -U`,
-      );
+      await execFileAsync("security", [
+        "add-generic-password",
+        "-s",
+        service,
+        "-a",
+        account,
+        "-w",
+        value,
+        "-U",
+      ]);
     },
     async get(service, account) {
       try {
-        const { stdout } = await execAsync(
-          `security find-generic-password -s "${service}" -a "${account}" -w`,
-        );
+        const { stdout } = await execFileAsync("security", [
+          "find-generic-password",
+          "-s",
+          service,
+          "-a",
+          account,
+          "-w",
+        ]);
         return stdout.trim() || null;
       } catch {
         return null;
@@ -29,9 +41,13 @@ export function createMacOSKeychain(): Keychain {
     },
     async remove(service, account) {
       try {
-        await execAsync(
-          `security delete-generic-password -s "${service}" -a "${account}"`,
-        );
+        await execFileAsync("security", [
+          "delete-generic-password",
+          "-s",
+          service,
+          "-a",
+          account,
+        ]);
       } catch {
         // Ignore failures when the item does not exist.
       }
