@@ -66,7 +66,8 @@ describe("Tabb monorepo bootstrap", () => {
 
     assert.deepEqual(rootPackage.workspaces, expectedWorkspaces);
     assert.equal(rootPackage.scripts.typecheck, "tsc -p tsconfig.json --noEmit");
-    assert.equal(rootPackage.scripts.test, "node --test tests/*.test.mjs");
+    assert.match(rootPackage.scripts.test, /node --test tests\/\*\.test\.mjs/);
+    assert.match(rootPackage.scripts.test, /bun test/);
     assert.equal(rootPackage.scripts.lint, "tsc -p tsconfig.json --noEmit");
 
     for (const workspace of workspaceEntrypoints) {

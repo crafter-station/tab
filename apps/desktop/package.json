@@ -2,5 +2,8 @@
   "name": "@tabb/desktop",
   "type": "module",
   "private": true,
-  "main": "src/index.ts"
+  "main": "src/main.ts",
+  "dependencies": {
+    "electron": "^43.0.0"
+  }
 }
