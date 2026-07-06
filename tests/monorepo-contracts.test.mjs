@@ -18,6 +18,22 @@ const workspaceEntrypoints = [
   "packages/effect-services",
 ];
 
+const contractReferences = [
+  /SuggestionContextSourceSchema/,
+  /RedactionSummarySchema/,
+  /SuggestionRequestSchema/,
+  /SuggestionResponseSchema/,
+  /ApiSuccessResponseSchema/,
+  /ApiErrorResponseSchema/,
+  /ApiResponseSchema/,
+  /z\.discriminatedUnion\("status"/,
+  /contextSource: SuggestionContextSourceSchema/,
+  /redaction: RedactionSummarySchema/,
+  /suggestions: z\.array/,
+  /status: z\.literal\("ok"\)/,
+  /status: z\.literal\("error"\)/,
+];
+
 function readJson(path) {
   return JSON.parse(readFileSync(join(root, path), "utf8"));
 }
@@ -43,19 +59,10 @@ describe("Tabb monorepo bootstrap", () => {
 
   it("keeps shared contracts and contributor references aligned with the PRD", () => {
     const contracts = readText("packages/contracts/src/index.ts");
-    assert.match(contracts, /SuggestionContextSourceSchema/);
-    assert.match(contracts, /RedactionSummarySchema/);
-    assert.match(contracts, /SuggestionRequestSchema/);
-    assert.match(contracts, /SuggestionResponseSchema/);
-    assert.match(contracts, /ApiSuccessResponseSchema/);
-    assert.match(contracts, /ApiErrorResponseSchema/);
-    assert.match(contracts, /ApiResponseSchema/);
-    assert.match(contracts, /z\.discriminatedUnion\("status"/);
-    assert.match(contracts, /contextSource: SuggestionContextSourceSchema/);
-    assert.match(contracts, /redaction: RedactionSummarySchema/);
-    assert.match(contracts, /suggestions: z\.array/);
-    assert.match(contracts, /status: z\.literal\("ok"\)/);
-    assert.match(contracts, /status: z\.literal\("error"\)/);
+
+    for (const contractReference of contractReferences) {
+      assert.match(contracts, contractReference);
+    }
 
     const redaction = readText("packages/redaction/src/index.ts");
     assert.match(redaction, /redactSensitiveText/);

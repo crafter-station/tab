@@ -64,7 +64,9 @@ export const ApiResponseSchema = z.discriminatedUnion("status", [
 ]);
 
 export type ActiveApplication = z.infer<typeof ActiveApplicationSchema>;
-export type SuggestionContextSource = z.infer<typeof SuggestionContextSourceSchema>;
+export type SuggestionContextSource = z.infer<
+  typeof SuggestionContextSourceSchema
+>;
 export type RedactionSummary = z.infer<typeof RedactionSummarySchema>;
 export type SuggestionRequest = z.infer<typeof SuggestionRequestSchema>;
 export type Suggestion = z.infer<typeof SuggestionSchema>;
