@@ -6,6 +6,7 @@ const workspaceRoot = path.resolve(desktopRoot, "../..");
 const devRoot = path.join(desktopRoot, ".dev");
 const devSrc = path.join(devRoot, "src");
 const devAssets = path.join(devRoot, "assets");
+const rendererHtmlPath = path.join(desktopRoot, "dist", "renderer", "index.html");
 
 async function buildEntry(entrypoint: string, outfile: string, format: "esm" | "cjs") {
   const result = await Bun.build({
@@ -32,11 +33,23 @@ async function copyRuntimeFiles() {
     JSON.stringify({ name: "tabb-dev", productName: "Tabb", type: "module", main: "src/main.js" }, null, 2),
   );
 
-  for (const fileName of ["index.html", "onboarding.html", "settings.html"]) {
+  for (const fileName of ["onboarding.html", "settings.html"]) {
     await Bun.write(
       path.join(devSrc, fileName),
       Bun.file(path.join(desktopRoot, "src", fileName)),
     );
+  }
+}
+
+async function buildRenderer() {
+  const child = Bun.spawn(["bunx", "electron-vite", "build"], {
+    cwd: desktopRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await child.exited;
+  if (exitCode !== 0) {
+    throw new Error("Failed to build desktop renderer");
   }
 }
 
@@ -72,6 +85,7 @@ async function main() {
   await Promise.all([
     buildEntry(path.join(desktopRoot, "src", "main.ts"), path.join(devSrc, "main.js"), "esm"),
     buildEntry(path.join(desktopRoot, "src", "preload.ts"), path.join(devSrc, "preload.cjs"), "cjs"),
+    buildRenderer(),
     copyRuntimeFiles(),
   ]);
 
@@ -86,6 +100,7 @@ async function main() {
     env: {
       ...process.env,
       TABB_PRELOAD_PATH: path.join(devSrc, "preload.cjs"),
+      TABB_RENDERER_PATH: rendererHtmlPath,
       TABB_TRAY_ICON_PATH: trayIconPath,
       ...(inputTapPath ? { TABB_INPUT_TAP_PATH: inputTapPath } : {}),
       TABB_DEVICE_ID: process.env.TABB_DEVICE_ID ?? "dev-device",

@@ -6,18 +6,32 @@
   "main": "dist/main.cjs",
   "scripts": {
     "dev": "bun scripts/dev.ts",
-    "build": "bun run build:main && bun run build:preload && bun run build:native && bun run build:copy",
+    "build": "bun run build:main && bun run build:preload && bun run build:renderer && bun run build:native && bun run build:copy",
     "build:main": "bun build src/main.ts --outfile=dist/main.cjs --target=node --format=cjs --external electron",
     "build:preload": "bun build src/preload.ts --outfile=dist/preload.cjs --target=node --format=cjs --external electron",
+    "build:renderer": "electron-vite build",
     "build:native": "bun scripts/build-native.ts",
-    "build:copy": "cp src/index.html src/settings.html src/onboarding.html dist/ && cp -R assets dist/",
+    "build:copy": "cp src/settings.html src/onboarding.html dist/ && cp -R assets dist/",
     "dev:permissions": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false bunx electron-builder --mac dir && open -n release/mac*/Tabb.app --args --permission-debug --typing-debug",
     "dist": "bun run build && bunx electron-builder",
     "dist:mac": "bun run build && bunx electron-builder --mac"
   },
+  "dependencies": {
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.562.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tailwind-merge": "^3.4.0"
+  },
   "devDependencies": {
     "@electron/notarize": "^3.0.1",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "@vitejs/plugin-react": "^4.6.0",
     "electron": "^43.0.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "vite": "^7.0.4"
   }
 }

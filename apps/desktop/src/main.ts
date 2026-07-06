@@ -34,6 +34,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
 const runtimeRoot = app.isPackaged ? path.join(app.getAppPath(), "dist") : __dirname;
 const PRELOAD_PATH = process.env.TABB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
+const RENDERER_PATH = process.env.TABB_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "index.html");
 const TRAY_ICON_PATH = process.env.TABB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
 const INPUT_TAP_PATH = process.env.TABB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
@@ -100,6 +101,13 @@ const DEBUG_TYPING_DEBOUNCE_MS = 300;
 const DEBUG_TYPING_HIDE_MS = 3_600;
 const DEBUG_TYPING_WORD_LIMIT = 100;
 const CLIPBOARD_RESTORE_DELAY_MS = 250;
+const OVERLAY_WIDTH = 560;
+const OVERLAY_SUGGESTION_HEIGHT = 64;
+const OVERLAY_DEBUG_WIDTH = 540;
+const OVERLAY_DEBUG_HEIGHT = 220;
+const OVERLAY_BOTTOM_MARGIN = 8;
+const OVERLAY_POSITION_CHECK_MS = 400;
+const OVERLAY_HIT_TEST_MS = 50;
 const SUGGESTION_VISIBLE_MS = 4_000;
 
 const authClient = createDesktopAuthClient({
@@ -234,15 +242,135 @@ function getTypedContextSource(): SuggestionContextSource {
   return "typed_text";
 }
 
+function getCurrentDisplay(): Electron.Display {
+  return screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+}
+
+function getSuggestionOverlayBounds(height = OVERLAY_SUGGESTION_HEIGHT): Electron.Rectangle {
+  const display = getCurrentDisplay();
+  const { x, y, width, height: workAreaHeight } = display.workArea;
+
+  return {
+    width: OVERLAY_WIDTH,
+    height,
+    x: x + Math.round((width - OVERLAY_WIDTH) / 2),
+    y: y + workAreaHeight - height - OVERLAY_BOTTOM_MARGIN,
+  };
+}
+
+function getDebugOverlayBounds(): Electron.Rectangle {
+  const display = getCurrentDisplay();
+  const { x, y, width } = display.workArea;
+
+  return {
+    width: OVERLAY_DEBUG_WIDTH,
+    height: OVERLAY_DEBUG_HEIGHT,
+    x: x + Math.round((width - OVERLAY_DEBUG_WIDTH) / 2),
+    y: y + 24,
+  };
+}
+
+function configureFloatingPanel(win: BrowserWindow): void {
+  if (process.platform !== "darwin") return;
+
+  win.setVisibleOnAllWorkspaces(true, {
+    visibleOnFullScreen: true,
+    skipTransformProcessType: true,
+  });
+  win.setAlwaysOnTop(true, "screen-saver");
+}
+
+function isBoundsOnScreen(bounds: Electron.Rectangle): boolean {
+  return screen.getAllDisplays().some((display) => {
+    const workArea = display.workArea;
+    const overlapsX = bounds.x < workArea.x + workArea.width && bounds.x + bounds.width > workArea.x;
+    const overlapsY = bounds.y < workArea.y + workArea.height && bounds.y + bounds.height > workArea.y;
+    return overlapsX && overlapsY;
+  });
+}
+
+function installOverlayPositionTracking(win: BrowserWindow, getBounds: () => Electron.Rectangle): void {
+  const reposition = () => {
+    if (win.isDestroyed()) return;
+    const currentBounds = win.getBounds();
+    if (!isBoundsOnScreen(currentBounds) || screen.getAllDisplays().length > 1) {
+      win.setBounds(getBounds(), false);
+    }
+  };
+
+  const interval = setInterval(reposition, OVERLAY_POSITION_CHECK_MS);
+  const onDisplayChanged = () => reposition();
+  screen.on("display-added", onDisplayChanged);
+  screen.on("display-removed", onDisplayChanged);
+  screen.on("display-metrics-changed", onDisplayChanged);
+  win.on("closed", () => {
+    clearInterval(interval);
+    screen.off("display-added", onDisplayChanged);
+    screen.off("display-removed", onDisplayChanged);
+    screen.off("display-metrics-changed", onDisplayChanged);
+  });
+}
+
+function installAlphaClickThrough(win: BrowserWindow): void {
+  win.setIgnoreMouseEvents(true, { forward: true });
+
+  let lastIgnoreState = true;
+  let captureInFlight = false;
+  const interval = setInterval(async () => {
+    if (win.isDestroyed() || captureInFlight) return;
+
+    const cursor = screen.getCursorScreenPoint();
+    const bounds = win.getBounds();
+    const inside =
+      cursor.x >= bounds.x &&
+      cursor.x < bounds.x + bounds.width &&
+      cursor.y >= bounds.y &&
+      cursor.y < bounds.y + bounds.height;
+
+    if (!inside) {
+      if (!lastIgnoreState) {
+        win.setIgnoreMouseEvents(true, { forward: true });
+        lastIgnoreState = true;
+      }
+      return;
+    }
+
+    captureInFlight = true;
+    try {
+      const image = await win.webContents.capturePage({
+        x: Math.floor(cursor.x - bounds.x),
+        y: Math.floor(cursor.y - bounds.y),
+        width: 1,
+        height: 1,
+      });
+      const bitmap = image.toBitmap();
+      const alpha = bitmap.length >= 4 ? (bitmap[3] ?? 0) : 0;
+
+      if (alpha > 0 && lastIgnoreState) {
+        win.setIgnoreMouseEvents(false);
+        lastIgnoreState = false;
+      } else if (alpha === 0 && !lastIgnoreState) {
+        win.setIgnoreMouseEvents(true, { forward: true });
+        lastIgnoreState = true;
+      }
+    } catch {
+      if (!lastIgnoreState) {
+        win.setIgnoreMouseEvents(true, { forward: true });
+        lastIgnoreState = true;
+      }
+    } finally {
+      captureInFlight = false;
+    }
+  }, OVERLAY_HIT_TEST_MS);
+
+  win.on("closed", () => clearInterval(interval));
+}
+
 function createOverlayWindow(): BrowserWindow {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height } = primaryDisplay.workAreaSize;
+  const bounds = getSuggestionOverlayBounds();
 
   const win = new BrowserWindow({
-    width: 520,
-    height: 40,
-    x: Math.round(width / 2 - 260),
-    y: height - 60,
+    ...bounds,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -250,25 +378,30 @@ function createOverlayWindow(): BrowserWindow {
     focusable: false,
     hasShadow: false,
     show: false,
+    resizable: false,
+    fullscreenable: false,
+    hiddenInMissionControl: true,
+    type: process.platform === "darwin" ? "panel" : undefined,
+    backgroundColor: "#00000000",
     webPreferences: {
       preload: PRELOAD_PATH,
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
-  win.loadFile(path.join(runtimeRoot, "index.html"));
-  win.setIgnoreMouseEvents(false);
+  configureFloatingPanel(win);
+  installOverlayPositionTracking(win, () => getSuggestionOverlayBounds(win.getBounds().height));
+  installAlphaClickThrough(win);
+  win.loadFile(RENDERER_PATH);
   return win;
 }
 
 function createDebugOverlayWindow(): BrowserWindow {
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width } = primaryDisplay.workAreaSize;
+  const bounds = getDebugOverlayBounds();
 
   const win = new BrowserWindow({
-    width: 520,
-    height: 128,
-    x: Math.round(width / 2 - 260),
-    y: 24,
+    ...bounds,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -276,33 +409,34 @@ function createDebugOverlayWindow(): BrowserWindow {
     focusable: false,
     hasShadow: false,
     show: false,
+    resizable: false,
+    fullscreenable: false,
+    hiddenInMissionControl: true,
+    type: process.platform === "darwin" ? "panel" : undefined,
+    backgroundColor: "#00000000",
     webPreferences: {
       preload: PRELOAD_PATH,
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
-  win.loadFile(path.join(runtimeRoot, "index.html"));
-  win.setIgnoreMouseEvents(false);
+  configureFloatingPanel(win);
+  installOverlayPositionTracking(win, getDebugOverlayBounds);
+  win.loadFile(RENDERER_PATH);
+  win.setIgnoreMouseEvents(true, { forward: true });
   return win;
 }
 
 function resizeOverlayWindow(height: number): void {
   if (!overlayWindow) return;
-  const primaryDisplay = screen.getPrimaryDisplay();
-  const { width, height: workAreaHeight } = primaryDisplay.workAreaSize;
-  const overlayWidth = 520;
-  overlayWindow.setBounds({
-    width: overlayWidth,
-    height,
-    x: Math.round(width / 2 - overlayWidth / 2),
-    y: workAreaHeight - height - 20,
-  });
+  overlayWindow.setBounds(getSuggestionOverlayBounds(height), false);
 }
 
 function showOverlay(suggestion: Suggestion): void {
   currentSuggestion = suggestion;
   if (!overlayWindow) return;
-  resizeOverlayWindow(40);
+  resizeOverlayWindow(OVERLAY_SUGGESTION_HEIGHT);
   overlayWindow.webContents.send("suggestion", suggestion);
   overlayWindow.showInactive();
 }
