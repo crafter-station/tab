@@ -31,6 +31,11 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   guard type == .keyDown else { return Unmanaged.passUnretained(event) }
 
   let flags = event.flags
+  let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+  if keyCode == 48 {
+    return Unmanaged.passUnretained(event)
+  }
+
   if flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskHelp) {
     return Unmanaged.passUnretained(event)
   }

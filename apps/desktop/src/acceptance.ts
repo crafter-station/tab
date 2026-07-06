@@ -5,6 +5,7 @@ export type InsertionDependencies = {
   getPreviouslyActiveApplication(): ActiveApplication | null;
   setClipboard(text: string): Promise<string>;
   sendPaste(): Promise<void>;
+  waitForPaste?(): Promise<void>;
   restoreClipboard(previous: string): Promise<void>;
 };
 
@@ -23,6 +24,7 @@ export async function acceptAndInsertSuggestion(deps: InsertionDependencies): Pr
 
   const previousClipboard = await deps.setClipboard(suggestion.text);
   await deps.sendPaste();
+  await deps.waitForPaste?.();
   await deps.restoreClipboard(previousClipboard);
 
   return "inserted";

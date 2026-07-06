@@ -48,6 +48,7 @@ const TERMINAL_BUNDLE_IDS = new Set([
 ]);
 
 let overlayWindow: BrowserWindow | null = null;
+let debugOverlayWindow: BrowserWindow | null = null;
 let suggestionLoop: ReturnType<typeof createSuggestionLoop> | null = null;
 let currentSuggestion: Suggestion | null = null;
 let previouslyActiveApplication: ActiveApplication | null = null;
@@ -98,6 +99,7 @@ const SHOW_DEBUG_TYPING_OVERLAY =
 const DEBUG_TYPING_DEBOUNCE_MS = 300;
 const DEBUG_TYPING_HIDE_MS = 3_600;
 const DEBUG_TYPING_WORD_LIMIT = 100;
+const CLIPBOARD_RESTORE_DELAY_MS = 250;
 
 const authClient = createDesktopAuthClient({
   apiBaseUrl: API_BASE_URL,
@@ -116,6 +118,7 @@ const requestSuggestion = createApiSuggestionClient({
   deviceId: DEVICE_ID,
   appVersion: APP_VERSION,
   platform: process.platform,
+  memoryEnabled: false,
   getState: () => typingContextBuffer.getState(),
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
@@ -164,6 +167,16 @@ const statusService = createDesktopStatusService({
 let currentMemories: PersonalMemory[] = [];
 let debugTypingTimer: ReturnType<typeof setTimeout> | null = null;
 let debugTypingHideTimer: ReturnType<typeof setTimeout> | null = null;
+type DebugApiState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "empty" }
+  | { status: "suggestion"; text: string };
+let debugApiState: DebugApiState = { status: "idle" };
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function refreshMemories(): Promise<void> {
   const memories = await memoryClient.listMemories();
@@ -225,10 +238,36 @@ function createOverlayWindow(): BrowserWindow {
   const { width, height } = primaryDisplay.workAreaSize;
 
   const win = new BrowserWindow({
-    width: 640,
-    height: 52,
-    x: Math.round(width / 2 - 320),
-    y: height - 72,
+    width: 520,
+    height: 40,
+    x: Math.round(width / 2 - 260),
+    y: height - 60,
+    frame: false,
+    transparent: true,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    focusable: false,
+    hasShadow: false,
+    show: false,
+    webPreferences: {
+      preload: PRELOAD_PATH,
+    },
+  });
+
+  win.loadFile(path.join(runtimeRoot, "index.html"));
+  win.setIgnoreMouseEvents(false);
+  return win;
+}
+
+function createDebugOverlayWindow(): BrowserWindow {
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width } = primaryDisplay.workAreaSize;
+
+  const win = new BrowserWindow({
+    width: 520,
+    height: 128,
+    x: Math.round(width / 2 - 260),
+    y: 24,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -250,7 +289,7 @@ function resizeOverlayWindow(height: number): void {
   if (!overlayWindow) return;
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height: workAreaHeight } = primaryDisplay.workAreaSize;
-  const overlayWidth = height > 80 ? 720 : 640;
+  const overlayWidth = 520;
   overlayWindow.setBounds({
     width: overlayWidth,
     height,
@@ -262,26 +301,32 @@ function resizeOverlayWindow(height: number): void {
 function showOverlay(suggestion: Suggestion): void {
   currentSuggestion = suggestion;
   if (!overlayWindow) return;
-  if (debugTypingTimer) {
-    clearTimeout(debugTypingTimer);
-    debugTypingTimer = null;
-  }
-  if (debugTypingHideTimer) {
-    clearTimeout(debugTypingHideTimer);
-    debugTypingHideTimer = null;
-  }
-  resizeOverlayWindow(52);
+  resizeOverlayWindow(40);
   overlayWindow.webContents.send("suggestion", suggestion);
   overlayWindow.showInactive();
 }
 
-function hideOverlay(): void {
+function clearSuggestionOverlay(): void {
   currentSuggestion = null;
   if (!overlayWindow) return;
+  overlayWindow.webContents.send("hide");
+  overlayWindow.hide();
+}
+
+function hideOverlay(): void {
+  clearSuggestionOverlay();
+  if (!debugOverlayWindow) return;
   if (SHOW_DEBUG_TYPING_OVERLAY && typingContextBuffer.getState().context.length > 0) {
     showDebugTypingOverlay();
     return;
   }
+  hideDebugTypingOverlay();
+}
+
+function hideDebugTypingOverlay(): void {
+  if (!debugOverlayWindow) return;
+  debugOverlayWindow.webContents.send("hide");
+  debugOverlayWindow.hide();
   if (debugTypingTimer) {
     clearTimeout(debugTypingTimer);
     debugTypingTimer = null;
@@ -290,15 +335,14 @@ function hideOverlay(): void {
     clearTimeout(debugTypingHideTimer);
     debugTypingHideTimer = null;
   }
-  overlayWindow.hide();
 }
 
 function sendDebugContext(): void {
-  if (!SHOW_DEBUG_TYPING_OVERLAY || !overlayWindow) return;
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
 
   const state = typingContextBuffer.getState();
   const context = getLastWords(state.context, DEBUG_TYPING_WORD_LIMIT);
-  overlayWindow.webContents.send("debug-context", {
+  debugOverlayWindow.webContents.send("debug-context", {
     context,
     wordLimit: DEBUG_TYPING_WORD_LIMIT,
     wordCount: context.length === 0 ? 0 : context.split(/\s+/).length,
@@ -306,36 +350,51 @@ function sendDebugContext(): void {
     app: state.activeApplication?.bundleId ?? null,
     paused: state.paused,
     secureInput: state.secureInput,
+    api: debugApiState,
   });
 }
 
-function showDebugTypingOverlay(): void {
-  if (!SHOW_DEBUG_TYPING_OVERLAY || !overlayWindow || currentSuggestion) return;
-  if (typingContextBuffer.getState().context.length === 0) {
-    overlayWindow.hide();
-    return;
-  }
+function updateDebugApiState(apiState: DebugApiState): void {
+  debugApiState = apiState;
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
+  if (typingContextBuffer.getState().context.length === 0) return;
 
-  if (debugTypingTimer) {
-    clearTimeout(debugTypingTimer);
-  }
-  if (debugTypingHideTimer) {
-    clearTimeout(debugTypingHideTimer);
+  sendDebugContext();
+  debugOverlayWindow.showInactive();
+}
+
+function showDebugTypingOverlay(): void {
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
+  if (SHOW_DEBUG_TYPING_OVERLAY && typingContextBuffer.getState().context.length > 0) {
+    if (debugTypingTimer) {
+      clearTimeout(debugTypingTimer);
+    }
+    if (debugTypingHideTimer) {
+      clearTimeout(debugTypingHideTimer);
+      debugTypingHideTimer = null;
+    }
+    debugTypingTimer = setTimeout(() => {
+      debugTypingTimer = null;
+      if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
+
+      sendDebugContext();
+      debugOverlayWindow.showInactive();
+      debugTypingHideTimer = setTimeout(() => {
+        debugTypingHideTimer = null;
+        debugOverlayWindow?.hide();
+      }, DEBUG_TYPING_HIDE_MS);
+    }, DEBUG_TYPING_DEBOUNCE_MS);
+  } else {
+    debugOverlayWindow.hide();
+    if (debugTypingTimer) {
+      clearTimeout(debugTypingTimer);
+      debugTypingTimer = null;
+    }
+    if (debugTypingHideTimer) {
+      clearTimeout(debugTypingHideTimer);
+    }
     debugTypingHideTimer = null;
   }
-  debugTypingTimer = setTimeout(() => {
-    debugTypingTimer = null;
-    if (!SHOW_DEBUG_TYPING_OVERLAY || !overlayWindow || currentSuggestion) return;
-
-    resizeOverlayWindow(184);
-    sendDebugContext();
-    overlayWindow.showInactive();
-    debugTypingHideTimer = setTimeout(() => {
-      debugTypingHideTimer = null;
-      if (!overlayWindow || currentSuggestion) return;
-      overlayWindow.hide();
-    }, DEBUG_TYPING_HIDE_MS);
-  }, DEBUG_TYPING_DEBOUNCE_MS);
 }
 
 async function acceptCurrentSuggestion(): Promise<void> {
@@ -358,6 +417,11 @@ async function acceptCurrentSuggestion(): Promise<void> {
         await execAsync('osascript -e \'tell application "System Events" to keystroke "v" using command down\'');
       }
     },
+    waitForPaste: async () => {
+      // Some target apps process the paste event after osascript returns. Keep
+      // the suggestion on the pasteboard until the app has consumed Cmd+V.
+      await delay(CLIPBOARD_RESTORE_DELAY_MS);
+    },
     restoreClipboard: async (previous) => {
       clipboard.writeText(previous);
     },
@@ -371,6 +435,7 @@ async function acceptCurrentSuggestion(): Promise<void> {
 
 function clearContextAndHide(): void {
   typingContextBuffer.clear();
+  debugApiState = { status: "idle" };
   if (debugTypingTimer) {
     clearTimeout(debugTypingTimer);
     debugTypingTimer = null;
@@ -451,12 +516,17 @@ async function bootstrap(): Promise<void> {
   // permissions. Tabb deliberately does not request Screen Recording or Full
   // Disk Access; those are out of scope for the MVP per ADR-0037.
   overlayWindow = createOverlayWindow();
+  debugOverlayWindow = SHOW_DEBUG_TYPING_OVERLAY ? createDebugOverlayWindow() : null;
 
   suggestionLoop = createSuggestionLoop({
     getContext: () => typingContextBuffer.getState(),
     requestSuggestion,
     onShowSuggestion: showOverlay,
     onHideSuggestion: hideOverlay,
+    onRequestStarted: () => updateDebugApiState({ status: "loading" }),
+    onRequestFinished: (suggestion) => {
+      updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
+    },
     onSecretLikeContextDetected: () => {
       // Clear the in-memory buffer as soon as secret-like context is detected,
       // before any network call can happen.
@@ -649,6 +719,7 @@ app.on("will-quit", () => {
     app.relaunch({ args: process.argv.slice(1) });
   }
   globalShortcut.unregisterAll();
+  debugOverlayWindow?.close();
   inputTapProcess?.kill();
   typingContextBuffer.clear();
 });
@@ -666,15 +737,19 @@ app.on("activate", () => {
 export function handleTextInput(text: string): void {
   if (observationPaused) return;
   typingContextBuffer.appendText(text, getTypedContextSource());
-  showDebugTypingOverlay();
+  debugApiState = { status: "idle" };
+  clearSuggestionOverlay();
   suggestionLoop?.onContextChanged();
+  showDebugTypingOverlay();
 }
 
 export function handlePastedText(text: string): void {
   if (observationPaused) return;
   typingContextBuffer.appendPastedText(text);
-  showDebugTypingOverlay();
+  debugApiState = { status: "idle" };
+  clearSuggestionOverlay();
   suggestionLoop?.onContextChanged();
+  showDebugTypingOverlay();
 }
 
 export function handleShortcutOrNavigation(): void {
@@ -685,6 +760,7 @@ export function handleActiveApplicationChanged(bundleId: string | null): void {
   if (observationPaused) return;
 
   const activeApp = bundleId ? { bundleId } : null;
+  const previousBundleId = typingContextBuffer.getState().activeApplication?.bundleId ?? null;
 
   // Do not treat Tabb's own windows as the previously active application,
   // otherwise clicking the overlay would paste back into Tabb.
@@ -693,20 +769,29 @@ export function handleActiveApplicationChanged(bundleId: string | null): void {
     previouslyActiveApplication = activeApp;
   }
 
+  if ((activeApp?.bundleId ?? null) === previousBundleId) {
+    return;
+  }
+
   typingContextBuffer.setActiveApplication(activeApp);
-  showDebugTypingOverlay();
+  debugApiState = { status: "idle" };
+  clearSuggestionOverlay();
   suggestionLoop?.onContextChanged();
+  showDebugTypingOverlay();
 }
 
 export function handleSecureInputChanged(active: boolean): void {
   typingContextBuffer.setSecureInput(active);
-  showDebugTypingOverlay();
+  debugApiState = { status: "idle" };
+  clearSuggestionOverlay();
   suggestionLoop?.onContextChanged();
+  showDebugTypingOverlay();
 }
 
 export function handlePauseChanged(active: boolean): void {
   observationPaused = active;
   typingContextBuffer.setPaused(active);
+  debugApiState = { status: "idle" };
   if (active) {
     clearContextAndHide();
   }

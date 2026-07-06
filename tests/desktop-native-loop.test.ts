@@ -118,6 +118,8 @@ describe("desktop native suggestion loop", () => {
           requestSuggestion: overrides.requestSuggestion ?? (async () => ({ id: "s-1", text: " world" })),
           onShowSuggestion: (suggestion: Suggestion) => events.push({ type: "show", payload: suggestion }),
           onHideSuggestion: () => events.push({ type: "hide" }),
+          onRequestStarted: (context: string) => events.push({ type: "requestStarted", payload: context }),
+          onRequestFinished: (suggestion: Suggestion | null) => events.push({ type: "requestFinished", payload: suggestion }),
           debounceMs: 5,
         },
       };
@@ -129,8 +131,28 @@ describe("desktop native suggestion loop", () => {
       loop.onContextChanged();
       expect(events).toHaveLength(0);
       await wait(10);
-      expect(events).toHaveLength(1);
-      expect(events[0].type).toBe("show");
+      expect(events.some((event) => event.type === "show")).toBe(true);
+    });
+
+    it("reports request lifecycle events around suggestion requests", async () => {
+      const { events, deps } = makeDeps();
+      const loop = createSuggestionLoop(deps);
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show"]);
+      expect(events[0].payload).toBe("hello");
+      expect(events[1].payload).toEqual({ id: "s-1", text: " world" });
+    });
+
+    it("reports empty request results without showing a suggestion", async () => {
+      const { events, deps } = makeDeps({ requestSuggestion: async () => null });
+      const loop = createSuggestionLoop(deps);
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished"]);
+      expect(events[1].payload).toBeNull();
     });
 
     it("cancels stale debounced requests when context changes", async () => {
@@ -215,12 +237,13 @@ describe("desktop native suggestion loop", () => {
           return "previous-clipboard";
         },
         sendPaste: async () => calls.push({ type: "sendPaste" }),
+        waitForPaste: async () => calls.push({ type: "waitForPaste" }),
         restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
       });
       expect(result).toBe("inserted");
-      expect(calls.map((c) => c.type)).toEqual(["setClipboard", "sendPaste", "restoreClipboard"]);
+      expect(calls.map((c) => c.type)).toEqual(["setClipboard", "sendPaste", "waitForPaste", "restoreClipboard"]);
       expect(calls[0].value).toBe(" world");
-      expect(calls[2].value).toBe("previous-clipboard");
+      expect(calls[3].value).toBe("previous-clipboard");
     });
 
     it("returns no_suggestion when there is nothing to insert", async () => {

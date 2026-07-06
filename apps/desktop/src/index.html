@@ -27,15 +27,15 @@
 
       #overlay {
         width: 100%;
-        max-width: 640px;
-        padding: 12px 20px;
-        border-radius: 10px;
+        max-width: 520px;
+        padding: 8px 14px;
+        border-radius: 9px;
         background: rgba(28, 28, 30, 0.72);
         backdrop-filter: blur(14px);
         -webkit-backdrop-filter: blur(14px);
         color: #ffffff;
-        font-size: 15px;
-        line-height: 1.35;
+        font-size: 13px;
+        line-height: 1.3;
         text-align: center;
         cursor: pointer;
         user-select: none;
@@ -51,15 +51,13 @@
       }
 
       #hint {
-        margin-top: 4px;
-        font-size: 11px;
-        color: rgba(255, 255, 255, 0.55);
+        display: none;
       }
 
       #overlay.debug {
         text-align: left;
-        padding: 14px 16px;
-        border-radius: 16px;
+        padding: 10px 12px;
+        border-radius: 12px;
         background: linear-gradient(135deg, rgba(8, 13, 22, 0.88), rgba(22, 31, 45, 0.78));
         border-color: rgba(90, 200, 250, 0.3);
       }
@@ -71,8 +69,8 @@
 
       #debug-label {
         display: none;
-        margin-bottom: 8px;
-        font-size: 10px;
+        margin-bottom: 6px;
+        font-size: 9px;
         font-weight: 700;
         letter-spacing: 0.08em;
         text-transform: uppercase;
@@ -81,8 +79,8 @@
 
       #debug-meta {
         display: none;
-        margin-top: 8px;
-        font-size: 10px;
+        margin-top: 6px;
+        font-size: 9px;
         color: rgba(255, 255, 255, 0.48);
         white-space: nowrap;
         overflow: hidden;
@@ -90,16 +88,51 @@
       }
 
       #overlay.debug #suggestion {
-        display: block;
+        display: none;
+      }
+
+      #debug-body {
+        display: none;
+      }
+
+      #overlay.debug #debug-body {
+        display: grid;
+        gap: 6px;
+      }
+
+      .debug-section-label {
+        margin-bottom: 4px;
+        font-size: 8px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.42);
+      }
+
+      #debug-input,
+      #debug-api {
         max-height: 112px;
         overflow: hidden;
         text-align: left;
         white-space: pre-wrap;
         word-break: break-word;
         font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-        font-size: 12.5px;
-        line-height: 1.45;
+        font-size: 11px;
+        line-height: 1.35;
         color: rgba(255, 255, 255, 0.88);
+      }
+
+      #debug-api {
+        max-height: 34px;
+        padding: 6px 8px;
+        border-radius: 8px;
+        background: rgba(90, 200, 250, 0.08);
+        border: 1px solid rgba(90, 200, 250, 0.16);
+        color: rgba(255, 255, 255, 0.92);
+      }
+
+      #debug-api.muted {
+        color: rgba(255, 255, 255, 0.55);
       }
 
       #overlay.debug #debug-label,
@@ -112,7 +145,17 @@
     <div id="overlay">
       <div id="debug-label">Dev typing context</div>
       <div id="suggestion">Tabb is ready</div>
-      <div id="hint">Option+Tab or click to accept</div>
+      <div id="debug-body">
+        <div>
+          <div class="debug-section-label">Captured input</div>
+          <div id="debug-input"></div>
+        </div>
+        <div>
+          <div class="debug-section-label">API response</div>
+          <div id="debug-api" class="muted">Waiting for typing...</div>
+        </div>
+      </div>
+      <div id="hint"></div>
       <div id="debug-meta"></div>
     </div>
     <script>
@@ -120,6 +163,8 @@
       const hintEl = document.getElementById("hint");
       const overlayEl = document.getElementById("overlay");
       const debugMetaEl = document.getElementById("debug-meta");
+      const debugInputEl = document.getElementById("debug-input");
+      const debugApiEl = document.getElementById("debug-api");
       let showingSuggestion = false;
       let latestDebug = null;
       let fadeTimer = null;
@@ -130,7 +175,18 @@
         }
         overlayEl.classList.add("debug");
         overlayEl.classList.remove("fading");
-        suggestionEl.textContent = debug.context || "No captured typing context";
+        debugInputEl.textContent = debug.context || "No captured typing context";
+        const api = debug.api || { status: "idle" };
+        debugApiEl.classList.toggle("muted", api.status !== "suggestion");
+        if (api.status === "loading") {
+          debugApiEl.textContent = "Requesting next tokens...";
+        } else if (api.status === "empty") {
+          debugApiEl.textContent = "No suggestion returned yet.";
+        } else if (api.status === "suggestion") {
+          debugApiEl.textContent = api.text;
+        } else {
+          debugApiEl.textContent = "Waiting for debounce...";
+        }
         hintEl.style.display = "none";
         debugMetaEl.textContent = `last ${debug.wordCount}/${debug.wordLimit} words · ${debug.source} · ${debug.app || "no active app"}${debug.secureInput ? " · secure input" : ""}${debug.paused ? " · paused" : ""}`;
         fadeTimer = setTimeout(() => {
@@ -148,7 +204,7 @@
           }
           overlayEl.classList.remove("debug", "fading");
           suggestionEl.textContent = suggestion.text;
-          hintEl.style.display = "block";
+          hintEl.style.display = "none";
           debugMetaEl.textContent = "";
         });
 
@@ -161,18 +217,17 @@
 
         window.tabb.onHide(() => {
           showingSuggestion = false;
-          if (latestDebug && latestDebug.context) {
-            renderDebug(latestDebug);
-          } else {
-            overlayEl.classList.remove("debug");
-            suggestionEl.textContent = "";
-            hintEl.style.display = "none";
-            debugMetaEl.textContent = "";
-          }
+          latestDebug = null;
+          overlayEl.classList.remove("debug", "fading");
+          suggestionEl.textContent = "";
+          hintEl.style.display = "none";
+          debugMetaEl.textContent = "";
         });
 
         overlayEl.addEventListener("click", () => {
-          window.tabb.acceptSuggestion();
+          if (showingSuggestion) {
+            window.tabb.acceptSuggestion();
+          }
         });
       }
     </script>
