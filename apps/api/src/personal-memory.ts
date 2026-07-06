@@ -28,22 +28,26 @@ function toISOTimestamp(date: Date): string {
   return date.toISOString();
 }
 
+function createMemoryRecord(input: CreatePersonalMemoryInput): PersonalMemory {
+  const now = toISOTimestamp(new Date());
+  return {
+    id: crypto.randomUUID(),
+    userId: input.userId,
+    content: input.content,
+    category: input.category,
+    source: input.source,
+    sensitivity: input.sensitivity,
+    active: input.active ?? true,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   private memories = new Map<string, PersonalMemory>();
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
-    const now = new Date();
-    const memory: PersonalMemory = {
-      id: crypto.randomUUID(),
-      userId: input.userId,
-      content: input.content,
-      category: input.category,
-      source: input.source,
-      sensitivity: input.sensitivity,
-      active: input.active ?? true,
-      createdAt: toISOTimestamp(now),
-      updatedAt: toISOTimestamp(now),
-    };
+    const memory = createMemoryRecord(input);
     this.memories.set(memory.id, memory);
     return memory;
   }
@@ -61,10 +65,6 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   async deleteMemory(id: string): Promise<boolean> {
     return this.memories.delete(id);
   }
-}
-
-function asD1Database(db: unknown): D1DatabaseLike {
-  return db as D1DatabaseLike;
 }
 
 function rowToMemory(row: Record<string, unknown>): PersonalMemory {
@@ -90,7 +90,7 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
   private db: D1DatabaseLike;
 
   constructor(db: unknown) {
-    this.db = asD1Database(db);
+    this.db = db as D1DatabaseLike;
   }
 
   async ensureTables(): Promise<void> {
@@ -111,19 +111,7 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
   }
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
-    const id = crypto.randomUUID();
-    const now = new Date();
-    const memory: PersonalMemory = {
-      id,
-      userId: input.userId,
-      content: input.content,
-      category: input.category,
-      source: input.source,
-      sensitivity: input.sensitivity,
-      active: input.active ?? true,
-      createdAt: toISOTimestamp(now),
-      updatedAt: toISOTimestamp(now),
-    };
+    const memory = createMemoryRecord(input);
 
     await this.db
       .prepare(
@@ -203,9 +191,12 @@ function normalizeTokens(text: string): Set<string> {
 }
 
 function hasSharedSignificantToken(a: string, b: string): boolean {
-  const tokensA = normalizeTokens(a);
-  if (tokensA.size === 0) return false;
-  return Array.from(normalizeTokens(b)).some((token) => tokensA.has(token));
+  const sourceTokens = normalizeTokens(a);
+  if (sourceTokens.size === 0) return false;
+
+  return Array.from(normalizeTokens(b)).some((token) =>
+    sourceTokens.has(token),
+  );
 }
 
 function isMemoryRelevant(
@@ -262,8 +253,7 @@ export class PersonalMemoryService {
       return [];
     }
 
-    const memories = await this.storage.listMemoriesByUser(input.userId);
-    const relevant = memories
+    return (await this.storage.listMemoriesByUser(input.userId))
       .filter((memory) =>
         isMemoryRelevant(
           memory,
@@ -276,7 +266,5 @@ export class PersonalMemoryService {
           new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
       )
       .slice(0, this.maxRelevantMemories);
-
-    return relevant;
   }
 }
