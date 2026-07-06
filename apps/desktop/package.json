@@ -2,8 +2,22 @@
   "name": "@tabb/desktop",
   "type": "module",
   "private": true,
-  "main": "src/main.ts",
+  "version": "0.1.0",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "dev": "bun run build && electron .",
+    "build": "bun run build:main && bun run build:preload && bun run build:copy",
+    "build:main": "bun build src/main.ts --outdir=dist --target=node --format=cjs --packages=external",
+    "build:preload": "bun build src/preload.ts --outdir=dist --target=node --format=cjs --packages=external",
+    "build:copy": "cp src/index.html src/settings.html src/onboarding.html dist/ && cp -R assets dist/",
+    "dist": "bun run build && bunx electron-builder",
+    "dist:mac": "bun run build && bunx electron-builder --mac"
+  },
   "dependencies": {
     "electron": "^43.0.0"
+  },
+  "devDependencies": {
+    "@electron/notarize": "^3.0.1",
+    "electron-builder": "^26.0.12"
   }
 }

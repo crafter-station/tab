@@ -11,6 +11,8 @@ export type WebAppConfig = {
   apiBaseUrl: string;
   fetch?: typeof globalThis.fetch;
   appName?: string;
+  macDownloadUrl?: string;
+  latestVersion?: string;
 };
 
 type User = {
@@ -148,6 +150,13 @@ function htmlErrorPage(
   return html(layout(title, `<p class="error">${message}</p>`, { user }));
 }
 
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json; charset=utf-8" },
+  });
+}
+
 function routeSegment(path: string, index: number): string | undefined {
   const segment = path.split("/")[index];
   return segment ? decodeURIComponent(segment) : undefined;
@@ -164,6 +173,14 @@ export function createWebApp(config: WebAppConfig) {
   const baseUrl = config.apiBaseUrl.replace(/\/$/, "");
   const fetchImpl = config.fetch ?? globalThis.fetch;
   const appName = config.appName ?? "Tabb";
+  const macDownloadUrl =
+    config.macDownloadUrl ??
+    process.env.TABB_MAC_DOWNLOAD_URL ??
+    "https://downloads.tabb.app/tabb.dmg";
+  const latestVersion =
+    config.latestVersion ??
+    process.env.TABB_DESKTOP_LATEST_VERSION ??
+    "0.1.0";
 
   async function apiRequest(
     path: string,
@@ -514,7 +531,7 @@ export function createWebApp(config: WebAppConfig) {
         <h1>Download Tabb for macOS</h1>
         <p>Install the native autocomplete app directly on your Mac.</p>
         <p><a href="/download/tabb.dmg" class="button">Download Tabb.dmg</a></p>
-        <p class="muted"> macOS 14+. Notarization and code signing are handled during release packaging.</p>
+        <p class="muted">Version ${escapeHtml(latestVersion)} · macOS 14+. Notarization and code signing are handled during release packaging.</p>
       </section>`;
     return html(layout(`${appName} Download`, content));
   }
@@ -578,6 +595,18 @@ export function createWebApp(config: WebAppConfig) {
 
       if (path === "/download" && request.method === "GET") {
         return downloadPage();
+      }
+
+      if (path === "/download/tabb.dmg" && request.method === "GET") {
+        return redirect(macDownloadUrl);
+      }
+
+      if (path === "/download/latest.json" && request.method === "GET") {
+        return json({
+          version: latestVersion,
+          url: macDownloadUrl,
+          notes: "",
+        });
       }
 
       return html(layout("Not found", `<h1>Not found</h1><p>The page <code>${escapeHtml(path)}</code> does not exist.</p>`), 404);

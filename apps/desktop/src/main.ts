@@ -26,6 +26,7 @@ import { createOnboardingWindowManager } from "./onboarding-window.ts";
 import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
+import { createUpdateChecker } from "./release.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tabb/contracts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -72,12 +73,13 @@ const settingsWindowManager = createSettingsWindowManager({
 const API_BASE_URL = process.env.TABB_API_BASE_URL ?? "http://localhost:8787";
 const WEB_BASE_URL = process.env.TABB_WEB_BASE_URL ?? "http://localhost:3000";
 const DEVICE_ID = process.env.TABB_DEVICE_ID ?? "device-unknown";
+const APP_VERSION = app.getVersion() || "0.0.0";
 
 const authClient = createDesktopAuthClient({
   apiBaseUrl: API_BASE_URL,
   webBaseUrl: WEB_BASE_URL,
   deviceId: DEVICE_ID,
-  appVersion: app.getVersion() || "0.0.0",
+  appVersion: APP_VERSION,
   platform: process.platform,
   keychain: createMacOSKeychain(),
   openExternal: async (url) => {
@@ -88,7 +90,7 @@ const authClient = createDesktopAuthClient({
 const requestSuggestion = createApiSuggestionClient({
   apiBaseUrl: API_BASE_URL,
   deviceId: DEVICE_ID,
-  appVersion: app.getVersion() || "0.0.0",
+  appVersion: APP_VERSION,
   platform: process.platform,
   getState: () => typingContextBuffer.getState(),
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
@@ -97,6 +99,17 @@ const requestSuggestion = createApiSuggestionClient({
 const memoryClient = createDesktopMemoryClient({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+});
+
+let updateAvailable = false;
+
+const updateChecker = createUpdateChecker({
+  currentVersion: APP_VERSION,
+  feedUrl: `${WEB_BASE_URL}/download/latest.json`,
+  onUpdateAvailable: () => {
+    updateAvailable = true;
+    updateTray();
+  },
 });
 
 const statusService = createDesktopStatusService({
@@ -136,7 +149,7 @@ function updateTrayFromStatus(status: DesktopStatus): void {
   tray?.update(createTrayState(status));
 }
 
-function updateTrayFromPause(): void {
+function updateTray(): void {
   tray?.update(createTrayState(statusService.getCurrentStatus()));
 }
 
@@ -145,6 +158,7 @@ function createTrayState(status: DesktopStatus) {
     paused: observationPaused,
     auth: status.auth,
     quotaExhausted: status.quota?.exhausted ?? false,
+    updateAvailable,
   };
 }
 
@@ -152,7 +166,7 @@ async function togglePause(): Promise<void> {
   observationPaused = !observationPaused;
   typingContextBuffer.setPaused(observationPaused);
   settingsWindowManager.sendPaused(observationPaused);
-  updateTrayFromPause();
+  updateTray();
   if (observationPaused) {
     clearContextAndHide();
   }
@@ -197,7 +211,7 @@ function createOverlayWindow(): BrowserWindow {
     hasShadow: false,
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, "preload.cjs"),
     },
   });
 
@@ -253,6 +267,12 @@ async function acceptCurrentSuggestion(): Promise<void> {
 function clearContextAndHide(): void {
   typingContextBuffer.clear();
   suggestionLoop?.invalidate();
+}
+
+function checkForUpdates(errorMessage: string): void {
+  updateChecker.checkForUpdates().catch((error) => {
+    console.error(errorMessage, error);
+  });
 }
 
 async function bootstrap(): Promise<void> {
@@ -357,7 +377,7 @@ async function bootstrap(): Promise<void> {
   // Tray menu provides always-visible access to settings, quick memory, pause,
   // and sign-in/out without cluttering the overlay.
   tray = createTrayMenu({
-    icon: path.join(__dirname, "../assets/iconTemplate.png"),
+    icon: path.join(__dirname, "assets", "iconTemplate.png"),
     actions: {
       showSettings: () => settingsWindowManager.show(),
       showQuickMemory: () => settingsWindowManager.show(),
@@ -370,9 +390,26 @@ async function bootstrap(): Promise<void> {
       signOut: () => {
         signOut().catch((error) => console.error("Failed to sign out from tray:", error));
       },
+      checkForUpdates: () => {
+        checkForUpdates("Failed to check for updates:");
+      },
+      openDownloadPage: () => {
+        shell.openExternal(`${WEB_BASE_URL}/download`).catch((error) => {
+          console.error("Failed to open download page:", error);
+        });
+      },
       quit: () => app.quit(),
     },
   });
+
+  // Check for updates shortly after launch and then every hour. The initial
+  // check is delayed so it does not block first-launch onboarding.
+  setTimeout(() => {
+    checkForUpdates("Failed initial update check:");
+  }, 60_000);
+  setInterval(() => {
+    checkForUpdates("Failed periodic update check:");
+  }, 60 * 60 * 1_000);
 
   // Poll status so the tray and settings window reflect auth, quota, and
   // connectivity changes without requiring user interaction.

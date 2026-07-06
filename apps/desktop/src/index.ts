@@ -27,3 +27,4 @@ export { createDesktopStatusService, type DesktopStatus } from "./status.ts";
 export { createDesktopMemoryClient } from "./memory-client.ts";
 export { createOnboardingManager, ONBOARDING_PERMISSIONS_COPY, type OnboardingPreferences } from "./onboarding.ts";
 export { createPreferencesManager, createMemoryPreferencesStorage, type DesktopPreferences } from "./preferences.ts";
+export { createUpdateChecker, type UpdateChecker } from "./release.ts";

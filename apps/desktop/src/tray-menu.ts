@@ -1,10 +1,16 @@
-import { Tray, Menu, type NativeImage } from "electron";
+import {
+  Tray,
+  Menu,
+  type MenuItemConstructorOptions,
+  type NativeImage,
+} from "electron";
 import type { DesktopStatus } from "./status.ts";
 
 export type TrayMenuState = {
   paused: boolean;
   auth: DesktopStatus["auth"];
   quotaExhausted: boolean;
+  updateAvailable?: boolean;
 };
 
 export type TrayMenuActions = {
@@ -13,6 +19,8 @@ export type TrayMenuActions = {
   togglePause(): void;
   signIn(): void;
   signOut(): void;
+  checkForUpdates(): void;
+  openDownloadPage(): void;
   quit(): void;
 };
 
@@ -29,6 +37,7 @@ const INITIAL_TRAY_STATE: TrayMenuState = {
   paused: false,
   auth: "sign_in_required",
   quotaExhausted: false,
+  updateAvailable: false,
 };
 
 export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
@@ -47,6 +56,31 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
   function buildContextMenu(state: TrayMenuState): Menu {
     const isSignedIn = state.auth === "signed_in";
     const pauseLabel = state.paused ? "Resume Tabb" : "Pause Tabb";
+    let updateItem: MenuItemConstructorOptions;
+    if (state.updateAvailable) {
+      updateItem = {
+        label: "Update Available",
+        click: deps.actions.openDownloadPage,
+      };
+    } else {
+      updateItem = {
+        label: "Check for Updates",
+        click: deps.actions.checkForUpdates,
+      };
+    }
+
+    let authItem: MenuItemConstructorOptions;
+    if (isSignedIn) {
+      authItem = {
+        label: "Sign Out",
+        click: deps.actions.signOut,
+      };
+    } else {
+      authItem = {
+        label: "Sign In",
+        click: deps.actions.signIn,
+      };
+    }
 
     return Menu.buildFromTemplate([
       {
@@ -68,15 +102,9 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
         click: deps.actions.togglePause,
       },
       { type: "separator" },
-      isSignedIn
-        ? {
-            label: "Sign Out",
-            click: deps.actions.signOut,
-          }
-        : {
-            label: "Sign In",
-            click: deps.actions.signIn,
-          },
+      updateItem,
+      { type: "separator" },
+      authItem,
       { type: "separator" },
       {
         label: "Quit",
