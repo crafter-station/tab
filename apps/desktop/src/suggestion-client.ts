@@ -23,7 +23,7 @@ export type ApiSuggestionClientDependencies = {
 };
 
 function buildContextHash(state: TypingContextState, context: string): string {
-  return `${state.activeApplication?.bundleId ?? "none"}:${context}:${state.secureInput}`;
+  return `${state.activeApplication?.bundleId ?? "none"}:${state.activeApplication?.windowId ?? "window-unknown"}:${context}:${state.secureInput}`;
 }
 
 function buildSuggestionRequest(

@@ -43,7 +43,7 @@ describe("desktop API suggestion client", () => {
     expect(suggestion?.text).toBe(" world");
     expect(captured.url).toBe("http://localhost:8787/suggestions");
     const request = SuggestionRequestSchema.parse(captured.body);
-    expect(request.contextHash).toBe("com.apple.TextEdit:hello:false");
+    expect(request.contextHash).toBe("com.apple.TextEdit:window-unknown:hello:false");
   });
 
   it("can disable memories in the suggestion request", async () => {

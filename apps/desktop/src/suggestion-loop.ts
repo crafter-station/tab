@@ -12,7 +12,7 @@ export type TypingContextSnapshot = {
 export type SuggestionLoopState =
   | { status: "idle" }
   | { status: "debouncing"; timer: ReturnType<typeof setTimeout>; contextHash: string }
-  | { status: "showing"; suggestion: Suggestion; contextHash: string };
+  | { status: "showing"; suggestion: Suggestion; contextHash: string; expiryTimer: ReturnType<typeof setTimeout> };
 
 export type SuggestionLoopDependencies = {
   getContext(): TypingContextSnapshot;
@@ -23,10 +23,11 @@ export type SuggestionLoopDependencies = {
   onRequestFinished?: (suggestion: Suggestion | null) => void;
   onSecretLikeContextDetected?: () => void;
   debounceMs: number;
+  maxVisibleMs?: number;
 };
 
 function contextHash(snapshot: TypingContextSnapshot): string {
-  return `${snapshot.activeApplication?.bundleId ?? "none"}:${snapshot.context}:${snapshot.secureInput}`;
+  return `${snapshot.activeApplication?.bundleId ?? "none"}:${snapshot.activeApplication?.windowId ?? "window-unknown"}:${snapshot.context}:${snapshot.secureInput}`;
 }
 
 function shouldSuppressSuggestions(snapshot: TypingContextSnapshot): boolean {
@@ -43,6 +44,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
 
   function hideIfShowing(): void {
     if (state.status === "showing") {
+      clearTimeout(state.expiryTimer);
       deps.onHideSuggestion();
     }
   }
@@ -110,7 +112,15 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
-        state = { status: "showing", suggestion, contextHash: hash };
+        const expiryTimer = setTimeout(() => {
+          if (state.status !== "showing" || state.contextHash !== hash) {
+            return;
+          }
+          deps.onHideSuggestion();
+          state = { status: "idle" };
+        }, deps.maxVisibleMs ?? 4_000);
+
+        state = { status: "showing", suggestion, contextHash: hash, expiryTimer };
         deps.onShowSuggestion(suggestion);
       }, deps.debounceMs),
     };

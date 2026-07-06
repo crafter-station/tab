@@ -46,6 +46,11 @@ function isPasswordManager(bundleId: string | null | undefined): boolean {
   return PASSWORD_MANAGER_BUNDLE_ID_PATTERNS.some((id) => normalizedBundleId.includes(id));
 }
 
+function activeApplicationKey(app: ActiveApplication | null): string | null {
+  if (!app) return null;
+  return `${app.bundleId}:${app.windowId ?? "window-unknown"}`;
+}
+
 export function getLastWords(text: string, maxWords: number): string {
   const words = text.trim().split(/\s+/).filter(Boolean);
   if (words.length <= maxWords) return words.join(" ");
@@ -98,7 +103,7 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
     },
     setActiveApplication(app) {
       if (paused) return;
-      if (app?.bundleId !== activeApplication?.bundleId) {
+      if (activeApplicationKey(app) !== activeApplicationKey(activeApplication)) {
         context = "";
       }
       activeApplication = app;

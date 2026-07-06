@@ -100,6 +100,7 @@ const DEBUG_TYPING_DEBOUNCE_MS = 300;
 const DEBUG_TYPING_HIDE_MS = 3_600;
 const DEBUG_TYPING_WORD_LIMIT = 100;
 const CLIPBOARD_RESTORE_DELAY_MS = 250;
+const SUGGESTION_VISIBLE_MS = 4_000;
 
 const authClient = createDesktopAuthClient({
   apiBaseUrl: API_BASE_URL,
@@ -455,7 +456,7 @@ function checkForUpdates(errorMessage: string): void {
 
 function handleInputTapMessage(message: unknown): void {
   if (!message || typeof message !== "object") return;
-  const payload = message as { type?: unknown; text?: unknown; bundleId?: unknown; message?: unknown };
+  const payload = message as { type?: unknown; text?: unknown; bundleId?: unknown; windowId?: unknown; message?: unknown };
 
   if (payload.type === "ready") {
     console.log("macOS input tap ready.");
@@ -466,7 +467,10 @@ function handleInputTapMessage(message: unknown): void {
     return;
   }
   if (payload.type === "active-app" && typeof payload.bundleId === "string") {
-    handleActiveApplicationChanged(payload.bundleId);
+    handleActiveApplicationChanged(
+      payload.bundleId,
+      typeof payload.windowId === "string" ? payload.windowId : null,
+    );
     return;
   }
   if (payload.type === "text" && typeof payload.text === "string") {
@@ -533,6 +537,7 @@ async function bootstrap(): Promise<void> {
       typingContextBuffer.clear();
     },
     debounceMs: 300,
+    maxVisibleMs: SUGGESTION_VISIBLE_MS,
   });
 
   const registered = globalShortcut.register("Alt+Tab", () => {
@@ -702,7 +707,7 @@ async function bootstrap(): Promise<void> {
   // Input monitoring and active-application tracking are wired to the same
   // in-memory buffer. In a production build these are fed by a macOS native
   // input tap (IOKit/Quartz Event Services) and an active-app observer.
-  handleActiveApplicationChanged("com.apple.TextEdit");
+  handleActiveApplicationChanged("com.apple.TextEdit", null);
   startMacOSInputTap();
 
   // Initial status and memory refresh.
@@ -756,11 +761,13 @@ export function handleShortcutOrNavigation(): void {
   // Shortcuts and navigation keys do not become typing context.
 }
 
-export function handleActiveApplicationChanged(bundleId: string | null): void {
+export function handleActiveApplicationChanged(bundleId: string | null, windowId: string | null = null): void {
   if (observationPaused) return;
 
-  const activeApp = bundleId ? { bundleId } : null;
-  const previousBundleId = typingContextBuffer.getState().activeApplication?.bundleId ?? null;
+  const activeApp = bundleId ? { bundleId, ...(windowId ? { windowId } : {}) } : null;
+  const previousActiveApp = typingContextBuffer.getState().activeApplication;
+  const previousActiveKey = previousActiveApp ? `${previousActiveApp.bundleId}:${previousActiveApp.windowId ?? "window-unknown"}` : null;
+  const activeKey = activeApp ? `${activeApp.bundleId}:${activeApp.windowId ?? "window-unknown"}` : null;
 
   // Do not treat Tabb's own windows as the previously active application,
   // otherwise clicking the overlay would paste back into Tabb.
@@ -769,7 +776,7 @@ export function handleActiveApplicationChanged(bundleId: string | null): void {
     previouslyActiveApplication = activeApp;
   }
 
-  if ((activeApp?.bundleId ?? null) === previousBundleId) {
+  if (activeKey === previousActiveKey) {
     return;
   }
 

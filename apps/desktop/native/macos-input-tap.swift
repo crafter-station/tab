@@ -8,8 +8,43 @@ func emit(_ payload: [String: String]) {
   FileHandle.standardOutput.write(Data("\n".utf8))
 }
 
-func activeBundleId() -> String {
-  NSWorkspace.shared.frontmostApplication?.bundleIdentifier ?? ""
+struct ActiveWindowSnapshot: Equatable {
+  let bundleId: String
+  let windowId: String
+}
+
+func activeWindowSnapshot() -> ActiveWindowSnapshot? {
+  guard let app = NSWorkspace.shared.frontmostApplication,
+        let bundleId = app.bundleIdentifier else {
+    return nil
+  }
+
+  let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
+  guard let windowInfoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
+    return ActiveWindowSnapshot(bundleId: bundleId, windowId: "app:\(app.processIdentifier)")
+  }
+
+  for windowInfo in windowInfoList {
+    guard let ownerPid = windowInfo[kCGWindowOwnerPID as String] as? pid_t,
+          ownerPid == app.processIdentifier,
+          let layer = windowInfo[kCGWindowLayer as String] as? Int,
+          layer == 0,
+          let windowNumber = windowInfo[kCGWindowNumber as String] as? UInt32 else {
+      continue
+    }
+    return ActiveWindowSnapshot(bundleId: bundleId, windowId: "window:\(windowNumber)")
+  }
+
+  return ActiveWindowSnapshot(bundleId: bundleId, windowId: "app:\(app.processIdentifier)")
+}
+
+var lastActiveWindowSnapshot: ActiveWindowSnapshot?
+
+func emitActiveWindowIfChanged() {
+  guard let snapshot = activeWindowSnapshot() else { return }
+  if snapshot == lastActiveWindowSnapshot { return }
+  lastActiveWindowSnapshot = snapshot
+  emit(["type": "active-app", "bundleId": snapshot.bundleId, "windowId": snapshot.windowId])
 }
 
 func normalizedText(from event: CGEvent) -> String? {
@@ -44,10 +79,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     return Unmanaged.passUnretained(event)
   }
 
-  let bundleId = activeBundleId()
-  if !bundleId.isEmpty {
-    emit(["type": "active-app", "bundleId": bundleId])
-  }
+  emitActiveWindowIfChanged()
   emit(["type": "text", "text": text])
   return Unmanaged.passUnretained(event)
 }
@@ -68,4 +100,7 @@ let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, eventTap, 0)
 CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
 CGEvent.tapEnable(tap: eventTap, enable: true)
 emit(["type": "ready"])
+Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
+  emitActiveWindowIfChanged()
+}
 CFRunLoopRun()

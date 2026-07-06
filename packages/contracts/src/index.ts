@@ -12,6 +12,7 @@ const errorCodes = [
 export const ActiveApplicationSchema = z.object({
   bundleId: z.string().min(1),
   name: z.string().min(1).optional(),
+  windowId: z.string().min(1).optional(),
 });
 
 export const SuggestionContextSourceSchema = z.enum([

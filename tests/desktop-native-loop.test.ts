@@ -40,6 +40,14 @@ describe("desktop native suggestion loop", () => {
       expect(buffer.getState().context).toBe("Hello");
     });
 
+    it("clears context when active window changes within the same application", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:1" });
+      buffer.appendText("Hello");
+      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:2" });
+      expect(buffer.getState().context).toBe("");
+    });
+
     it("clears context on secure input", () => {
       const buffer = createTypingContextBuffer();
       buffer.appendText("Hello");
@@ -109,6 +117,7 @@ describe("desktop native suggestion loop", () => {
     function makeDeps(overrides: {
       requestSuggestion?: (context: string) => Promise<Suggestion | null>;
       getContext?: () => { context: string; activeApplication: ActiveApplication | null; secureInput: boolean };
+      maxVisibleMs?: number;
     } = {}) {
       const events: Array<{ type: string; payload?: unknown }> = [];
       return {
@@ -121,6 +130,7 @@ describe("desktop native suggestion loop", () => {
           onRequestStarted: (context: string) => events.push({ type: "requestStarted", payload: context }),
           onRequestFinished: (suggestion: Suggestion | null) => events.push({ type: "requestFinished", payload: suggestion }),
           debounceMs: 5,
+          maxVisibleMs: overrides.maxVisibleMs,
         },
       };
     }
@@ -223,6 +233,28 @@ describe("desktop native suggestion loop", () => {
       loop.onContextChanged();
       await wait(10);
       expect(events.filter((e) => e.type === "show")).toHaveLength(1);
+    });
+
+    it("hides a shown suggestion after the visible timeout", async () => {
+      const { events, deps } = makeDeps({ maxVisibleMs: 5 });
+      const loop = createSuggestionLoop(deps);
+      loop.onContextChanged();
+      await wait(15);
+      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show", "hide"]);
+      expect(loop.getState().status).toBe("idle");
+    });
+
+    it("hides a suggestion when the active window changes within the same application", async () => {
+      const { events, deps } = makeDeps();
+      let app: ActiveApplication | null = { bundleId: "com.apple.TextEdit", windowId: "window:1" };
+      deps.getContext = () => ({ context: "hello", activeApplication: app, secureInput: false });
+      const loop = createSuggestionLoop(deps);
+      loop.onContextChanged();
+      await wait(10);
+      app = { bundleId: "com.apple.TextEdit", windowId: "window:2" };
+      loop.onContextChanged();
+      await wait(10);
+      expect(events.some((e) => e.type === "hide")).toBe(true);
     });
   });
 
