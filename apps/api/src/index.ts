@@ -1,7 +1,7 @@
 import { Hono } from "hono";
+import { logger } from "hono/logger";
 import type { Context, Next } from "hono";
 import { generateText } from "ai";
-import { createOpenAI } from "@ai-sdk/openai";
 import { planQuotas, shouldCountSuggestionResponse } from "@tabb/billing";
 import {
   ApiErrorResponseSchema,
@@ -72,6 +72,8 @@ export type SuggestionGenerator = (
   input: SuggestionInput,
 ) => Promise<{ text: string; modelId?: string } | null>;
 
+const SUGGESTION_MODEL_ID = "google/gemma-4-31b-it";
+
 type ApiVariables = {
   device: Device;
 };
@@ -124,17 +126,6 @@ function formatValidationIssues(
     .join("; ");
 }
 
-function getProviderBaseUrl(
-  accountId: string | undefined,
-  gatewayId: string,
-): string {
-  if (accountId && gatewayId) {
-    return `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/openai`;
-  }
-
-  return "https://api.openai.com/v1";
-}
-
 function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
   if (memories.length === 0) return "";
 
@@ -145,36 +136,15 @@ function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
 }
 
 function createRealSuggestionGenerator(): SuggestionGenerator {
-  const apiKey = process.env.OPENAI_API_KEY;
-  const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
-  const gatewayId = process.env.CLOUDFLARE_AI_GATEWAY_ID ?? "tabb";
-  const modelId = process.env.TABB_SUGGESTION_MODEL ?? "gpt-4o-mini";
+  const apiKey = process.env.AI_GATEWAY_API_KEY;
 
   return async (input) => {
     if (!apiKey) {
-      throw new Error("OPENAI_API_KEY is not configured");
+      throw new Error("AI_GATEWAY_API_KEY is not configured");
     }
 
-    const baseURL = getProviderBaseUrl(accountId, gatewayId);
-
-    const openai = createOpenAI({
-      apiKey,
-      baseURL,
-      headers: {
-        // Per Cloudflare AI Gateway docs, include a gateway ID header when the
-        // environment supplies a Cloudflare API token for authenticated gateways.
-        ...(process.env.CLOUDFLARE_API_TOKEN
-          ? {
-              "cf-aig-authorization": `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
-            }
-          : {}),
-      },
-    });
-
     const { text } = await generateText({
-      // AI Gateway provider-specific endpoints expose /chat/completions, so use
-      // the chat completions model factory rather than the default Responses API.
-      model: openai.chat(modelId),
+      model: SUGGESTION_MODEL_ID,
       system:
         "You are a concise autocomplete assistant. Given the user's recent typing context, respond with only the most likely next few words that continue their thought. Do not explain, prefix, or quote the continuation. If there is no clear continuation, respond with an empty string.",
       prompt: `Active application: ${input.activeApplication.bundleId}\nSource: ${input.contextSource}\nContext: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
@@ -185,7 +155,7 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
     const trimmed = text.trim();
     if (trimmed.length === 0) return null;
 
-    return { text: trimmed, modelId };
+    return { text: trimmed, modelId: SUGGESTION_MODEL_ID };
   };
 }
 
@@ -231,6 +201,8 @@ export function createApp(deps: ApiDependencies = {}) {
   }
 
   const app = new Hono<{ Variables: ApiVariables }>();
+
+  app.use("*", logger());
 
   // Device handoff: a signed-in browser requests a short-lived exchange code.
   // These routes are registered before the Better Auth catch-all so Hono
@@ -425,7 +397,6 @@ export function createApp(deps: ApiDependencies = {}) {
     return { ok: true as const, session };
   }
 
-  app.use("/suggestions", authenticateDevice);
   app.use("/api/status", authenticateDevice);
   app.use("/api/memory/*", authenticateDevice);
 
@@ -603,11 +574,13 @@ export function createApp(deps: ApiDependencies = {}) {
     );
   });
 
-  app.post("/suggestions", async (c) => {
+app.post("/suggestions", async (c) => {
+    console.log("[suggestions] request received");
     let payload: unknown;
     try {
       payload = await c.req.json();
     } catch {
+      console.warn("[suggestions] invalid JSON body");
       return c.json(
         createErrorResponse("invalid_request", "Request body must be valid JSON."),
         400,
@@ -616,6 +589,10 @@ export function createApp(deps: ApiDependencies = {}) {
 
     const parseResult = SuggestionRequestSchema.safeParse(payload);
     if (!parseResult.success) {
+      console.warn(
+        "[suggestions] invalid request",
+        formatValidationIssues(parseResult.error.issues),
+      );
       return c.json(
         createErrorResponse(
           "invalid_request",
@@ -626,10 +603,36 @@ export function createApp(deps: ApiDependencies = {}) {
     }
 
     const request = parseResult.data;
-    const device = c.get("device");
+    const device = (c.get("device") as Device | undefined) ?? {
+      id: "public-suggestions-device",
+      userId: "public-suggestions-user",
+      deviceId: request.deviceId,
+      tokenHash: "public",
+      platform: request.clientMetadata?.platform ?? "unknown",
+      appVersion: request.clientMetadata?.appVersion ?? "unknown",
+      createdAt: new Date(),
+      lastSeenAt: new Date(),
+      revoked: false,
+    };
+    console.log("[suggestions] parsed request", {
+      requestId: request.requestId,
+      deviceId: device.deviceId,
+      userId: device.userId,
+      contextLength: request.typingContext.length,
+      contextSource: request.contextSource,
+      activeApplication: request.activeApplication.bundleId,
+      memoryEnabled: request.memoryEnabled,
+      redactionApplied: request.redaction.applied,
+    });
 
     const quotaCheck = await billingService.checkQuota(device.userId);
     if (!quotaCheck.ok) {
+      console.warn("[suggestions] quota exhausted", {
+        requestId: request.requestId,
+        userId: device.userId,
+        usage: quotaCheck.usage,
+        quota: quotaCheck.quota,
+      });
       return c.json(
         createErrorResponse(
           "quota_exhausted",
@@ -673,6 +676,11 @@ export function createApp(deps: ApiDependencies = {}) {
         memoryEnabled: request.memoryEnabled,
         memories,
       });
+      console.log("[suggestions] model result", {
+        requestId: request.requestId,
+        modelId: generated?.modelId,
+        suggestionLength: generated?.text.length ?? 0,
+      });
 
       const latencyMs = Math.round(performance.now() - suggestionStart);
 
@@ -714,6 +722,13 @@ export function createApp(deps: ApiDependencies = {}) {
           });
       }
 
+      if (suggestions.length === 0) {
+        console.log("[suggestions] returning empty suggestions", {
+          requestId: request.requestId,
+          latencyMs,
+        });
+      }
+
       const memoryEligibility = getMemoryEligibility(request.contextSource);
       if (request.memoryEnabled && memoryEligibility.eligible) {
         try {
@@ -751,6 +766,11 @@ export function createApp(deps: ApiDependencies = {}) {
       const latencyMs = Math.round(performance.now() - suggestionStart);
       const message =
         error instanceof Error ? error.message : "Suggestion generation failed.";
+      console.error("[suggestions] provider failure", {
+        requestId: request.requestId,
+        latencyMs,
+        message,
+      });
 
       await recordSuggestionEvent({
         eventType: "suggestion_error",

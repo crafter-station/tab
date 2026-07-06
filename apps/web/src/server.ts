@@ -1,6 +1,7 @@
 import { planQuotas, type PlanId } from "@tabb/billing";
 import {
   BillingQuotaResponseSchema,
+  DeviceAuthorizeResponseSchema,
   type DeviceListItem,
   DeviceListResponseSchema,
   MemoryListResponseSchema,
@@ -169,6 +170,14 @@ function setCookies(response: Response, source: Response): void {
   }
 }
 
+function cookieHeaderFromSetCookie(source: Response): string | undefined {
+  const cookies = source.headers.getSetCookie?.() ?? [];
+  const pairs = cookies
+    .map((cookie) => cookie.split(";", 1)[0] ?? "")
+    .filter((cookie) => cookie.length > 0);
+  return pairs.length > 0 ? pairs.join("; ") : undefined;
+}
+
 export function createWebApp(config: WebAppConfig) {
   const baseUrl = config.apiBaseUrl.replace(/\/$/, "");
   const fetchImpl = config.fetch ?? globalThis.fetch;
@@ -279,14 +288,20 @@ export function createWebApp(config: WebAppConfig) {
     return html(layout(`${appName} Pricing`, content, { path }));
   }
 
-  function loginPage(error?: string, path = "/login"): Response {
+  function loginPage(error?: string, path = "/login", searchParams = new URLSearchParams()): Response {
     const errorBlock = error
       ? `<p class="error">${escapeHtml(error)}</p>`
       : "";
+    const deviceId = searchParams.get("device_id") ?? "";
+    const callback = searchParams.get("callback") ?? "";
+    const handoffFields = `${
+      deviceId ? `<input type="hidden" name="device_id" value="${escapeHtml(deviceId)}">` : ""
+    }${callback ? `<input type="hidden" name="callback" value="${escapeHtml(callback)}">` : ""}`;
     const content = `
       <h1>Sign in to ${escapeHtml(appName)}</h1>
       <form method="post" action="/login" class="card">
         ${errorBlock}
+        ${handoffFields}
         <label>Email
           <input type="email" name="email" required autocomplete="email">
         </label>
@@ -308,6 +323,8 @@ export function createWebApp(config: WebAppConfig) {
 
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
+    const deviceId = String(formData.get("device_id") ?? "");
+    const callback = String(formData.get("callback") ?? "");
 
     const signInResponse = await apiRequest(
       "/api/auth/sign-in/email",
@@ -321,6 +338,24 @@ export function createWebApp(config: WebAppConfig) {
 
     if (signInResponse.status !== 200) {
       return loginPage("Invalid email or password.");
+    }
+
+    if (deviceId && callback) {
+      const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
+      const authorizeResponse = await apiRequest(
+        "/api/auth/device/authorize",
+        { method: "POST" },
+        signedInCookieHeader,
+      );
+
+      if (authorizeResponse.status !== 200) {
+        return loginPage("Signed in, but failed to authorize this device.");
+      }
+
+      const authorize = DeviceAuthorizeResponseSchema.parse(await authorizeResponse.json());
+      const callbackUrl = new URL(callback);
+      callbackUrl.searchParams.set("code", authorize.code);
+      return redirect(callbackUrl.toString());
     }
 
     const response = redirect("/account");
@@ -551,7 +586,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/login") {
-        if (request.method === "GET") return loginPage(undefined, path);
+        if (request.method === "GET") return loginPage(undefined, path, url.searchParams);
         if (request.method === "POST") return loginHandler(request, cookieHeader);
       }
 

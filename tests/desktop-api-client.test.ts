@@ -46,6 +46,32 @@ describe("desktop API suggestion client", () => {
     expect(request.contextHash).toBe("com.apple.TextEdit:hello:false");
   });
 
+  it("can disable memories in the suggestion request", async () => {
+    const captured: { body?: unknown } = {};
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      return new Response(
+        JSON.stringify({ status: "ok", data: { suggestions: [{ id: "s-1", text: " world" }] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      memoryEnabled: false,
+      getState: () => makeState(),
+      fetch,
+    });
+
+    await requestSuggestion("hello");
+
+    const request = SuggestionRequestSchema.parse(captured.body);
+    expect(request.memoryEnabled).toBe(false);
+  });
+
   it("returns null when the API returns an empty suggestions array", async () => {
     const fetch = async () =>
       new Response(JSON.stringify({ status: "ok", data: { suggestions: [] } }), {

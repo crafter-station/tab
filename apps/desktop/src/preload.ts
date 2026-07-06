@@ -2,9 +2,26 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tabb/contracts";
 
+type DebugApiState =
+  | { status: "idle" }
+  | { status: "loading" }
+  | { status: "empty" }
+  | { status: "suggestion"; text: string };
+
+type DebugContext = {
+  context: string;
+  wordLimit: number;
+  wordCount: number;
+  source: string;
+  app: string | null;
+  paused: boolean;
+  secureInput: boolean;
+  api?: DebugApiState;
+};
+
 export type TabbPreloadApi = {
   onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => void;
-  onDebugContext: (callback: (debug: { context: string; wordLimit: number; wordCount: number; source: string; app: string | null; paused: boolean; secureInput: boolean }) => void) => void;
+  onDebugContext: (callback: (debug: DebugContext) => void) => void;
   onHide: (callback: () => void) => void;
   acceptSuggestion: () => void;
 
@@ -31,7 +48,7 @@ contextBridge.exposeInMainWorld("tabb", {
   onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => {
     ipcRenderer.on("suggestion", (_event, suggestion) => callback(suggestion));
   },
-  onDebugContext: (callback: (debug: { context: string; wordLimit: number; wordCount: number; source: string; app: string | null; paused: boolean; secureInput: boolean }) => void) => {
+  onDebugContext: (callback: (debug: DebugContext) => void) => {
     ipcRenderer.on("debug-context", (_event, debug) => callback(debug));
   },
   onHide: (callback: () => void) => {

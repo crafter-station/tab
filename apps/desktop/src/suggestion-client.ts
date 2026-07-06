@@ -16,6 +16,7 @@ export type ApiSuggestionClientDependencies = {
   deviceId: string;
   appVersion: string;
   platform: string;
+  memoryEnabled?: boolean;
   getState(): TypingContextState;
   fetch?: typeof globalThis.fetch;
   getAuthorizationHeader?: () => Promise<string | null>;
@@ -43,7 +44,7 @@ function buildSuggestionRequest(
       kinds: [...new Set(redaction.redactions.map((redaction) => redaction.kind))],
     },
     activeApplication: state.activeApplication,
-    memoryEnabled: true,
+    memoryEnabled: deps.memoryEnabled ?? true,
     contextHash: buildContextHash(state, context),
     clientMetadata: {
       appVersion: deps.appVersion,

@@ -19,6 +19,8 @@ export type SuggestionLoopDependencies = {
   requestSuggestion(context: string): Promise<Suggestion | null>;
   onShowSuggestion(suggestion: Suggestion): void;
   onHideSuggestion(): void;
+  onRequestStarted?: (context: string) => void;
+  onRequestFinished?: (suggestion: Suggestion | null) => void;
   onSecretLikeContextDetected?: () => void;
   debounceMs: number;
 };
@@ -94,11 +96,14 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
+        deps.onRequestStarted?.(redaction.text);
         const suggestion = await deps.requestSuggestion(redaction.text);
 
         if (state.status !== "debouncing" || state.contextHash !== hash) {
           return;
         }
+
+        deps.onRequestFinished?.(suggestion);
 
         if (!suggestion) {
           state = { status: "idle" };
