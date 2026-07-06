@@ -31,6 +31,29 @@ export const ClientMetadataSchema = z.object({
   platform: z.string().min(1).optional(),
 });
 
+export const DeviceTokenExchangeRequestSchema = z.object({
+  code: z.string().min(1),
+  deviceId: z.string().min(1),
+  platform: z.string().min(1),
+  appVersion: z.string().min(1),
+});
+
+export const DeviceTokenExchangeResponseSchema = z.object({
+  token: z.string().min(1),
+});
+
+export const DeviceAuthorizeResponseSchema = z.object({
+  code: z.string().min(1),
+});
+
+export const DeviceMetadataSchema = z.object({
+  platform: z.string().min(1),
+  appVersion: z.string().min(1),
+  createdAt: z.string().datetime(),
+  lastSeenAt: z.string().datetime(),
+  revoked: z.boolean(),
+});
+
 export const SuggestionRequestSchema = z.object({
   requestId: z.string().min(1),
   deviceId: z.string().min(1),
@@ -82,3 +105,13 @@ export type SuggestionResponse = z.infer<typeof SuggestionResponseSchema>;
 export type ApiSuccessResponse = z.infer<typeof ApiSuccessResponseSchema>;
 export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
 export type ApiResponse = z.infer<typeof ApiResponseSchema>;
+export type DeviceTokenExchangeRequest = z.infer<
+  typeof DeviceTokenExchangeRequestSchema
+>;
+export type DeviceTokenExchangeResponse = z.infer<
+  typeof DeviceTokenExchangeResponseSchema
+>;
+export type DeviceAuthorizeResponse = z.infer<
+  typeof DeviceAuthorizeResponseSchema
+>;
+export type DeviceMetadata = z.infer<typeof DeviceMetadataSchema>;

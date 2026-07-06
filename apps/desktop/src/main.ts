@@ -1,4 +1,13 @@
-import { app, BrowserWindow, globalShortcut, clipboard, ipcMain, screen, powerMonitor } from "electron";
+import {
+  app,
+  BrowserWindow,
+  globalShortcut,
+  clipboard,
+  ipcMain,
+  screen,
+  powerMonitor,
+  shell,
+} from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
@@ -7,6 +16,8 @@ import { createTypingContextBuffer } from "./typing-context.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { acceptAndInsertSuggestion } from "./acceptance.ts";
+import { createDesktopAuthClient } from "./auth.ts";
+import { createMacOSKeychain } from "./keychain.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource } from "@tabb/contracts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +41,20 @@ let observationPaused = false;
 const typingContextBuffer = createTypingContextBuffer();
 
 const API_BASE_URL = process.env.TABB_API_BASE_URL ?? "http://localhost:8787";
+const WEB_BASE_URL = process.env.TABB_WEB_BASE_URL ?? "http://localhost:3000";
 const DEVICE_ID = process.env.TABB_DEVICE_ID ?? "device-unknown";
+
+const authClient = createDesktopAuthClient({
+  apiBaseUrl: API_BASE_URL,
+  webBaseUrl: WEB_BASE_URL,
+  deviceId: DEVICE_ID,
+  appVersion: app.getVersion() || "0.0.0",
+  platform: process.platform,
+  keychain: createMacOSKeychain(),
+  openExternal: async (url) => {
+    await shell.openExternal(url);
+  },
+});
 
 const requestSuggestion = createApiSuggestionClient({
   apiBaseUrl: API_BASE_URL,
@@ -38,6 +62,7 @@ const requestSuggestion = createApiSuggestionClient({
   appVersion: app.getVersion() || "0.0.0",
   platform: process.platform,
   getState: () => typingContextBuffer.getState(),
+  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
 
 function isTerminalApplication(bundleId: string | null | undefined): boolean {
@@ -159,6 +184,26 @@ async function bootstrap(): Promise<void> {
     acceptCurrentSuggestion().catch((error) => {
       console.error("Failed to accept suggestion via overlay click:", error);
     });
+  });
+
+  // Register the custom URL scheme so the browser handoff can land back in the
+  // native app (ADR-0007).
+  if (process.platform === "darwin") {
+    app.setAsDefaultProtocolClient("tabb");
+  }
+
+  app.on("open-url", (event, url) => {
+    if (url.startsWith("tabb://")) {
+      event.preventDefault();
+      authClient
+        .handleCallback(url)
+        .then(() => {
+          console.log("Device token stored after browser handoff.");
+        })
+        .catch((error) => {
+          console.error("Failed to complete browser handoff:", error);
+        });
+    }
   });
 
   // The local typing context buffer remains in process memory only and clears

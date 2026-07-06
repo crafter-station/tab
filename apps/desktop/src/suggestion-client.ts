@@ -18,6 +18,7 @@ export type ApiSuggestionClientDependencies = {
   platform: string;
   getState(): TypingContextState;
   fetch?: typeof globalThis.fetch;
+  getAuthorizationHeader?: () => Promise<string | null>;
 };
 
 function buildContextHash(state: TypingContextState, context: string): string {
@@ -72,9 +73,17 @@ export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies)
     }
 
     try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      const authorization = await deps.getAuthorizationHeader?.();
+      if (authorization) {
+        headers.Authorization = authorization;
+      }
+
       const response = await http(`${deps.apiBaseUrl}/suggestions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify(parsed.data),
       });
 

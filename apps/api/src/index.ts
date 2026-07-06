@@ -4,11 +4,16 @@ import { createOpenAI } from "@ai-sdk/openai";
 import {
   ApiErrorResponseSchema,
   ApiSuccessResponseSchema,
+  DeviceAuthorizeResponseSchema,
+  DeviceTokenExchangeRequestSchema,
+  DeviceTokenExchangeResponseSchema,
   SuggestionRequestSchema,
   type ActiveApplication,
   type Suggestion,
   type SuggestionContextSource,
 } from "@tabb/contracts";
+import { createAuthInstance, type AuthInstance } from "./auth.ts";
+import { DeviceTokenService, type Device } from "./device-tokens.ts";
 
 export const apiAppBoundary = {
   runtime: "cloudflare-worker-hono",
@@ -32,8 +37,21 @@ export type SuggestionGenerator = (
   input: SuggestionInput,
 ) => Promise<{ text: string } | null>;
 
+type ApiVariables = {
+  device: Device;
+};
+
+const ERROR_CODES = [
+  "invalid_request",
+  "unauthenticated",
+  "revoked_device",
+  "quota_exhausted",
+  "rate_limited",
+  "provider_failure",
+] as const;
+
 function createErrorResponse(
-  code: "invalid_request" | "provider_failure",
+  code: (typeof ERROR_CODES)[number],
   message: string,
 ) {
   return ApiErrorResponseSchema.parse({
@@ -57,7 +75,10 @@ function formatValidationIssues(
     .join("; ");
 }
 
-function getProviderBaseUrl(accountId: string | undefined, gatewayId: string): string {
+function getProviderBaseUrl(
+  accountId: string | undefined,
+  gatewayId: string,
+): string {
   if (accountId && gatewayId) {
     return `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/openai`;
   }
@@ -85,7 +106,9 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
         // Per Cloudflare AI Gateway docs, include a gateway ID header when the
         // environment supplies a Cloudflare API token for authenticated gateways.
         ...(process.env.CLOUDFLARE_API_TOKEN
-          ? { "cf-aig-authorization": `Bearer ${process.env.CLOUDFLARE_API_TOKEN}` }
+          ? {
+              "cf-aig-authorization": `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
+            }
           : {}),
       },
     });
@@ -110,24 +133,187 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
 
 export type ApiDependencies = {
   readonly generateSuggestion?: SuggestionGenerator;
+  readonly auth?: AuthInstance;
+  readonly deviceTokenService?: DeviceTokenService;
 };
 
 export function createApp(deps: ApiDependencies = {}) {
-  const generateSuggestion = deps.generateSuggestion ?? createRealSuggestionGenerator();
-  const app = new Hono();
+  const generateSuggestion =
+    deps.generateSuggestion ?? createRealSuggestionGenerator();
+  const auth = deps.auth ?? createAuthInstance();
+  const deviceTokenService =
+    deps.deviceTokenService ?? new DeviceTokenService();
+
+  const app = new Hono<{ Variables: ApiVariables }>();
+
+  // Device handoff: a signed-in browser requests a short-lived exchange code.
+  // These routes are registered before the Better Auth catch-all so Hono
+  // matches them first.
+  app.post("/api/auth/device/authorize", async (c) => {
+    const session = await auth.api.getSession({
+      headers: c.req.raw.headers,
+    });
+
+    if (!session) {
+      return c.json(
+        createErrorResponse("unauthenticated", "Sign in required."),
+        401,
+      );
+    }
+
+    const code = await deviceTokenService.createExchangeCode(session.user.id);
+
+    return c.json(
+      DeviceAuthorizeResponseSchema.parse({ code }),
+      200,
+    );
+  });
+
+  // Native app exchanges the code for an opaque, per-installation device token.
+  app.post("/api/auth/device/exchange", async (c) => {
+    let payload: unknown;
+    try {
+      payload = await c.req.json();
+    } catch {
+      return c.json(
+        createErrorResponse("invalid_request", "Request body must be valid JSON."),
+        400,
+      );
+    }
+
+    const parseResult = DeviceTokenExchangeRequestSchema.safeParse(payload);
+    if (!parseResult.success) {
+      return c.json(
+        createErrorResponse(
+          "invalid_request",
+          formatValidationIssues(parseResult.error.issues),
+        ),
+        400,
+      );
+    }
+
+    const exchange = await deviceTokenService.consumeExchangeCode(
+      parseResult.data.code,
+    );
+    if (!exchange) {
+      return c.json(
+        createErrorResponse(
+          "invalid_request",
+          "Invalid or expired exchange code.",
+        ),
+        400,
+      );
+    }
+
+    const { token } = await deviceTokenService.createDeviceToken(
+      exchange.userId,
+      {
+        deviceId: parseResult.data.deviceId,
+        platform: parseResult.data.platform,
+        appVersion: parseResult.data.appVersion,
+      },
+    );
+
+    return c.json(
+      DeviceTokenExchangeResponseSchema.parse({ token }),
+      200,
+    );
+  });
+
+  // Revoke a device from the account surface.
+  app.post("/api/auth/device/revoke", async (c) => {
+    const session = await auth.api.getSession({
+      headers: c.req.raw.headers,
+    });
+
+    if (!session) {
+      return c.json(
+        createErrorResponse("unauthenticated", "Sign in required."),
+        401,
+      );
+    }
+
+    let payload: { deviceId?: string } = {};
+    try {
+      payload = (await c.req.json()) as { deviceId?: string };
+    } catch {
+      // allow empty body
+    }
+
+    if (!payload.deviceId) {
+      return c.json(
+        createErrorResponse("invalid_request", "deviceId is required."),
+        400,
+      );
+    }
+
+    const revoked = await deviceTokenService.revokeDevice(
+      session.user.id,
+      payload.deviceId,
+    );
+
+    if (!revoked) {
+      return c.json(
+        createErrorResponse("invalid_request", "Device not found."),
+        404,
+      );
+    }
+
+    return c.json({ ok: true }, 200);
+  });
+
+  // Better Auth owns users, sessions, and password/credential flows.
+  app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+
+  // Product APIs require a valid, non-revoked device token.
+  app.use("/suggestions", async (c, next) => {
+    const authorization = c.req.header("Authorization");
+    if (!authorization?.startsWith("Bearer ")) {
+      return c.json(
+        createErrorResponse("unauthenticated", "Device token required."),
+        401,
+      );
+    }
+
+    const token = authorization.slice("Bearer ".length);
+    const device = await deviceTokenService.verifyDeviceToken(token);
+
+    if (!device) {
+      return c.json(
+        createErrorResponse("unauthenticated", "Invalid device token."),
+        401,
+      );
+    }
+
+    if (device.revoked) {
+      return c.json(
+        createErrorResponse("revoked_device", "This device has been revoked."),
+        401,
+      );
+    }
+
+    c.set("device", device);
+    await next();
+  });
 
   app.post("/suggestions", async (c) => {
     let payload: unknown;
     try {
       payload = await c.req.json();
     } catch {
-      return c.json(createErrorResponse("invalid_request", "Request body must be valid JSON."), 400);
+      return c.json(
+        createErrorResponse("invalid_request", "Request body must be valid JSON."),
+        400,
+      );
     }
 
     const parseResult = SuggestionRequestSchema.safeParse(payload);
     if (!parseResult.success) {
       return c.json(
-        createErrorResponse("invalid_request", formatValidationIssues(parseResult.error.issues)),
+        createErrorResponse(
+          "invalid_request",
+          formatValidationIssues(parseResult.error.issues),
+        ),
         400,
       );
     }
@@ -152,12 +338,10 @@ export function createApp(deps: ApiDependencies = {}) {
           ]
         : [];
 
-      return c.json(
-        createSuccessResponse(suggestions),
-        200,
-      );
+      return c.json(createSuccessResponse(suggestions), 200);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Suggestion generation failed.";
+      const message =
+        error instanceof Error ? error.message : "Suggestion generation failed.";
       return c.json(createErrorResponse("provider_failure", message), 503);
     }
   });

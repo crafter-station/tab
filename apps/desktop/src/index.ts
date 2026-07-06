@@ -21,3 +21,5 @@ export { generateFakeSuggestion } from "./suggestion-engine.ts";
 export { createSuggestionLoop } from "./suggestion-loop.ts";
 export { acceptAndInsertSuggestion } from "./acceptance.ts";
 export { createApiSuggestionClient } from "./suggestion-client.ts";
+export { createDesktopAuthClient } from "./auth.ts";
+export { createMemoryKeychain, createMacOSKeychain } from "./keychain.ts";
