@@ -4,6 +4,8 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@tabb/billing": "workspace:*",
+    "@tabb/contracts": "workspace:*",
     "better-auth": "^1.6.23"
   }
 }

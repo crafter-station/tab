@@ -93,6 +93,43 @@ export const MemoryDeleteResponseSchema = z.object({
   }),
 });
 
+export const DeviceListItemSchema = DeviceMetadataSchema.extend({
+  id: z.string().min(1),
+  deviceId: z.string().min(1),
+});
+
+export const DeviceListResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    devices: z.array(DeviceListItemSchema),
+  }),
+});
+
+export const BillingQuotaResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    planId: z.string().min(1),
+    quota: z.number().int().nonnegative(),
+    usage: z.number().int().nonnegative(),
+    resetAt: z.string().datetime(),
+    upgradeUrl: z.string().min(1).optional(),
+  }),
+});
+
+export const BillingCheckoutResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    url: z.string().min(1),
+  }),
+});
+
+export const BillingPortalResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    url: z.string().min(1),
+  }),
+});
+
 export const SuggestionRequestSchema = z.object({
   requestId: z.string().min(1),
   deviceId: z.string().min(1),
@@ -172,3 +209,8 @@ export type PersonalMemorySensitivity = z.infer<
 export type PersonalMemory = z.infer<typeof PersonalMemorySchema>;
 export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;
 export type MemoryDeleteResponse = z.infer<typeof MemoryDeleteResponseSchema>;
+export type DeviceListItem = z.infer<typeof DeviceListItemSchema>;
+export type DeviceListResponse = z.infer<typeof DeviceListResponseSchema>;
+export type BillingQuotaResponse = z.infer<typeof BillingQuotaResponseSchema>;
+export type BillingCheckoutResponse = z.infer<typeof BillingCheckoutResponseSchema>;
+export type BillingPortalResponse = z.infer<typeof BillingPortalResponseSchema>;

@@ -2,11 +2,15 @@ import { Hono } from "hono";
 import type { Context, Next } from "hono";
 import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
-import { shouldCountSuggestionResponse } from "@tabb/billing";
+import { planQuotas, shouldCountSuggestionResponse } from "@tabb/billing";
 import {
   ApiErrorResponseSchema,
   ApiSuccessResponseSchema,
+  BillingCheckoutResponseSchema,
+  BillingPortalResponseSchema,
+  BillingQuotaResponseSchema,
   DeviceAuthorizeResponseSchema,
+  DeviceListResponseSchema,
   DeviceTokenExchangeRequestSchema,
   DeviceTokenExchangeResponseSchema,
   MemoryDeleteResponseSchema,
@@ -22,6 +26,8 @@ import { DeviceTokenService, type Device } from "./device-tokens.ts";
 import {
   BillingService,
   BillingWebhookHandler,
+  type BillingCheckoutClient,
+  createBillingCheckoutClient,
   UsageMeterService,
 } from "./billing.ts";
 import {
@@ -175,6 +181,7 @@ export type ApiDependencies = {
   readonly deviceTokenService?: DeviceTokenService;
   readonly billingService?: BillingService;
   readonly usageMeterService?: UsageMeterService;
+  readonly billingCheckoutClient?: BillingCheckoutClient;
   readonly personalMemoryStorage?: PersonalMemoryStorage;
 };
 
@@ -186,6 +193,8 @@ export function createApp(deps: ApiDependencies = {}) {
     deps.deviceTokenService ?? new DeviceTokenService();
   const billingService = deps.billingService ?? new BillingService();
   const usageMeterService = deps.usageMeterService ?? new UsageMeterService();
+  const billingCheckoutClient =
+    deps.billingCheckoutClient ?? createBillingCheckoutClient();
   const personalMemoryService = new PersonalMemoryService({
     storage: deps.personalMemoryStorage,
   });
@@ -308,6 +317,31 @@ export function createApp(deps: ApiDependencies = {}) {
     return c.json({ ok: true }, 200);
   });
 
+  // Account device list is served by the API, not Better Auth, and must be
+  // registered before the Better Auth catch-all so Hono matches it first.
+  app.get("/api/auth/devices", async (c) => {
+    const sessionCheck = await requireSession(c);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const devices = await deviceTokenService.listDevices(
+      sessionCheck.session.user.id,
+    );
+
+    return c.json(
+      DeviceListResponseSchema.parse({
+        status: "ok",
+        data: {
+          devices: devices.map((device) => ({
+            ...deviceTokenService.getDeviceMetadata(device),
+            id: device.id,
+            deviceId: device.deviceId,
+          })),
+        },
+      }),
+      200,
+    );
+  });
+
   // Better Auth owns users, sessions, and password/credential flows.
   app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
@@ -342,6 +376,24 @@ export function createApp(deps: ApiDependencies = {}) {
     await next();
   }
 
+  async function requireSession(c: Context) {
+    const session = await auth.api.getSession({
+      headers: c.req.raw.headers,
+    });
+
+    if (!session) {
+      return {
+        ok: false as const,
+        response: c.json(
+          createErrorResponse("unauthenticated", "Sign in required."),
+          401,
+        ),
+      };
+    }
+
+    return { ok: true as const, session };
+  }
+
   app.use("/suggestions", authenticateDevice);
   app.use("/api/memory/*", authenticateDevice);
 
@@ -363,6 +415,124 @@ export function createApp(deps: ApiDependencies = {}) {
     const id = c.req.param("id");
 
     const deleted = await personalMemoryService.deleteMemory(device.userId, id);
+
+    if (!deleted) {
+      return c.json(
+        createErrorResponse("invalid_request", "Memory not found."),
+        404,
+      );
+    }
+
+    return c.json(
+      MemoryDeleteResponseSchema.parse({
+        status: "ok",
+        data: { deleted: true },
+      }),
+      200,
+    );
+  });
+
+  // Account surface routes use the browser session from Better Auth.
+  app.get("/api/billing/quota", async (c) => {
+    const sessionCheck = await requireSession(c);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const quotaCheck = await billingService.checkQuota(
+      sessionCheck.session.user.id,
+    );
+
+    return c.json(
+      BillingQuotaResponseSchema.parse({
+        status: "ok",
+        data: {
+          planId: quotaCheck.entitlement.planId,
+          quota: quotaCheck.quota,
+          usage: quotaCheck.usage,
+          resetAt: quotaCheck.resetAt.toISOString(),
+          upgradeUrl: quotaCheck.ok ? undefined : "/pricing",
+        },
+      }),
+      200,
+    );
+  });
+
+  app.get("/api/billing/checkout", async (c) => {
+    const sessionCheck = await requireSession(c);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const planIdParam = c.req.query("plan");
+    if (!planIdParam || !(planIdParam in planQuotas)) {
+      return c.json(
+        createErrorResponse("invalid_request", "Invalid plan."),
+        400,
+      );
+    }
+
+    try {
+      const url = await billingCheckoutClient.createCheckoutUrl(
+        planIdParam as keyof typeof planQuotas,
+        sessionCheck.session.user.id,
+      );
+      return c.json(
+        BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
+        200,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Checkout creation failed.";
+      return c.json(createErrorResponse("provider_failure", message), 503);
+    }
+  });
+
+  app.get("/api/billing/portal", async (c) => {
+    const sessionCheck = await requireSession(c);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const userId = sessionCheck.session.user.id;
+    const entitlement = await billingService.getEntitlement(userId);
+
+    try {
+      const url = await billingCheckoutClient.createPortalUrl(
+        userId,
+        entitlement.polarCustomerId,
+      );
+      return c.json(
+        BillingPortalResponseSchema.parse({ status: "ok", data: { url } }),
+        200,
+      );
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Portal creation failed.";
+      return c.json(createErrorResponse("provider_failure", message), 503);
+    }
+  });
+
+  app.get("/api/account/memory", async (c) => {
+    const sessionCheck = await requireSession(c);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const memories = await personalMemoryService.listMemories(
+      sessionCheck.session.user.id,
+    );
+
+    return c.json(
+      MemoryListResponseSchema.parse({
+        status: "ok",
+        data: { memories },
+      }),
+      200,
+    );
+  });
+
+  app.delete("/api/account/memory/:id", async (c) => {
+    const sessionCheck = await requireSession(c);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const id = c.req.param("id");
+    const deleted = await personalMemoryService.deleteMemory(
+      sessionCheck.session.user.id,
+      id,
+    );
 
     if (!deleted) {
       return c.json(

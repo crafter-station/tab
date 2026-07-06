@@ -122,6 +122,93 @@ export class InMemoryUsageMeterClient implements UsageMeterClient {
   }
 }
 
+export interface BillingCheckoutClient {
+  createCheckoutUrl(planId: PlanId, userId: string): Promise<string>;
+  createPortalUrl(userId: string, customerId?: string): Promise<string>;
+}
+
+export type CreatePolarBillingCheckoutClientOptions = {
+  accessToken?: string;
+  server?: "production" | "sandbox";
+  productIds?: Partial<Record<Exclude<PlanId, "free">, string>>;
+  successUrl?: string;
+};
+
+export class StubBillingCheckoutClient implements BillingCheckoutClient {
+  async createCheckoutUrl(planId: PlanId, userId: string): Promise<string> {
+    return `https://polar.sh/checkout/${planId}?customer=${encodeURIComponent(userId)}`;
+  }
+
+  async createPortalUrl(userId: string, customerId?: string): Promise<string> {
+    return `https://polar.sh/portal/${customerId ?? userId}`;
+  }
+}
+
+export class PolarBillingCheckoutClient implements BillingCheckoutClient {
+  private readonly polar: Polar;
+  private readonly productIds: Record<Exclude<PlanId, "free">, string>;
+  private readonly successUrl: string | undefined;
+
+  constructor(options: CreatePolarBillingCheckoutClientOptions = {}) {
+    const accessToken = options.accessToken ?? process.env.POLAR_ACCESS_TOKEN;
+    if (!accessToken) {
+      throw new Error("POLAR_ACCESS_TOKEN is not configured");
+    }
+
+    const productIds: Partial<Record<Exclude<PlanId, "free">, string>> = {
+      pro: process.env.POLAR_PRODUCT_ID_PRO,
+      max: process.env.POLAR_PRODUCT_ID_MAX,
+      ...options.productIds,
+    };
+
+    if (!productIds.pro || !productIds.max) {
+      throw new Error("Polar product ids are not configured");
+    }
+
+    this.polar = new Polar({
+      accessToken,
+      server: options.server ?? "production",
+    });
+    this.productIds = productIds as Record<Exclude<PlanId, "free">, string>;
+    this.successUrl = options.successUrl ?? process.env.POLAR_CHECKOUT_SUCCESS_URL;
+  }
+
+  async createCheckoutUrl(planId: PlanId, userId: string): Promise<string> {
+    if (planId === "free") {
+      throw new Error("No checkout required for the free plan");
+    }
+
+    const checkout = await this.polar.checkouts.create({
+      products: [this.productIds[planId]],
+      externalCustomerId: userId,
+      successUrl: this.successUrl,
+    });
+
+    return checkout.url;
+  }
+
+  async createPortalUrl(userId: string, customerId?: string): Promise<string> {
+    if (!customerId) {
+      throw new Error("No Polar customer associated with this account");
+    }
+
+    const session = await this.polar.customerSessions.create({
+      customerId,
+    });
+
+    return session.customerPortalUrl;
+  }
+}
+
+export function createBillingCheckoutClient(
+  options?: CreatePolarBillingCheckoutClientOptions,
+): BillingCheckoutClient {
+  if (process.env.POLAR_ACCESS_TOKEN && process.env.POLAR_PRODUCT_ID_PRO) {
+    return new PolarBillingCheckoutClient(options);
+  }
+  return new StubBillingCheckoutClient();
+}
+
 function currentMonth(): string {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;

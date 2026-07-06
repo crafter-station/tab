@@ -1,9 +1,10 @@
 import { createAuthClient } from "better-auth/client";
 
 export { planQuotas as pricingPlans } from "@tabb/billing";
+export { createWebApp, type WebAppConfig, type WebApp } from "./server.ts";
 
 export const webAppBoundary = {
-  runtime: "tanstack-start",
+  runtime: "bun-serve-html",
   owns: [
     "marketing and download surface",
     "pricing and account management",
