@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { createTypingContextBuffer } from "../apps/desktop/src/typing-context.ts";
+import { createTypingContextBuffer, getLastWords } from "../apps/desktop/src/typing-context.ts";
 import { generateFakeSuggestion } from "../apps/desktop/src/suggestion-engine.ts";
 import { createSuggestionLoop } from "../apps/desktop/src/suggestion-loop.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/acceptance.ts";
@@ -67,6 +67,12 @@ describe("desktop native suggestion loop", () => {
       buffer.appendText("0123456789");
       buffer.appendText("X");
       expect(buffer.getState().context).toBe("123456789X");
+    });
+
+    it("formats the last words for debug overlays", () => {
+      expect(getLastWords("one two three four", 2)).toBe("three four");
+      expect(getLastWords("  one\n two\tthree  ", 10)).toBe("one two three");
+      expect(getLastWords("   ", 100)).toBe("");
     });
   });
 

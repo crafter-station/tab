@@ -7,6 +7,8 @@ directories:
 files:
   - dist/**/*
   - assets/**/*
+asarUnpack:
+  - dist/macos-input-tap
 mac:
   category: public.app-category.productivity
   target:
@@ -22,6 +24,9 @@ mac:
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSAccessibilityUsageDescription: Tabb needs accessibility access to paste accepted suggestions into other apps.
+    NSInputMonitoringUsageDescription: Tabb needs input monitoring access to observe typing context and the Option+Tab shortcut across apps.
   artifactName: "${productName}-${version}-${arch}.${ext}"
 dmg:
   sign: false

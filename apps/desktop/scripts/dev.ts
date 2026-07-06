@@ -29,7 +29,7 @@ async function buildEntry(entrypoint: string, outfile: string, format: "esm" | "
 async function copyRuntimeFiles() {
   await Bun.write(
     path.join(devRoot, "package.json"),
-    JSON.stringify({ type: "module", main: "src/main.js" }, null, 2),
+    JSON.stringify({ name: "tabb-dev", productName: "Tabb", type: "module", main: "src/main.js" }, null, 2),
   );
 
   for (const fileName of ["index.html", "onboarding.html", "settings.html"]) {
@@ -40,13 +40,26 @@ async function copyRuntimeFiles() {
   }
 }
 
-async function writePlaceholderTrayIcon() {
+async function copyTrayIcon() {
   const iconPath = path.join(devAssets, "iconTemplate.png");
-  const transparentPngBase64 =
-    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8AABQMBgAottDkAAAAASUVORK5CYII=";
-
-  await Bun.write(iconPath, Buffer.from(transparentPngBase64, "base64"));
+  await Bun.write(iconPath, Bun.file(path.join(desktopRoot, "assets", "iconTemplate.png")));
   return iconPath;
+}
+
+async function buildNativeInputTap() {
+  const inputTapPath = path.join(devRoot, "macos-input-tap");
+  if (process.platform !== "darwin") return null;
+
+  const child = Bun.spawn(["bun", path.join(desktopRoot, "scripts", "build-native.ts"), inputTapPath], {
+    cwd: workspaceRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await child.exited;
+  if (exitCode !== 0) {
+    throw new Error("Failed to build macOS input tap");
+  }
+  return inputTapPath;
 }
 
 async function main() {
@@ -62,7 +75,7 @@ async function main() {
     copyRuntimeFiles(),
   ]);
 
-  const trayIconPath = await writePlaceholderTrayIcon();
+  const [trayIconPath, inputTapPath] = await Promise.all([copyTrayIcon(), buildNativeInputTap()]);
   if (buildOnly) {
     console.log(`Built desktop dev app at ${devRoot}`);
     return;
@@ -74,6 +87,7 @@ async function main() {
       ...process.env,
       TABB_PRELOAD_PATH: path.join(devSrc, "preload.cjs"),
       TABB_TRAY_ICON_PATH: trayIconPath,
+      ...(inputTapPath ? { TABB_INPUT_TAP_PATH: inputTapPath } : {}),
       TABB_DEVICE_ID: process.env.TABB_DEVICE_ID ?? "dev-device",
     },
     stdin: "inherit",

@@ -8,6 +8,7 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test tests/*.test.mjs && bun test",
     "desktop:dev": "bun apps/desktop/scripts/dev.ts",
+    "desktop:permissions": "bun run --cwd apps/desktop dev:permissions",
     "sandcastle": "bun --env-file=.sandcastle/.env .sandcastle/main.ts",
     "sandcastle:verify-gh": "bun --env-file=.sandcastle/.env .sandcastle/verify-gh.ts"
   },

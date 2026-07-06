@@ -1,8 +1,8 @@
 import { BrowserWindow } from "electron";
-import path from "node:path";
 
 export type CreateOnboardingWindowDependencies = {
   htmlPath: string;
+  preloadPath: string;
 };
 
 export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies): BrowserWindow {
@@ -16,7 +16,7 @@ export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies)
     show: false,
     title: "Welcome to Tabb",
     webPreferences: {
-      preload: path.join(path.dirname(deps.htmlPath), "preload.js"),
+      preload: deps.preloadPath,
     },
   });
 
@@ -28,6 +28,7 @@ export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies)
 
 export type OnboardingWindowManagerDependencies = {
   htmlPath: string;
+  preloadPath: string;
 };
 
 export function createOnboardingWindowManager(deps: OnboardingWindowManagerDependencies) {
@@ -41,6 +42,7 @@ export function createOnboardingWindowManager(deps: OnboardingWindowManagerDepen
 
     win = createOnboardingWindow({
       htmlPath: deps.htmlPath,
+      preloadPath: deps.preloadPath,
     });
 
     win.on("closed", () => {

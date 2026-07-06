@@ -1,10 +1,10 @@
 import { BrowserWindow } from "electron";
-import path from "node:path";
 import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tabb/contracts";
 
 export type CreateSettingsWindowDependencies = {
   htmlPath: string;
+  preloadPath: string;
 };
 
 export function createSettingsWindow(deps: CreateSettingsWindowDependencies): BrowserWindow {
@@ -18,7 +18,7 @@ export function createSettingsWindow(deps: CreateSettingsWindowDependencies): Br
     show: false,
     title: "Tabb Settings",
     webPreferences: {
-      preload: path.join(path.dirname(deps.htmlPath), "preload.js"),
+      preload: deps.preloadPath,
     },
   });
 
@@ -30,6 +30,7 @@ export function createSettingsWindow(deps: CreateSettingsWindowDependencies): Br
 
 export type SettingsWindowManagerDependencies = {
   htmlPath: string;
+  preloadPath: string;
 };
 
 export function createSettingsWindowManager(deps: SettingsWindowManagerDependencies) {
@@ -41,7 +42,7 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
       return win;
     }
 
-    win = createSettingsWindow({ htmlPath: deps.htmlPath });
+    win = createSettingsWindow({ htmlPath: deps.htmlPath, preloadPath: deps.preloadPath });
 
     win.on("closed", () => {
       win = null;

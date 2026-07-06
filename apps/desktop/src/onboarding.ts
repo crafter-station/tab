@@ -22,6 +22,18 @@ export const ONBOARDING_PERMISSIONS_COPY = {
   cta: "Continue to Permissions",
 } as const;
 
+export const MACOS_PERMISSION_SETTINGS_URLS = {
+  accessibility: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
+  inputMonitoring: "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent",
+} as const;
+
+export function getMacOSAppBundlePath(executablePath: string): string {
+  const bundleMarker = ".app/Contents/MacOS/";
+  const markerIndex = executablePath.indexOf(bundleMarker);
+  if (markerIndex === -1) return executablePath;
+  return executablePath.slice(0, markerIndex + ".app".length);
+}
+
 export function createOnboardingManager(deps: OnboardingManagerDependencies) {
   function shouldShowOnboarding(): boolean {
     return !deps.getPreferences().completed;

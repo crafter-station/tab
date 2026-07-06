@@ -7,13 +7,14 @@ import {
   screen,
   powerMonitor,
   shell,
+  systemPreferences,
 } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { exec } from "node:child_process";
-import { mkdirSync } from "node:fs";
+import { exec, spawn } from "node:child_process";
+import { existsSync, mkdirSync } from "node:fs";
 import { promisify } from "node:util";
-import { createTypingContextBuffer } from "./typing-context.ts";
+import { createTypingContextBuffer, getLastWords } from "./typing-context.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { acceptAndInsertSuggestion } from "./acceptance.ts";
@@ -21,7 +22,7 @@ import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
 import { createDesktopMemoryClient } from "./memory-client.ts";
-import { createOnboardingManager } from "./onboarding.ts";
+import { MACOS_PERMISSION_SETTINGS_URLS, createOnboardingManager, getMacOSAppBundlePath } from "./onboarding.ts";
 import { createOnboardingWindowManager } from "./onboarding-window.ts";
 import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
@@ -31,8 +32,11 @@ import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMe
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
-const PRELOAD_PATH = process.env.TABB_PRELOAD_PATH ?? path.join(__dirname, "preload.cjs");
-const TRAY_ICON_PATH = process.env.TABB_TRAY_ICON_PATH ?? path.join(__dirname, "assets", "iconTemplate.png");
+const runtimeRoot = app.isPackaged ? path.join(app.getAppPath(), "dist") : __dirname;
+const PRELOAD_PATH = process.env.TABB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
+const TRAY_ICON_PATH = process.env.TABB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
+const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
+const INPUT_TAP_PATH = process.env.TABB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
 
 const TERMINAL_BUNDLE_IDS = new Set([
   "com.apple.Terminal",
@@ -49,6 +53,15 @@ let currentSuggestion: Suggestion | null = null;
 let previouslyActiveApplication: ActiveApplication | null = null;
 let observationPaused = false;
 let tray: TabbTray | null = null;
+let relaunchAfterPermissionQuit = false;
+type InputTapProcess = {
+  stdout: { on(event: "data", callback: (chunk: Buffer) => void): void };
+  stderr: { on(event: "data", callback: (chunk: Buffer) => void): void };
+  on(event: "exit", callback: (code: number | null, signal: string | null) => void): void;
+  kill(): boolean;
+};
+
+let inputTapProcess: InputTapProcess | null = null;
 
 const typingContextBuffer = createTypingContextBuffer();
 
@@ -65,17 +78,26 @@ const onboardingManager = createOnboardingManager({
 });
 
 const onboardingWindowManager = createOnboardingWindowManager({
-  htmlPath: path.join(__dirname, "onboarding.html"),
+  htmlPath: path.join(runtimeRoot, "onboarding.html"),
+  preloadPath: PRELOAD_PATH,
 });
 
 const settingsWindowManager = createSettingsWindowManager({
-  htmlPath: path.join(__dirname, "settings.html"),
+  htmlPath: path.join(runtimeRoot, "settings.html"),
+  preloadPath: PRELOAD_PATH,
 });
 
 const API_BASE_URL = process.env.TABB_API_BASE_URL ?? "http://localhost:8787";
 const WEB_BASE_URL = process.env.TABB_WEB_BASE_URL ?? "http://localhost:3000";
 const DEVICE_ID = process.env.TABB_DEVICE_ID ?? "device-unknown";
 const APP_VERSION = app.getVersion() || "0.0.0";
+const SHOW_SETTINGS_ON_START = process.argv.includes("--permission-debug") || process.env.TABB_SHOW_SETTINGS_ON_START === "1";
+const SHOW_DEBUG_TYPING_OVERLAY =
+  process.env.TABB_DEBUG_TYPING_OVERLAY !== "0" &&
+  (!app.isPackaged || process.env.TABB_DEBUG_TYPING_OVERLAY === "1" || process.argv.includes("--typing-debug") || SHOW_SETTINGS_ON_START);
+const DEBUG_TYPING_DEBOUNCE_MS = 300;
+const DEBUG_TYPING_HIDE_MS = 3_600;
+const DEBUG_TYPING_WORD_LIMIT = 100;
 
 const authClient = createDesktopAuthClient({
   apiBaseUrl: API_BASE_URL,
@@ -140,6 +162,8 @@ const statusService = createDesktopStatusService({
 });
 
 let currentMemories: PersonalMemory[] = [];
+let debugTypingTimer: ReturnType<typeof setTimeout> | null = null;
+let debugTypingHideTimer: ReturnType<typeof setTimeout> | null = null;
 
 async function refreshMemories(): Promise<void> {
   const memories = await memoryClient.listMemories();
@@ -217,14 +241,36 @@ function createOverlayWindow(): BrowserWindow {
     },
   });
 
-  win.loadFile(path.join(__dirname, "index.html"));
+  win.loadFile(path.join(runtimeRoot, "index.html"));
   win.setIgnoreMouseEvents(false);
   return win;
+}
+
+function resizeOverlayWindow(height: number): void {
+  if (!overlayWindow) return;
+  const primaryDisplay = screen.getPrimaryDisplay();
+  const { width, height: workAreaHeight } = primaryDisplay.workAreaSize;
+  const overlayWidth = height > 80 ? 720 : 640;
+  overlayWindow.setBounds({
+    width: overlayWidth,
+    height,
+    x: Math.round(width / 2 - overlayWidth / 2),
+    y: workAreaHeight - height - 20,
+  });
 }
 
 function showOverlay(suggestion: Suggestion): void {
   currentSuggestion = suggestion;
   if (!overlayWindow) return;
+  if (debugTypingTimer) {
+    clearTimeout(debugTypingTimer);
+    debugTypingTimer = null;
+  }
+  if (debugTypingHideTimer) {
+    clearTimeout(debugTypingHideTimer);
+    debugTypingHideTimer = null;
+  }
+  resizeOverlayWindow(52);
   overlayWindow.webContents.send("suggestion", suggestion);
   overlayWindow.showInactive();
 }
@@ -232,7 +278,64 @@ function showOverlay(suggestion: Suggestion): void {
 function hideOverlay(): void {
   currentSuggestion = null;
   if (!overlayWindow) return;
+  if (SHOW_DEBUG_TYPING_OVERLAY && typingContextBuffer.getState().context.length > 0) {
+    showDebugTypingOverlay();
+    return;
+  }
+  if (debugTypingTimer) {
+    clearTimeout(debugTypingTimer);
+    debugTypingTimer = null;
+  }
+  if (debugTypingHideTimer) {
+    clearTimeout(debugTypingHideTimer);
+    debugTypingHideTimer = null;
+  }
   overlayWindow.hide();
+}
+
+function sendDebugContext(): void {
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !overlayWindow) return;
+
+  const state = typingContextBuffer.getState();
+  const context = getLastWords(state.context, DEBUG_TYPING_WORD_LIMIT);
+  overlayWindow.webContents.send("debug-context", {
+    context,
+    wordLimit: DEBUG_TYPING_WORD_LIMIT,
+    wordCount: context.length === 0 ? 0 : context.split(/\s+/).length,
+    source: state.contextSource,
+    app: state.activeApplication?.bundleId ?? null,
+    paused: state.paused,
+    secureInput: state.secureInput,
+  });
+}
+
+function showDebugTypingOverlay(): void {
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !overlayWindow || currentSuggestion) return;
+  if (typingContextBuffer.getState().context.length === 0) {
+    overlayWindow.hide();
+    return;
+  }
+
+  if (debugTypingTimer) {
+    clearTimeout(debugTypingTimer);
+  }
+  if (debugTypingHideTimer) {
+    clearTimeout(debugTypingHideTimer);
+    debugTypingHideTimer = null;
+  }
+  debugTypingTimer = setTimeout(() => {
+    debugTypingTimer = null;
+    if (!SHOW_DEBUG_TYPING_OVERLAY || !overlayWindow || currentSuggestion) return;
+
+    resizeOverlayWindow(184);
+    sendDebugContext();
+    overlayWindow.showInactive();
+    debugTypingHideTimer = setTimeout(() => {
+      debugTypingHideTimer = null;
+      if (!overlayWindow || currentSuggestion) return;
+      overlayWindow.hide();
+    }, DEBUG_TYPING_HIDE_MS);
+  }, DEBUG_TYPING_DEBOUNCE_MS);
 }
 
 async function acceptCurrentSuggestion(): Promise<void> {
@@ -268,12 +371,78 @@ async function acceptCurrentSuggestion(): Promise<void> {
 
 function clearContextAndHide(): void {
   typingContextBuffer.clear();
+  if (debugTypingTimer) {
+    clearTimeout(debugTypingTimer);
+    debugTypingTimer = null;
+  }
+  if (debugTypingHideTimer) {
+    clearTimeout(debugTypingHideTimer);
+    debugTypingHideTimer = null;
+  }
   suggestionLoop?.invalidate();
 }
 
 function checkForUpdates(errorMessage: string): void {
   updateChecker.checkForUpdates().catch((error) => {
     console.error(errorMessage, error);
+  });
+}
+
+function handleInputTapMessage(message: unknown): void {
+  if (!message || typeof message !== "object") return;
+  const payload = message as { type?: unknown; text?: unknown; bundleId?: unknown; message?: unknown };
+
+  if (payload.type === "ready") {
+    console.log("macOS input tap ready.");
+    return;
+  }
+  if (payload.type === "error") {
+    console.error("macOS input tap error:", payload.message);
+    return;
+  }
+  if (payload.type === "active-app" && typeof payload.bundleId === "string") {
+    handleActiveApplicationChanged(payload.bundleId);
+    return;
+  }
+  if (payload.type === "text" && typeof payload.text === "string") {
+    handleTextInput(payload.text);
+  }
+}
+
+function startMacOSInputTap(): void {
+  if (process.platform !== "darwin") return;
+  if (!existsSync(INPUT_TAP_PATH)) {
+    console.error(`macOS input tap helper missing at ${INPUT_TAP_PATH}`);
+    return;
+  }
+
+  const child = spawn(INPUT_TAP_PATH, [], { stdio: ["ignore", "pipe", "pipe"] }) as unknown as InputTapProcess;
+  inputTapProcess = child;
+  let stdoutBuffer = "";
+
+  child.stdout.on("data", (chunk) => {
+    stdoutBuffer += chunk.toString("utf8");
+    const lines = stdoutBuffer.split("\n");
+    stdoutBuffer = lines.pop() ?? "";
+    for (const line of lines) {
+      if (line.trim().length === 0) continue;
+      try {
+        handleInputTapMessage(JSON.parse(line));
+      } catch (error) {
+        console.error("Failed to parse macOS input tap message:", error);
+      }
+    }
+  });
+
+  child.stderr.on("data", (chunk) => {
+    console.error("macOS input tap stderr:", chunk.toString("utf8"));
+  });
+
+  child.on("exit", (code, signal) => {
+    if (inputTapProcess === child) {
+      inputTapProcess = null;
+    }
+    console.error(`macOS input tap exited with code ${code ?? "null"} signal ${signal ?? "null"}`);
   });
 }
 
@@ -318,6 +487,38 @@ async function bootstrap(): Promise<void> {
   ipcMain.on("complete-onboarding", () => {
     onboardingManager.completeOnboarding();
     onboardingWindowManager.close();
+  });
+
+  ipcMain.handle("open-accessibility-settings", async () => {
+    if (process.platform !== "darwin") return false;
+
+    relaunchAfterPermissionQuit = true;
+    const trusted = systemPreferences.isTrustedAccessibilityClient(true);
+    if (!trusted) {
+      await shell.openExternal(MACOS_PERMISSION_SETTINGS_URLS.accessibility);
+    }
+    return trusted;
+  });
+
+  ipcMain.handle("check-accessibility-permission", () => {
+    if (process.platform !== "darwin") return true;
+    return systemPreferences.isTrustedAccessibilityClient(false);
+  });
+
+  ipcMain.handle("open-input-monitoring-settings", async () => {
+    if (process.platform === "darwin") {
+      relaunchAfterPermissionQuit = true;
+      await shell.openExternal(MACOS_PERMISSION_SETTINGS_URLS.inputMonitoring);
+    }
+  });
+
+  ipcMain.handle("reveal-app-in-finder", () => {
+    shell.showItemInFolder(getMacOSAppBundlePath(app.getPath("exe")));
+  });
+
+  ipcMain.handle("relaunch-for-permissions", () => {
+    relaunchAfterPermissionQuit = true;
+    app.quit();
   });
 
   ipcMain.on("sign-in", () => {
@@ -424,12 +625,15 @@ async function bootstrap(): Promise<void> {
   // Show onboarding on first launch; once completed it will not reappear.
   if (onboardingManager.shouldShowOnboarding()) {
     onboardingWindowManager.show();
+  } else if (SHOW_SETTINGS_ON_START) {
+    settingsWindowManager.show();
   }
 
   // Input monitoring and active-application tracking are wired to the same
   // in-memory buffer. In a production build these are fed by a macOS native
   // input tap (IOKit/Quartz Event Services) and an active-app observer.
   handleActiveApplicationChanged("com.apple.TextEdit");
+  startMacOSInputTap();
 
   // Initial status and memory refresh.
   statusService.refresh().catch((error) => console.error("Failed initial status refresh:", error));
@@ -441,7 +645,11 @@ app.whenReady().then(bootstrap).catch((error) => {
 });
 
 app.on("will-quit", () => {
+  if (relaunchAfterPermissionQuit) {
+    app.relaunch({ args: process.argv.slice(1) });
+  }
   globalShortcut.unregisterAll();
+  inputTapProcess?.kill();
   typingContextBuffer.clear();
 });
 
@@ -450,16 +658,22 @@ app.on("window-all-closed", () => {
   // Do not call app.quit() here so Tabb keeps running in the background.
 });
 
+app.on("activate", () => {
+  settingsWindowManager.show();
+});
+
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
   if (observationPaused) return;
   typingContextBuffer.appendText(text, getTypedContextSource());
+  showDebugTypingOverlay();
   suggestionLoop?.onContextChanged();
 }
 
 export function handlePastedText(text: string): void {
   if (observationPaused) return;
   typingContextBuffer.appendPastedText(text);
+  showDebugTypingOverlay();
   suggestionLoop?.onContextChanged();
 }
 
@@ -480,11 +694,13 @@ export function handleActiveApplicationChanged(bundleId: string | null): void {
   }
 
   typingContextBuffer.setActiveApplication(activeApp);
+  showDebugTypingOverlay();
   suggestionLoop?.onContextChanged();
 }
 
 export function handleSecureInputChanged(active: boolean): void {
   typingContextBuffer.setSecureInput(active);
+  showDebugTypingOverlay();
   suggestionLoop?.onContextChanged();
 }
 
@@ -494,6 +710,7 @@ export function handlePauseChanged(active: boolean): void {
   if (active) {
     clearContextAndHide();
   }
+  showDebugTypingOverlay();
 }
 
 export function getCurrentSuggestionForTest(): Suggestion | null {

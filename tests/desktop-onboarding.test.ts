@@ -1,6 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import {
   createOnboardingManager,
+  getMacOSAppBundlePath,
+  MACOS_PERMISSION_SETTINGS_URLS,
   ONBOARDING_PERMISSIONS_COPY,
   type OnboardingPreferences,
 } from "../apps/desktop/src/onboarding.ts";
@@ -43,6 +45,19 @@ describe("desktop onboarding", () => {
     expect(ONBOARDING_PERMISSIONS_COPY.title.toLowerCase()).toContain("permissions");
     expect(ONBOARDING_PERMISSIONS_COPY.requiredPermissions).toContain("Accessibility");
     expect(ONBOARDING_PERMISSIONS_COPY.requiredPermissions).toContain("Input Monitoring");
+  });
+
+  it("targets the exact macOS privacy panes required for onboarding", () => {
+    expect(MACOS_PERMISSION_SETTINGS_URLS.accessibility).toContain("Privacy_Accessibility");
+    expect(MACOS_PERMISSION_SETTINGS_URLS.inputMonitoring).toContain("Privacy_ListenEvent");
+  });
+
+  it("reveals the app bundle instead of the executable inside a macOS app", () => {
+    expect(getMacOSAppBundlePath("/Applications/Tabb.app/Contents/MacOS/Tabb")).toBe("/Applications/Tabb.app");
+  });
+
+  it("falls back to the executable path when not running from a macOS app bundle", () => {
+    expect(getMacOSAppBundlePath("/usr/local/bin/electron")).toBe("/usr/local/bin/electron");
   });
 
   it("does not request Screen Recording or Full Disk Access", () => {

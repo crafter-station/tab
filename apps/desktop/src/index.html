@@ -41,6 +41,9 @@
         user-select: none;
         box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
         border: 1px solid rgba(255, 255, 255, 0.08);
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        transition: opacity 520ms ease, transform 520ms ease, background 180ms ease, border-color 180ms ease;
       }
 
       #suggestion {
@@ -52,27 +55,120 @@
         font-size: 11px;
         color: rgba(255, 255, 255, 0.55);
       }
+
+      #overlay.debug {
+        text-align: left;
+        padding: 14px 16px;
+        border-radius: 16px;
+        background: linear-gradient(135deg, rgba(8, 13, 22, 0.88), rgba(22, 31, 45, 0.78));
+        border-color: rgba(90, 200, 250, 0.3);
+      }
+
+      #overlay.debug.fading {
+        opacity: 0;
+        transform: translateY(10px) scale(0.985);
+      }
+
+      #debug-label {
+        display: none;
+        margin-bottom: 8px;
+        font-size: 10px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: #5ac8fa;
+      }
+
+      #debug-meta {
+        display: none;
+        margin-top: 8px;
+        font-size: 10px;
+        color: rgba(255, 255, 255, 0.48);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      #overlay.debug #suggestion {
+        display: block;
+        max-height: 112px;
+        overflow: hidden;
+        text-align: left;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 12.5px;
+        line-height: 1.45;
+        color: rgba(255, 255, 255, 0.88);
+      }
+
+      #overlay.debug #debug-label,
+      #overlay.debug #debug-meta {
+        display: block;
+      }
     </style>
   </head>
   <body>
     <div id="overlay">
+      <div id="debug-label">Dev typing context</div>
       <div id="suggestion">Tabb is ready</div>
       <div id="hint">Option+Tab or click to accept</div>
+      <div id="debug-meta"></div>
     </div>
     <script>
       const suggestionEl = document.getElementById("suggestion");
       const hintEl = document.getElementById("hint");
       const overlayEl = document.getElementById("overlay");
+      const debugMetaEl = document.getElementById("debug-meta");
+      let showingSuggestion = false;
+      let latestDebug = null;
+      let fadeTimer = null;
+
+      function renderDebug(debug) {
+        if (fadeTimer) {
+          clearTimeout(fadeTimer);
+        }
+        overlayEl.classList.add("debug");
+        overlayEl.classList.remove("fading");
+        suggestionEl.textContent = debug.context || "No captured typing context";
+        hintEl.style.display = "none";
+        debugMetaEl.textContent = `last ${debug.wordCount}/${debug.wordLimit} words · ${debug.source} · ${debug.app || "no active app"}${debug.secureInput ? " · secure input" : ""}${debug.paused ? " · paused" : ""}`;
+        fadeTimer = setTimeout(() => {
+          if (!showingSuggestion) {
+            overlayEl.classList.add("fading");
+          }
+        }, 2_800);
+      }
 
       if (window.tabb) {
         window.tabb.onSuggestion((suggestion) => {
+          showingSuggestion = true;
+          if (fadeTimer) {
+            clearTimeout(fadeTimer);
+          }
+          overlayEl.classList.remove("debug", "fading");
           suggestionEl.textContent = suggestion.text;
           hintEl.style.display = "block";
+          debugMetaEl.textContent = "";
+        });
+
+        window.tabb.onDebugContext((debug) => {
+          latestDebug = debug;
+          if (!showingSuggestion) {
+            renderDebug(debug);
+          }
         });
 
         window.tabb.onHide(() => {
-          suggestionEl.textContent = "";
-          hintEl.style.display = "none";
+          showingSuggestion = false;
+          if (latestDebug && latestDebug.context) {
+            renderDebug(latestDebug);
+          } else {
+            overlayEl.classList.remove("debug");
+            suggestionEl.textContent = "";
+            hintEl.style.display = "none";
+            debugMetaEl.textContent = "";
+          }
         });
 
         overlayEl.addEventListener("click", () => {

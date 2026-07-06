@@ -4,10 +4,16 @@ import type { PersonalMemory } from "@tabb/contracts";
 
 export type TabbPreloadApi = {
   onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => void;
+  onDebugContext: (callback: (debug: { context: string; wordLimit: number; wordCount: number; source: string; app: string | null; paused: boolean; secureInput: boolean }) => void) => void;
   onHide: (callback: () => void) => void;
   acceptSuggestion: () => void;
 
   // Onboarding
+  openAccessibilitySettings: () => Promise<boolean>;
+  checkAccessibilityPermission: () => Promise<boolean>;
+  openInputMonitoringSettings: () => Promise<void>;
+  revealAppInFinder: () => Promise<void>;
+  relaunchForPermissions: () => Promise<void>;
   completeOnboarding: () => void;
 
   // Settings / status
@@ -25,6 +31,9 @@ contextBridge.exposeInMainWorld("tabb", {
   onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => {
     ipcRenderer.on("suggestion", (_event, suggestion) => callback(suggestion));
   },
+  onDebugContext: (callback: (debug: { context: string; wordLimit: number; wordCount: number; source: string; app: string | null; paused: boolean; secureInput: boolean }) => void) => {
+    ipcRenderer.on("debug-context", (_event, debug) => callback(debug));
+  },
   onHide: (callback: () => void) => {
     ipcRenderer.on("hide", () => callback());
   },
@@ -32,6 +41,11 @@ contextBridge.exposeInMainWorld("tabb", {
     ipcRenderer.send("accept-suggestion");
   },
 
+  openAccessibilitySettings: () => ipcRenderer.invoke("open-accessibility-settings"),
+  checkAccessibilityPermission: () => ipcRenderer.invoke("check-accessibility-permission"),
+  openInputMonitoringSettings: () => ipcRenderer.invoke("open-input-monitoring-settings"),
+  revealAppInFinder: () => ipcRenderer.invoke("reveal-app-in-finder"),
+  relaunchForPermissions: () => ipcRenderer.invoke("relaunch-for-permissions"),
   completeOnboarding: () => {
     ipcRenderer.send("complete-onboarding");
   },

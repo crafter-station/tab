@@ -6,5 +6,6 @@ node_modules/
 !.sandcastle/.env.example
 dist/
 build/
+apps/desktop/.dev/
 .wrangler/
 .sandcastle/*.auth.json

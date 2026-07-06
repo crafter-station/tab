@@ -68,6 +68,12 @@
         font-size: 14px;
       }
 
+      .row-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+
       .status-badge {
         padding: 4px 10px;
         border-radius: 12px;
@@ -104,6 +110,11 @@
       button.secondary {
         background: #e5e5ea;
         color: #1c1c1e;
+      }
+
+      button:disabled {
+        cursor: default;
+        opacity: 0.55;
       }
 
       button:hover {
@@ -154,6 +165,21 @@
         font-size: 14px;
         color: #e65100;
       }
+
+      .help-text {
+        margin: 10px 0 0;
+        font-size: 12px;
+        line-height: 1.45;
+        color: #636366;
+      }
+
+      code {
+        padding: 1px 4px;
+        border-radius: 4px;
+        background: #f2f2f7;
+        font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+        font-size: 11px;
+      }
     </style>
   </head>
   <body>
@@ -195,6 +221,29 @@
       </div>
 
       <div class="section">
+        <h2>Permissions</h2>
+        <div class="row">
+          <span>Accessibility</span>
+          <div class="row-actions">
+            <span id="accessibility-status" class="status-badge warning">Checking...</span>
+            <button id="accessibility-button">Open Settings</button>
+          </div>
+        </div>
+        <div class="row">
+          <span>Input Monitoring</span>
+          <div class="row-actions">
+            <span class="status-badge warning">Manual</span>
+            <button id="input-monitoring-button">Open Settings</button>
+            <button id="relaunch-button" class="secondary">Relaunch Tabb</button>
+          </div>
+        </div>
+        <p class="help-text">
+          If macOS says “Electron” in dev mode, it is granting the Electron host instead of the packaged Tabb app.
+          For a stable Tabb entry, run <code>bun run desktop:permissions</code>, enable Tabb, then relaunch.
+        </p>
+      </div>
+
+      <div class="section">
         <h2>Quick Memory</h2>
         <div id="memory-list"></div>
       </div>
@@ -208,8 +257,13 @@
       const signInButton = document.getElementById("sign-in-button");
       const signOutButton = document.getElementById("sign-out-button");
       const pauseButton = document.getElementById("pause-button");
+      const accessibilityStatus = document.getElementById("accessibility-status");
+      const accessibilityButton = document.getElementById("accessibility-button");
+      const inputMonitoringButton = document.getElementById("input-monitoring-button");
+      const relaunchButton = document.getElementById("relaunch-button");
       const pausedBanner = document.getElementById("paused-banner");
       const memoryList = document.getElementById("memory-list");
+      let accessibilityPoll = null;
 
       function getAuthBadgeClass(auth) {
         switch (auth) {
@@ -277,12 +331,37 @@
         pauseButton.textContent = paused ? "Resume" : "Pause";
       }
 
+      function renderAccessibility(granted) {
+        accessibilityStatus.textContent = granted ? "Enabled" : "Needs access";
+        accessibilityStatus.className = "status-badge " + (granted ? "ok" : "warning");
+        accessibilityButton.textContent = granted ? "Reopen Settings" : "Open Settings";
+      }
+
+      async function refreshAccessibility() {
+        if (!window.tabb?.checkAccessibilityPermission) return false;
+        const granted = await window.tabb.checkAccessibilityPermission();
+        renderAccessibility(Boolean(granted));
+        if (granted && accessibilityPoll !== null) {
+          window.clearInterval(accessibilityPoll);
+          accessibilityPoll = null;
+        }
+        return Boolean(granted);
+      }
+
+      function pollAccessibility() {
+        if (accessibilityPoll !== null) window.clearInterval(accessibilityPoll);
+        accessibilityPoll = window.setInterval(() => {
+          refreshAccessibility().catch(() => {});
+        }, 1500);
+      }
+
       async function loadInitialState() {
         if (!window.tabb?.getInitialState) return;
         const state = await window.tabb.getInitialState();
         renderStatus(state.status);
         renderMemories(state.memories);
         renderPaused(state.paused);
+        await refreshAccessibility().catch(() => renderAccessibility(false));
       }
 
       if (window.tabb) {
@@ -293,9 +372,27 @@
         signInButton.addEventListener("click", () => window.tabb?.signIn?.());
         signOutButton.addEventListener("click", () => window.tabb?.signOut?.());
         pauseButton.addEventListener("click", () => window.tabb?.togglePause?.());
+        accessibilityButton.addEventListener("click", async () => {
+          accessibilityButton.disabled = true;
+          const alreadyGranted = await window.tabb?.openAccessibilitySettings?.();
+          renderAccessibility(Boolean(alreadyGranted));
+          accessibilityButton.disabled = false;
+          if (!alreadyGranted) pollAccessibility();
+        });
+        inputMonitoringButton.addEventListener("click", async () => {
+          inputMonitoringButton.disabled = true;
+          await window.tabb?.openInputMonitoringSettings?.();
+          await window.tabb?.revealAppInFinder?.();
+          inputMonitoringButton.disabled = false;
+        });
+        relaunchButton.addEventListener("click", () => window.tabb?.relaunchForPermissions?.());
 
         loadInitialState();
       }
+
+      window.addEventListener("beforeunload", () => {
+        if (accessibilityPoll !== null) window.clearInterval(accessibilityPoll);
+      });
     </script>
   </body>
 </html>

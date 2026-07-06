@@ -1,6 +1,7 @@
 import {
   Tray,
   Menu,
+  nativeImage,
   type MenuItemConstructorOptions,
   type NativeImage,
 } from "electron";
@@ -41,7 +42,10 @@ const INITIAL_TRAY_STATE: TrayMenuState = {
 };
 
 export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
-  const tray = new Tray(deps.icon) as TabbTray;
+  const icon = typeof deps.icon === "string" ? nativeImage.createFromPath(deps.icon) : deps.icon;
+  icon.setTemplateImage(true);
+
+  const tray = new Tray(icon) as TabbTray;
   tray.setToolTip("Tabb");
 
   function buildStatusLabel(state: TrayMenuState): string {

@@ -46,7 +46,13 @@ function isPasswordManager(bundleId: string | null | undefined): boolean {
   return PASSWORD_MANAGER_BUNDLE_ID_PATTERNS.some((id) => normalizedBundleId.includes(id));
 }
 
-export function createTypingContextBuffer(maxLength = 500): TypingContextBuffer {
+export function getLastWords(text: string, maxWords: number): string {
+  const words = text.trim().split(/\s+/).filter(Boolean);
+  if (words.length <= maxWords) return words.join(" ");
+  return words.slice(-maxWords).join(" ");
+}
+
+export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffer {
   let context = "";
   let activeApplication: ActiveApplication | null = null;
   let secureInput = false;
