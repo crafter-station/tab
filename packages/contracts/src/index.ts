@@ -26,6 +26,11 @@ export const RedactionSummarySchema = z.object({
   kinds: z.array(z.string().min(1)),
 });
 
+export const ClientMetadataSchema = z.object({
+  appVersion: z.string().min(1).optional(),
+  platform: z.string().min(1).optional(),
+});
+
 export const SuggestionRequestSchema = z.object({
   requestId: z.string().min(1),
   deviceId: z.string().min(1),
@@ -34,6 +39,8 @@ export const SuggestionRequestSchema = z.object({
   redaction: RedactionSummarySchema,
   activeApplication: ActiveApplicationSchema,
   memoryEnabled: z.boolean().default(true),
+  contextHash: z.string().min(1).optional(),
+  clientMetadata: ClientMetadataSchema.optional(),
 });
 
 export const SuggestionSchema = z.object({
@@ -68,6 +75,7 @@ export type SuggestionContextSource = z.infer<
   typeof SuggestionContextSourceSchema
 >;
 export type RedactionSummary = z.infer<typeof RedactionSummarySchema>;
+export type ClientMetadata = z.infer<typeof ClientMetadataSchema>;
 export type SuggestionRequest = z.infer<typeof SuggestionRequestSchema>;
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 export type SuggestionResponse = z.infer<typeof SuggestionResponseSchema>;

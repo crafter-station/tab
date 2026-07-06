@@ -5,7 +5,7 @@ import { exec } from "node:child_process";
 import { promisify } from "node:util";
 import { createTypingContextBuffer } from "./typing-context.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
-import { generateFakeSuggestion } from "./suggestion-engine.ts";
+import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { acceptAndInsertSuggestion } from "./acceptance.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource } from "@tabb/contracts";
 
@@ -28,6 +28,17 @@ let previouslyActiveApplication: ActiveApplication | null = null;
 let observationPaused = false;
 
 const typingContextBuffer = createTypingContextBuffer();
+
+const API_BASE_URL = process.env.TABB_API_BASE_URL ?? "http://localhost:8787";
+const DEVICE_ID = process.env.TABB_DEVICE_ID ?? "device-unknown";
+
+const requestSuggestion = createApiSuggestionClient({
+  apiBaseUrl: API_BASE_URL,
+  deviceId: DEVICE_ID,
+  appVersion: app.getVersion() || "0.0.0",
+  platform: process.platform,
+  getState: () => typingContextBuffer.getState(),
+});
 
 function isTerminalApplication(bundleId: string | null | undefined): boolean {
   if (!bundleId) return false;
@@ -123,7 +134,7 @@ async function bootstrap(): Promise<void> {
 
   suggestionLoop = createSuggestionLoop({
     getContext: () => typingContextBuffer.getState(),
-    requestSuggestion: async (context) => generateFakeSuggestion(context),
+    requestSuggestion: (context) => requestSuggestion(context),
     onShowSuggestion: showOverlay,
     onHideSuggestion: hideOverlay,
     onSecretLikeContextDetected: () => {

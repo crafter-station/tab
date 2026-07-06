@@ -2,5 +2,11 @@
   "name": "@tabb/api",
   "type": "module",
   "private": true,
-  "main": "src/index.ts"
+  "main": "src/index.ts",
+  "dependencies": {
+    "@ai-sdk/openai": "^4.0.8",
+    "ai": "^7.0.15",
+    "hono": "^4.12.27",
+    "zod": "^4.4.3"
+  }
 }

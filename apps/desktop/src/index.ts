@@ -20,3 +20,4 @@ export { createTypingContextBuffer } from "./typing-context.ts";
 export { generateFakeSuggestion } from "./suggestion-engine.ts";
 export { createSuggestionLoop } from "./suggestion-loop.ts";
 export { acceptAndInsertSuggestion } from "./acceptance.ts";
+export { createApiSuggestionClient } from "./suggestion-client.ts";
