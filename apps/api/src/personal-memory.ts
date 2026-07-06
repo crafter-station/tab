@@ -29,7 +29,10 @@ export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
   findMemoryById(id: string): Promise<PersonalMemory | null>;
-  updateMemory(id: string, input: UpdatePersonalMemoryInput): Promise<PersonalMemory | null>;
+  updateMemory(
+    id: string,
+    input: UpdatePersonalMemoryInput,
+  ): Promise<PersonalMemory | null>;
   deleteMemory(id: string): Promise<boolean>;
 }
 
@@ -83,7 +86,9 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
       ...(input.content !== undefined && { content: input.content }),
       ...(input.category !== undefined && { category: input.category }),
       ...(input.source !== undefined && { source: input.source }),
-      ...(input.sensitivity !== undefined && { sensitivity: input.sensitivity }),
+      ...(input.sensitivity !== undefined && {
+        sensitivity: input.sensitivity,
+      }),
       ...(input.active !== undefined && { active: input.active }),
       updatedAt: toISOTimestamp(new Date()),
     };
@@ -210,7 +215,15 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
       )
       .run();
 
-    return { ...existing, content, category, source, sensitivity, active, updatedAt };
+    return {
+      ...existing,
+      content,
+      category,
+      source,
+      sensitivity,
+      active,
+      updatedAt,
+    };
   }
 
   async deleteMemory(id: string): Promise<boolean> {

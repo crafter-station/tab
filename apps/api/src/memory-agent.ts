@@ -92,6 +92,12 @@ function isEligibleMemorySource(
   return (ELIGIBLE_MEMORY_SOURCES as readonly string[]).includes(source);
 }
 
+function isSafeMemoryText(content: string, category: string): boolean {
+  return (
+    validateMemoryContent(content).safe && validateMemoryContent(category).safe
+  );
+}
+
 export interface MemoryAgentModel {
   proposeOperations(
     job: MemoryJob,
@@ -147,13 +153,7 @@ export class BackgroundMemoryAgent {
           return;
         }
 
-        const contentValidation = validateMemoryContent(operation.content);
-        if (!contentValidation.safe) {
-          return;
-        }
-
-        const categoryValidation = validateMemoryContent(operation.category);
-        if (!categoryValidation.safe) {
+        if (!isSafeMemoryText(operation.content, operation.category)) {
           return;
         }
 
@@ -168,10 +168,8 @@ export class BackgroundMemoryAgent {
       }
 
       case "update": {
-        const existing = await this.personalMemoryService.findMemoryById(
-          operation.id,
-        );
-        if (!existing || existing.userId !== userId) {
+        const existing = await this.findMemoryForUser(userId, operation.id);
+        if (!existing) {
           return;
         }
 
@@ -179,13 +177,7 @@ export class BackgroundMemoryAgent {
           return;
         }
 
-        const contentValidation = validateMemoryContent(operation.content);
-        if (!contentValidation.safe) {
-          return;
-        }
-
-        const categoryValidation = validateMemoryContent(operation.category);
-        if (!categoryValidation.safe) {
+        if (!isSafeMemoryText(operation.content, operation.category)) {
           return;
         }
 
@@ -199,10 +191,8 @@ export class BackgroundMemoryAgent {
       }
 
       case "archive": {
-        const existing = await this.personalMemoryService.findMemoryById(
-          operation.id,
-        );
-        if (!existing || existing.userId !== userId) {
+        const existing = await this.findMemoryForUser(userId, operation.id);
+        if (!existing) {
           return;
         }
 
@@ -210,5 +200,18 @@ export class BackgroundMemoryAgent {
         return;
       }
     }
+  }
+
+  private async findMemoryForUser(
+    userId: string,
+    memoryId: string,
+  ): Promise<PersonalMemory | null> {
+    const memory = await this.personalMemoryService.findMemoryById(memoryId);
+
+    if (!memory || memory.userId !== userId) {
+      return null;
+    }
+
+    return memory;
   }
 }

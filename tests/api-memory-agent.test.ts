@@ -14,9 +14,7 @@ import {
   type MemoryAgentModel,
   type ProposedMemoryOperation,
 } from "../apps/api/src/memory-agent.ts";
-import { validateMemoryContent } from "../packages/memory-policy/src/index.ts";
-import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
-import type { SuggestionGenerator, SuggestionInput } from "../apps/api/src/index.ts";
+import type { SuggestionGenerator } from "../apps/api/src/index.ts";
 
 async function createMemoryAgentTestApp(
   generateSuggestion: SuggestionGenerator,
