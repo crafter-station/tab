@@ -123,4 +123,13 @@ describe("Tabb MVP PRD contracts", () => {
       );
     }
   });
+
+  it("records the subissue closure gate in the PRD", () => {
+    const prd = readText(prdPath);
+    assert.match(
+      prd,
+      /Do not close until all subissues are closed/i,
+      "PRD reminds maintainers to keep the tracking issue open until child issues close",
+    );
+  });
 });

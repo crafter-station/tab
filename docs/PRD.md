@@ -171,3 +171,4 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Polar usage-based billing requires Tabb to enforce usage limits. Polar receives immutable usage events and aggregates meters, but it does not automatically block customer actions based on meter balance.
 - AI SDK and AI Gateway implementation details, including current model IDs, must be verified against current docs during implementation rather than relying on memory.
 - The glossary in `CONTEXT.md` is the canonical product language for future specs, implementation, and UI copy.
+- Do not close until all subissues are closed.
