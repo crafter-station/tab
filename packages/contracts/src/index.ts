@@ -80,11 +80,19 @@ export const ApiSuccessResponseSchema = z.object({
   data: SuggestionResponseSchema,
 });
 
+export const EntitlementErrorDetailsSchema = z.object({
+  quota: z.number().int().nonnegative(),
+  usage: z.number().int().nonnegative(),
+  resetAt: z.string().datetime(),
+  upgradeUrl: z.string().min(1).optional(),
+});
+
 export const ApiErrorResponseSchema = z.object({
   status: z.literal("error"),
   error: z.object({
     code: z.enum(errorCodes),
     message: z.string().min(1),
+    details: EntitlementErrorDetailsSchema.optional(),
   }),
 });
 
@@ -102,6 +110,9 @@ export type ClientMetadata = z.infer<typeof ClientMetadataSchema>;
 export type SuggestionRequest = z.infer<typeof SuggestionRequestSchema>;
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 export type SuggestionResponse = z.infer<typeof SuggestionResponseSchema>;
+export type EntitlementErrorDetails = z.infer<
+  typeof EntitlementErrorDetailsSchema
+>;
 export type ApiSuccessResponse = z.infer<typeof ApiSuccessResponseSchema>;
 export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
 export type ApiResponse = z.infer<typeof ApiResponseSchema>;

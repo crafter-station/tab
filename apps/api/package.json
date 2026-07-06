@@ -5,9 +5,14 @@
   "main": "src/index.ts",
   "dependencies": {
     "@ai-sdk/openai": "^4.0.8",
+    "@polar-sh/sdk": "^0.48.1",
+    "@tabb/billing": "workspace:*",
     "ai": "^7.0.15",
     "better-auth": "^1.6.23",
     "hono": "^4.12.27",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "standardwebhooks": "^1.0.0"
   }
 }

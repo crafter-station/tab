@@ -14,6 +14,11 @@ import {
 } from "@tabb/contracts";
 import { createAuthInstance, type AuthInstance } from "./auth.ts";
 import { DeviceTokenService, type Device } from "./device-tokens.ts";
+import {
+  BillingService,
+  BillingWebhookHandler,
+  UsageMeterService,
+} from "./billing.ts";
 
 export const apiAppBoundary = {
   runtime: "cloudflare-worker-hono",
@@ -53,10 +58,11 @@ const ERROR_CODES = [
 function createErrorResponse(
   code: (typeof ERROR_CODES)[number],
   message: string,
+  details?: Record<string, unknown>,
 ) {
   return ApiErrorResponseSchema.parse({
     status: "error",
-    error: { code, message },
+    error: { code, message, details },
   });
 }
 
@@ -135,6 +141,8 @@ export type ApiDependencies = {
   readonly generateSuggestion?: SuggestionGenerator;
   readonly auth?: AuthInstance;
   readonly deviceTokenService?: DeviceTokenService;
+  readonly billingService?: BillingService;
+  readonly usageMeterService?: UsageMeterService;
 };
 
 export function createApp(deps: ApiDependencies = {}) {
@@ -143,6 +151,8 @@ export function createApp(deps: ApiDependencies = {}) {
   const auth = deps.auth ?? createAuthInstance();
   const deviceTokenService =
     deps.deviceTokenService ?? new DeviceTokenService();
+  const billingService = deps.billingService ?? new BillingService();
+  const usageMeterService = deps.usageMeterService ?? new UsageMeterService();
 
   const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -319,6 +329,24 @@ export function createApp(deps: ApiDependencies = {}) {
     }
 
     const request = parseResult.data;
+    const device = c.get("device");
+
+    const quotaCheck = await billingService.checkQuota(device.userId);
+    if (!quotaCheck.ok) {
+      return c.json(
+        createErrorResponse(
+          "quota_exhausted",
+          "Monthly autocomplete quota exhausted. Upgrade to continue.",
+          {
+            quota: quotaCheck.quota,
+            usage: quotaCheck.usage,
+            resetAt: quotaCheck.resetAt.toISOString(),
+            upgradeUrl: "/pricing",
+          },
+        ),
+        402,
+      );
+    }
 
     try {
       const generated = await generateSuggestion({
@@ -338,12 +366,49 @@ export function createApp(deps: ApiDependencies = {}) {
           ]
         : [];
 
+      if (suggestions.length > 0) {
+        await billingService.consumeSuggestion(device.userId);
+        usageMeterService
+          .recordUsage({
+            userId: device.userId,
+            requestId: request.requestId,
+            timestamp: new Date(),
+          })
+          .catch(() => {
+            // Ingestion failures are retried by the meter service; do not fail
+            // the hot suggestion response when Polar ingestion is unavailable.
+          });
+      }
+
       return c.json(createSuccessResponse(suggestions), 200);
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Suggestion generation failed.";
       return c.json(createErrorResponse("provider_failure", message), 503);
     }
+  });
+
+  app.post("/api/billing/webhook", async (c) => {
+    const webhookHandler = new BillingWebhookHandler({
+      storage: billingService.storage,
+    });
+
+    const body = await c.req.text();
+    const validation = webhookHandler.validateRequest(body, {
+      "webhook-id": c.req.header("webhook-id"),
+      "webhook-timestamp": c.req.header("webhook-timestamp"),
+      "webhook-signature": c.req.header("webhook-signature"),
+    });
+
+    if (!validation.valid) {
+      return c.json(
+        createErrorResponse("invalid_request", validation.reason),
+        400,
+      );
+    }
+
+    await webhookHandler.handle(validation.payload);
+    return c.json({ ok: true }, 200);
   });
 
   return app;

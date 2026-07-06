@@ -1,0 +1,353 @@
+import { describe, it, expect } from "bun:test";
+import { Database } from "bun:sqlite";
+import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
+import { createApp } from "../apps/api/src/index.ts";
+import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
+import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import {
+  BillingService,
+  D1BillingStorage,
+  InMemoryBillingStorage,
+  InMemoryUsageMeterClient,
+  UsageMeterService,
+  BillingWebhookHandler,
+} from "../apps/api/src/billing.ts";
+import { Webhook } from "standardwebhooks";
+import type { SuggestionGenerator } from "../apps/api/src/index.ts";
+
+const validRequest = {
+  requestId: "req-1",
+  deviceId: "device-1",
+  typingContext: "Hello",
+  contextSource: "typed_text",
+  redaction: { applied: false, redactionCount: 0, kinds: [] },
+  activeApplication: { bundleId: "com.apple.TextEdit" },
+  memoryEnabled: true,
+  contextHash: "com.apple.TextEdit:Hello:false",
+  clientMetadata: { appVersion: "0.0.1", platform: "darwin" },
+} as const;
+
+function authHeaders(token: string) {
+  return {
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${token}`,
+  };
+}
+
+async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
+  const database = new Database(":memory:");
+  const auth = createAuthInstance({ database });
+  await migrateAuth(auth);
+  const deviceTokenService = new DeviceTokenService();
+  const billingStorage = new InMemoryBillingStorage();
+  const billingService = new BillingService({ storage: billingStorage });
+  const usageMeterClient = new InMemoryUsageMeterClient();
+  const usageMeterService = new UsageMeterService({
+    client: usageMeterClient,
+    retryDelayMs: 10,
+  });
+  const app = createApp({
+    generateSuggestion,
+    auth,
+    deviceTokenService,
+    billingService,
+    usageMeterService,
+  });
+  const { token } = await deviceTokenService.createDeviceToken("user-1", {
+    deviceId: "device-1",
+    platform: "darwin",
+    appVersion: "0.0.1",
+  });
+  return { app, token, billingService, usageMeterClient };
+}
+
+async function parseApiResponse(response: Response) {
+  return ApiResponseSchema.parse(await response.json());
+}
+
+describe("Billing and quota enforcement", () => {
+  it("counts only returned suggestions against quota", async () => {
+    const { app, token, billingService } = await createBillingTestApp(
+      async () => ({ text: " world" }),
+    );
+
+    const first = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+    expect(first.status).toBe(200);
+
+    const second = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRequest, requestId: "req-2" }),
+    });
+    expect(second.status).toBe(200);
+
+    const usage = await billingService.storage.getUsage("user-1", currentMonth());
+    expect(usage).toBe(2);
+  });
+
+  it("does not consume quota for empty suggestions", async () => {
+    const { app, token, billingService } = await createBillingTestApp(
+      async () => null,
+    );
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await parseApiResponse(response);
+    expect(body.status).toBe("ok");
+    if (body.status !== "ok") throw new Error("Expected ok response");
+    expect(body.data.suggestions).toHaveLength(0);
+
+    const usage = await billingService.storage.getUsage("user-1", currentMonth());
+    expect(usage).toBe(0);
+  });
+
+  it("does not consume quota when generation fails", async () => {
+    const { app, token, billingService } = await createBillingTestApp(async () => {
+      throw new Error("model timeout");
+    });
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+
+    expect(response.status).toBe(503);
+    const usage = await billingService.storage.getUsage("user-1", currentMonth());
+    expect(usage).toBe(0);
+  });
+
+  it("returns a quota_exhausted entitlement error when the monthly quota is exceeded", async () => {
+    const { app, token, billingService } = await createBillingTestApp(
+      async () => ({ text: " world" }),
+    );
+
+    await billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "free",
+      status: "active",
+      cachedAt: new Date(),
+    });
+
+    for (let i = 0; i < 100; i++) {
+      const response = await app.request("/suggestions", {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ ...validRequest, requestId: `req-${i}` }),
+      });
+      expect(response.status).toBe(200);
+    }
+
+    const exhausted = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRequest, requestId: "req-exhausted" }),
+    });
+
+    expect(exhausted.status).toBe(402);
+    const body = await parseApiResponse(exhausted);
+    expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
+    expect(body.error.code).toBe("quota_exhausted");
+    expect(body.error.details).toBeDefined();
+    expect(body.error.details?.quota).toBe(100);
+    expect(body.error.details?.usage).toBe(100);
+    expect(body.error.details?.resetAt).toBeDefined();
+  });
+
+  it("records a Polar usage event when a suggestion is returned", async () => {
+    const { app, token, usageMeterClient } = await createBillingTestApp(
+      async () => ({ text: " world" }),
+    );
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+
+    expect(response.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    const events = usageMeterClient.getEvents();
+    expect(events).toHaveLength(1);
+    expect(events[0].userId).toBe("user-1");
+    expect(events[0].requestId).toBe("req-1");
+  });
+
+  it("does not record a Polar usage event for empty suggestions", async () => {
+    const { app, token, usageMeterClient } = await createBillingTestApp(
+      async () => null,
+    );
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+
+    expect(response.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    expect(usageMeterClient.getEvents()).toHaveLength(0);
+  });
+
+  it("retries Polar usage ingestion and eventually succeeds", async () => {
+    const { app, token, usageMeterClient } = await createBillingTestApp(
+      async () => ({ text: " world" }),
+    );
+
+    usageMeterClient.setFailNext(true);
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+
+    expect(response.status).toBe(200);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    expect(usageMeterClient.getEvents()).toHaveLength(1);
+  });
+
+  it("rejects webhook requests with an invalid signature", async () => {
+    const database = new Database(":memory:");
+    const auth = createAuthInstance({ database });
+    await migrateAuth(auth);
+    const app = createApp({ auth, deviceTokenService: new DeviceTokenService() });
+
+    const response = await app.request("/api/billing/webhook", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "webhook-id": "webhook-id-1",
+        "webhook-timestamp": String(Math.floor(Date.now() / 1000)),
+        "webhook-signature": "v1,invalid-signature",
+      },
+      body: JSON.stringify({ type: "subscription.created", data: {} }),
+    });
+
+    expect(response.status).toBe(400);
+    const body = await parseApiResponse(response);
+    expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
+    expect(body.error.code).toBe("invalid_request");
+  });
+
+  it("upgrades plan quota through Polar webhook entitlement updates", async () => {
+    const { app, token, billingService } = await createBillingTestApp(
+      async () => ({ text: " world" }),
+    );
+
+    await billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "free",
+      status: "active",
+      cachedAt: new Date(),
+    });
+
+    const webhookHandler = new BillingWebhookHandler({
+      storage: billingService.storage,
+    });
+
+    await webhookHandler.handle({
+      type: "subscription.created",
+      data: {
+        customer: { external_id: "user-1" },
+        customer_id: "polar-customer-1",
+        id: "polar-sub-1",
+        status: "active",
+        product: { name: "Tabb Pro" },
+        current_period_end: new Date(
+          Date.now() + 30 * 24 * 60 * 60 * 1000,
+        ).toISOString(),
+      },
+    });
+
+    const entitlement = await billingService.getEntitlement("user-1");
+    expect(entitlement.planId).toBe("pro");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
+
+    for (let i = 0; i < 1000; i++) {
+      const response = await app.request("/suggestions", {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify({ ...validRequest, requestId: `req-pro-${i}` }),
+      });
+      if (response.status !== 200) {
+        const body = await parseApiResponse(response);
+        throw new Error(`Unexpected status ${response.status}: ${JSON.stringify(body)}`);
+      }
+    }
+
+    const exhausted = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRequest, requestId: "req-pro-exhausted" }),
+    });
+    expect(exhausted.status).toBe(402);
+  });
+
+  it("stores entitlements and usage in D1-compatible storage", async () => {
+    const db = new Database(":memory:");
+    const storage = new D1BillingStorage(createD1LikeDatabase(db));
+    await storage.ensureTables();
+
+    await storage.setEntitlement({
+      userId: "user-d1",
+      planId: "max",
+      status: "active",
+      cachedAt: new Date(),
+    });
+
+    const entitlement = await storage.getEntitlement("user-d1");
+    expect(entitlement?.planId).toBe("max");
+
+    const first = await storage.incrementUsage("user-d1", currentMonth());
+    const second = await storage.incrementUsage("user-d1", currentMonth());
+    expect(first).toBe(1);
+    expect(second).toBe(2);
+
+    const usage = await storage.getUsage("user-d1", currentMonth());
+    expect(usage).toBe(2);
+  });
+});
+
+function createD1LikeDatabase(db: Database) {
+  return {
+    prepare(sql: string) {
+      const statement = db.prepare(sql);
+      return {
+        bind(...values: unknown[]) {
+          return {
+            first<T = unknown>(): Promise<T | null> {
+              return Promise.resolve(statement.get(...values) as T | null);
+            },
+            run(): Promise<{ success: boolean; error?: string }> {
+              statement.run(...values);
+              return Promise.resolve({ success: true });
+            },
+            all<T = unknown>(): Promise<{ results: T[] }> {
+              return Promise.resolve({ results: statement.all(...values) as T[] });
+            },
+          };
+        },
+      };
+    },
+    async exec(sql: string): Promise<void> {
+      db.exec(sql);
+    },
+  };
+}
+
+function currentMonth(): string {
+  const now = new Date();
+  return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
