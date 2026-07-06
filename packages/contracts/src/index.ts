@@ -31,7 +31,13 @@ export const SuggestionResponseSchema = z.object({
   suggestions: z.array(SuggestionSchema).max(1),
 });
 
-export const ErrorResponseSchema = z.object({
+export const ApiSuccessResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: SuggestionResponseSchema,
+});
+
+export const ApiErrorResponseSchema = z.object({
+  status: z.literal("error"),
   error: z.object({
     code: z.enum(errorCodes),
     message: z.string().min(1),
@@ -42,4 +48,5 @@ export type ActiveApplication = z.infer<typeof ActiveApplicationSchema>;
 export type SuggestionRequest = z.infer<typeof SuggestionRequestSchema>;
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 export type SuggestionResponse = z.infer<typeof SuggestionResponseSchema>;
-export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
+export type ApiSuccessResponse = z.infer<typeof ApiSuccessResponseSchema>;
+export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;

@@ -15,6 +15,11 @@ Tabb is a three-app monorepo with shared packages for product contracts, redacti
 - Run `npm run test` before committing.
 - `npm run lint` currently aliases the strict TypeScript baseline until a dedicated linter is introduced.
 
+## API Contracts
+
+- Put shared desktop/API request and response schemas in `@tabb/contracts`.
+- Use `status: "ok"` success envelopes and `status: "error"` error envelopes so callers can distinguish empty suggestion results from API failures.
+
 ## Effect Usage
 
 Use Effect-style service boundaries for cross-runtime workflows with typed dependencies and explicit failures, especially API orchestration, memory policy decisions, quota checks, retries, and background work. Keep simple UI rendering and placeholder shell code free of unnecessary Effect abstractions.

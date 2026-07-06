@@ -1,4 +1,4 @@
-import { SuggestionRequestSchema, SuggestionResponseSchema } from "@tabb/contracts";
+import { ApiSuccessResponseSchema, SuggestionRequestSchema } from "@tabb/contracts";
 
 export const apiAppBoundary = {
   runtime: "cloudflare-worker-hono",
@@ -13,7 +13,10 @@ export const apiAppBoundary = {
 export function validateSuggestionPayload(payload: unknown) {
   SuggestionRequestSchema.parse(payload);
 
-  return SuggestionResponseSchema.parse({
-    suggestions: [],
+  return ApiSuccessResponseSchema.parse({
+    status: "ok",
+    data: {
+      suggestions: [],
+    },
   });
 }
