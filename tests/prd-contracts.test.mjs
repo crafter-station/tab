@@ -29,6 +29,30 @@ const canonicalGlossaryTerms = [
   "Personal Memory",
 ];
 
+const billingPlanExpectations = [
+  {
+    planDefinition: /free:/,
+    quotaDefinition: /monthlyAutocompleteSuggestions:\s*100/,
+    prdDescription: /Free with 100 autocompletes per month/,
+  },
+  {
+    planDefinition: /pro:/,
+    quotaDefinition: /monthlyAutocompleteSuggestions:\s*1[_,]000/,
+    prdDescription: /Pro user.*1,000 autocompletes per month for \$10/,
+  },
+  {
+    planDefinition: /max:/,
+    quotaDefinition: /monthlyAutocompleteSuggestions:\s*1[_,]000[_,]000/,
+    prdDescription: /Max user.*1,000,000 autocompletes per month for \$100/,
+  },
+];
+
+const contextSourceExpectations = [
+  { schemaValue: "typed_text", prdPhrase: "typed text" },
+  { schemaValue: "pasted_text", prdPhrase: "pasted text" },
+  { schemaValue: "terminal_input", prdPhrase: "terminal input" },
+];
+
 function readText(path) {
   return readFileSync(join(root, path), "utf8");
 }
@@ -67,27 +91,30 @@ describe("Tabb MVP PRD contracts", () => {
     const prd = readText(prdPath);
     const billing = readText("packages/billing/src/index.ts");
 
-    assert.match(billing, /free:/);
-    assert.match(billing, /monthlyAutocompleteSuggestions:\s*100/);
-    assert.match(billing, /pro:/);
-    assert.match(billing, /monthlyAutocompleteSuggestions:\s*1[_,]000/);
-    assert.match(billing, /max:/);
-    assert.match(billing, /monthlyAutocompleteSuggestions:\s*1[_,]000[_,]000/);
-
-    assert.match(prd, /Free with 100 autocompletes per month/);
-    assert.match(prd, /Pro user.*1,000 autocompletes per month for \$10/);
-    assert.match(prd, /Max user.*1,000,000 autocompletes per month for \$100/);
+    for (const {
+      planDefinition,
+      quotaDefinition,
+      prdDescription,
+    } of billingPlanExpectations) {
+      assert.match(billing, planDefinition);
+      assert.match(billing, quotaDefinition);
+      assert.match(prd, prdDescription);
+    }
   });
 
   it("keeps PRD context sources aligned with shared request schema", () => {
     const prd = readText(prdPath);
     const contracts = readText("packages/contracts/src/index.ts");
 
-    for (const source of ["typed_text", "pasted_text", "terminal_input"]) {
-      assert.match(contracts, new RegExp(`"${source}"`), `contracts schema includes ${source}`);
+    for (const { schemaValue, prdPhrase } of contextSourceExpectations) {
+      assert.match(
+        contracts,
+        new RegExp(`"${schemaValue}"`),
+        `contracts schema includes ${schemaValue}`,
+      );
       assert.ok(
-        prd.toLowerCase().includes(source.replace("_", " ")),
-        `PRD discusses ${source}`,
+        prd.toLowerCase().includes(prdPhrase),
+        `PRD discusses ${schemaValue}`,
       );
     }
   });
