@@ -1,11 +1,14 @@
 import { describe, it, expect } from "bun:test";
+import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
 import { createApp } from "../apps/api/src/index.ts";
-import type { SuggestionInput } from "../apps/api/src/index.ts";
+import type { SuggestionGenerator, SuggestionInput } from "../apps/api/src/index.ts";
 
-function createTestApp(
-  generateSuggestion: (input: SuggestionInput) => Promise<{ text: string } | null>,
-) {
+function createTestApp(generateSuggestion: SuggestionGenerator) {
   return createApp({ generateSuggestion });
+}
+
+async function parseApiResponse(response: Response) {
+  return ApiResponseSchema.parse(await response.json());
 }
 
 const validRequest = {
@@ -31,8 +34,9 @@ describe("Hono suggestion API", () => {
     });
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { status: "ok"; data: { suggestions: Array<{ id: string; text: string }> } };
+    const body = await parseApiResponse(response);
     expect(body.status).toBe("ok");
+    if (body.status !== "ok") throw new Error("Expected ok response");
     expect(body.data.suggestions).toHaveLength(1);
     expect(body.data.suggestions[0].text).toBe(" world");
     expect(body.data.suggestions[0].id).toContain("req-1");
@@ -48,8 +52,9 @@ describe("Hono suggestion API", () => {
     });
 
     expect(response.status).toBe(200);
-    const body = (await response.json()) as { status: "ok"; data: { suggestions: [] } };
+    const body = await parseApiResponse(response);
     expect(body.status).toBe("ok");
+    if (body.status !== "ok") throw new Error("Expected ok response");
     expect(body.data.suggestions).toHaveLength(0);
   });
 
@@ -63,8 +68,9 @@ describe("Hono suggestion API", () => {
     });
 
     expect(response.status).toBe(400);
-    const body = (await response.json()) as { status: "error"; error: { code: string } };
+    const body = await parseApiResponse(response);
     expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
     expect(body.error.code).toBe("invalid_request");
   });
 
@@ -80,8 +86,9 @@ describe("Hono suggestion API", () => {
     });
 
     expect(response.status).toBe(503);
-    const body = (await response.json()) as { status: "error"; error: { code: string; message: string } };
+    const body = await parseApiResponse(response);
     expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
     expect(body.error.code).toBe("provider_failure");
     expect(body.error.message).toContain("model timeout");
   });

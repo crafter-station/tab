@@ -134,7 +134,7 @@ async function bootstrap(): Promise<void> {
 
   suggestionLoop = createSuggestionLoop({
     getContext: () => typingContextBuffer.getState(),
-    requestSuggestion: (context) => requestSuggestion(context),
+    requestSuggestion,
     onShowSuggestion: showOverlay,
     onHideSuggestion: hideOverlay,
     onSecretLikeContextDetected: () => {

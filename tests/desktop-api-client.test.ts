@@ -1,4 +1,5 @@
 import { describe, it, expect } from "bun:test";
+import { SuggestionRequestSchema } from "../packages/contracts/src/index.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/suggestion-client.ts";
 import type { TypingContextState } from "../apps/desktop/src/typing-context.ts";
 
@@ -41,7 +42,8 @@ describe("desktop API suggestion client", () => {
     expect(suggestion).not.toBeNull();
     expect(suggestion?.text).toBe(" world");
     expect(captured.url).toBe("http://localhost:8787/suggestions");
-    expect((captured.body as { contextHash: string }).contextHash).toBe("com.apple.TextEdit:hello:false");
+    const request = SuggestionRequestSchema.parse(captured.body);
+    expect(request.contextHash).toBe("com.apple.TextEdit:hello:false");
   });
 
   it("returns null when the API returns an empty suggestions array", async () => {

@@ -7,6 +7,10 @@ import {
 import { redactSensitiveText } from "@tabb/redaction";
 import type { TypingContextState } from "./typing-context.ts";
 
+type ActiveTypingContextState = TypingContextState & {
+  activeApplication: NonNullable<TypingContextState["activeApplication"]>;
+};
+
 export type ApiSuggestionClientDependencies = {
   apiBaseUrl: string;
   deviceId: string;
@@ -20,6 +24,33 @@ function buildContextHash(state: TypingContextState, context: string): string {
   return `${state.activeApplication?.bundleId ?? "none"}:${context}:${state.secureInput}`;
 }
 
+function buildSuggestionRequest(
+  deps: ApiSuggestionClientDependencies,
+  state: ActiveTypingContextState,
+  context: string,
+): SuggestionRequest {
+  const redaction = redactSensitiveText(context);
+
+  return {
+    requestId: crypto.randomUUID(),
+    deviceId: deps.deviceId,
+    typingContext: redaction.text,
+    contextSource: state.contextSource,
+    redaction: {
+      applied: redaction.redactions.length > 0,
+      redactionCount: redaction.redactions.length,
+      kinds: [...new Set(redaction.redactions.map((redaction) => redaction.kind))],
+    },
+    activeApplication: state.activeApplication,
+    memoryEnabled: true,
+    contextHash: buildContextHash(state, context),
+    clientMetadata: {
+      appVersion: deps.appVersion,
+      platform: deps.platform,
+    },
+  };
+}
+
 export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
 
@@ -30,29 +61,11 @@ export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies)
       return null;
     }
 
-    const redaction = redactSensitiveText(context);
-    const requestId = crypto.randomUUID();
-    const contextHash = buildContextHash(state, context);
-
-    const payload: SuggestionRequest = {
-      requestId,
-      deviceId: deps.deviceId,
-      typingContext: redaction.text,
-      contextSource: state.contextSource,
-      redaction: {
-        applied: redaction.redactions.length > 0,
-        redactionCount: redaction.redactions.length,
-        kinds: [...new Set(redaction.redactions.map((r) => r.kind))],
-      },
-      activeApplication: state.activeApplication,
-      memoryEnabled: true,
-      contextHash,
-      clientMetadata: {
-        appVersion: deps.appVersion,
-        platform: deps.platform,
-      },
-    };
-
+    const payload = buildSuggestionRequest(
+      deps,
+      { ...state, activeApplication: state.activeApplication },
+      context,
+    );
     const parsed = SuggestionRequestSchema.safeParse(payload);
     if (!parsed.success) {
       return null;

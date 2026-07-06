@@ -32,6 +32,39 @@ export type SuggestionGenerator = (
   input: SuggestionInput,
 ) => Promise<{ text: string } | null>;
 
+function createErrorResponse(
+  code: "invalid_request" | "provider_failure",
+  message: string,
+) {
+  return ApiErrorResponseSchema.parse({
+    status: "error",
+    error: { code, message },
+  });
+}
+
+function createSuccessResponse(suggestions: Suggestion[]) {
+  return ApiSuccessResponseSchema.parse({
+    status: "ok",
+    data: { suggestions },
+  });
+}
+
+function formatValidationIssues(
+  issues: Array<{ path: PropertyKey[]; message: string }>,
+): string {
+  return issues
+    .map((issue) => `${issue.path.join(".")}: ${issue.message}`)
+    .join("; ");
+}
+
+function getProviderBaseUrl(accountId: string | undefined, gatewayId: string): string {
+  if (accountId && gatewayId) {
+    return `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/openai`;
+  }
+
+  return "https://api.openai.com/v1";
+}
+
 function createRealSuggestionGenerator(): SuggestionGenerator {
   const apiKey = process.env.OPENAI_API_KEY;
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -43,10 +76,7 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
       throw new Error("OPENAI_API_KEY is not configured");
     }
 
-    const baseURL =
-      accountId && gatewayId
-        ? `https://gateway.ai.cloudflare.com/v1/${accountId}/${gatewayId}/openai`
-        : "https://api.openai.com/v1";
+    const baseURL = getProviderBaseUrl(accountId, gatewayId);
 
     const openai = createOpenAI({
       apiKey,
@@ -91,28 +121,13 @@ export function createApp(deps: ApiDependencies = {}) {
     try {
       payload = await c.req.json();
     } catch {
-      return c.json(
-        ApiErrorResponseSchema.parse({
-          status: "error",
-          error: {
-            code: "invalid_request",
-            message: "Request body must be valid JSON.",
-          },
-        }),
-        400,
-      );
+      return c.json(createErrorResponse("invalid_request", "Request body must be valid JSON."), 400);
     }
 
     const parseResult = SuggestionRequestSchema.safeParse(payload);
     if (!parseResult.success) {
       return c.json(
-        ApiErrorResponseSchema.parse({
-          status: "error",
-          error: {
-            code: "invalid_request",
-            message: parseResult.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; "),
-          },
-        }),
+        createErrorResponse("invalid_request", formatValidationIssues(parseResult.error.issues)),
         400,
       );
     }
@@ -138,24 +153,12 @@ export function createApp(deps: ApiDependencies = {}) {
         : [];
 
       return c.json(
-        ApiSuccessResponseSchema.parse({
-          status: "ok",
-          data: { suggestions },
-        }),
+        createSuccessResponse(suggestions),
         200,
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : "Suggestion generation failed.";
-      return c.json(
-        ApiErrorResponseSchema.parse({
-          status: "error",
-          error: {
-            code: "provider_failure",
-            message,
-          },
-        }),
-        503,
-      );
+      return c.json(createErrorResponse("provider_failure", message), 503);
     }
   });
 
