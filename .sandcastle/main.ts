@@ -54,18 +54,27 @@ const opencodeSandbox = () =>
         sandboxPath: "/home/agent/.opencode-auth-source.json",
         readonly: true,
       },
+      {
+        hostPath: process.env.GH_CONFIG_DIR ?? "~/.config/gh",
+        sandboxPath: "/home/agent/.gh-config-source",
+        readonly: true,
+      },
     ],
   });
 
 // Hooks run inside the sandbox before the agent starts each iteration.
-// The OpenCode auth copy configures the Docker-installed OpenCode CLI with the
-// host's OAuth credentials; npm install ensures dependencies are fresh.
+// Auth copies configure the Docker-installed CLIs with the host's existing
+// credentials; npm install ensures dependencies are fresh.
 const hooks = {
   sandbox: {
     onSandboxReady: [
       {
         command:
           "mkdir -p ~/.local/share/opencode && cp ~/.opencode-auth-source.json ~/.local/share/opencode/auth.json",
+      },
+      {
+        command:
+          "mkdir -p ~/.config && rm -rf ~/.config/gh && cp -R ~/.gh-config-source ~/.config/gh",
       },
       { command: "npm install" },
     ],
