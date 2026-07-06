@@ -1,6 +1,6 @@
 # Contributing
 
-Tabb is a three-app monorepo with shared packages for product contracts and cross-runtime policy.
+Tabb is a three-app monorepo with shared packages for product contracts, redaction, and cross-runtime policy.
 
 ## Product Language And Decisions
 
