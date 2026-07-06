@@ -45,7 +45,11 @@ describe("Tabb monorepo bootstrap", () => {
     const contracts = readText("packages/contracts/src/index.ts");
     assert.match(contracts, /SuggestionRequestSchema/);
     assert.match(contracts, /SuggestionResponseSchema/);
+    assert.match(contracts, /ApiSuccessResponseSchema/);
+    assert.match(contracts, /ApiErrorResponseSchema/);
     assert.match(contracts, /suggestions: z\.array/);
+    assert.match(contracts, /status: z\.literal\("ok"\)/);
+    assert.match(contracts, /status: z\.literal\("error"\)/);
 
     const redaction = readText("packages/redaction/src/index.ts");
     assert.match(redaction, /redactSensitiveText/);
