@@ -13,6 +13,7 @@ const workspaceEntrypoints = [
   "apps/api",
   "packages/contracts",
   "packages/memory-policy",
+  "packages/redaction",
   "packages/billing",
   "packages/effect-services",
 ];
@@ -45,6 +46,10 @@ describe("Tabb monorepo bootstrap", () => {
     assert.match(contracts, /SuggestionRequestSchema/);
     assert.match(contracts, /SuggestionResponseSchema/);
     assert.match(contracts, /suggestions: z\.array/);
+
+    const redaction = readText("packages/redaction/src/index.ts");
+    assert.match(redaction, /redactSensitiveText/);
+    assert.match(redaction, /api[_-]?key|bearer|private key/i);
 
     const contributorDocs = readText("CONTRIBUTING.md");
     assert.match(contributorDocs, /CONTEXT\.md/);
