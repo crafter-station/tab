@@ -54,6 +54,45 @@ export const DeviceMetadataSchema = z.object({
   revoked: z.boolean(),
 });
 
+export const PersonalMemorySourceSchema = z.enum([
+  "typed_text",
+  "pasted_text",
+  "terminal_input",
+  "manual",
+]);
+
+export const PersonalMemorySensitivitySchema = z.enum([
+  "normal",
+  "sensitive",
+  "private",
+]);
+
+export const PersonalMemorySchema = z.object({
+  id: z.string().min(1),
+  userId: z.string().min(1),
+  content: z.string().min(1),
+  category: z.string().min(1),
+  source: PersonalMemorySourceSchema,
+  sensitivity: PersonalMemorySensitivitySchema,
+  active: z.boolean(),
+  createdAt: z.string().datetime(),
+  updatedAt: z.string().datetime(),
+});
+
+export const MemoryListResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    memories: z.array(PersonalMemorySchema),
+  }),
+});
+
+export const MemoryDeleteResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    deleted: z.boolean(),
+  }),
+});
+
 export const SuggestionRequestSchema = z.object({
   requestId: z.string().min(1),
   deviceId: z.string().min(1),
@@ -126,3 +165,10 @@ export type DeviceAuthorizeResponse = z.infer<
   typeof DeviceAuthorizeResponseSchema
 >;
 export type DeviceMetadata = z.infer<typeof DeviceMetadataSchema>;
+export type PersonalMemorySource = z.infer<typeof PersonalMemorySourceSchema>;
+export type PersonalMemorySensitivity = z.infer<
+  typeof PersonalMemorySensitivitySchema
+>;
+export type PersonalMemory = z.infer<typeof PersonalMemorySchema>;
+export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;
+export type MemoryDeleteResponse = z.infer<typeof MemoryDeleteResponseSchema>;

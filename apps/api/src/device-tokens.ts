@@ -115,7 +115,7 @@ export type DeviceTokenServiceDependencies = {
   exchangeCodeTtlMs?: number;
 };
 
-type D1Statement = {
+export type D1Statement = {
   bind(...values: unknown[]): {
     first<T = unknown>(): Promise<T | null>;
     run(): Promise<{ success: boolean; error?: string }>;
@@ -123,7 +123,7 @@ type D1Statement = {
   };
 };
 
-type D1DatabaseLike = {
+export type D1DatabaseLike = {
   prepare(sql: string): D1Statement;
   exec(sql: string): Promise<void>;
 };

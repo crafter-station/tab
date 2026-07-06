@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import type { Context, Next } from "hono";
 import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { shouldCountSuggestionResponse } from "@tabb/billing";
@@ -8,8 +9,11 @@ import {
   DeviceAuthorizeResponseSchema,
   DeviceTokenExchangeRequestSchema,
   DeviceTokenExchangeResponseSchema,
+  MemoryDeleteResponseSchema,
+  MemoryListResponseSchema,
   SuggestionRequestSchema,
   type ActiveApplication,
+  type PersonalMemory,
   type Suggestion,
   type SuggestionContextSource,
 } from "@tabb/contracts";
@@ -20,6 +24,10 @@ import {
   BillingWebhookHandler,
   UsageMeterService,
 } from "./billing.ts";
+import {
+  PersonalMemoryService,
+  type PersonalMemoryStorage,
+} from "./personal-memory.ts";
 
 export const apiAppBoundary = {
   runtime: "cloudflare-worker-hono",
@@ -37,6 +45,7 @@ export type SuggestionInput = {
   readonly contextSource: SuggestionContextSource;
   readonly activeApplication: ActiveApplication;
   readonly memoryEnabled: boolean;
+  readonly memories: readonly PersonalMemory[];
 };
 
 export type SuggestionGenerator = (
@@ -106,6 +115,15 @@ function getProviderBaseUrl(
   return "https://api.openai.com/v1";
 }
 
+function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
+  if (memories.length === 0) return "";
+
+  const lines = memories.map(
+    (memory) => `- [${memory.category}] ${memory.content}`,
+  );
+  return `\nRelevant personal memory:\n${lines.join("\n")}`;
+}
+
 function createRealSuggestionGenerator(): SuggestionGenerator {
   const apiKey = process.env.OPENAI_API_KEY;
   const accountId = process.env.CLOUDFLARE_ACCOUNT_ID;
@@ -139,7 +157,7 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
       model: openai.chat(modelId),
       system:
         "You are a concise autocomplete assistant. Given the user's recent typing context, respond with only the most likely next few words that continue their thought. Do not explain, prefix, or quote the continuation. If there is no clear continuation, respond with an empty string.",
-      prompt: `Active application: ${input.activeApplication.bundleId}\nSource: ${input.contextSource}\nContext: """${input.typingContext}"""`,
+      prompt: `Active application: ${input.activeApplication.bundleId}\nSource: ${input.contextSource}\nContext: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
       maxOutputTokens: 32,
       temperature: 0.3,
     });
@@ -157,6 +175,7 @@ export type ApiDependencies = {
   readonly deviceTokenService?: DeviceTokenService;
   readonly billingService?: BillingService;
   readonly usageMeterService?: UsageMeterService;
+  readonly personalMemoryStorage?: PersonalMemoryStorage;
 };
 
 export function createApp(deps: ApiDependencies = {}) {
@@ -167,6 +186,9 @@ export function createApp(deps: ApiDependencies = {}) {
     deps.deviceTokenService ?? new DeviceTokenService();
   const billingService = deps.billingService ?? new BillingService();
   const usageMeterService = deps.usageMeterService ?? new UsageMeterService();
+  const personalMemoryService = new PersonalMemoryService({
+    storage: deps.personalMemoryStorage,
+  });
 
   const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -290,7 +312,7 @@ export function createApp(deps: ApiDependencies = {}) {
   app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
   // Product APIs require a valid, non-revoked device token.
-  app.use("/suggestions", async (c, next) => {
+  async function authenticateDevice(c: Context<{ Variables: ApiVariables }>, next: Next) {
     const authorization = c.req.header("Authorization");
     if (!authorization?.startsWith("Bearer ")) {
       return c.json(
@@ -318,6 +340,44 @@ export function createApp(deps: ApiDependencies = {}) {
 
     c.set("device", device);
     await next();
+  }
+
+  app.use("/suggestions", authenticateDevice);
+  app.use("/api/memory/*", authenticateDevice);
+
+  app.get("/api/memory", async (c) => {
+    const device = c.get("device");
+    const memories = await personalMemoryService.listMemories(device.userId);
+
+    return c.json(
+      MemoryListResponseSchema.parse({
+        status: "ok",
+        data: { memories },
+      }),
+      200,
+    );
+  });
+
+  app.delete("/api/memory/:id", async (c) => {
+    const device = c.get("device");
+    const id = c.req.param("id");
+
+    const deleted = await personalMemoryService.deleteMemory(device.userId, id);
+
+    if (!deleted) {
+      return c.json(
+        createErrorResponse("invalid_request", "Memory not found."),
+        404,
+      );
+    }
+
+    return c.json(
+      MemoryDeleteResponseSchema.parse({
+        status: "ok",
+        data: { deleted: true },
+      }),
+      200,
+    );
   });
 
   app.post("/suggestions", async (c) => {
@@ -358,12 +418,20 @@ export function createApp(deps: ApiDependencies = {}) {
     }
 
     try {
+      const memories = await personalMemoryService.selectRelevantMemories({
+        userId: device.userId,
+        typingContext: request.typingContext,
+        activeApplication: request.activeApplication,
+        memoryEnabled: request.memoryEnabled,
+      });
+
       const generated = await generateSuggestion({
         requestId: request.requestId,
         typingContext: request.typingContext,
         contextSource: request.contextSource,
         activeApplication: request.activeApplication,
         memoryEnabled: request.memoryEnabled,
+        memories,
       });
 
       const suggestions: Suggestion[] = generated?.text
