@@ -1,6 +1,7 @@
 import { planQuotas, type PlanId } from "@tabb/billing";
 import {
   BillingQuotaResponseSchema,
+  type DeviceListItem,
   DeviceListResponseSchema,
   MemoryListResponseSchema,
   type PersonalMemory,
@@ -38,6 +39,30 @@ function formatDate(iso: string): string {
     month: "short",
     day: "numeric",
   });
+}
+
+function formatPlanName(planId: string): string {
+  return planId.charAt(0).toUpperCase() + planId.slice(1);
+}
+
+function formatMonthlyPrice(monthlyPriceUsd: number): string {
+  if (monthlyPriceUsd === 0) {
+    return "Free";
+  }
+
+  return `$${monthlyPriceUsd}/mo`;
+}
+
+function renderTableOrEmpty(
+  rows: string,
+  header: string,
+  emptyMessage: string,
+): string {
+  if (!rows) {
+    return `<p>${emptyMessage}</p>`;
+  }
+
+  return `<table><thead>${header}</thead><tbody>${rows}</tbody></table>`;
 }
 
 function layout(
@@ -113,6 +138,19 @@ function html(body: string, status = 200): Response {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
+}
+
+function htmlErrorPage(
+  title: string,
+  message: string,
+  user?: User,
+): Response {
+  return html(layout(title, `<p class="error">${message}</p>`, { user }));
+}
+
+function routeSegment(path: string, index: number): string | undefined {
+  const segment = path.split("/")[index];
+  return segment ? decodeURIComponent(segment) : undefined;
 }
 
 function setCookies(response: Response, source: Response): void {
@@ -196,7 +234,7 @@ export function createWebApp(config: WebAppConfig) {
   function pricingPage(path: string): Response {
     const plans = Object.entries(planQuotas).map(([planId, plan]) => ({
       planId: planId as PlanId,
-      name: planId.charAt(0).toUpperCase() + planId.slice(1),
+      name: formatPlanName(planId),
       ...plan,
     }));
 
@@ -209,7 +247,7 @@ export function createWebApp(config: WebAppConfig) {
         return `
           <div class="card">
             <h3>${escapeHtml(plan.name)}</h3>
-            <div class="price">${plan.monthlyPriceUsd === 0 ? "Free" : `$${plan.monthlyPriceUsd}/mo`}</div>
+            <div class="price">${formatMonthlyPrice(plan.monthlyPriceUsd)}</div>
             <p>${plan.monthlyAutocompleteSuggestions.toLocaleString()} autocompletes per month</p>
             <p>Personal Memory included</p>
             ${cta}
@@ -303,7 +341,7 @@ export function createWebApp(config: WebAppConfig) {
     const usageBar = `
       <div class="card">
         <h2>Monthly usage</h2>
-        <p><strong>${quota.data.planId.charAt(0).toUpperCase() + quota.data.planId.slice(1)} plan</strong></p>
+        <p><strong>${formatPlanName(quota.data.planId)} plan</strong></p>
         <p>${quota.data.usage.toLocaleString()} / ${quota.data.quota.toLocaleString()} autocompletes used this month</p>
         <p class="muted">Resets ${formatDate(quota.data.resetAt)}</p>
         ${upgradeAlert}
@@ -311,28 +349,29 @@ export function createWebApp(config: WebAppConfig) {
       </div>`;
 
     const devicesRows = deviceList.data.devices
-      .map(
-        (device) => `
+      .map((device: DeviceListItem) => {
+        const revokeForm = device.revoked
+          ? ""
+          : `<form class="inline" method="post" action="/account/devices/${encodeURIComponent(device.deviceId)}/revoke"><button type="submit">Revoke</button></form>`;
+
+        return `
           <tr>
             <td>${escapeHtml(device.platform)}</td>
             <td>${escapeHtml(device.appVersion)}</td>
             <td>${formatDate(device.createdAt)}</td>
             <td>${device.revoked ? "Revoked" : "Active"}</td>
-            <td>
-              ${
-                device.revoked
-                  ? ""
-                  : `<form class="inline" method="post" action="/account/devices/${encodeURIComponent(device.deviceId)}/revoke"><button type="submit">Revoke</button></form>`
-              }
-            </td>
-          </tr>`,
-      )
+            <td>${revokeForm}</td>
+          </tr>`;
+      })
       .join("");
+
+    const devicesTableHeader =
+      "<tr><th>Platform</th><th>Version</th><th>Added</th><th>Status</th><th></th></tr>";
 
     const devicesSection = `
       <div class="card" id="devices">
         <h2>Devices</h2>
-        ${devicesRows ? `<table><thead><tr><th>Platform</th><th>Version</th><th>Added</th><th>Status</th><th></th></tr></thead><tbody>${devicesRows}</tbody></table>` : "<p>No devices linked to your account.</p>"}
+        ${renderTableOrEmpty(devicesRows, devicesTableHeader, "No devices linked to your account.")}
       </div>`;
 
     const memoryRows = memoryList.data.memories
@@ -350,10 +389,13 @@ export function createWebApp(config: WebAppConfig) {
       )
       .join("");
 
+    const memoriesTableHeader =
+      "<tr><th>Category</th><th>Content</th><th>Source</th><th>Added</th><th></th></tr>";
+
     const memoriesSection = `
       <div class="card" id="memories">
         <h2>Personal Memory</h2>
-        ${memoryRows ? `<table><thead><tr><th>Category</th><th>Content</th><th>Source</th><th>Added</th><th></th></tr></thead><tbody>${memoryRows}</tbody></table>` : "<p>No memories stored yet.</p>"}
+        ${renderTableOrEmpty(memoryRows, memoriesTableHeader, "No memories stored yet.")}
       </div>`;
 
     const tab = searchParams.get("tab");
@@ -387,7 +429,11 @@ export function createWebApp(config: WebAppConfig) {
 
     if (response.status === 401) return redirect("/login");
     if (response.status !== 200) {
-      return html(layout("Checkout error", `<p class="error">Could not start checkout. Please try again.</p>`, { user: sessionCheck.user }));
+      return htmlErrorPage(
+        "Checkout error",
+        "Could not start checkout. Please try again.",
+        sessionCheck.user,
+      );
     }
 
     const body = (await response.json()) as { data: { url: string } };
@@ -403,7 +449,11 @@ export function createWebApp(config: WebAppConfig) {
     const response = await apiRequest("/api/billing/portal", {}, cookieHeader);
     if (response.status === 401) return redirect("/login");
     if (response.status !== 200) {
-      return html(layout("Billing error", `<p class="error">Could not open billing portal. Please try again.</p>`, { user: sessionCheck.user }));
+      return htmlErrorPage(
+        "Billing error",
+        "Could not open billing portal. Please try again.",
+        sessionCheck.user,
+      );
     }
 
     const body = (await response.json()) as { data: { url: string } };
@@ -504,19 +554,25 @@ export function createWebApp(config: WebAppConfig) {
         return portalRedirect(cookieHeader);
       }
 
-      if (path.startsWith("/account/devices/") && path.endsWith("/revoke") && request.method === "POST") {
-        const segments = path.split("/");
-        const deviceId = segments[3];
+      if (
+        path.startsWith("/account/devices/") &&
+        path.endsWith("/revoke") &&
+        request.method === "POST"
+      ) {
+        const deviceId = routeSegment(path, 3);
         if (deviceId) {
-          return revokeDeviceHandler(cookieHeader, decodeURIComponent(deviceId));
+          return revokeDeviceHandler(cookieHeader, deviceId);
         }
       }
 
-      if (path.startsWith("/account/memory/") && path.endsWith("/delete") && request.method === "POST") {
-        const segments = path.split("/");
-        const memoryId = segments[3];
+      if (
+        path.startsWith("/account/memory/") &&
+        path.endsWith("/delete") &&
+        request.method === "POST"
+      ) {
+        const memoryId = routeSegment(path, 3);
         if (memoryId) {
-          return deleteMemoryHandler(cookieHeader, decodeURIComponent(memoryId));
+          return deleteMemoryHandler(cookieHeader, memoryId);
         }
       }
 
