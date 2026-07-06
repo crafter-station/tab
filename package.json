@@ -7,6 +7,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test tests/*.test.mjs && bun test",
+    "desktop:dev": "bun apps/desktop/scripts/dev.ts",
     "sandcastle": "bun --env-file=.sandcastle/.env .sandcastle/main.ts",
     "sandcastle:verify-gh": "bun --env-file=.sandcastle/.env .sandcastle/verify-gh.ts"
   },

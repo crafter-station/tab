@@ -31,6 +31,8 @@ import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMe
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
+const PRELOAD_PATH = process.env.TABB_PRELOAD_PATH ?? path.join(__dirname, "preload.cjs");
+const TRAY_ICON_PATH = process.env.TABB_TRAY_ICON_PATH ?? path.join(__dirname, "assets", "iconTemplate.png");
 
 const TERMINAL_BUNDLE_IDS = new Set([
   "com.apple.Terminal",
@@ -211,7 +213,7 @@ function createOverlayWindow(): BrowserWindow {
     hasShadow: false,
     show: false,
     webPreferences: {
-      preload: path.join(__dirname, "preload.cjs"),
+      preload: PRELOAD_PATH,
     },
   });
 
@@ -377,7 +379,7 @@ async function bootstrap(): Promise<void> {
   // Tray menu provides always-visible access to settings, quick memory, pause,
   // and sign-in/out without cluttering the overlay.
   tray = createTrayMenu({
-    icon: path.join(__dirname, "assets", "iconTemplate.png"),
+    icon: TRAY_ICON_PATH,
     actions: {
       showSettings: () => settingsWindowManager.show(),
       showQuickMemory: () => settingsWindowManager.show(),

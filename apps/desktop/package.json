@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "main": "dist/main.cjs",
   "scripts": {
-    "dev": "bun run build && electron .",
+    "dev": "bun scripts/dev.ts",
     "build": "bun run build:main && bun run build:preload && bun run build:copy",
     "build:main": "bun build src/main.ts --outdir=dist --target=node --format=cjs --packages=external",
     "build:preload": "bun build src/preload.ts --outdir=dist --target=node --format=cjs --packages=external",
