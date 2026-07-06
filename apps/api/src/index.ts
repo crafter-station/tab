@@ -185,7 +185,7 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
     const trimmed = text.trim();
     if (trimmed.length === 0) return null;
 
-    return { text: trimmed, modelId: modelId };
+    return { text: trimmed, modelId };
   };
 }
 

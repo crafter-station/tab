@@ -46,58 +46,46 @@ export class InMemoryTelemetryStorage implements TelemetryStorage {
   }
 }
 
+function optionalString(value: unknown): string | undefined {
+  return value ? String(value) : undefined;
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return value === null || value === undefined ? undefined : Number(value);
+}
+
+function optionalBoolean(value: unknown): boolean | undefined {
+  if (value === true || value === 1 || value === "1") return true;
+  if (value === false || value === 0 || value === "0") return false;
+  return undefined;
+}
+
 function rowToTelemetryEvent(row: Record<string, unknown>): TelemetryEvent {
   return TelemetryEventSchema.parse({
     id: String(row.id),
     requestId: String(row.request_id),
     userId: String(row.user_id),
-    deviceId: row.device_id ? String(row.device_id) : undefined,
+    deviceId: optionalString(row.device_id),
     eventType: String(row.event_type),
     timestamp: String(row.timestamp),
-    activeApplicationBundleId: row.active_application_bundle_id
-      ? String(row.active_application_bundle_id)
-      : undefined,
-    contextSource: row.context_source
-      ? String(row.context_source)
-      : undefined,
-    suggestionLength:
-      row.suggestion_length !== null && row.suggestion_length !== undefined
-        ? Number(row.suggestion_length)
-        : undefined,
-    planId: row.plan_id ? String(row.plan_id) : undefined,
-    modelId: row.model_id ? String(row.model_id) : undefined,
-    latencyMs:
-      row.latency_ms !== null && row.latency_ms !== undefined
-        ? Number(row.latency_ms)
-        : undefined,
-    errorCode: row.error_code ? String(row.error_code) : undefined,
-    memoryEligible:
-      row.memory_eligible === true || row.memory_eligible === 1 || row.memory_eligible === "1"
-        ? true
-        : row.memory_eligible === false || row.memory_eligible === 0 || row.memory_eligible === "0"
-          ? false
-          : undefined,
-    redactionApplied:
-      row.redaction_applied === true ||
-      row.redaction_applied === 1 ||
-      row.redaction_applied === "1"
-        ? true
-        : row.redaction_applied === false ||
-            row.redaction_applied === 0 ||
-            row.redaction_applied === "0"
-          ? false
-          : undefined,
-    redactionCount:
-      row.redaction_count !== null && row.redaction_count !== undefined
-        ? Number(row.redaction_count)
-        : undefined,
-    clientAppVersion: row.client_app_version
-      ? String(row.client_app_version)
-      : undefined,
-    clientPlatform: row.client_platform
-      ? String(row.client_platform)
-      : undefined,
+    activeApplicationBundleId: optionalString(row.active_application_bundle_id),
+    contextSource: optionalString(row.context_source),
+    suggestionLength: optionalNumber(row.suggestion_length),
+    planId: optionalString(row.plan_id),
+    modelId: optionalString(row.model_id),
+    latencyMs: optionalNumber(row.latency_ms),
+    errorCode: optionalString(row.error_code),
+    memoryEligible: optionalBoolean(row.memory_eligible),
+    redactionApplied: optionalBoolean(row.redaction_applied),
+    redactionCount: optionalNumber(row.redaction_count),
+    clientAppVersion: optionalString(row.client_app_version),
+    clientPlatform: optionalString(row.client_platform),
   });
+}
+
+function booleanToInteger(value: boolean | undefined): 1 | 0 | null {
+  if (value === undefined) return null;
+  return value ? 1 : 0;
 }
 
 export class D1TelemetryStorage implements TelemetryStorage {
@@ -158,12 +146,8 @@ export class D1TelemetryStorage implements TelemetryStorage {
         event.modelId ?? null,
         event.latencyMs ?? null,
         event.errorCode ?? null,
-        event.memoryEligible === undefined ? null : event.memoryEligible ? 1 : 0,
-        event.redactionApplied === undefined
-          ? null
-          : event.redactionApplied
-            ? 1
-            : 0,
+        booleanToInteger(event.memoryEligible),
+        booleanToInteger(event.redactionApplied),
         event.redactionCount ?? null,
         event.clientAppVersion ?? null,
         event.clientPlatform ?? null,
