@@ -57,6 +57,10 @@ function readText(path) {
   return readFileSync(join(root, path), "utf8");
 }
 
+function escapeRegExp(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 describe("Tabb MVP PRD contracts", () => {
   it("publishes the PRD at docs/PRD.md with all required sections", () => {
     const prdFullPath = join(root, prdPath);
@@ -75,7 +79,11 @@ describe("Tabb MVP PRD contracts", () => {
 
     const context = readText(contextPath);
     for (const term of canonicalGlossaryTerms) {
-      assert.match(context, new RegExp(`\\*\\*${term}\\*\\*`), `CONTEXT.md defines ${term}`);
+      assert.match(
+        context,
+        new RegExp(`\\*\\*${escapeRegExp(term)}\\*\\*`),
+        `CONTEXT.md defines ${term}`,
+      );
     }
   });
 
@@ -91,14 +99,10 @@ describe("Tabb MVP PRD contracts", () => {
     const prd = readText(prdPath);
     const billing = readText("packages/billing/src/index.ts");
 
-    for (const {
-      planDefinition,
-      quotaDefinition,
-      prdDescription,
-    } of billingPlanExpectations) {
-      assert.match(billing, planDefinition);
-      assert.match(billing, quotaDefinition);
-      assert.match(prd, prdDescription);
+    for (const expectation of billingPlanExpectations) {
+      assert.match(billing, expectation.planDefinition);
+      assert.match(billing, expectation.quotaDefinition);
+      assert.match(prd, expectation.prdDescription);
     }
   });
 
@@ -106,15 +110,16 @@ describe("Tabb MVP PRD contracts", () => {
     const prd = readText(prdPath);
     const contracts = readText("packages/contracts/src/index.ts");
 
-    for (const { schemaValue, prdPhrase } of contextSourceExpectations) {
+    for (const expectation of contextSourceExpectations) {
       assert.match(
         contracts,
-        new RegExp(`"${schemaValue}"`),
-        `contracts schema includes ${schemaValue}`,
+        new RegExp(`"${expectation.schemaValue}"`),
+        `contracts schema includes ${expectation.schemaValue}`,
       );
-      assert.ok(
-        prd.toLowerCase().includes(prdPhrase),
-        `PRD discusses ${schemaValue}`,
+      assert.match(
+        prd,
+        new RegExp(expectation.prdPhrase, "i"),
+        `PRD discusses ${expectation.schemaValue}`,
       );
     }
   });
