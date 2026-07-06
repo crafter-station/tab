@@ -1,0 +1,15 @@
+{
+  "name": "tabbb",
+  "module": "index.ts",
+  "type": "module",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "@ai-hero/sandcastle": "^0.12.0"
+  }
+}
