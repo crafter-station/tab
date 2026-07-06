@@ -47,6 +47,8 @@ describe("Tabb monorepo bootstrap", () => {
     assert.match(contracts, /SuggestionResponseSchema/);
     assert.match(contracts, /ApiSuccessResponseSchema/);
     assert.match(contracts, /ApiErrorResponseSchema/);
+    assert.match(contracts, /ApiResponseSchema/);
+    assert.match(contracts, /z\.discriminatedUnion\("status"/);
     assert.match(contracts, /suggestions: z\.array/);
     assert.match(contracts, /status: z\.literal\("ok"\)/);
     assert.match(contracts, /status: z\.literal\("error"\)/);

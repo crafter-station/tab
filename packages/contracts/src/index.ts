@@ -44,9 +44,15 @@ export const ApiErrorResponseSchema = z.object({
   }),
 });
 
+export const ApiResponseSchema = z.discriminatedUnion("status", [
+  ApiSuccessResponseSchema,
+  ApiErrorResponseSchema,
+]);
+
 export type ActiveApplication = z.infer<typeof ActiveApplicationSchema>;
 export type SuggestionRequest = z.infer<typeof SuggestionRequestSchema>;
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 export type SuggestionResponse = z.infer<typeof SuggestionResponseSchema>;
 export type ApiSuccessResponse = z.infer<typeof ApiSuccessResponseSchema>;
 export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
+export type ApiResponse = z.infer<typeof ApiResponseSchema>;
