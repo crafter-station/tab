@@ -142,6 +142,17 @@ export const SuggestionRequestSchema = z.object({
   clientMetadata: ClientMetadataSchema.optional(),
 });
 
+export const MemoryJobSchema = z.object({
+  requestId: z.string().min(1),
+  userId: z.string().min(1),
+  typingContext: z.string().min(1),
+  contextSource: SuggestionContextSourceSchema,
+  activeApplication: ActiveApplicationSchema,
+  memoryEligible: z.boolean(),
+  redaction: RedactionSummarySchema,
+  clientMetadata: ClientMetadataSchema.optional(),
+});
+
 export const SuggestionSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
@@ -214,3 +225,4 @@ export type DeviceListResponse = z.infer<typeof DeviceListResponseSchema>;
 export type BillingQuotaResponse = z.infer<typeof BillingQuotaResponseSchema>;
 export type BillingCheckoutResponse = z.infer<typeof BillingCheckoutResponseSchema>;
 export type BillingPortalResponse = z.infer<typeof BillingPortalResponseSchema>;
+export type MemoryJob = z.infer<typeof MemoryJobSchema>;

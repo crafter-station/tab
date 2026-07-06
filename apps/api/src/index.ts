@@ -34,6 +34,12 @@ import {
   PersonalMemoryService,
   type PersonalMemoryStorage,
 } from "./personal-memory.ts";
+import {
+  BackgroundMemoryAgent,
+  InMemoryMemoryJobQueue,
+  type MemoryJobQueue,
+} from "./memory-agent.ts";
+import { getMemoryEligibility } from "@tabb/memory-policy";
 
 export const apiAppBoundary = {
   runtime: "cloudflare-worker-hono",
@@ -183,6 +189,8 @@ export type ApiDependencies = {
   readonly usageMeterService?: UsageMeterService;
   readonly billingCheckoutClient?: BillingCheckoutClient;
   readonly personalMemoryStorage?: PersonalMemoryStorage;
+  readonly memoryJobQueue?: MemoryJobQueue;
+  readonly memoryAgent?: BackgroundMemoryAgent;
 };
 
 export function createApp(deps: ApiDependencies = {}) {
@@ -198,6 +206,16 @@ export function createApp(deps: ApiDependencies = {}) {
   const personalMemoryService = new PersonalMemoryService({
     storage: deps.personalMemoryStorage,
   });
+  const memoryJobQueue = deps.memoryJobQueue ?? new InMemoryMemoryJobQueue();
+  const memoryAgent =
+    deps.memoryAgent ??
+    new BackgroundMemoryAgent({
+      personalMemoryService,
+    });
+
+  if (memoryJobQueue instanceof InMemoryMemoryJobQueue) {
+    memoryJobQueue.subscribe(async (job) => memoryAgent.processJob(job));
+  }
 
   const app = new Hono<{ Variables: ApiVariables }>();
 
@@ -625,6 +643,25 @@ export function createApp(deps: ApiDependencies = {}) {
             // Ingestion failures are retried by the meter service; do not fail
             // the hot suggestion response when Polar ingestion is unavailable.
           });
+      }
+
+      const memoryEligibility = getMemoryEligibility(request.contextSource);
+      if (request.memoryEnabled && memoryEligibility.eligible) {
+        try {
+          await memoryJobQueue.enqueue({
+            requestId: request.requestId,
+            userId: device.userId,
+            typingContext: request.typingContext,
+            contextSource: request.contextSource,
+            activeApplication: request.activeApplication,
+            memoryEligible: true,
+            redaction: request.redaction,
+            clientMetadata: request.clientMetadata,
+          });
+        } catch {
+          // Background memory jobs are best-effort; do not fail the hot
+          // suggestion response when enqueueing is unavailable.
+        }
       }
 
       return c.json(createSuccessResponse(suggestions), 200);

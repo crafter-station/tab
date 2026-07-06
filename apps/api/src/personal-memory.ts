@@ -17,10 +17,22 @@ export type CreatePersonalMemoryInput = {
   readonly active?: boolean;
 };
 
+export type UpdatePersonalMemoryInput = {
+  readonly content?: string;
+  readonly category?: string;
+  readonly source?: PersonalMemorySource;
+  readonly sensitivity?: PersonalMemorySensitivity;
+  readonly active?: boolean;
+};
+
 export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
   findMemoryById(id: string): Promise<PersonalMemory | null>;
+  updateMemory(
+    id: string,
+    input: UpdatePersonalMemoryInput,
+  ): Promise<PersonalMemory | null>;
   deleteMemory(id: string): Promise<boolean>;
 }
 
@@ -60,6 +72,28 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
 
   async findMemoryById(id: string): Promise<PersonalMemory | null> {
     return this.memories.get(id) ?? null;
+  }
+
+  async updateMemory(
+    id: string,
+    input: UpdatePersonalMemoryInput,
+  ): Promise<PersonalMemory | null> {
+    const existing = this.memories.get(id);
+    if (!existing) return null;
+
+    const updated: PersonalMemory = {
+      ...existing,
+      ...(input.content !== undefined && { content: input.content }),
+      ...(input.category !== undefined && { category: input.category }),
+      ...(input.source !== undefined && { source: input.source }),
+      ...(input.sensitivity !== undefined && {
+        sensitivity: input.sensitivity,
+      }),
+      ...(input.active !== undefined && { active: input.active }),
+      updatedAt: toISOTimestamp(new Date()),
+    };
+    this.memories.set(id, updated);
+    return updated;
   }
 
   async deleteMemory(id: string): Promise<boolean> {
@@ -148,6 +182,48 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
       .bind(id)
       .first()) as Record<string, unknown> | null;
     return row ? rowToMemory(row) : null;
+  }
+
+  async updateMemory(
+    id: string,
+    input: UpdatePersonalMemoryInput,
+  ): Promise<PersonalMemory | null> {
+    const existing = await this.findMemoryById(id);
+    if (!existing) return null;
+
+    const content = input.content ?? existing.content;
+    const category = input.category ?? existing.category;
+    const source = input.source ?? existing.source;
+    const sensitivity = input.sensitivity ?? existing.sensitivity;
+    const active = input.active ?? existing.active;
+    const updatedAt = toISOTimestamp(new Date());
+
+    await this.db
+      .prepare(
+        `UPDATE personal_memories
+         SET content = ?, category = ?, source = ?, sensitivity = ?, active = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .bind(
+        content,
+        category,
+        source,
+        sensitivity,
+        active ? 1 : 0,
+        updatedAt,
+        id,
+      )
+      .run();
+
+    return {
+      ...existing,
+      content,
+      category,
+      source,
+      sensitivity,
+      active,
+      updatedAt,
+    };
   }
 
   async deleteMemory(id: string): Promise<boolean> {
@@ -240,12 +316,27 @@ export class PersonalMemoryService {
     return this.storage.listMemoriesByUser(userId);
   }
 
+  async findMemoryById(id: string): Promise<PersonalMemory | null> {
+    return this.storage.findMemoryById(id);
+  }
+
   async deleteMemory(userId: string, id: string): Promise<boolean> {
     const memory = await this.storage.findMemoryById(id);
     if (!memory || memory.userId !== userId) {
       return false;
     }
     return this.storage.deleteMemory(id);
+  }
+
+  async updateMemory(
+    id: string,
+    input: UpdatePersonalMemoryInput,
+  ): Promise<PersonalMemory | null> {
+    return this.storage.updateMemory(id, input);
+  }
+
+  async archiveMemory(id: string): Promise<PersonalMemory | null> {
+    return this.storage.updateMemory(id, { active: false });
   }
 
   async selectRelevantMemories(input: RelevanceInput): Promise<PersonalMemory[]> {
