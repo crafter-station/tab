@@ -1,15 +1,20 @@
-# tabbb
+# Tabb
 
-To install dependencies:
+Tabb is a native desktop autocomplete product that suggests continuations while a person types in other applications.
+
+## Development
+
+This repository is a three-app monorepo with shared packages. See [CONTRIBUTING.md](./CONTRIBUTING.md) for workspace structure, commands, and conventions.
+
+Quick commands:
 
 ```bash
-bun install
+# Install dependencies
+npm install
+
+# Typecheck
+npm run typecheck
+
+# Run tests
+npm run test
 ```
-
-To run:
-
-```bash
-bun run index.ts
-```
-
-This project was created using `bun init` in bun v1.3.13. [Bun](https://bun.com) is a fast all-in-one JavaScript runtime.
