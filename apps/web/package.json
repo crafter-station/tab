@@ -1,0 +1,6 @@
+{
+  "name": "@tabb/web",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts"
+}

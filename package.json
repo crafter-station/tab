@@ -1,8 +1,13 @@
 {
-  "name": "tabbb",
-  "module": "index.ts",
+  "name": "tabb",
   "type": "module",
   "private": true,
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test tests/*.test.mjs"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },

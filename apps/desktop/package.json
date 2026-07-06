@@ -1,0 +1,6 @@
+{
+  "name": "@tabb/desktop",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts"
+}

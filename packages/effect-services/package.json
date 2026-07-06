@@ -1,0 +1,9 @@
+{
+  "name": "@tabb/effect-services",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  }
+}

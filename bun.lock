@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "tabbb",
+      "name": "tabb",
       "dependencies": {
         "@ai-hero/sandcastle": "^0.12.0",
         "zod": "^4.4.3",
@@ -14,6 +14,27 @@
       "peerDependencies": {
         "typescript": "^5",
       },
+    },
+    "apps/api": {
+      "name": "@tabb/api",
+    },
+    "apps/desktop": {
+      "name": "@tabb/desktop",
+    },
+    "apps/web": {
+      "name": "@tabb/web",
+    },
+    "packages/billing": {
+      "name": "@tabb/billing",
+    },
+    "packages/contracts": {
+      "name": "@tabb/contracts",
+    },
+    "packages/effect-services": {
+      "name": "@tabb/effect-services",
+    },
+    "packages/memory-policy": {
+      "name": "@tabb/memory-policy",
     },
   },
   "packages": {
