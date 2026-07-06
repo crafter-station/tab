@@ -27,6 +27,15 @@ function contextHash(snapshot: TypingContextSnapshot): string {
   return `${snapshot.activeApplication?.bundleId ?? "none"}:${snapshot.context}:${snapshot.secureInput}`;
 }
 
+function shouldSuppressSuggestions(snapshot: TypingContextSnapshot): boolean {
+  return Boolean(
+    snapshot.secureInput ||
+      snapshot.paused ||
+      snapshot.privateContext ||
+      snapshot.context.trim().length === 0,
+  );
+}
+
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   let state: SuggestionLoopState = { status: "idle" };
 
@@ -48,12 +57,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     const snapshot = deps.getContext();
     const hash = contextHash(snapshot);
 
-    if (
-      snapshot.secureInput ||
-      snapshot.paused ||
-      snapshot.privateContext ||
-      snapshot.context.trim().length === 0
-    ) {
+    if (shouldSuppressSuggestions(snapshot)) {
       invalidate();
       return;
     }

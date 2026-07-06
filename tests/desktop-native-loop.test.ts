@@ -242,9 +242,16 @@ describe("desktop native suggestion loop", () => {
 
   describe("local privacy suppression and redaction", () => {
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+    type PrivacyContext = {
+      context: string;
+      activeApplication: ActiveApplication | null;
+      secureInput: boolean;
+      paused?: boolean;
+      privateContext?: boolean;
+    };
 
     function makePrivacyDeps(overrides: {
-      getContext?: () => { context: string; activeApplication: ActiveApplication | null; secureInput: boolean; paused?: boolean; privateContext?: boolean };
+      getContext?: () => PrivacyContext;
       requestSuggestion?: (context: string) => Promise<Suggestion | null>;
     } = {}) {
       const events: Array<{ type: string; payload?: unknown }> = [];
@@ -313,7 +320,7 @@ describe("desktop native suggestion loop", () => {
 
       it("redacts api keys in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
-        let context = "api_key=sk-abc1234567890";
+        const context = "api_key=sk-abc1234567890";
         deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
@@ -324,7 +331,7 @@ describe("desktop native suggestion loop", () => {
 
       it("redacts bearer tokens in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
-        let context = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+        const context = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
         deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
@@ -335,7 +342,7 @@ describe("desktop native suggestion loop", () => {
 
       it("redacts private key blocks in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
-        let context = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc123\n-----END OPENSSH PRIVATE KEY-----";
+        const context = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc123\n-----END OPENSSH PRIVATE KEY-----";
         deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
@@ -346,7 +353,7 @@ describe("desktop native suggestion loop", () => {
 
       it("redacts database URLs in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
-        let context = "DATABASE_URL=postgres://user:pass@localhost:5432/db";
+        const context = "DATABASE_URL=postgres://user:pass@localhost:5432/db";
         deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
@@ -357,7 +364,7 @@ describe("desktop native suggestion loop", () => {
 
       it("allows normal typed prose to request suggestions", async () => {
         const { requestSuggestionCalls, deps } = makePrivacyDeps();
-        let context = "hello world";
+        const context = "hello world";
         deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
@@ -423,7 +430,7 @@ describe("desktop native suggestion loop", () => {
       });
 
       it("suppresses suggestion requests while paused", async () => {
-        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        const { requestSuggestionCalls, deps } = makePrivacyDeps();
         deps.getContext = () => ({
           context: "hello",
           activeApplication: { bundleId: "com.apple.TextEdit" },

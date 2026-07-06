@@ -34,6 +34,12 @@ function isTerminalApplication(bundleId: string | null | undefined): boolean {
   return TERMINAL_BUNDLE_IDS.has(bundleId);
 }
 
+function getTypedContextSource(): SuggestionContextSource {
+  const bundleId = typingContextBuffer.getState().activeApplication?.bundleId;
+  if (isTerminalApplication(bundleId)) return "terminal_input";
+  return "typed_text";
+}
+
 function createOverlayWindow(): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.workAreaSize;
@@ -172,12 +178,7 @@ app.on("window-all-closed", () => {
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
   if (observationPaused) return;
-  const source: SuggestionContextSource = isTerminalApplication(
-    typingContextBuffer.getState().activeApplication?.bundleId,
-  )
-    ? "terminal_input"
-    : "typed_text";
-  typingContextBuffer.appendText(text, source);
+  typingContextBuffer.appendText(text, getTypedContextSource());
   suggestionLoop?.onContextChanged();
 }
 

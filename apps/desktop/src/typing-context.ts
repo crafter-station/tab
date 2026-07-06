@@ -36,10 +36,14 @@ const PASSWORD_MANAGER_BUNDLE_IDS = new Set([
   "com.bitwarden.desktop",
 ]);
 
+const PASSWORD_MANAGER_BUNDLE_ID_PATTERNS = [...PASSWORD_MANAGER_BUNDLE_IDS].map((id) =>
+  id.toLowerCase(),
+);
+
 function isPasswordManager(bundleId: string | null | undefined): boolean {
   if (!bundleId) return false;
-  const lower = bundleId.toLowerCase();
-  return [...PASSWORD_MANAGER_BUNDLE_IDS].some((id) => lower.includes(id.toLowerCase()));
+  const normalizedBundleId = bundleId.toLowerCase();
+  return PASSWORD_MANAGER_BUNDLE_ID_PATTERNS.some((id) => normalizedBundleId.includes(id));
 }
 
 export function createTypingContextBuffer(maxLength = 500): TypingContextBuffer {
@@ -53,13 +57,17 @@ export function createTypingContextBuffer(maxLength = 500): TypingContextBuffer 
     return secureInput || isPasswordManager(activeApplication?.bundleId);
   }
 
+  function isPasswordManagerContext(): boolean {
+    return isPasswordManager(activeApplication?.bundleId);
+  }
+
   function append(text: string, source: SuggestionContextSource): void {
     if (paused) return;
     if (secureInput) {
       context = "";
       return;
     }
-    if (isPasswordManager(activeApplication?.bundleId)) {
+    if (isPasswordManagerContext()) {
       // Do not accumulate typing context inside known password managers.
       context = "";
       return;
@@ -75,7 +83,7 @@ export function createTypingContextBuffer(maxLength = 500): TypingContextBuffer 
     },
     appendPastedText(text) {
       if (paused || secureInput) return;
-      if (isPasswordManager(activeApplication?.bundleId)) return;
+      if (isPasswordManagerContext()) return;
       // Pasted text may inform immediate suggestions after local redaction, but
       // it is not eligible for Personal Memory by default (ADR-0017).
       const redacted = redactSensitiveText(text);
@@ -88,7 +96,7 @@ export function createTypingContextBuffer(maxLength = 500): TypingContextBuffer 
         context = "";
       }
       activeApplication = app;
-      if (isPasswordManager(activeApplication?.bundleId)) {
+      if (isPasswordManagerContext()) {
         context = "";
       }
     },
