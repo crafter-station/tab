@@ -56,6 +56,9 @@
     },
     "packages/memory-policy": {
       "name": "@tabb/memory-policy",
+      "dependencies": {
+        "@tabb/redaction": "workspace:*",
+      },
     },
     "packages/redaction": {
       "name": "@tabb/redaction",

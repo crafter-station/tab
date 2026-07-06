@@ -105,6 +105,17 @@ export const SuggestionRequestSchema = z.object({
   clientMetadata: ClientMetadataSchema.optional(),
 });
 
+export const MemoryJobSchema = z.object({
+  requestId: z.string().min(1),
+  userId: z.string().min(1),
+  typingContext: z.string().min(1),
+  contextSource: SuggestionContextSourceSchema,
+  activeApplication: ActiveApplicationSchema,
+  memoryEligible: z.boolean(),
+  redaction: RedactionSummarySchema,
+  clientMetadata: ClientMetadataSchema.optional(),
+});
+
 export const SuggestionSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
@@ -172,3 +183,4 @@ export type PersonalMemorySensitivity = z.infer<
 export type PersonalMemory = z.infer<typeof PersonalMemorySchema>;
 export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;
 export type MemoryDeleteResponse = z.infer<typeof MemoryDeleteResponseSchema>;
+export type MemoryJob = z.infer<typeof MemoryJobSchema>;

@@ -1,3 +1,5 @@
+import { detectSensitiveData, type RedactionKind } from "@tabb/redaction";
+
 export type MemorySource =
   | "typed_text"
   | "pasted_text"
@@ -28,4 +30,33 @@ export function getMemoryEligibility(source: MemorySource): MemoryEligibility {
         reason: "terminal output is not user-authored typing context",
       };
   }
+}
+
+export type MemorySafetyResult = {
+  readonly safe: boolean;
+  readonly reason?: string;
+  readonly violations: readonly RedactionKind[];
+};
+
+/**
+ * Deterministic validator that rejects content containing secrets, tokens,
+ * private keys, auth headers, cookies, payment data, government identifiers,
+ * and other high-entropy or high-risk patterns before it can be persisted as
+ * Personal Memory.
+ */
+export function validateMemoryContent(content: string): MemorySafetyResult {
+  const detection = detectSensitiveData(content);
+
+  if (detection.hasSensitiveData) {
+    return {
+      safe: false,
+      reason: `Content contains sensitive data patterns: ${detection.kinds.join(", ")}`,
+      violations: detection.kinds,
+    };
+  }
+
+  return {
+    safe: true,
+    violations: [],
+  };
 }
