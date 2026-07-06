@@ -168,6 +168,57 @@ export const MemoryJobSchema = z.object({
   clientMetadata: ClientMetadataSchema.optional(),
 });
 
+export const TelemetryEventTypeSchema = z.enum([
+  "suggestion_shown",
+  "suggestion_accepted",
+  "suggestion_dismissed",
+  "suggestion_stale",
+  "suggestion_error",
+  "memory_job_enqueued",
+]);
+
+export const TelemetryEventSchema = z.object({
+  id: z.string().min(1),
+  requestId: z.string().min(1),
+  userId: z.string().min(1),
+  deviceId: z.string().min(1).optional(),
+  eventType: TelemetryEventTypeSchema,
+  timestamp: z.string().datetime(),
+  activeApplicationBundleId: z.string().min(1).optional(),
+  contextSource: SuggestionContextSourceSchema.optional(),
+  suggestionLength: z.number().int().nonnegative().optional(),
+  planId: z.string().min(1).optional(),
+  modelId: z.string().min(1).optional(),
+  latencyMs: z.number().int().nonnegative().optional(),
+  errorCode: z.enum(errorCodes).optional(),
+  memoryEligible: z.boolean().optional(),
+  redactionApplied: z.boolean().optional(),
+  redactionCount: z.number().int().nonnegative().optional(),
+  clientAppVersion: z.string().min(1).optional(),
+  clientPlatform: z.string().min(1).optional(),
+});
+
+export const RecordTelemetryEventRequestSchema = z
+  .object({
+    eventType: z.enum([
+      "suggestion_accepted",
+      "suggestion_dismissed",
+      "suggestion_stale",
+    ]),
+    requestId: z.string().min(1),
+    timestamp: z.string().datetime(),
+    activeApplicationBundleId: z.string().min(1).optional(),
+    suggestionLength: z.number().int().nonnegative().optional(),
+  })
+  .strict();
+
+export const TelemetryEventsResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    recorded: z.boolean(),
+  }),
+});
+
 export const SuggestionSchema = z.object({
   id: z.string().min(1),
   text: z.string().min(1),
@@ -241,5 +292,13 @@ export type BillingQuotaResponse = z.infer<typeof BillingQuotaResponseSchema>;
 export type BillingCheckoutResponse = z.infer<typeof BillingCheckoutResponseSchema>;
 export type BillingPortalResponse = z.infer<typeof BillingPortalResponseSchema>;
 export type MemoryJob = z.infer<typeof MemoryJobSchema>;
+export type TelemetryEventType = z.infer<typeof TelemetryEventTypeSchema>;
+export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
+export type RecordTelemetryEventRequest = z.infer<
+  typeof RecordTelemetryEventRequestSchema
+>;
+export type TelemetryEventsResponse = z.infer<
+  typeof TelemetryEventsResponseSchema
+>;
 export type DesktopStatus = z.infer<typeof DesktopStatusSchema>;
 export type DesktopStatusResponse = z.infer<typeof DesktopStatusResponseSchema>;

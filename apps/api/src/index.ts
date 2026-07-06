@@ -16,11 +16,14 @@ import {
   DeviceTokenExchangeResponseSchema,
   MemoryDeleteResponseSchema,
   MemoryListResponseSchema,
+  RecordTelemetryEventRequestSchema,
   SuggestionRequestSchema,
+  TelemetryEventsResponseSchema,
   type ActiveApplication,
   type PersonalMemory,
   type Suggestion,
   type SuggestionContextSource,
+  type TelemetryEvent,
 } from "@tabb/contracts";
 import { createAuthInstance, type AuthInstance } from "./auth.ts";
 import { DeviceTokenService, type Device } from "./device-tokens.ts";
@@ -41,6 +44,10 @@ import {
   type MemoryJobQueue,
 } from "./memory-agent.ts";
 import { getMemoryEligibility } from "@tabb/memory-policy";
+import {
+  TelemetryService,
+  type TelemetryStorage,
+} from "./telemetry.ts";
 
 export const apiAppBoundary = {
   runtime: "cloudflare-worker-hono",
@@ -63,7 +70,7 @@ export type SuggestionInput = {
 
 export type SuggestionGenerator = (
   input: SuggestionInput,
-) => Promise<{ text: string } | null>;
+) => Promise<{ text: string; modelId?: string } | null>;
 
 type ApiVariables = {
   device: Device;
@@ -178,7 +185,7 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
     const trimmed = text.trim();
     if (trimmed.length === 0) return null;
 
-    return { text: trimmed };
+    return { text: trimmed, modelId: modelId };
   };
 }
 
@@ -192,6 +199,8 @@ export type ApiDependencies = {
   readonly personalMemoryStorage?: PersonalMemoryStorage;
   readonly memoryJobQueue?: MemoryJobQueue;
   readonly memoryAgent?: BackgroundMemoryAgent;
+  readonly telemetryService?: TelemetryService;
+  readonly telemetryStorage?: TelemetryStorage;
 };
 
 export function createApp(deps: ApiDependencies = {}) {
@@ -213,6 +222,9 @@ export function createApp(deps: ApiDependencies = {}) {
     new BackgroundMemoryAgent({
       personalMemoryService,
     });
+  const telemetryService =
+    deps.telemetryService ??
+    new TelemetryService({ storage: deps.telemetryStorage });
 
   if (memoryJobQueue instanceof InMemoryMemoryJobQueue) {
     memoryJobQueue.subscribe(async (job) => memoryAgent.processJob(job));
@@ -628,6 +640,23 @@ export function createApp(deps: ApiDependencies = {}) {
       );
     }
 
+    async function recordSuggestionEvent(
+      event: Omit<TelemetryEvent, "id" | "requestId" | "userId" | "deviceId">,
+    ): Promise<void> {
+      try {
+        await telemetryService.record({
+          ...event,
+          requestId: request.requestId,
+          userId: device.userId,
+          deviceId: device.deviceId,
+        });
+      } catch {
+        // Telemetry is best-effort; do not fail the hot suggestion response.
+      }
+    }
+
+    const suggestionStart = performance.now();
+
     try {
       const memories = await personalMemoryService.selectRelevantMemories({
         userId: device.userId,
@@ -645,6 +674,8 @@ export function createApp(deps: ApiDependencies = {}) {
         memories,
       });
 
+      const latencyMs = Math.round(performance.now() - suggestionStart);
+
       const suggestions: Suggestion[] = generated?.text
         ? [
             {
@@ -653,6 +684,21 @@ export function createApp(deps: ApiDependencies = {}) {
             },
           ]
         : [];
+
+      await recordSuggestionEvent({
+        eventType: "suggestion_shown",
+        timestamp: new Date().toISOString(),
+        activeApplicationBundleId: request.activeApplication.bundleId,
+        contextSource: request.contextSource,
+        suggestionLength: suggestions[0]?.text.length ?? 0,
+        planId: quotaCheck.entitlement.planId,
+        modelId: generated?.modelId,
+        latencyMs,
+        redactionApplied: request.redaction.applied,
+        redactionCount: request.redaction.redactionCount,
+        clientAppVersion: request.clientMetadata?.appVersion,
+        clientPlatform: request.clientMetadata?.platform,
+      });
 
       if (shouldCountSuggestionResponse(suggestions.length)) {
         await billingService.consumeSuggestion(device.userId);
@@ -681,6 +727,19 @@ export function createApp(deps: ApiDependencies = {}) {
             redaction: request.redaction,
             clientMetadata: request.clientMetadata,
           });
+
+          await recordSuggestionEvent({
+            eventType: "memory_job_enqueued",
+            timestamp: new Date().toISOString(),
+            activeApplicationBundleId: request.activeApplication.bundleId,
+            contextSource: request.contextSource,
+            planId: quotaCheck.entitlement.planId,
+            memoryEligible: true,
+            redactionApplied: request.redaction.applied,
+            redactionCount: request.redaction.redactionCount,
+            clientAppVersion: request.clientMetadata?.appVersion,
+            clientPlatform: request.clientMetadata?.platform,
+          });
         } catch {
           // Background memory jobs are best-effort; do not fail the hot
           // suggestion response when enqueueing is unavailable.
@@ -689,10 +748,77 @@ export function createApp(deps: ApiDependencies = {}) {
 
       return c.json(createSuccessResponse(suggestions), 200);
     } catch (error) {
+      const latencyMs = Math.round(performance.now() - suggestionStart);
       const message =
         error instanceof Error ? error.message : "Suggestion generation failed.";
+
+      await recordSuggestionEvent({
+        eventType: "suggestion_error",
+        timestamp: new Date().toISOString(),
+        activeApplicationBundleId: request.activeApplication.bundleId,
+        contextSource: request.contextSource,
+        planId: quotaCheck.entitlement.planId,
+        latencyMs,
+        errorCode: "provider_failure",
+        redactionApplied: request.redaction.applied,
+        redactionCount: request.redaction.redactionCount,
+        clientAppVersion: request.clientMetadata?.appVersion,
+        clientPlatform: request.clientMetadata?.platform,
+      });
+
       return c.json(createErrorResponse("provider_failure", message), 503);
     }
+  });
+
+  app.use("/telemetry/events", authenticateDevice);
+
+  app.post("/telemetry/events", async (c) => {
+    let payload: unknown;
+    try {
+      payload = await c.req.json();
+    } catch {
+      return c.json(
+        createErrorResponse("invalid_request", "Request body must be valid JSON."),
+        400,
+      );
+    }
+
+    const parseResult = RecordTelemetryEventRequestSchema.safeParse(payload);
+    if (!parseResult.success) {
+      return c.json(
+        createErrorResponse(
+          "invalid_request",
+          formatValidationIssues(parseResult.error.issues),
+        ),
+        400,
+      );
+    }
+
+    const request = parseResult.data;
+    const device = c.get("device");
+
+    try {
+      await telemetryService.record({
+        eventType: request.eventType,
+        requestId: request.requestId,
+        userId: device.userId,
+        deviceId: device.deviceId,
+        timestamp: request.timestamp,
+        activeApplicationBundleId: request.activeApplicationBundleId,
+        suggestionLength: request.suggestionLength,
+      });
+    } catch {
+      // Telemetry ingestion is best-effort; still return success to the client
+      // so acceptance/dismissal reporting does not block typing.
+    }
+
+    return c.json(
+      TelemetryEventsResponseSchema.parse({
+        status: "ok",
+        data: { recorded: true },
+      }),
+      200,
+    );
   });
 
   app.post("/api/billing/webhook", async (c) => {
