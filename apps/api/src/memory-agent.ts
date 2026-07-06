@@ -81,6 +81,17 @@ export type ProposedMemoryOperation =
   | ProposedUpdateMemory
   | ProposedArchiveMemory;
 
+const ELIGIBLE_MEMORY_SOURCES: readonly PersonalMemorySource[] = [
+  "typed_text",
+  "terminal_input",
+];
+
+function isEligibleMemorySource(
+  source: PersonalMemorySource,
+): source is "typed_text" | "terminal_input" {
+  return (ELIGIBLE_MEMORY_SOURCES as readonly string[]).includes(source);
+}
+
 export interface MemoryAgentModel {
   proposeOperations(
     job: MemoryJob,
@@ -132,8 +143,17 @@ export class BackgroundMemoryAgent {
   ): Promise<void> {
     switch (operation.type) {
       case "create": {
-        const validation = validateMemoryContent(operation.content);
-        if (!validation.safe) {
+        if (!isEligibleMemorySource(operation.source)) {
+          return;
+        }
+
+        const contentValidation = validateMemoryContent(operation.content);
+        if (!contentValidation.safe) {
+          return;
+        }
+
+        const categoryValidation = validateMemoryContent(operation.category);
+        if (!categoryValidation.safe) {
           return;
         }
 
@@ -155,8 +175,17 @@ export class BackgroundMemoryAgent {
           return;
         }
 
-        const validation = validateMemoryContent(operation.content);
-        if (!validation.safe) {
+        if (!isEligibleMemorySource(operation.source)) {
+          return;
+        }
+
+        const contentValidation = validateMemoryContent(operation.content);
+        if (!contentValidation.safe) {
+          return;
+        }
+
+        const categoryValidation = validateMemoryContent(operation.category);
+        if (!categoryValidation.safe) {
           return;
         }
 
