@@ -1,4 +1,9 @@
-import { Tray, Menu, type NativeImage } from "electron";
+import {
+  Tray,
+  Menu,
+  type MenuItemConstructorOptions,
+  type NativeImage,
+} from "electron";
 import type { DesktopStatus } from "./status.ts";
 
 export type TrayMenuState = {
@@ -51,6 +56,31 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
   function buildContextMenu(state: TrayMenuState): Menu {
     const isSignedIn = state.auth === "signed_in";
     const pauseLabel = state.paused ? "Resume Tabb" : "Pause Tabb";
+    let updateItem: MenuItemConstructorOptions;
+    if (state.updateAvailable) {
+      updateItem = {
+        label: "Update Available",
+        click: deps.actions.openDownloadPage,
+      };
+    } else {
+      updateItem = {
+        label: "Check for Updates",
+        click: deps.actions.checkForUpdates,
+      };
+    }
+
+    let authItem: MenuItemConstructorOptions;
+    if (isSignedIn) {
+      authItem = {
+        label: "Sign Out",
+        click: deps.actions.signOut,
+      };
+    } else {
+      authItem = {
+        label: "Sign In",
+        click: deps.actions.signIn,
+      };
+    }
 
     return Menu.buildFromTemplate([
       {
@@ -72,25 +102,9 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
         click: deps.actions.togglePause,
       },
       { type: "separator" },
-      state.updateAvailable
-        ? {
-            label: "Update Available",
-            click: deps.actions.openDownloadPage,
-          }
-        : {
-            label: "Check for Updates",
-            click: deps.actions.checkForUpdates,
-          },
+      updateItem,
       { type: "separator" },
-      isSignedIn
-        ? {
-            label: "Sign Out",
-            click: deps.actions.signOut,
-          }
-        : {
-            label: "Sign In",
-            click: deps.actions.signIn,
-          },
+      authItem,
       { type: "separator" },
       {
         label: "Quit",

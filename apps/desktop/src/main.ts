@@ -73,12 +73,13 @@ const settingsWindowManager = createSettingsWindowManager({
 const API_BASE_URL = process.env.TABB_API_BASE_URL ?? "http://localhost:8787";
 const WEB_BASE_URL = process.env.TABB_WEB_BASE_URL ?? "http://localhost:3000";
 const DEVICE_ID = process.env.TABB_DEVICE_ID ?? "device-unknown";
+const APP_VERSION = app.getVersion() || "0.0.0";
 
 const authClient = createDesktopAuthClient({
   apiBaseUrl: API_BASE_URL,
   webBaseUrl: WEB_BASE_URL,
   deviceId: DEVICE_ID,
-  appVersion: app.getVersion() || "0.0.0",
+  appVersion: APP_VERSION,
   platform: process.platform,
   keychain: createMacOSKeychain(),
   openExternal: async (url) => {
@@ -89,7 +90,7 @@ const authClient = createDesktopAuthClient({
 const requestSuggestion = createApiSuggestionClient({
   apiBaseUrl: API_BASE_URL,
   deviceId: DEVICE_ID,
-  appVersion: app.getVersion() || "0.0.0",
+  appVersion: APP_VERSION,
   platform: process.platform,
   getState: () => typingContextBuffer.getState(),
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
@@ -103,11 +104,11 @@ const memoryClient = createDesktopMemoryClient({
 let updateAvailable = false;
 
 const updateChecker = createUpdateChecker({
-  currentVersion: app.getVersion() || "0.0.0",
+  currentVersion: APP_VERSION,
   feedUrl: `${WEB_BASE_URL}/download/latest.json`,
   onUpdateAvailable: () => {
     updateAvailable = true;
-    updateTrayFromUpdate();
+    updateTray();
   },
 });
 
@@ -148,11 +149,7 @@ function updateTrayFromStatus(status: DesktopStatus): void {
   tray?.update(createTrayState(status));
 }
 
-function updateTrayFromPause(): void {
-  tray?.update(createTrayState(statusService.getCurrentStatus()));
-}
-
-function updateTrayFromUpdate(): void {
+function updateTray(): void {
   tray?.update(createTrayState(statusService.getCurrentStatus()));
 }
 
@@ -169,7 +166,7 @@ async function togglePause(): Promise<void> {
   observationPaused = !observationPaused;
   typingContextBuffer.setPaused(observationPaused);
   settingsWindowManager.sendPaused(observationPaused);
-  updateTrayFromPause();
+  updateTray();
   if (observationPaused) {
     clearContextAndHide();
   }
@@ -213,9 +210,9 @@ function createOverlayWindow(): BrowserWindow {
     focusable: false,
     hasShadow: false,
     show: false,
-      webPreferences: {
-        preload: path.join(__dirname, "preload.cjs"),
-      },
+    webPreferences: {
+      preload: path.join(__dirname, "preload.cjs"),
+    },
   });
 
   win.loadFile(path.join(__dirname, "index.html"));
@@ -270,6 +267,12 @@ async function acceptCurrentSuggestion(): Promise<void> {
 function clearContextAndHide(): void {
   typingContextBuffer.clear();
   suggestionLoop?.invalidate();
+}
+
+function checkForUpdates(errorMessage: string): void {
+  updateChecker.checkForUpdates().catch((error) => {
+    console.error(errorMessage, error);
+  });
 }
 
 async function bootstrap(): Promise<void> {
@@ -388,9 +391,7 @@ async function bootstrap(): Promise<void> {
         signOut().catch((error) => console.error("Failed to sign out from tray:", error));
       },
       checkForUpdates: () => {
-        updateChecker
-          .checkForUpdates()
-          .catch((error) => console.error("Failed to check for updates:", error));
+        checkForUpdates("Failed to check for updates:");
       },
       openDownloadPage: () => {
         shell.openExternal(`${WEB_BASE_URL}/download`).catch((error) => {
@@ -404,14 +405,10 @@ async function bootstrap(): Promise<void> {
   // Check for updates shortly after launch and then every hour. The initial
   // check is delayed so it does not block first-launch onboarding.
   setTimeout(() => {
-    updateChecker.checkForUpdates().catch((error) => {
-      console.error("Failed initial update check:", error);
-    });
+    checkForUpdates("Failed initial update check:");
   }, 60_000);
   setInterval(() => {
-    updateChecker.checkForUpdates().catch((error) => {
-      console.error("Failed periodic update check:", error);
-    });
+    checkForUpdates("Failed periodic update check:");
   }, 60 * 60 * 1_000);
 
   // Poll status so the tray and settings window reflect auth, quota, and
