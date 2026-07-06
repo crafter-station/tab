@@ -1,9 +1,12 @@
 import type { Suggestion, ActiveApplication } from "@tabb/contracts";
+import { redactSensitiveText } from "@tabb/redaction";
 
 export type TypingContextSnapshot = {
   context: string;
   activeApplication: ActiveApplication | null;
   secureInput: boolean;
+  paused?: boolean;
+  privateContext?: boolean;
 };
 
 export type SuggestionLoopState =
@@ -16,6 +19,7 @@ export type SuggestionLoopDependencies = {
   requestSuggestion(context: string): Promise<Suggestion | null>;
   onShowSuggestion(suggestion: Suggestion): void;
   onHideSuggestion(): void;
+  onSecretLikeContextDetected?: () => void;
   debounceMs: number;
 };
 
@@ -44,7 +48,12 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     const snapshot = deps.getContext();
     const hash = contextHash(snapshot);
 
-    if (snapshot.secureInput || snapshot.context.trim().length === 0) {
+    if (
+      snapshot.secureInput ||
+      snapshot.paused ||
+      snapshot.privateContext ||
+      snapshot.context.trim().length === 0
+    ) {
       invalidate();
       return;
     }
@@ -71,7 +80,17 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
-        const suggestion = await deps.requestSuggestion(latest.context);
+        // Redact obvious secrets locally before any suggestion request can be
+        // sent to an API. If secret-like values are detected, treat this as
+        // secret-like context detection per ADR-0018 and suppress the request.
+        const redaction = redactSensitiveText(latest.context);
+        if (redaction.redactions.length > 0) {
+          deps.onSecretLikeContextDetected?.();
+          invalidate();
+          return;
+        }
+
+        const suggestion = await deps.requestSuggestion(redaction.text);
 
         if (state.status !== "debouncing" || state.contextHash !== hash) {
           return;

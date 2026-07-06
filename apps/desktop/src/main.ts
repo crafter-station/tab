@@ -1,4 +1,4 @@
-import { app, BrowserWindow, globalShortcut, clipboard, ipcMain, screen } from "electron";
+import { app, BrowserWindow, globalShortcut, clipboard, ipcMain, screen, powerMonitor } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
@@ -7,17 +7,32 @@ import { createTypingContextBuffer } from "./typing-context.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
 import { generateFakeSuggestion } from "./suggestion-engine.ts";
 import { acceptAndInsertSuggestion } from "./acceptance.ts";
-import type { Suggestion, ActiveApplication } from "@tabb/contracts";
+import type { Suggestion, ActiveApplication, SuggestionContextSource } from "@tabb/contracts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
+
+const TERMINAL_BUNDLE_IDS = new Set([
+  "com.apple.Terminal",
+  "com.googlecode.iterm2",
+  "com.mitchellh.ghostty",
+  "net.kovidgoyal.kitty",
+  "com.microsoft.WindowsTerminal",
+  "dev.tabby",
+]);
 
 let overlayWindow: BrowserWindow | null = null;
 let suggestionLoop: ReturnType<typeof createSuggestionLoop> | null = null;
 let currentSuggestion: Suggestion | null = null;
 let previouslyActiveApplication: ActiveApplication | null = null;
+let observationPaused = false;
 
 const typingContextBuffer = createTypingContextBuffer();
+
+function isTerminalApplication(bundleId: string | null | undefined): boolean {
+  if (!bundleId) return false;
+  return TERMINAL_BUNDLE_IDS.has(bundleId);
+}
 
 function createOverlayWindow(): BrowserWindow {
   const primaryDisplay = screen.getPrimaryDisplay();
@@ -89,6 +104,11 @@ async function acceptCurrentSuggestion(): Promise<void> {
   }
 }
 
+function clearContextAndHide(): void {
+  typingContextBuffer.clear();
+  suggestionLoop?.invalidate();
+}
+
 async function bootstrap(): Promise<void> {
   // Onboarding should guide the user to grant Accessibility and Input Monitoring
   // permissions. Tabb deliberately does not request Screen Recording or Full
@@ -100,6 +120,11 @@ async function bootstrap(): Promise<void> {
     requestSuggestion: async (context) => generateFakeSuggestion(context),
     onShowSuggestion: showOverlay,
     onHideSuggestion: hideOverlay,
+    onSecretLikeContextDetected: () => {
+      // Clear the in-memory buffer as soon as secret-like context is detected,
+      // before any network call can happen.
+      typingContextBuffer.clear();
+    },
     debounceMs: 300,
   });
 
@@ -119,6 +144,11 @@ async function bootstrap(): Promise<void> {
     });
   });
 
+  // The local typing context buffer remains in process memory only and clears
+  // on sleep/lock so sensitive context cannot sit around (ADR-0018).
+  powerMonitor.on("suspend", clearContextAndHide);
+  powerMonitor.on("lock-screen", clearContextAndHide);
+
   // Input monitoring and active-application tracking are wired to the same
   // in-memory buffer. In a production build these are fed by a macOS native
   // input tap (IOKit/Quartz Event Services) and an active-app observer.
@@ -131,6 +161,7 @@ app.whenReady().then(bootstrap).catch((error) => {
 
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  typingContextBuffer.clear();
 });
 
 app.on("window-all-closed", () => {
@@ -140,7 +171,19 @@ app.on("window-all-closed", () => {
 
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
-  typingContextBuffer.appendText(text);
+  if (observationPaused) return;
+  const source: SuggestionContextSource = isTerminalApplication(
+    typingContextBuffer.getState().activeApplication?.bundleId,
+  )
+    ? "terminal_input"
+    : "typed_text";
+  typingContextBuffer.appendText(text, source);
+  suggestionLoop?.onContextChanged();
+}
+
+export function handlePastedText(text: string): void {
+  if (observationPaused) return;
+  typingContextBuffer.appendPastedText(text);
   suggestionLoop?.onContextChanged();
 }
 
@@ -149,6 +192,8 @@ export function handleShortcutOrNavigation(): void {
 }
 
 export function handleActiveApplicationChanged(bundleId: string | null): void {
+  if (observationPaused) return;
+
   const activeApp = bundleId ? { bundleId } : null;
 
   // Do not treat Tabb's own windows as the previously active application,
@@ -159,11 +204,20 @@ export function handleActiveApplicationChanged(bundleId: string | null): void {
   }
 
   typingContextBuffer.setActiveApplication(activeApp);
+  suggestionLoop?.onContextChanged();
 }
 
 export function handleSecureInputChanged(active: boolean): void {
   typingContextBuffer.setSecureInput(active);
   suggestionLoop?.onContextChanged();
+}
+
+export function handlePauseChanged(active: boolean): void {
+  observationPaused = active;
+  typingContextBuffer.setPaused(active);
+  if (active) {
+    clearContextAndHide();
+  }
 }
 
 export function getCurrentSuggestionForTest(): Suggestion | null {

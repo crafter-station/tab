@@ -3,6 +3,8 @@ import { createTypingContextBuffer } from "../apps/desktop/src/typing-context.ts
 import { generateFakeSuggestion } from "../apps/desktop/src/suggestion-engine.ts";
 import { createSuggestionLoop } from "../apps/desktop/src/suggestion-loop.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/acceptance.ts";
+import { redactSensitiveText } from "../packages/redaction/src/index.ts";
+import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
 import type { Suggestion, ActiveApplication } from "@tabb/contracts";
 
 describe("desktop native suggestion loop", () => {
@@ -235,6 +237,187 @@ describe("desktop native suggestion loop", () => {
         restoreClipboard: async () => {},
       });
       expect(result).toBe("no_target_app");
+    });
+  });
+
+  describe("local privacy suppression and redaction", () => {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    function makePrivacyDeps(overrides: {
+      getContext?: () => { context: string; activeApplication: ActiveApplication | null; secureInput: boolean; paused?: boolean; privateContext?: boolean };
+      requestSuggestion?: (context: string) => Promise<Suggestion | null>;
+    } = {}) {
+      const events: Array<{ type: string; payload?: unknown }> = [];
+      const requestSuggestionCalls: string[] = [];
+      return {
+        events,
+        requestSuggestionCalls,
+        deps: {
+          getContext:
+            overrides.getContext ??
+            (() => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false })),
+          requestSuggestion: async (context: string) => {
+            requestSuggestionCalls.push(context);
+            return overrides.requestSuggestion?.(context) ?? { id: "s-1", text: " world" };
+          },
+          onShowSuggestion: (suggestion: Suggestion) => events.push({ type: "show", payload: suggestion }),
+          onHideSuggestion: () => events.push({ type: "hide" }),
+          onSecretLikeContextDetected: () => events.push({ type: "secretDetected" }),
+          debounceMs: 5,
+        },
+      };
+    }
+
+    describe("typing context source and memory eligibility", () => {
+      it("treats typed text as memory eligible", () => {
+        const buffer = createTypingContextBuffer();
+        buffer.appendText("hello");
+        expect(buffer.getState().contextSource).toBe("typed_text");
+        expect(buffer.getState().memoryEligible).toBe(true);
+        expect(getMemoryEligibility("typed_text").eligible).toBe(true);
+      });
+
+      it("treats terminal input as memory eligible", () => {
+        const buffer = createTypingContextBuffer();
+        buffer.appendText("npm install", "terminal_input");
+        expect(buffer.getState().contextSource).toBe("terminal_input");
+        expect(buffer.getState().memoryEligible).toBe(true);
+        expect(getMemoryEligibility("terminal_input").eligible).toBe(true);
+      });
+
+      it("treats pasted text as not memory eligible", () => {
+        const buffer = createTypingContextBuffer();
+        buffer.appendPastedText("some pasted text");
+        expect(buffer.getState().contextSource).toBe("pasted_text");
+        expect(buffer.getState().memoryEligible).toBe(false);
+        expect(getMemoryEligibility("pasted_text").eligible).toBe(false);
+      });
+
+      it("does not capture terminal output as typing context", () => {
+        // Terminal output is never fed into the buffer by the native input bridge.
+        // The public buffer API only accepts typed_text, pasted_text, or terminal_input.
+        const buffer = createTypingContextBuffer();
+        buffer.setActiveApplication({ bundleId: "com.apple.Terminal" });
+        expect(buffer.getState().context).toBe("");
+        expect(buffer.getState().contextSource).toBe("typed_text");
+      });
+    });
+
+    describe("local redaction", () => {
+      it("redacts pasted text before adding to the buffer", () => {
+        const buffer = createTypingContextBuffer();
+        buffer.appendPastedText("api_key=sk-abc1234567890 hello");
+        expect(buffer.getState().context).toContain("[REDACTED_SECRET]");
+        expect(buffer.getState().context).not.toContain("sk-abc1234567890");
+      });
+
+      it("redacts api keys in typed context and suppresses the request", async () => {
+        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        let context = "api_key=sk-abc1234567890";
+        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(0);
+        expect(events.some((e) => e.type === "secretDetected")).toBe(true);
+      });
+
+      it("redacts bearer tokens in typed context and suppresses the request", async () => {
+        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        let context = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
+        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(0);
+        expect(events.some((e) => e.type === "secretDetected")).toBe(true);
+      });
+
+      it("redacts private key blocks in typed context and suppresses the request", async () => {
+        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        let context = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc123\n-----END OPENSSH PRIVATE KEY-----";
+        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(0);
+        expect(events.some((e) => e.type === "secretDetected")).toBe(true);
+      });
+
+      it("redacts database URLs in typed context and suppresses the request", async () => {
+        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        let context = "DATABASE_URL=postgres://user:pass@localhost:5432/db";
+        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(0);
+        expect(events.some((e) => e.type === "secretDetected")).toBe(true);
+      });
+
+      it("allows normal typed prose to request suggestions", async () => {
+        const { requestSuggestionCalls, deps } = makePrivacyDeps();
+        let context = "hello world";
+        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(1);
+        expect(requestSuggestionCalls[0]).toBe("hello world");
+      });
+    });
+
+    describe("password manager suppression", () => {
+      it("clears context when active application is a known password manager", () => {
+        const buffer = createTypingContextBuffer();
+        buffer.setActiveApplication({ bundleId: "com.apple.TextEdit" });
+        buffer.appendText("hello");
+        buffer.setActiveApplication({ bundleId: "com.1password.1password" });
+        expect(buffer.getState().context).toBe("");
+        buffer.appendText("secret");
+        expect(buffer.getState().context).toBe("");
+      });
+
+      it("suppresses suggestion requests in password manager contexts", async () => {
+        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        deps.getContext = () => ({
+          context: "hello",
+          activeApplication: { bundleId: "com.1password.1password" },
+          secureInput: false,
+          privateContext: true,
+        });
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(0);
+        expect(events.some((e) => e.type === "hide")).toBe(false);
+      });
+    });
+
+    describe("global pause control", () => {
+      it("clears context and disables observation when paused", () => {
+        const buffer = createTypingContextBuffer();
+        buffer.appendText("hello");
+        buffer.setPaused(true);
+        expect(buffer.getState().context).toBe("");
+        expect(buffer.getState().paused).toBe(true);
+        buffer.appendText("world");
+        expect(buffer.getState().context).toBe("");
+      });
+
+      it("suppresses suggestion requests while paused", async () => {
+        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        deps.getContext = () => ({
+          context: "hello",
+          activeApplication: { bundleId: "com.apple.TextEdit" },
+          secureInput: false,
+          paused: true,
+        });
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(0);
+      });
     });
   });
 });

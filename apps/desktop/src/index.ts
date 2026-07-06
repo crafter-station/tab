@@ -7,6 +7,8 @@ export const desktopAppBoundary = {
     "typing context observation",
     "floating suggestion overlay",
     "suggestion acceptance",
+    "local privacy suppression and redaction",
+    "global pause/opt-out control",
   ],
 } as const;
 
