@@ -211,9 +211,20 @@
       const pausedBanner = document.getElementById("paused-banner");
       const memoryList = document.getElementById("memory-list");
 
+      function getAuthBadgeClass(auth) {
+        switch (auth) {
+          case "signed_in":
+            return "ok";
+          case "revoked_device":
+            return "error";
+          default:
+            return "warning";
+        }
+      }
+
       function renderStatus(status) {
         authStatus.textContent = status.auth.replace(/_/g, " ");
-        authStatus.className = "status-badge " + (status.auth === "signed_in" ? "ok" : status.auth === "revoked_device" ? "error" : "warning");
+        authStatus.className = "status-badge " + getAuthBadgeClass(status.auth);
 
         if (status.quota) {
           planValue.textContent = status.quota.planId;

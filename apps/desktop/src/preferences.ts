@@ -14,6 +14,19 @@ const DEFAULT_PREFERENCES: DesktopPreferences = {
   onboarding: { completed: false },
 };
 
+function isDesktopPreferences(value: unknown): value is DesktopPreferences {
+  if (!value || typeof value !== "object") return false;
+  if (!("onboarding" in value)) return false;
+
+  const onboarding = value.onboarding;
+  return (
+    !!onboarding &&
+    typeof onboarding === "object" &&
+    "completed" in onboarding &&
+    typeof onboarding.completed === "boolean"
+  );
+}
+
 export function createMemoryPreferencesStorage(
   initial: DesktopPreferences = DEFAULT_PREFERENCES,
 ): PreferencesStorage {
@@ -32,17 +45,8 @@ export function createFilePreferencesStorage(filePath: string): PreferencesStora
       try {
         const raw = readFileSync(filePath, "utf-8");
         const parsed = JSON.parse(raw) as unknown;
-        // Minimal validation: ensure the shape is a preferences object.
-        if (
-          parsed &&
-          typeof parsed === "object" &&
-          "onboarding" in parsed &&
-          parsed.onboarding &&
-          typeof parsed.onboarding === "object" &&
-          "completed" in parsed.onboarding &&
-          typeof parsed.onboarding.completed === "boolean"
-        ) {
-          return structuredClone(parsed as DesktopPreferences);
+        if (isDesktopPreferences(parsed)) {
+          return structuredClone(parsed);
         }
       } catch {
         // File missing or corrupt: fall back to defaults.

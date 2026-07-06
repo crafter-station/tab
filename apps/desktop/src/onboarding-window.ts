@@ -1,6 +1,5 @@
 import { BrowserWindow } from "electron";
 import path from "node:path";
-import type { OnboardingManager } from "./onboarding.ts";
 
 export type CreateOnboardingWindowDependencies = {
   htmlPath: string;
@@ -28,7 +27,6 @@ export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies)
 }
 
 export type OnboardingWindowManagerDependencies = {
-  onboardingManager: OnboardingManager;
   htmlPath: string;
 };
 

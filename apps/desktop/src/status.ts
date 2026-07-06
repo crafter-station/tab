@@ -57,6 +57,13 @@ function isUnauthenticatedError(body: unknown): boolean {
   return parsed.success && parsed.data.error.code === "unauthenticated";
 }
 
+function markUpdated(status: Omit<DesktopStatus, "lastUpdatedAt">): DesktopStatus {
+  return {
+    ...status,
+    lastUpdatedAt: new Date(),
+  };
+}
+
 export function createDesktopStatusService(deps: DesktopStatusServiceDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
   let currentStatus: DesktopStatus = createInitialStatus();
@@ -70,10 +77,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
     const authorization = await deps.getAuthorizationHeader();
 
     if (!authorization) {
-      const status: DesktopStatus = {
-        ...createInitialStatus(),
-        lastUpdatedAt: new Date(),
-      };
+      const status = markUpdated(createInitialStatus());
       emit(status);
       return status;
     }
@@ -96,36 +100,29 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
       if (response.status === 401) {
         const body = (await response.json()) as unknown;
         if (isRevokedDeviceError(body)) {
-          const status: DesktopStatus = {
+          const status = markUpdated({
             ...createInitialStatus(),
             auth: "revoked_device",
             connectivity: "online",
             overlay: "hidden",
-            lastUpdatedAt: new Date(),
-          };
+          });
           emit(status);
           return status;
         }
 
         if (isUnauthenticatedError(body)) {
-          const status: DesktopStatus = {
+          const status = markUpdated({
             ...createInitialStatus(),
             connectivity: "online",
             overlay: "hidden",
-            lastUpdatedAt: new Date(),
-          };
+          });
           emit(status);
           return status;
         }
       }
 
       if (!response.ok) {
-        const status: DesktopStatus = {
-          ...currentStatus,
-          connectivity: "offline",
-          overlay: "hidden",
-          lastUpdatedAt: new Date(),
-        };
+        const status = createOfflineStatus();
         emit(status);
         return status;
       }
@@ -134,18 +131,13 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
       const parsed = DesktopStatusResponseSchema.safeParse(raw);
 
       if (!parsed.success) {
-        const status: DesktopStatus = {
-          ...currentStatus,
-          connectivity: "offline",
-          overlay: "hidden",
-          lastUpdatedAt: new Date(),
-        };
+        const status = createOfflineStatus();
         emit(status);
         return status;
       }
 
       const data = parsed.data.data;
-      const status: DesktopStatus = {
+      const status = markUpdated({
         auth: "signed_in",
         connectivity: "online",
         userId: data.userId ?? currentStatus.userId,
@@ -159,8 +151,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
             }
           : null,
         overlay: "hidden",
-        lastUpdatedAt: new Date(),
-      };
+      });
       emit(status);
       return status;
     } catch {
@@ -168,16 +159,19 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
       // known auth state; on the first failure assume signed_in because the
       // token exists. Status UI surfaces the connectivity issue separately from
       // the overlay.
-      const status: DesktopStatus = {
-        ...currentStatus,
-        auth: currentStatus.auth === "sign_in_required" ? "signed_in" : currentStatus.auth,
-        connectivity: "offline",
-        overlay: "hidden",
-        lastUpdatedAt: new Date(),
-      };
+      const status = createOfflineStatus();
       emit(status);
       return status;
     }
+  }
+
+  function createOfflineStatus(): DesktopStatus {
+    return markUpdated({
+      ...currentStatus,
+      auth: currentStatus.auth === "sign_in_required" ? "signed_in" : currentStatus.auth,
+      connectivity: "offline",
+      overlay: "hidden",
+    });
   }
 
   function getCurrentStatus(): DesktopStatus {

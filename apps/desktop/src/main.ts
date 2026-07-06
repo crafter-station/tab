@@ -7,7 +7,6 @@ import {
   screen,
   powerMonitor,
   shell,
-  Tray,
 } from "electron";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -63,7 +62,6 @@ const onboardingManager = createOnboardingManager({
 });
 
 const onboardingWindowManager = createOnboardingWindowManager({
-  onboardingManager,
   htmlPath: path.join(__dirname, "onboarding.html"),
 });
 
@@ -135,20 +133,19 @@ async function refreshMemories(): Promise<void> {
 }
 
 function updateTrayFromStatus(status: DesktopStatus): void {
-  tray?.update({
-    paused: observationPaused,
-    auth: status.auth,
-    quotaExhausted: status.quota?.exhausted ?? false,
-  });
+  tray?.update(createTrayState(status));
 }
 
 function updateTrayFromPause(): void {
-  const status = statusService.getCurrentStatus();
-  tray?.update({
+  tray?.update(createTrayState(statusService.getCurrentStatus()));
+}
+
+function createTrayState(status: DesktopStatus) {
+  return {
     paused: observationPaused,
     auth: status.auth,
     quotaExhausted: status.quota?.exhausted ?? false,
-  });
+  };
 }
 
 async function togglePause(): Promise<void> {

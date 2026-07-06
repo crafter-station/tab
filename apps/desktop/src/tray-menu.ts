@@ -25,6 +25,12 @@ export type TabbTray = Tray & {
   update(state: TrayMenuState): void;
 };
 
+const INITIAL_TRAY_STATE: TrayMenuState = {
+  paused: false,
+  auth: "sign_in_required",
+  quotaExhausted: false,
+};
+
 export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
   const tray = new Tray(deps.icon) as TabbTray;
   tray.setToolTip("Tabb");
@@ -84,8 +90,7 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
     tray.setContextMenu(buildContextMenu(state));
   };
 
-  tray.setToolTip(buildStatusLabel({ paused: false, auth: "sign_in_required", quotaExhausted: false }));
-  tray.setContextMenu(buildContextMenu({ paused: false, auth: "sign_in_required", quotaExhausted: false }));
+  tray.update(INITIAL_TRAY_STATE);
 
   return tray;
 }
