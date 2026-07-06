@@ -43,12 +43,16 @@ describe("Tabb monorepo bootstrap", () => {
 
   it("keeps shared contracts and contributor references aligned with the PRD", () => {
     const contracts = readText("packages/contracts/src/index.ts");
+    assert.match(contracts, /SuggestionContextSourceSchema/);
+    assert.match(contracts, /RedactionSummarySchema/);
     assert.match(contracts, /SuggestionRequestSchema/);
     assert.match(contracts, /SuggestionResponseSchema/);
     assert.match(contracts, /ApiSuccessResponseSchema/);
     assert.match(contracts, /ApiErrorResponseSchema/);
     assert.match(contracts, /ApiResponseSchema/);
     assert.match(contracts, /z\.discriminatedUnion\("status"/);
+    assert.match(contracts, /contextSource: SuggestionContextSourceSchema/);
+    assert.match(contracts, /redaction: RedactionSummarySchema/);
     assert.match(contracts, /suggestions: z\.array/);
     assert.match(contracts, /status: z\.literal\("ok"\)/);
     assert.match(contracts, /status: z\.literal\("error"\)/);
