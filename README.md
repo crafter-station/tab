@@ -9,11 +9,17 @@ This repository is a three-app monorepo with shared packages. See [CONTRIBUTING.
 Quick commands:
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies for local development
+bun install
+
+# Install dependencies in npm-only environments, including CI
+npm ci
 
 # Typecheck
 npm run typecheck
+
+# Lint
+npm run lint
 
 # Run tests
 npm run test
