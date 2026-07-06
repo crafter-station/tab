@@ -64,8 +64,8 @@ export type CreatePolarUsageMeterClientOptions = {
 };
 
 export class PolarUsageMeterClient implements UsageMeterClient {
-  private polar: Polar;
-  private meterId: string;
+  private readonly polar: Polar;
+  private readonly meterId: string;
 
   constructor(options: CreatePolarUsageMeterClientOptions = {}) {
     const accessToken = options.accessToken ?? process.env.POLAR_ACCESS_TOKEN;
@@ -190,9 +190,9 @@ export type UsageMeterServiceDependencies = {
 };
 
 export class UsageMeterService {
-  private client: UsageMeterClient;
-  private maxRetries: number;
-  private retryDelayMs: number;
+  private readonly client: UsageMeterClient;
+  private readonly maxRetries: number;
+  private readonly retryDelayMs: number;
 
   constructor(deps: UsageMeterServiceDependencies = {}) {
     this.client = deps.client ?? new InMemoryUsageMeterClient();
@@ -264,10 +264,6 @@ type D1DatabaseLike = {
   exec(sql: string): Promise<void>;
 };
 
-function asD1Database(db: unknown): D1DatabaseLike {
-  return db as D1DatabaseLike;
-}
-
 function entitlementRowToEntitlement(row: Record<string, unknown>): UserEntitlement {
   return {
     userId: String(row.user_id),
@@ -285,10 +281,10 @@ function entitlementRowToEntitlement(row: Record<string, unknown>): UserEntitlem
 }
 
 export class D1BillingStorage implements BillingStorage {
-  private db: D1DatabaseLike;
+  private readonly db: D1DatabaseLike;
 
   constructor(db: unknown) {
-    this.db = asD1Database(db);
+    this.db = db as D1DatabaseLike;
   }
 
   async ensureTables(): Promise<void> {
@@ -380,6 +376,18 @@ type PolarWebhookPayload = {
   readonly data: Record<string, unknown>;
 };
 
+function optionalString(value: unknown): string | undefined {
+  return value ? String(value) : undefined;
+}
+
+function optionalDate(value: unknown): Date | undefined {
+  return value ? new Date(String(value)) : undefined;
+}
+
+function optionalRecord(value: unknown): Record<string, unknown> | undefined {
+  return value as Record<string, unknown> | undefined;
+}
+
 function planIdFromProductName(name: string): PlanId | null {
   const lower = name.toLowerCase();
   if (lower.includes("max")) return "max";
@@ -398,8 +406,8 @@ export type WebhookHandlerDependencies = {
 };
 
 export class BillingWebhookHandler {
-  private storage: BillingStorage;
-  private secret: string | undefined;
+  private readonly storage: BillingStorage;
+  private readonly secret: string | undefined;
 
   constructor(deps: WebhookHandlerDependencies = {}) {
     this.storage = deps.storage ?? new InMemoryBillingStorage();
@@ -435,20 +443,14 @@ export class BillingWebhookHandler {
     switch (payload.type) {
       case "subscription.created":
       case "subscription.updated": {
-        const customer = data.customer as Record<string, unknown> | undefined;
-        const userId = customer?.external_id
-          ? String(customer.external_id)
-          : undefined;
-        const customerId = data.customer_id
-          ? String(data.customer_id)
-          : undefined;
-        const subscriptionId = data.id ? String(data.id) : undefined;
-        const status = data.status ? String(data.status) : "inactive";
-        const product = data.product as Record<string, unknown> | undefined;
-        const productName = product?.name ? String(product.name) : undefined;
-        const currentPeriodEnd = data.current_period_end
-          ? new Date(String(data.current_period_end))
-          : undefined;
+        const customer = optionalRecord(data.customer);
+        const product = optionalRecord(data.product);
+        const userId = optionalString(customer?.external_id);
+        const customerId = optionalString(data.customer_id);
+        const subscriptionId = optionalString(data.id);
+        const status = optionalString(data.status) ?? "inactive";
+        const productName = optionalString(product?.name);
+        const currentPeriodEnd = optionalDate(data.current_period_end);
 
         if (!userId || !customerId || !subscriptionId || !productName) {
           return;
@@ -470,22 +472,20 @@ export class BillingWebhookHandler {
 
       case "subscription.canceled":
       case "subscription.uncanceled": {
-        const customer = data.customer as Record<string, unknown> | undefined;
-        const userId = customer?.external_id
-          ? String(customer.external_id)
-          : undefined;
+        const customer = optionalRecord(data.customer);
+        const userId = optionalString(customer?.external_id);
         if (!userId) return;
 
         const existing = await this.storage.getEntitlement(userId);
+        const status =
+          payload.type === "subscription.canceled" ? "canceled" : "active";
+
         await this.storage.setEntitlement({
           userId,
           planId: existing?.planId ?? "free",
           polarCustomerId: existing?.polarCustomerId,
           polarSubscriptionId: existing?.polarSubscriptionId,
-          status:
-            payload.type === "subscription.canceled"
-              ? "canceled"
-              : "active",
+          status,
           currentPeriodEnd: existing?.currentPeriodEnd,
           cachedAt: new Date(),
         });

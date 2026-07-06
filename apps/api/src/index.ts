@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { generateText } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
+import { shouldCountSuggestionResponse } from "@tabb/billing";
 import {
   ApiErrorResponseSchema,
   ApiSuccessResponseSchema,
@@ -71,6 +72,19 @@ function createSuccessResponse(suggestions: Suggestion[]) {
     status: "ok",
     data: { suggestions },
   });
+}
+
+function createQuotaExhaustedDetails(quotaCheck: {
+  readonly quota: number;
+  readonly usage: number;
+  readonly resetAt: Date;
+}) {
+  return {
+    quota: quotaCheck.quota,
+    usage: quotaCheck.usage,
+    resetAt: quotaCheck.resetAt.toISOString(),
+    upgradeUrl: "/pricing",
+  };
 }
 
 function formatValidationIssues(
@@ -337,12 +351,7 @@ export function createApp(deps: ApiDependencies = {}) {
         createErrorResponse(
           "quota_exhausted",
           "Monthly autocomplete quota exhausted. Upgrade to continue.",
-          {
-            quota: quotaCheck.quota,
-            usage: quotaCheck.usage,
-            resetAt: quotaCheck.resetAt.toISOString(),
-            upgradeUrl: "/pricing",
-          },
+          createQuotaExhaustedDetails(quotaCheck),
         ),
         402,
       );
@@ -366,7 +375,7 @@ export function createApp(deps: ApiDependencies = {}) {
           ]
         : [];
 
-      if (suggestions.length > 0) {
+      if (shouldCountSuggestionResponse(suggestions.length)) {
         await billingService.consumeSuggestion(device.userId);
         usageMeterService
           .recordUsage({
