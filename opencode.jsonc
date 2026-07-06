@@ -1,0 +1,16 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "sandcastle": "https://github.com/mattpocock/sandcastle",
+    "sdk": {
+      "repository": "https://github.com/crafter-station/maca",
+      "branch": "main",
+      "description": "Maca is a text to speech app. Use this as an electron overlay and permissions implementation example.",
+    },
+    "opencode": {
+      "repository": "https://github.com/anomalyco/opencode",
+      "branch": "main",
+      "description": "Use for OpenCode implementation details",
+    },
+  },
+}
