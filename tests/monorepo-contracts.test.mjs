@@ -32,7 +32,9 @@ const sharedPackageNames = [
 const sharedPackageEntrypoints = sharedPackageNames.map((name) => `packages/${name}`);
 const workspaceEntrypoints = [...appEntrypoints, ...sharedPackageEntrypoints];
 
-const sharedPackageImportPattern = new RegExp(`@tabb/(${sharedPackageNames.join("|")})`);
+const sharedPackageBoundaryPattern = new RegExp(
+  `@tabb/(${sharedPackageNames.join("|")})["']`,
+);
 
 const contractReferences = [
   /SuggestionContextSourceSchema/,
@@ -105,7 +107,7 @@ describe("Tabb monorepo bootstrap", () => {
   it("connects every app boundary to at least one shared package", () => {
     for (const app of appEntrypoints) {
       const source = readText(`${app}/src/index.ts`);
-      assert.match(source, sharedPackageImportPattern, `${app} imports from a shared package`);
+      assert.match(source, sharedPackageBoundaryPattern, `${app} must reference a shared package`);
     }
   });
 
@@ -122,6 +124,6 @@ describe("Tabb monorepo bootstrap", () => {
 
     const effectServices = readText("packages/effect-services/src/index.ts");
     assert.match(effectServices, /from ["']effect["']/, "effect-services imports from the effect package");
-    assert.match(effectServices, /Effect</, "effect-services uses Effect typed effects");
+    assert.match(effectServices, /Effect\.Effect</, "effect-services uses Effect typed effects");
   });
 });
