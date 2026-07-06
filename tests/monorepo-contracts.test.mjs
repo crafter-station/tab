@@ -57,6 +57,17 @@ describe("Tabb monorepo bootstrap", () => {
     }
   });
 
+  it("provides a CI workflow that runs the install, typecheck, lint, and test commands", () => {
+    const ciPath = join(root, ".github/workflows/ci.yml");
+    assert.ok(existsSync(ciPath), "CI workflow file exists");
+
+    const ciWorkflow = readText(".github/workflows/ci.yml");
+    assert.match(ciWorkflow, /npm ci/);
+    assert.match(ciWorkflow, /npm run typecheck/);
+    assert.match(ciWorkflow, /npm run lint/);
+    assert.match(ciWorkflow, /npm run test/);
+  });
+
   it("keeps shared contracts and contributor references aligned with the PRD", () => {
     const contracts = readText("packages/contracts/src/index.ts");
 
