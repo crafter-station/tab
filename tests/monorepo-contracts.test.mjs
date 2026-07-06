@@ -7,6 +7,14 @@ const root = new URL("..", import.meta.url).pathname;
 
 const expectedWorkspaces = ["apps/*", "packages/*"];
 
+const ciWorkflowPath = ".github/workflows/ci.yml";
+const ciWorkflowCommands = [
+  /npm ci/,
+  /npm run typecheck/,
+  /npm run lint/,
+  /npm run test/,
+];
+
 const workspaceEntrypoints = [
   "apps/desktop",
   "apps/web",
@@ -54,6 +62,16 @@ describe("Tabb monorepo bootstrap", () => {
     for (const workspace of workspaceEntrypoints) {
       assert.ok(existsSync(join(root, workspace, "package.json")), `${workspace} has a package manifest`);
       assert.ok(existsSync(join(root, workspace, "src/index.ts")), `${workspace} has a source entrypoint`);
+    }
+  });
+
+  it("provides a CI workflow that runs the install, typecheck, lint, and test commands", () => {
+    const ciPath = join(root, ciWorkflowPath);
+    assert.ok(existsSync(ciPath), "CI workflow file exists");
+
+    const ciWorkflow = readText(ciWorkflowPath);
+    for (const command of ciWorkflowCommands) {
+      assert.match(ciWorkflow, command);
     }
   });
 
