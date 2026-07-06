@@ -130,6 +130,21 @@ export const BillingPortalResponseSchema = z.object({
   }),
 });
 
+export const DesktopStatusSchema = z.object({
+  authenticated: z.boolean(),
+  deviceRevoked: z.boolean(),
+  userId: z.string().min(1).optional(),
+  planId: z.string().min(1).optional(),
+  quota: z.number().int().nonnegative().optional(),
+  usage: z.number().int().nonnegative().optional(),
+  resetAt: z.string().datetime().optional(),
+});
+
+export const DesktopStatusResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: DesktopStatusSchema,
+});
+
 export const SuggestionRequestSchema = z.object({
   requestId: z.string().min(1),
   deviceId: z.string().min(1),
@@ -226,3 +241,5 @@ export type BillingQuotaResponse = z.infer<typeof BillingQuotaResponseSchema>;
 export type BillingCheckoutResponse = z.infer<typeof BillingCheckoutResponseSchema>;
 export type BillingPortalResponse = z.infer<typeof BillingPortalResponseSchema>;
 export type MemoryJob = z.infer<typeof MemoryJobSchema>;
+export type DesktopStatus = z.infer<typeof DesktopStatusSchema>;
+export type DesktopStatusResponse = z.infer<typeof DesktopStatusResponseSchema>;
