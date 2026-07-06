@@ -15,16 +15,26 @@ const ciWorkflowCommands = [
   /npm run test/,
 ];
 
-const workspaceEntrypoints = [
+const appEntrypoints = [
   "apps/desktop",
   "apps/web",
   "apps/api",
-  "packages/contracts",
-  "packages/memory-policy",
-  "packages/redaction",
-  "packages/billing",
-  "packages/effect-services",
 ];
+
+const sharedPackageNames = [
+  "contracts",
+  "memory-policy",
+  "redaction",
+  "billing",
+  "effect-services",
+];
+
+const sharedPackageEntrypoints = sharedPackageNames.map((name) => `packages/${name}`);
+const workspaceEntrypoints = [...appEntrypoints, ...sharedPackageEntrypoints];
+
+const sharedPackageBoundaryPattern = new RegExp(
+  `@tabb/(${sharedPackageNames.join("|")})["']`,
+);
 
 const contractReferences = [
   /SuggestionContextSourceSchema/,
@@ -92,5 +102,28 @@ describe("Tabb monorepo bootstrap", () => {
     assert.match(contributorDocs, /Effect/);
     assert.match(contributorDocs, /npm run typecheck/);
     assert.match(contributorDocs, /npm run test/);
+  });
+
+  it("connects every app boundary to at least one shared package", () => {
+    for (const app of appEntrypoints) {
+      const source = readText(`${app}/src/index.ts`);
+      assert.match(source, sharedPackageBoundaryPattern, `${app} must reference a shared package`);
+    }
+  });
+
+  it("has a repeatable install lockfile for npm ci", () => {
+    assert.ok(existsSync(join(root, "package-lock.json")), "package-lock.json exists for repeatable npm ci installs");
+  });
+
+  it("encodes Effect usage conventions in the shared service package", () => {
+    const effectServicesPackage = readJson("packages/effect-services/package.json");
+    assert.ok(
+      effectServicesPackage.dependencies?.effect,
+      "effect-services declares effect as a dependency",
+    );
+
+    const effectServices = readText("packages/effect-services/src/index.ts");
+    assert.match(effectServices, /from ["']effect["']/, "effect-services imports from the effect package");
+    assert.match(effectServices, /Effect\.Effect</, "effect-services uses Effect typed effects");
   });
 });

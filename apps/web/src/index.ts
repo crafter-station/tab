@@ -1,3 +1,5 @@
+export { planQuotas as pricingPlans } from "@tabb/billing";
+
 export const webAppBoundary = {
   runtime: "tanstack-start",
   owns: [
