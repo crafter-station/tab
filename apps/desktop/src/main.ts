@@ -26,6 +26,7 @@ import { createOnboardingWindowManager } from "./onboarding-window.ts";
 import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
+import { createUpdateChecker } from "./release.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tabb/contracts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -99,6 +100,17 @@ const memoryClient = createDesktopMemoryClient({
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
 
+let updateAvailable = false;
+
+const updateChecker = createUpdateChecker({
+  currentVersion: app.getVersion() || "0.0.0",
+  feedUrl: `${WEB_BASE_URL}/download/latest.json`,
+  onUpdateAvailable: () => {
+    updateAvailable = true;
+    updateTrayFromUpdate();
+  },
+});
+
 const statusService = createDesktopStatusService({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
@@ -140,11 +152,16 @@ function updateTrayFromPause(): void {
   tray?.update(createTrayState(statusService.getCurrentStatus()));
 }
 
+function updateTrayFromUpdate(): void {
+  tray?.update(createTrayState(statusService.getCurrentStatus()));
+}
+
 function createTrayState(status: DesktopStatus) {
   return {
     paused: observationPaused,
     auth: status.auth,
     quotaExhausted: status.quota?.exhausted ?? false,
+    updateAvailable,
   };
 }
 
@@ -196,9 +213,9 @@ function createOverlayWindow(): BrowserWindow {
     focusable: false,
     hasShadow: false,
     show: false,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-    },
+      webPreferences: {
+        preload: path.join(__dirname, "preload.cjs"),
+      },
   });
 
   win.loadFile(path.join(__dirname, "index.html"));
@@ -357,7 +374,7 @@ async function bootstrap(): Promise<void> {
   // Tray menu provides always-visible access to settings, quick memory, pause,
   // and sign-in/out without cluttering the overlay.
   tray = createTrayMenu({
-    icon: path.join(__dirname, "../assets/iconTemplate.png"),
+    icon: path.join(__dirname, "assets", "iconTemplate.png"),
     actions: {
       showSettings: () => settingsWindowManager.show(),
       showQuickMemory: () => settingsWindowManager.show(),
@@ -370,9 +387,32 @@ async function bootstrap(): Promise<void> {
       signOut: () => {
         signOut().catch((error) => console.error("Failed to sign out from tray:", error));
       },
+      checkForUpdates: () => {
+        updateChecker
+          .checkForUpdates()
+          .catch((error) => console.error("Failed to check for updates:", error));
+      },
+      openDownloadPage: () => {
+        shell.openExternal(`${WEB_BASE_URL}/download`).catch((error) => {
+          console.error("Failed to open download page:", error);
+        });
+      },
       quit: () => app.quit(),
     },
   });
+
+  // Check for updates shortly after launch and then every hour. The initial
+  // check is delayed so it does not block first-launch onboarding.
+  setTimeout(() => {
+    updateChecker.checkForUpdates().catch((error) => {
+      console.error("Failed initial update check:", error);
+    });
+  }, 60_000);
+  setInterval(() => {
+    updateChecker.checkForUpdates().catch((error) => {
+      console.error("Failed periodic update check:", error);
+    });
+  }, 60 * 60 * 1_000);
 
   // Poll status so the tray and settings window reflect auth, quota, and
   // connectivity changes without requiring user interaction.

@@ -5,6 +5,7 @@ export type TrayMenuState = {
   paused: boolean;
   auth: DesktopStatus["auth"];
   quotaExhausted: boolean;
+  updateAvailable?: boolean;
 };
 
 export type TrayMenuActions = {
@@ -13,6 +14,8 @@ export type TrayMenuActions = {
   togglePause(): void;
   signIn(): void;
   signOut(): void;
+  checkForUpdates(): void;
+  openDownloadPage(): void;
   quit(): void;
 };
 
@@ -29,6 +32,7 @@ const INITIAL_TRAY_STATE: TrayMenuState = {
   paused: false,
   auth: "sign_in_required",
   quotaExhausted: false,
+  updateAvailable: false,
 };
 
 export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
@@ -67,6 +71,16 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
         label: pauseLabel,
         click: deps.actions.togglePause,
       },
+      { type: "separator" },
+      state.updateAvailable
+        ? {
+            label: "Update Available",
+            click: deps.actions.openDownloadPage,
+          }
+        : {
+            label: "Check for Updates",
+            click: deps.actions.checkForUpdates,
+          },
       { type: "separator" },
       isSignedIn
         ? {
