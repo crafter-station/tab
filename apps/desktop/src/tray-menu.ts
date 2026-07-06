@@ -4,6 +4,7 @@ import type { DesktopStatus } from "./status.ts";
 export type TrayMenuState = {
   paused: boolean;
   auth: DesktopStatus["auth"];
+  quotaExhausted: boolean;
 };
 
 export type TrayMenuActions = {
@@ -28,13 +29,22 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
   const tray = new Tray(deps.icon) as TabbTray;
   tray.setToolTip("Tabb");
 
+  function buildStatusLabel(state: TrayMenuState): string {
+    if (state.paused) return "Tabb — Paused";
+    if (state.auth === "revoked_device") return "Tabb — Device Revoked";
+    if (state.auth === "sign_in_required") return "Tabb — Sign In Required";
+    if (state.quotaExhausted) return "Tabb — Quota Exhausted";
+    if (state.auth === "signed_in") return "Tabb — Signed In";
+    return "Tabb";
+  }
+
   function buildContextMenu(state: TrayMenuState): Menu {
     const isSignedIn = state.auth === "signed_in";
     const pauseLabel = state.paused ? "Resume Tabb" : "Pause Tabb";
 
     return Menu.buildFromTemplate([
       {
-        label: "Tabb",
+        label: buildStatusLabel(state),
         enabled: false,
       },
       { type: "separator" },
@@ -70,10 +80,12 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
   }
 
   tray.update = (state: TrayMenuState): void => {
+    tray.setToolTip(buildStatusLabel(state));
     tray.setContextMenu(buildContextMenu(state));
   };
 
-  tray.setContextMenu(buildContextMenu({ paused: false, auth: "sign_in_required" }));
+  tray.setToolTip(buildStatusLabel({ paused: false, auth: "sign_in_required", quotaExhausted: false }));
+  tray.setContextMenu(buildContextMenu({ paused: false, auth: "sign_in_required", quotaExhausted: false }));
 
   return tray;
 }

@@ -42,6 +42,11 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     }
 
     win = createSettingsWindow({ htmlPath: deps.htmlPath });
+
+    win.on("closed", () => {
+      win = null;
+    });
+
     return win;
   }
 

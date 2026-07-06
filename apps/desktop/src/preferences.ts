@@ -1,3 +1,4 @@
+import { readFileSync, writeFileSync } from "node:fs";
 import type { OnboardingPreferences } from "./onboarding.ts";
 
 export type DesktopPreferences = {
@@ -21,6 +22,35 @@ export function createMemoryPreferencesStorage(
     load: () => structuredClone(prefs),
     save: (next) => {
       prefs = structuredClone(next);
+    },
+  };
+}
+
+export function createFilePreferencesStorage(filePath: string): PreferencesStorage {
+  return {
+    load: () => {
+      try {
+        const raw = readFileSync(filePath, "utf-8");
+        const parsed = JSON.parse(raw) as unknown;
+        // Minimal validation: ensure the shape is a preferences object.
+        if (
+          parsed &&
+          typeof parsed === "object" &&
+          "onboarding" in parsed &&
+          parsed.onboarding &&
+          typeof parsed.onboarding === "object" &&
+          "completed" in parsed.onboarding &&
+          typeof parsed.onboarding.completed === "boolean"
+        ) {
+          return structuredClone(parsed as DesktopPreferences);
+        }
+      } catch {
+        // File missing or corrupt: fall back to defaults.
+      }
+      return structuredClone(DEFAULT_PREFERENCES);
+    },
+    save: (next) => {
+      writeFileSync(filePath, JSON.stringify(next, null, 2));
     },
   };
 }

@@ -12,6 +12,7 @@ import {
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import { promisify } from "node:util";
 import { createTypingContextBuffer } from "./typing-context.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
@@ -25,7 +26,7 @@ import { createOnboardingManager } from "./onboarding.ts";
 import { createOnboardingWindowManager } from "./onboarding-window.ts";
 import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
-import { createPreferencesManager, createMemoryPreferencesStorage } from "./preferences.ts";
+import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tabb/contracts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -49,8 +50,10 @@ let tray: TabbTray | null = null;
 
 const typingContextBuffer = createTypingContextBuffer();
 
+const userDataPath = app.getPath("userData");
+mkdirSync(userDataPath, { recursive: true });
 const preferencesManager = createPreferencesManager({
-  storage: createMemoryPreferencesStorage(),
+  storage: createFilePreferencesStorage(path.join(userDataPath, "preferences.json")),
 });
 
 const onboardingManager = createOnboardingManager({
@@ -104,11 +107,21 @@ const statusService = createDesktopStatusService({
   onChange: (status) => {
     settingsWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
-    if (status.auth === "revoked_device") {
-      // Clear the local token so the user is prompted to sign in again.
-      authClient.clearToken().catch((error) => {
-        console.error("Failed to clear revoked device token:", error);
-      });
+    if (status.auth === "revoked_device" || status.auth === "sign_in_required") {
+      // If a token is stored but the API reports revoked or unauthenticated,
+      // clear it so the user is prompted to sign in again. The initial
+      // sign_in_required state has no stored token, so isAuthenticated guards
+      // against clearing an already-empty keychain.
+      authClient
+        .isAuthenticated()
+        .then((authenticated) => {
+          if (authenticated) {
+            return authClient.clearToken();
+          }
+        })
+        .catch((error) => {
+          console.error("Failed to clear invalid device token:", error);
+        });
     }
   },
 });
@@ -122,11 +135,20 @@ async function refreshMemories(): Promise<void> {
 }
 
 function updateTrayFromStatus(status: DesktopStatus): void {
-  tray?.update({ paused: observationPaused, auth: status.auth });
+  tray?.update({
+    paused: observationPaused,
+    auth: status.auth,
+    quotaExhausted: status.quota?.exhausted ?? false,
+  });
 }
 
 function updateTrayFromPause(): void {
-  tray?.update({ paused: observationPaused, auth: statusService.getCurrentStatus().auth });
+  const status = statusService.getCurrentStatus();
+  tray?.update({
+    paused: observationPaused,
+    auth: status.auth,
+    quotaExhausted: status.quota?.exhausted ?? false,
+  });
 }
 
 async function togglePause(): Promise<void> {
@@ -141,6 +163,7 @@ async function togglePause(): Promise<void> {
 
 async function signOut(): Promise<void> {
   await authClient.clearToken();
+  clearContextAndHide();
   await statusService.refresh();
   await refreshMemories();
 }

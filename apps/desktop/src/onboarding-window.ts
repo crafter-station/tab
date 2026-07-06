@@ -45,6 +45,10 @@ export function createOnboardingWindowManager(deps: OnboardingWindowManagerDepen
       htmlPath: deps.htmlPath,
     });
 
+    win.on("closed", () => {
+      win = null;
+    });
+
     return win;
   }
 
