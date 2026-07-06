@@ -15,16 +15,24 @@ const ciWorkflowCommands = [
   /npm run test/,
 ];
 
-const workspaceEntrypoints = [
+const appEntrypoints = [
   "apps/desktop",
   "apps/web",
   "apps/api",
-  "packages/contracts",
-  "packages/memory-policy",
-  "packages/redaction",
-  "packages/billing",
-  "packages/effect-services",
 ];
+
+const sharedPackageNames = [
+  "contracts",
+  "memory-policy",
+  "redaction",
+  "billing",
+  "effect-services",
+];
+
+const sharedPackageEntrypoints = sharedPackageNames.map((name) => `packages/${name}`);
+const workspaceEntrypoints = [...appEntrypoints, ...sharedPackageEntrypoints];
+
+const sharedPackageImportPattern = new RegExp(`@tabb/(${sharedPackageNames.join("|")})`);
 
 const contractReferences = [
   /SuggestionContextSourceSchema/,
@@ -95,11 +103,9 @@ describe("Tabb monorepo bootstrap", () => {
   });
 
   it("connects every app boundary to at least one shared package", () => {
-    const sharedPackagePattern = /@tabb\/(contracts|billing|memory-policy|redaction|effect-services)/;
-
-    for (const app of ["apps/desktop", "apps/web", "apps/api"]) {
+    for (const app of appEntrypoints) {
       const source = readText(`${app}/src/index.ts`);
-      assert.match(source, sharedPackagePattern, `${app} imports from a shared package`);
+      assert.match(source, sharedPackageImportPattern, `${app} imports from a shared package`);
     }
   });
 });
