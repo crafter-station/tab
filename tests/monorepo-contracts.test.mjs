@@ -7,6 +7,14 @@ const root = new URL("..", import.meta.url).pathname;
 
 const expectedWorkspaces = ["apps/*", "packages/*"];
 
+const ciWorkflowPath = ".github/workflows/ci.yml";
+const ciWorkflowCommands = [
+  /npm ci/,
+  /npm run typecheck/,
+  /npm run lint/,
+  /npm run test/,
+];
+
 const workspaceEntrypoints = [
   "apps/desktop",
   "apps/web",
@@ -58,14 +66,13 @@ describe("Tabb monorepo bootstrap", () => {
   });
 
   it("provides a CI workflow that runs the install, typecheck, lint, and test commands", () => {
-    const ciPath = join(root, ".github/workflows/ci.yml");
+    const ciPath = join(root, ciWorkflowPath);
     assert.ok(existsSync(ciPath), "CI workflow file exists");
 
-    const ciWorkflow = readText(".github/workflows/ci.yml");
-    assert.match(ciWorkflow, /npm ci/);
-    assert.match(ciWorkflow, /npm run typecheck/);
-    assert.match(ciWorkflow, /npm run lint/);
-    assert.match(ciWorkflow, /npm run test/);
+    const ciWorkflow = readText(ciWorkflowPath);
+    for (const command of ciWorkflowCommands) {
+      assert.match(ciWorkflow, command);
+    }
   });
 
   it("keeps shared contracts and contributor references aligned with the PRD", () => {
