@@ -10,6 +10,8 @@ export type RedactionMatch = {
 
 export type RedactionKind = "api_key" | "bearer_token" | "private_key" | "database_url";
 
+const API_KEY_SECRET_PLACEHOLDER = "[REDACTED_SECRET]";
+
 const REDACTION_RULES: readonly {
   kind: RedactionKind;
   pattern: RegExp;
@@ -28,7 +30,7 @@ const REDACTION_RULES: readonly {
   {
     kind: "api_key",
     pattern: /\b(api[_-]?key|token|secret)\s*[=:]\s*['\"]?[A-Za-z0-9_./~+:-]{12,}['\"]?/gi,
-    replacement: "$1=[REDACTED_SECRET]",
+    replacement: `$1=${API_KEY_SECRET_PLACEHOLDER}`,
   },
   {
     kind: "database_url",
@@ -42,11 +44,13 @@ export function redactSensitiveText(input: string): RedactionResult {
   let text = input;
 
   for (const rule of REDACTION_RULES) {
-    text = text.replace(rule.pattern, (...args: unknown[]) => {
+    text = text.replace(rule.pattern, (...replacementArgs: unknown[]) => {
       redactions.push({ kind: rule.kind, replacement: rule.replacement });
 
       if (rule.kind === "api_key") {
-        return `${String(args[1])}=[REDACTED_SECRET]`;
+        const secretName = String(replacementArgs[1]);
+
+        return `${secretName}=${API_KEY_SECRET_PLACEHOLDER}`;
       }
 
       return rule.replacement;
