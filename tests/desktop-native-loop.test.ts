@@ -103,12 +103,10 @@ describe("desktop native suggestion loop", () => {
       getContext?: () => { context: string; activeApplication: ActiveApplication | null; secureInput: boolean };
     } = {}) {
       const events: Array<{ type: string; payload?: unknown }> = [];
-      const getContext = overrides.getContext ?? (() => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false }));
       return {
         events,
-        getContext,
         deps: {
-          getContext,
+          getContext: overrides.getContext ?? (() => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false })),
           requestSuggestion: overrides.requestSuggestion ?? (async () => ({ id: "s-1", text: " world" })),
           onShowSuggestion: (suggestion: Suggestion) => events.push({ type: "show", payload: suggestion }),
           onHideSuggestion: () => events.push({ type: "hide" }),
@@ -128,7 +126,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("cancels stale debounced requests when context changes", async () => {
-      const { events, deps, getContext } = makeDeps();
+      const { events, deps } = makeDeps();
       let context = "hello";
       deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
       const loop = createSuggestionLoop(deps);
@@ -141,7 +139,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("hides a suggestion when context changes after it is shown", async () => {
-      const { events, deps, getContext } = makeDeps();
+      const { events, deps } = makeDeps();
       let context = "hello";
       deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
       const loop = createSuggestionLoop(deps);
@@ -172,7 +170,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("hides an existing suggestion when secure input activates", async () => {
-      const { events, deps, getContext } = makeDeps();
+      const { events, deps } = makeDeps();
       let secureInput = false;
       deps.getContext = () => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput });
       const loop = createSuggestionLoop(deps);
@@ -185,7 +183,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("does not show a stale response if the active application switched during debounce", async () => {
-      const { events, deps, getContext } = makeDeps();
+      const { events, deps } = makeDeps();
       let app: ActiveApplication | null = { bundleId: "com.apple.TextEdit" };
       deps.getContext = () => ({ context: "hello", activeApplication: app, secureInput: false });
       const loop = createSuggestionLoop(deps);

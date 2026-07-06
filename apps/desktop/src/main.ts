@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { exec } from "node:child_process";
 import { promisify } from "node:util";
-import process from "node:process";
 import { createTypingContextBuffer } from "./typing-context.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
 import { generateFakeSuggestion } from "./suggestion-engine.ts";
@@ -145,31 +144,21 @@ export function handleTextInput(text: string): void {
   suggestionLoop?.onContextChanged();
 }
 
-export function handlePastedText(text: string): void {
-  typingContextBuffer.appendText(text);
-  suggestionLoop?.onContextChanged();
-}
-
-export function handleTerminalInput(text: string): void {
-  typingContextBuffer.appendText(text);
-  suggestionLoop?.onContextChanged();
-}
-
 export function handleShortcutOrNavigation(): void {
   // Shortcuts and navigation keys do not become typing context.
 }
 
 export function handleActiveApplicationChanged(bundleId: string | null): void {
-  const app = bundleId ? { bundleId } : null;
+  const activeApp = bundleId ? { bundleId } : null;
 
   // Do not treat Tabb's own windows as the previously active application,
   // otherwise clicking the overlay would paste back into Tabb.
   const isTabb = bundleId?.toLowerCase().includes("tabb") ?? false;
-  if (app && !isTabb) {
-    previouslyActiveApplication = app;
+  if (activeApp && !isTabb) {
+    previouslyActiveApplication = activeApp;
   }
 
-  typingContextBuffer.setActiveApplication(app);
+  typingContextBuffer.setActiveApplication(activeApp);
 }
 
 export function handleSecureInputChanged(active: boolean): void {

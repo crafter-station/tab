@@ -25,7 +25,6 @@ function contextHash(snapshot: TypingContextSnapshot): string {
 
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   let state: SuggestionLoopState = { status: "idle" };
-  let requestSequence = 0;
 
   function hideIfShowing(): void {
     if (state.status === "showing") {
@@ -57,8 +56,6 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     if (state.status === "debouncing") {
       clearTimeout(state.timer);
     }
-
-    const currentSequence = ++requestSequence;
 
     state = {
       status: "debouncing",
