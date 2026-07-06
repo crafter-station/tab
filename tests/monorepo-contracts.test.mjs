@@ -112,4 +112,16 @@ describe("Tabb monorepo bootstrap", () => {
   it("has a repeatable install lockfile for npm ci", () => {
     assert.ok(existsSync(join(root, "package-lock.json")), "package-lock.json exists for repeatable npm ci installs");
   });
+
+  it("encodes Effect usage conventions in the shared service package", () => {
+    const effectServicesPackage = readJson("packages/effect-services/package.json");
+    assert.ok(
+      effectServicesPackage.dependencies?.effect,
+      "effect-services declares effect as a dependency",
+    );
+
+    const effectServices = readText("packages/effect-services/src/index.ts");
+    assert.match(effectServices, /from ["']effect["']/, "effect-services imports from the effect package");
+    assert.match(effectServices, /Effect</, "effect-services uses Effect typed effects");
+  });
 });
