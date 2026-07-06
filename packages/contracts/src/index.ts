@@ -1,5 +1,14 @@
 import { z } from "zod";
 
+const errorCodes = [
+  "invalid_request",
+  "unauthenticated",
+  "revoked_device",
+  "quota_exhausted",
+  "rate_limited",
+  "provider_failure",
+] as const;
+
 export const ActiveApplicationSchema = z.object({
   bundleId: z.string().min(1),
   name: z.string().min(1).optional(),
@@ -24,7 +33,7 @@ export const SuggestionResponseSchema = z.object({
 
 export const ErrorResponseSchema = z.object({
   error: z.object({
-    code: z.enum(["invalid_request", "unauthenticated", "revoked_device", "quota_exhausted", "rate_limited", "provider_failure"]),
+    code: z.enum(errorCodes),
     message: z.string().min(1),
   }),
 });

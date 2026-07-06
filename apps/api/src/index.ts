@@ -11,9 +11,9 @@ export const apiAppBoundary = {
 } as const;
 
 export function validateSuggestionPayload(payload: unknown) {
-  const request = SuggestionRequestSchema.parse(payload);
+  SuggestionRequestSchema.parse(payload);
 
   return SuggestionResponseSchema.parse({
-    suggestions: request.typingContext.trim().length > 0 ? [] : [],
+    suggestions: [],
   });
 }
