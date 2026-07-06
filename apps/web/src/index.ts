@@ -1,3 +1,5 @@
+import { planQuotas } from "@tabb/billing";
+
 export const webAppBoundary = {
   runtime: "tanstack-start",
   owns: [
@@ -7,3 +9,5 @@ export const webAppBoundary = {
     "device management",
   ],
 } as const;
+
+export const pricingPlans = planQuotas;

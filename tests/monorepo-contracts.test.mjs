@@ -93,4 +93,13 @@ describe("Tabb monorepo bootstrap", () => {
     assert.match(contributorDocs, /npm run typecheck/);
     assert.match(contributorDocs, /npm run test/);
   });
+
+  it("connects every app boundary to at least one shared package", () => {
+    const sharedPackagePattern = /@tabb\/(contracts|billing|memory-policy|redaction|effect-services)/;
+
+    for (const app of ["apps/desktop", "apps/web", "apps/api"]) {
+      const source = readText(`${app}/src/index.ts`);
+      assert.match(source, sharedPackagePattern, `${app} imports from a shared package`);
+    }
+  });
 });
