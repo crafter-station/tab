@@ -365,6 +365,23 @@ describe("desktop native suggestion loop", () => {
         expect(requestSuggestionCalls).toHaveLength(1);
         expect(requestSuggestionCalls[0]).toBe("hello world");
       });
+
+      it("clears the typing context buffer when secret-like context is detected", async () => {
+        const buffer = createTypingContextBuffer();
+        const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
+        deps.getContext = () => buffer.getState();
+        deps.onSecretLikeContextDetected = () => {
+          buffer.clear();
+          events.push({ type: "secretDetected" });
+        };
+        buffer.appendText("api_key=sk-abc1234567890");
+        const loop = createSuggestionLoop(deps);
+        loop.onContextChanged();
+        await wait(10);
+        expect(requestSuggestionCalls).toHaveLength(0);
+        expect(buffer.getState().context).toBe("");
+        expect(events.some((e) => e.type === "secretDetected")).toBe(true);
+      });
     });
 
     describe("password manager suppression", () => {
