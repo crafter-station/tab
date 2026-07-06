@@ -108,4 +108,8 @@ describe("Tabb monorepo bootstrap", () => {
       assert.match(source, sharedPackageImportPattern, `${app} imports from a shared package`);
     }
   });
+
+  it("has a repeatable install lockfile for npm ci", () => {
+    assert.ok(existsSync(join(root, "package-lock.json")), "package-lock.json exists for repeatable npm ci installs");
+  });
 });
