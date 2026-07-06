@@ -24,8 +24,14 @@ ARG AGENT_GID=1000
 # Rename the base image's "node" user to "agent" and align UID/GID.
 RUN groupmod -o -g $AGENT_GID node && usermod -o -u $AGENT_UID -g $AGENT_GID -d /home/agent -m -l agent node
 
+# Install Bun (the project uses bun scripts, e.g. `bun run`, `bun test`)
+RUN curl -fsSL https://bun.sh/install | bash \
+  && mv /root/.bun/bin/bun /usr/local/bin/bun \
+  && mv /root/.bun/bin/bunx /usr/local/bin/bunx \
+  && rm -rf /root/.bun
+
 # Install OpenCode CLI (run as root before USER agent)
-RUN npm install -g opencode-ai@latest
+RUN bun install -g opencode-ai@latest
 
 USER ${AGENT_UID}:${AGENT_GID}
 

@@ -6,7 +6,9 @@
   "scripts": {
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit",
-    "test": "node --test tests/*.test.mjs"
+    "test": "node --test tests/*.test.mjs",
+    "sandcastle": "bun --env-file=.sandcastle/.env .sandcastle/main.ts",
+    "sandcastle:verify-gh": "bun --env-file=.sandcastle/.env .sandcastle/verify-gh.ts"
   },
   "devDependencies": {
     "@types/bun": "latest"

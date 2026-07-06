@@ -9,10 +9,10 @@ const expectedWorkspaces = ["apps/*", "packages/*"];
 
 const ciWorkflowPath = ".github/workflows/ci.yml";
 const ciWorkflowCommands = [
-  /npm ci/,
-  /npm run typecheck/,
-  /npm run lint/,
-  /npm run test/,
+  /bun install --frozen-lockfile/,
+  /bun run typecheck/,
+  /bun run lint/,
+  /bun run test/,
 ];
 
 const appEntrypoints = [
@@ -100,8 +100,8 @@ describe("Tabb monorepo bootstrap", () => {
     assert.match(contributorDocs, /CONTEXT\.md/);
     assert.match(contributorDocs, /docs\/adr/);
     assert.match(contributorDocs, /Effect/);
-    assert.match(contributorDocs, /npm run typecheck/);
-    assert.match(contributorDocs, /npm run test/);
+    assert.match(contributorDocs, /bun run typecheck/);
+    assert.match(contributorDocs, /bun run test/);
   });
 
   it("connects every app boundary to at least one shared package", () => {
@@ -111,8 +111,8 @@ describe("Tabb monorepo bootstrap", () => {
     }
   });
 
-  it("has a repeatable install lockfile for npm ci", () => {
-    assert.ok(existsSync(join(root, "package-lock.json")), "package-lock.json exists for repeatable npm ci installs");
+  it("has a repeatable install lockfile for bun install", () => {
+    assert.ok(existsSync(join(root, "bun.lock")), "bun.lock exists for repeatable bun installs");
   });
 
   it("encodes Effect usage conventions in the shared service package", () => {

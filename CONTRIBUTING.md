@@ -10,10 +10,10 @@ Tabb is a three-app monorepo with shared packages for product contracts, redacti
 
 ## Commands
 
-- Install with `bun install` when Bun is available; `npm install` is acceptable for CI environments that only provide npm.
-- Run `npm run typecheck` before committing.
-- Run `npm run test` before committing.
-- `npm run lint` currently aliases the strict TypeScript baseline until a dedicated linter is introduced.
+- Install with `bun install`.
+- Run `bun run typecheck` before committing.
+- Run `bun run test` before committing.
+- `bun run lint` currently aliases the strict TypeScript baseline until a dedicated linter is introduced.
 
 ## API Contracts
 

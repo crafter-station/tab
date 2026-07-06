@@ -48,15 +48,18 @@ const MAX_ITERATIONS = 10;
 
 const opencodeSandbox = () =>
   docker({
+    // Pass an explicit token when available; gh CLI honours GITHUB_TOKEN over
+    // the hosts.yml config. This lets Sandcastle use a dedicated token stored
+    // in .sandcastle/.env without relying on the host's gh auth state.
+    env: {
+      ...(process.env.GITHUB_TOKEN && {
+        GITHUB_TOKEN: process.env.GITHUB_TOKEN,
+      }),
+    },
     mounts: [
       {
         hostPath: "~/.local/share/opencode/auth.json",
         sandboxPath: "/home/agent/.opencode-auth-source.json",
-        readonly: true,
-      },
-      {
-        hostPath: process.env.GH_CONFIG_DIR ?? "~/.config/gh",
-        sandboxPath: "/home/agent/.gh-config-source",
         readonly: true,
       },
     ],
@@ -64,7 +67,7 @@ const opencodeSandbox = () =>
 
 // Hooks run inside the sandbox before the agent starts each iteration.
 // Auth copies configure the Docker-installed CLIs with the host's existing
-// credentials; npm install ensures dependencies are fresh.
+// credentials; bun install ensures dependencies are fresh.
 const hooks = {
   sandbox: {
     onSandboxReady: [
@@ -72,17 +75,13 @@ const hooks = {
         command:
           "mkdir -p ~/.local/share/opencode && cp ~/.opencode-auth-source.json ~/.local/share/opencode/auth.json",
       },
-      {
-        command:
-          "mkdir -p ~/.config && rm -rf ~/.config/gh && cp -R ~/.gh-config-source ~/.config/gh",
-      },
-      { command: "npm install" },
+      { command: "bun install" },
     ],
   },
 };
 
 // Copy node_modules from the host into the worktree before each sandbox starts.
-// Avoids a full npm install from scratch; the hook above handles platform-
+// Avoids a full bun install from scratch; the hook above handles platform-
 // specific binaries and any packages added since the last copy.
 const copyToWorktree = ["node_modules"];
 
