@@ -23,3 +23,7 @@ export { acceptAndInsertSuggestion } from "./acceptance.ts";
 export { createApiSuggestionClient } from "./suggestion-client.ts";
 export { createDesktopAuthClient } from "./auth.ts";
 export { createMemoryKeychain, createMacOSKeychain } from "./keychain.ts";
+export { createDesktopStatusService, type DesktopStatus } from "./status.ts";
+export { createDesktopMemoryClient } from "./memory-client.ts";
+export { createOnboardingManager, ONBOARDING_PERMISSIONS_COPY, type OnboardingPreferences } from "./onboarding.ts";
+export { createPreferencesManager, createMemoryPreferencesStorage, type DesktopPreferences } from "./preferences.ts";

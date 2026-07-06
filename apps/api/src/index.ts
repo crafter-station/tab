@@ -6,6 +6,7 @@ import { shouldCountSuggestionResponse } from "@tabb/billing";
 import {
   ApiErrorResponseSchema,
   ApiSuccessResponseSchema,
+  DesktopStatusResponseSchema,
   DeviceAuthorizeResponseSchema,
   DeviceTokenExchangeRequestSchema,
   DeviceTokenExchangeResponseSchema,
@@ -343,7 +344,29 @@ export function createApp(deps: ApiDependencies = {}) {
   }
 
   app.use("/suggestions", authenticateDevice);
+  app.use("/api/status", authenticateDevice);
   app.use("/api/memory/*", authenticateDevice);
+
+  app.get("/api/status", async (c) => {
+    const device = c.get("device");
+    const quotaCheck = await billingService.checkQuota(device.userId);
+
+    return c.json(
+      DesktopStatusResponseSchema.parse({
+        status: "ok",
+        data: {
+          authenticated: true,
+          deviceRevoked: false,
+          userId: device.userId,
+          planId: quotaCheck.entitlement.planId,
+          quota: quotaCheck.quota,
+          usage: quotaCheck.usage,
+          resetAt: quotaCheck.resetAt.toISOString(),
+        },
+      }),
+      200,
+    );
+  });
 
   app.get("/api/memory", async (c) => {
     const device = c.get("device");
