@@ -21,7 +21,6 @@ export const env = createEnv({
     POLAR_PRODUCT_ID_PRO: z.string().optional(),
     POLAR_SERVER: z.enum(["production", "sandbox"]).default("production"),
     POLAR_WEBHOOK_SECRET: z.string().optional(),
-    TABB_SUGGESTION_MODEL_ID: z.string().default("llama-3.1-8b-instant"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

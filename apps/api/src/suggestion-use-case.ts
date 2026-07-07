@@ -18,6 +18,8 @@ import type { PersonalMemoryService } from "./personal-memory.ts";
 import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
 
+const SUGGESTION_MODEL_ID = "llama-3.1-8b-instant";
+
 export type SuggestionInput = {
   readonly requestId: string;
   readonly typingContext: string;
@@ -77,7 +79,7 @@ export function normalizeGeneratedSuggestion(
 
 export function createRealSuggestionGenerator(): SuggestionGenerator {
   const apiKey = env.GROQ_API_KEY;
-  const modelId = env.TABB_SUGGESTION_MODEL_ID;
+  const modelId = SUGGESTION_MODEL_ID;
 
   return async (input) => {
     if (!apiKey) {
