@@ -4,7 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "bun --hot src/dev.ts",
     "build": "vite build",
     "start": "vite preview"
   },
@@ -22,8 +22,8 @@
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
-    "@vitejs/plugin-react": "latest",
+    "@vitejs/plugin-react": "^4.7.0",
     "typescript": "^5",
-    "vite": "latest"
+    "vite": "^7.3.6"
   }
 }

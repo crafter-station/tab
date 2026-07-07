@@ -121,7 +121,7 @@ describe("Metadata-only suggestion telemetry", () => {
   it("records shown metadata for an empty suggestion without raw text", async () => {
     const rawContext = "Hello telemetry-empty-raw-context";
     const { app, token, telemetryService } = await createAuthenticatedTestApp(
-      async () => null,
+      async () => ({ text: "", modelId: "gpt-4o-mini" }),
     );
 
     const response = await app.request("/suggestions", {
@@ -137,6 +137,7 @@ describe("Metadata-only suggestion telemetry", () => {
     const shown = events.find((e) => e.eventType === "suggestion_shown");
     expect(shown).toBeDefined();
     expect(shown?.suggestionLength).toBe(0);
+    expect(shown?.modelId).toBe("gpt-4o-mini");
     assertNoRawText(events, rawContext);
   });
 

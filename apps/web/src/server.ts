@@ -728,3 +728,11 @@ export function createWebApp(config: WebAppConfig) {
 }
 
 export type WebApp = ReturnType<typeof createWebApp>;
+
+const devServerApp = createWebApp({
+  apiBaseUrl: process.env.TABB_API_BASE_URL ?? "http://localhost:8787",
+});
+
+export default {
+  fetch: devServerApp.fetch,
+};

@@ -153,10 +153,7 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
       temperature: 0.3,
     });
 
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return null;
-
-    return { text: trimmed, modelId: SUGGESTION_MODEL_ID };
+    return { text: text.trim(), modelId: SUGGESTION_MODEL_ID };
   };
 }
 
@@ -729,6 +726,7 @@ app.post("/suggestions", async (c) => {
       if (suggestions.length === 0) {
         console.log("[suggestions] returning empty suggestions", {
           requestId: request.requestId,
+          modelId: generated?.modelId,
           latencyMs,
         });
       }
