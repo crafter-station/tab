@@ -143,7 +143,7 @@ describe("Hono suggestion API", () => {
     expect(capturedInput?.activeApplication.bundleId).toBe("com.apple.TextEdit");
   });
 
-  it("allows unauthenticated suggestion requests for public completion testing", async () => {
+  it("rejects unauthenticated suggestion requests", async () => {
     const database = new Database(":memory:");
     const auth = createAuthInstance({ database });
     await migrateAuth(auth);
@@ -159,14 +159,14 @@ describe("Hono suggestion API", () => {
       body: JSON.stringify(validRequest),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     const body = await parseApiResponse(response);
-    expect(body.status).toBe("ok");
-    if (body.status !== "ok") throw new Error("Expected ok response");
-    expect(body.data.suggestions[0]?.text).toBe(" world");
+    expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
+    expect(body.error.code).toBe("unauthenticated");
   });
 
-  it("does not require device-token checks while suggestions are public", async () => {
+  it("rejects revoked device tokens", async () => {
     const database = new Database(":memory:");
     const auth = createAuthInstance({ database });
     await migrateAuth(auth);
@@ -190,10 +190,10 @@ describe("Hono suggestion API", () => {
       body: JSON.stringify(validRequest),
     });
 
-    expect(response.status).toBe(200);
+    expect(response.status).toBe(401);
     const body = await parseApiResponse(response);
-    expect(body.status).toBe("ok");
-    if (body.status !== "ok") throw new Error("Expected ok response");
-    expect(body.data.suggestions[0]?.text).toBe(" world");
+    expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
+    expect(body.error.code).toBe("revoked_device");
   });
 });

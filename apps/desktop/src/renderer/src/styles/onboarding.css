@@ -10,11 +10,11 @@
 .onboarding-card {
   position: relative;
   display: grid;
-  grid-template-rows: auto auto auto auto auto auto 1fr;
+  grid-template-rows: auto auto minmax(0, 1fr) auto auto auto;
   gap: 16px;
-  width: min(100%, 584px);
+  width: min(100%, 664px);
   max-height: 100%;
-  padding: 46px 24px 22px;
+  padding: 48px 24px 22px;
   overflow: auto;
 }
 
@@ -24,14 +24,21 @@
   height: 42px;
 }
 
+.onboarding-header,
 .onboarding-hero {
   display: grid;
   gap: 10px;
-  padding-right: 12px;
 }
 
-.onboarding-hero h1 {
-  max-width: 500px;
+.onboarding-header {
+  grid-template-columns: 1fr auto;
+  align-items: start;
+  padding-right: 4px;
+}
+
+.onboarding-header h1,
+.onboarding-hero h2 {
+  max-width: 540px;
   font-size: 28px;
   line-height: 1.06;
   letter-spacing: -0.04em;
@@ -39,7 +46,7 @@
 
 .onboarding-progress {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(5, 1fr);
   gap: 8px;
 }
 
@@ -54,30 +61,71 @@
   background: var(--signal);
 }
 
-.onboarding-permissions {
+.onboarding-step {
   display: grid;
-  gap: 10px;
+  align-content: start;
+  gap: 14px;
+  min-height: 0;
 }
 
+.status-card,
 .privacy-card,
 .onboarding-status,
-.dev-note {
+.dev-note,
+.tutorial-panel,
+.practice-suggestion {
   padding: 13px 14px;
   font-size: 13px;
   line-height: 1.45;
   border-radius: 16px;
 }
 
-.privacy-card {
-  display: grid;
-  gap: 4px;
-  color: var(--text-subtle);
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+.status-card,
+.practice-suggestion {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.privacy-card strong {
+.status-card div,
+.privacy-card,
+.tutorial-panel,
+.practice-suggestion div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.status-card strong,
+.privacy-card strong,
+.tutorial-panel strong,
+.practice-suggestion strong {
   color: var(--text);
+}
+
+.status-card span,
+.privacy-card,
+.tutorial-panel,
+.practice-suggestion span {
+  color: var(--text-subtle);
+}
+
+.onboarding-permissions,
+.tutorial-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.tutorial-grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+
+.privacy-card,
+.tutorial-panel {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.09);
 }
 
 .onboarding-status {
@@ -107,9 +155,41 @@
   font-size: 12px;
 }
 
+.practice-input {
+  width: 100%;
+  resize: none;
+  padding: 14px;
+  color: var(--text);
+  background: rgba(0, 0, 0, 0.24);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+  outline: none;
+}
+
+.practice-input:focus {
+  border-color: rgba(218, 190, 77, 0.46);
+  box-shadow: 0 0 0 3px rgba(218, 190, 77, 0.12);
+}
+
+.practice-suggestion {
+  border-color: color-mix(in srgb, var(--signal) 26%, rgba(255, 255, 255, 0.08));
+  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.28);
+}
+
+.practice-suggestion__actions,
+.practice-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .onboarding-actions {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 10px;
   align-self: end;
+}
+
+.onboarding-actions .col-span-full {
+  grid-column: 1 / -1;
 }

@@ -1,15 +1,48 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, PermissionCard, SectionCard } from "@tabb/ui";
+import { Button, PermissionCard, SectionCard, StatusBadge } from "@tabb/ui";
+import type { DesktopStatus } from "../../../main/status";
 
-type OnboardingStep = "accessibility" | "input-monitoring" | "done";
+type OnboardingStep = "sign-in" | "permissions" | "how-it-works" | "practice" | "done";
+
+const STEPS: OnboardingStep[] = ["sign-in", "permissions", "how-it-works", "practice", "done"];
+const MOCK_SUGGESTIONS = [
+  "Thanks for the update - I can take a look this afternoon and follow up with next steps.",
+  "That works for me. I will send the details once I confirm the timing.",
+  "I appreciate the context. Let me review this and get back to you shortly.",
+];
+
+function createFallbackStatus(): DesktopStatus {
+  return {
+    auth: "sign_in_required",
+    connectivity: "online",
+    userId: null,
+    quota: null,
+    overlay: "hidden",
+    lastUpdatedAt: null,
+  };
+}
+
+function formatAuth(auth: DesktopStatus["auth"]) {
+  return auth.replace(/_/g, " ");
+}
 
 export function OnboardingSurface() {
-  const [step, setStep] = useState<OnboardingStep>("accessibility");
+  const [step, setStep] = useState<OnboardingStep>("sign-in");
+  const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [inputMonitoringOpened, setInputMonitoringOpened] = useState(false);
   const [busy, setBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [practiceText, setPracticeText] = useState("Hi Jordan, quick update on the launch plan:");
+  const [suggestionIndex, setSuggestionIndex] = useState(0);
+  const [suggestionVisible, setSuggestionVisible] = useState(true);
+  const [approvedPractice, setApprovedPractice] = useState(false);
+  const [rejectedPractice, setRejectedPractice] = useState(false);
   const pollRef = useRef<number | null>(null);
+
+  const currentStepIndex = STEPS.indexOf(step);
+  const signedIn = status.auth === "signed_in";
+  const practiceComplete = approvedPractice && rejectedPractice;
 
   const stopAccessibilityPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -22,10 +55,7 @@ export function OnboardingSurface() {
     (granted: boolean) => {
       setAccessibilityGranted(granted);
       if (granted) {
-        setStep((currentStep) => (currentStep === "accessibility" ? "input-monitoring" : currentStep));
-        setStatusMessage(
-          "Accessibility is enabled. Next, add Tabb to Input Monitoring so it can observe typing context and Option+Tab.",
-        );
+        setStatusMessage("Accessibility is enabled. Next, add Tabb to Input Monitoring.");
         stopAccessibilityPolling();
       }
     },
@@ -51,6 +81,16 @@ export function OnboardingSurface() {
   }, [refreshAccessibilityStatus, stopAccessibilityPolling]);
 
   useEffect(() => {
+    if (!window.tabb) return;
+
+    window.tabb.onStatusChanged((nextStatus) => setStatus(nextStatus));
+    window.tabb
+      .getInitialState()
+      .then((initialState) => setStatus(initialState.status))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     refreshAccessibilityStatus().catch(() => {
       setAccessibilityGranted(false);
     });
@@ -58,126 +98,315 @@ export function OnboardingSurface() {
     return stopAccessibilityPolling;
   }, [refreshAccessibilityStatus, stopAccessibilityPolling]);
 
-  async function handlePrimaryAction() {
-    if (!window.tabb) return;
-
-    if (step === "accessibility") {
-      setBusy(true);
-      try {
-        const alreadyGranted = Boolean(await window.tabb.openAccessibilitySettings?.());
-        setAccessibilityState(alreadyGranted);
-        if (!alreadyGranted) {
-          setStatusMessage(
-            "System Settings opened to Accessibility. Turn on Tabb; this window will continue automatically once macOS reports it is enabled.",
-          );
-          startAccessibilityPolling();
-        }
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
-    if (step === "input-monitoring") {
-      setBusy(true);
-      try {
-        await window.tabb.openInputMonitoringSettings?.();
-        await window.tabb.revealAppInFinder?.();
-        setInputMonitoringOpened(true);
-        setStep("done");
-        setStatusMessage(
-          "System Settings opened to Input Monitoring. If Tabb is not listed in dev mode, run `bun run desktop:permissions` and enable the packaged Tabb app. After enabling, use Relaunch Tabb if macOS does not reopen it.",
-        );
-      } finally {
-        setBusy(false);
-      }
-      return;
-    }
-
-    if (accessibilityGranted && inputMonitoringOpened && window.tabb.completeOnboarding) {
-      window.tabb.completeOnboarding();
-    } else {
-      setStatusMessage("Finish both permission steps before continuing.");
-    }
-  }
-
-  async function handleRefresh() {
+  async function openAccessibility() {
     setBusy(true);
     try {
-      await refreshAccessibilityStatus();
-    } catch {
-      setStatusMessage("Tabb could not read the current Accessibility status. Try again after System Settings opens.");
+      const alreadyGranted = Boolean(await window.tabb?.openAccessibilitySettings?.());
+      setAccessibilityState(alreadyGranted);
+      if (!alreadyGranted) {
+        setStatusMessage(
+          "System Settings opened to Accessibility. Turn on Tabb; this window will continue once macOS reports it is enabled.",
+        );
+        startAccessibilityPolling();
+      }
     } finally {
       setBusy(false);
     }
   }
 
+  async function openInputMonitoring() {
+    setBusy(true);
+    try {
+      await window.tabb?.openInputMonitoringSettings?.();
+      await window.tabb?.revealAppInFinder?.();
+      setInputMonitoringOpened(true);
+      setStatusMessage(
+        "System Settings opened to Input Monitoring. Enable Tabb there, then relaunch Tabb if macOS does not reopen it.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function goNext() {
+    const nextStep = STEPS[currentStepIndex + 1];
+    if (nextStep) {
+      setStatusMessage(null);
+      setStep(nextStep);
+    }
+  }
+
+  function goBack() {
+    const previousStep = STEPS[currentStepIndex - 1];
+    if (previousStep) {
+      setStatusMessage(null);
+      setStep(previousStep);
+    }
+  }
+
+  async function handlePrimaryAction() {
+    if (step === "sign-in") {
+      if (!signedIn) {
+        window.tabb?.signIn?.();
+        setStatusMessage("Complete sign-in in your browser, then return here.");
+        return;
+      }
+      goNext();
+      return;
+    }
+
+    if (step === "permissions") {
+      if (!accessibilityGranted) {
+        await openAccessibility();
+        return;
+      }
+      if (!inputMonitoringOpened) {
+        await openInputMonitoring();
+        return;
+      }
+      goNext();
+      return;
+    }
+
+    if (step === "how-it-works") {
+      goNext();
+      return;
+    }
+
+    if (step === "practice") {
+      if (practiceComplete) {
+        goNext();
+      } else {
+        setStatusMessage("Accept and reject the mock suggestion once, or use Finish anyway.");
+      }
+      return;
+    }
+
+    window.tabb?.completeOnboarding?.();
+  }
+
+  function approveSuggestion() {
+    if (!suggestionVisible) return;
+    setPracticeText((value) => `${value} ${MOCK_SUGGESTIONS[suggestionIndex]}`);
+    setApprovedPractice(true);
+    setSuggestionVisible(false);
+    setStatusMessage("Accepted. This is what Option+Tab or clicking a suggestion does in the real overlay.");
+  }
+
+  function rejectSuggestion() {
+    setRejectedPractice(true);
+    setSuggestionVisible(false);
+    setSuggestionIndex((index) => (index + 1) % MOCK_SUGGESTIONS.length);
+    setStatusMessage("Dismissed. In normal use, you can ignore stale suggestions or keep typing.");
+  }
+
+  function tryAgain() {
+    setSuggestionIndex((index) => (index + 1) % MOCK_SUGGESTIONS.length);
+    setSuggestionVisible(true);
+    setStatusMessage(null);
+  }
+
   const primaryLabel =
-    step === "accessibility"
-      ? "Open Accessibility Settings"
-      : step === "input-monitoring"
-        ? "Open Input Monitoring Settings"
-        : "I've Enabled Both Permissions";
+    step === "sign-in"
+      ? signedIn
+        ? "Continue"
+        : "Sign In"
+      : step === "permissions"
+        ? !accessibilityGranted
+          ? "Open Accessibility Settings"
+          : !inputMonitoringOpened
+            ? "Open Input Monitoring Settings"
+            : "Continue"
+        : step === "how-it-works"
+          ? "Practice Suggestions"
+          : step === "practice"
+            ? "Finish Practice"
+            : "Open Tabb";
 
   return (
     <main className="onboarding-shell">
       <SectionCard className="onboarding-card">
         <div className="onboarding-card__chrome drag-region" aria-hidden="true" />
-        <header className="onboarding-hero drag-region">
-          <p className="eyebrow">Welcome to Tabb</p>
-          <h1>Two permissions, one private typing assistant.</h1>
-          <p className="lede">
-            Tabb observes recent typing context in memory so it can suggest completions in other macOS apps. It does not
-            request Screen Recording or Full Disk Access.
-          </p>
+        <header className="onboarding-header drag-region">
+          <div>
+            <p className="eyebrow">Welcome to Tabb</p>
+            <h1>Set up your private typing assistant.</h1>
+          </div>
+          <Button className="no-drag" onClick={() => window.tabb?.skipOnboarding?.()} variant="ghost">
+            Skip setup
+          </Button>
         </header>
 
         <div className="onboarding-progress" aria-label="Setup progress">
-          <span data-active={step === "accessibility" || accessibilityGranted} />
-          <span data-active={step === "input-monitoring" || step === "done"} />
-          <span data-active={step === "done" && inputMonitoringOpened} />
+          {STEPS.map((item, index) => (
+            <span data-active={index <= currentStepIndex} key={item} />
+          ))}
         </div>
 
-        <div className="onboarding-permissions">
-          <PermissionCard
-            title="Accessibility"
-            description="Lets Tabb paste accepted suggestions into the previously active application and guide setup."
-            status={accessibilityGranted ? "Enabled" : "Needs access"}
-            state={accessibilityGranted ? "granted" : "pending"}
-          />
-          <PermissionCard
-            title="Input Monitoring"
-            description="Lets Tabb listen for text-bearing typing context and the Option+Tab acceptance shortcut."
-            status={inputMonitoringOpened ? "Confirm in System Settings" : "Relaunch may be required"}
-            state={inputMonitoringOpened ? "pending" : "manual"}
-          />
-        </div>
+        <section className="onboarding-step no-drag">
+          {step === "sign-in" ? (
+            <>
+              <div className="onboarding-hero">
+                <h2>Sign in is required before setup continues.</h2>
+                <p className="lede">
+                  Tabb links this Mac to your account before it requests autocomplete suggestions. You can configure permissions
+                  after sign-in returns here.
+                </p>
+              </div>
+              <div className="status-card">
+                <div>
+                  <strong>Account status</strong>
+                  <span>{signedIn ? "Ready to continue" : "Browser sign-in required"}</span>
+                </div>
+                <StatusBadge tone={signedIn ? "ok" : "warning"}>{formatAuth(status.auth)}</StatusBadge>
+              </div>
+            </>
+          ) : null}
 
-        <div className="privacy-card">
-          <strong>Privacy scope</strong>
-          <span>Your recent typing context stays in memory only. It is not stored as a raw log or used to build hidden profiles.</span>
-        </div>
+          {step === "permissions" ? (
+            <>
+              <div className="onboarding-hero">
+                <h2>Two permissions, no screen or file access.</h2>
+                <p className="lede">
+                  Tabb observes recent typing context in memory, knows the active app, and inserts only suggestions you accept.
+                </p>
+              </div>
+              <div className="onboarding-permissions">
+                <PermissionCard
+                  title="Accessibility"
+                  description="Lets Tabb paste accepted suggestions into the previously active application and guide setup."
+                  status={accessibilityGranted ? "Enabled" : "Needs access"}
+                  state={accessibilityGranted ? "granted" : "pending"}
+                />
+                <PermissionCard
+                  title="Input Monitoring"
+                  description="Lets Tabb listen for text-bearing typing context and the Option+Tab acceptance shortcut."
+                  status={inputMonitoringOpened ? "Confirm in System Settings" : "Relaunch may be required"}
+                  state={inputMonitoringOpened ? "pending" : "manual"}
+                />
+              </div>
+              <div className="privacy-card">
+                <strong>Privacy scope</strong>
+                <span>
+                  Your recent typing context stays in memory only. Tabb does not request Screen Recording or Full Disk Access.
+                </span>
+              </div>
+            </>
+          ) : null}
 
-        {statusMessage ? <div className="onboarding-status">{statusMessage}</div> : null}
+          {step === "how-it-works" ? (
+            <>
+              <div className="onboarding-hero">
+                <h2>How Tabb suggestions work.</h2>
+                <p className="lede">
+                  Tabb watches recent typing context in memory, requests a continuation, and shows a floating overlay near the
+                  bottom of the active display.
+                </p>
+              </div>
+              <div className="tutorial-grid">
+                <div className="tutorial-panel">
+                  <strong>Accept</strong>
+                  <span>Press Option+Tab or click the suggestion to paste it into the app you were using.</span>
+                </div>
+                <div className="tutorial-panel">
+                  <strong>Dismiss</strong>
+                  <span>Ignore it, press Escape when available, or keep typing so the suggestion becomes stale.</span>
+                </div>
+                <div className="tutorial-panel">
+                  <strong>Stay focused</strong>
+                  <span>The real suggestion overlay remains separate from this onboarding window.</span>
+                </div>
+              </div>
+            </>
+          ) : null}
 
-        <details className="dev-note">
-          <summary>Development mode note</summary>
-          <p>
-            macOS permission entries are tied to the exact app bundle. If Tabb is not listed while running from source,
-            use <code>bun run desktop:permissions</code> and enable the packaged Tabb app.
-          </p>
-        </details>
+          {step === "practice" ? (
+            <>
+              <div className="onboarding-hero">
+                <h2>Practice with a mock suggestion.</h2>
+                <p className="lede">This sandbox does not call the API or paste into another app.</p>
+              </div>
+              <textarea
+                className="practice-input"
+                onChange={(event) => setPracticeText(event.target.value)}
+                rows={4}
+                value={practiceText}
+              />
+              {suggestionVisible ? (
+                <div className="practice-suggestion">
+                  <div>
+                    <span>Suggested completion</span>
+                    <strong>{MOCK_SUGGESTIONS[suggestionIndex]}</strong>
+                  </div>
+                  <div className="practice-suggestion__actions">
+                    <Button onClick={approveSuggestion}>Approve</Button>
+                    <Button onClick={rejectSuggestion} variant="secondary">
+                      Reject
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <Button onClick={tryAgain} variant="secondary">
+                  Try another suggestion
+                </Button>
+              )}
+              <div className="practice-checks">
+                <StatusBadge tone={approvedPractice ? "ok" : "muted"}>Approve practiced</StatusBadge>
+                <StatusBadge tone={rejectedPractice ? "ok" : "muted"}>Reject practiced</StatusBadge>
+              </div>
+            </>
+          ) : null}
+
+          {step === "done" ? (
+            <>
+              <div className="onboarding-hero">
+                <h2>Tabb is ready.</h2>
+                <p className="lede">
+                  Finish setup to open the Tabb app. You can revisit account, permissions, pause, and memory controls in Settings.
+                </p>
+              </div>
+              <div className="privacy-card">
+                <strong>Running in the background</strong>
+                <span>Tabb keeps the overlay hidden until there is a suggestion to show.</span>
+              </div>
+            </>
+          ) : null}
+        </section>
+
+        {statusMessage ? <div className="onboarding-status no-drag">{statusMessage}</div> : null}
+
+        {step === "permissions" ? (
+          <details className="dev-note no-drag">
+            <summary>Development mode note</summary>
+            <p>
+              macOS permission entries are tied to the exact app bundle. If Tabb is not listed while running from source,
+              use <code>bun run desktop:permissions</code> and enable the packaged Tabb app.
+            </p>
+          </details>
+        ) : null}
 
         <footer className="onboarding-actions no-drag">
-          <Button className="col-span-full" disabled={busy || (step === "accessibility" && accessibilityGranted)} onClick={handlePrimaryAction}>
+          {step !== "sign-in" ? (
+            <Button disabled={busy || currentStepIndex === 0} onClick={goBack} variant="secondary">
+              Back
+            </Button>
+          ) : null}
+          <Button className={step === "sign-in" ? "col-span-full" : undefined} disabled={busy} onClick={handlePrimaryAction}>
             {primaryLabel}
           </Button>
-          <Button disabled={busy} onClick={handleRefresh} variant="secondary">
-            Refresh Permission Status
-          </Button>
-          {step === "done" ? (
-            <Button className="col-span-full" disabled={busy} onClick={() => window.tabb?.relaunchForPermissions?.()} variant="ghost">
+          {step === "permissions" ? (
+            <Button disabled={busy} onClick={() => refreshAccessibilityStatus().catch(() => {})} variant="secondary">
+              Refresh Permission Status
+            </Button>
+          ) : null}
+          {step === "permissions" && inputMonitoringOpened ? (
+            <Button disabled={busy} onClick={() => window.tabb?.relaunchForPermissions?.()} variant="ghost">
               Relaunch Tabb
+            </Button>
+          ) : null}
+          {step === "practice" && !practiceComplete ? (
+            <Button disabled={busy} onClick={goNext} variant="ghost">
+              Finish anyway
             </Button>
           ) : null}
         </footer>

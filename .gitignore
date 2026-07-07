@@ -9,3 +9,4 @@ build/
 apps/desktop/.dev/
 .wrangler/
 .sandcastle/*.auth.json
+apps/desktop/release

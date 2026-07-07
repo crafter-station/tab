@@ -1,4 +1,5 @@
 import { BrowserWindow } from "electron";
+import type { DesktopStatus } from "./status.ts";
 
 export type CreateOnboardingWindowDependencies = {
   rendererPath: string;
@@ -7,8 +8,8 @@ export type CreateOnboardingWindowDependencies = {
 
 export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies): BrowserWindow {
   const win = new BrowserWindow({
-    width: 620,
-    height: 690,
+    width: 700,
+    height: 760,
     resizable: false,
     minimizable: false,
     maximizable: false,
@@ -64,9 +65,16 @@ export function createOnboardingWindowManager(deps: OnboardingWindowManagerDepen
     win = null;
   }
 
+  function sendStatus(status: DesktopStatus): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("status-changed", status);
+    }
+  }
+
   return {
     show,
     close,
     isOpen: () => win !== null && !win.isDestroyed(),
+    sendStatus,
   };
 }

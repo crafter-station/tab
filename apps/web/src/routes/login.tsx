@@ -4,6 +4,10 @@ import { rootRoute } from "./__root.tsx";
 
 function LoginPage() {
   const search = useSearch({ strict: false }) as { device_id?: string; callback?: string };
+  const signupParams = new URLSearchParams();
+  if (search.device_id) signupParams.set("device_id", search.device_id);
+  if (search.callback) signupParams.set("callback", search.callback);
+  const signupHref = `/signup${signupParams.toString() ? `?${signupParams.toString()}` : ""}`;
 
   return (
     <Card className="max-w-[34rem]">
@@ -16,7 +20,7 @@ function LoginPage() {
         <Label>Password<Input type="password" name="password" required autoComplete="current-password" /></Label>
         <p><Button type="submit">Sign in</Button></p>
       </form>
-      <p className="mt-4 text-muted-foreground">Need an account? <a className="underline" href="/signup">Create one</a>.</p>
+      <p className="mt-4 text-muted-foreground">Need an account? <a className="underline" href={signupHref}>Create one</a>.</p>
       </CardContent>
     </Card>
   );

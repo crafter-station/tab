@@ -7,6 +7,33 @@ export type OnboardingManagerDependencies = {
   setPreferences(prefs: Partial<OnboardingPreferences>): void;
 };
 
+export const ONBOARDING_STEPS = ["sign-in", "permissions", "how-it-works", "practice", "done"] as const;
+
+export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
+
+export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subtitle: string }> = {
+  "sign-in": {
+    title: "Sign in to start Tabb",
+    subtitle: "Connect this Mac before Tabb can request suggestions for your account.",
+  },
+  permissions: {
+    title: "Enable two macOS permissions",
+    subtitle: "Accessibility and Input Monitoring let Tabb observe context and insert accepted suggestions.",
+  },
+  "how-it-works": {
+    title: "Learn the flow",
+    subtitle: "Tabb watches recent typing context in memory, asks for a suggestion, then shows a small overlay.",
+  },
+  practice: {
+    title: "Practice suggestions",
+    subtitle: "Try accepting and dismissing a mock completion before Tabb appears in other apps.",
+  },
+  done: {
+    title: "You are ready",
+    subtitle: "Tabb will keep running from the tray and show suggestions when context is available.",
+  },
+};
+
 export const ONBOARDING_PERMISSIONS_COPY = {
   title: "Welcome to Tabb — Permissions",
   subtitle: "Tabb suggests continuations while you type in other macOS applications.",

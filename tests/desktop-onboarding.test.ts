@@ -4,6 +4,8 @@ import {
   getMacOSAppBundlePath,
   MACOS_PERMISSION_SETTINGS_URLS,
   ONBOARDING_PERMISSIONS_COPY,
+  ONBOARDING_STEP_COPY,
+  ONBOARDING_STEPS,
   type OnboardingPreferences,
 } from "../apps/desktop/src/main/onboarding.ts";
 
@@ -39,6 +41,25 @@ describe("desktop onboarding", () => {
 
     expect(prefs.completed).toBe(true);
     expect(manager.shouldShowOnboarding()).toBe(false);
+  });
+
+  it("uses the completed flag for skipped onboarding", () => {
+    const prefs: OnboardingPreferences = { completed: false };
+    const manager = createOnboardingManager({
+      getPreferences: () => prefs,
+      setPreferences: (p) => Object.assign(prefs, p),
+    });
+
+    manager.completeOnboarding();
+
+    expect(prefs.completed).toBe(true);
+    expect(manager.shouldShowOnboarding()).toBe(false);
+  });
+
+  it("defines the first-run onboarding steps in order", () => {
+    expect(ONBOARDING_STEPS).toEqual(["sign-in", "permissions", "how-it-works", "practice", "done"]);
+    expect(ONBOARDING_STEP_COPY["sign-in"].title.toLowerCase()).toContain("sign in");
+    expect(ONBOARDING_STEP_COPY.practice.subtitle.toLowerCase()).toContain("mock");
   });
 
   it("explains Accessibility and Input Monitoring permissions in product language", () => {

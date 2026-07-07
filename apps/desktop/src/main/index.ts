@@ -155,6 +155,7 @@ const statusService = createDesktopStatusService({
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
   onChange: (status) => {
     settingsWindowManager.sendStatus(status);
+    onboardingWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
     if (status.auth === "revoked_device" || status.auth === "sign_in_required") {
       // If a token is stored but the API reports revoked or unauthenticated,
@@ -231,6 +232,15 @@ async function signOut(): Promise<void> {
 
 async function signIn(): Promise<void> {
   await authClient.openBrowserLogin();
+}
+
+function showInitialDesktopSurface(): void {
+  if (onboardingManager.shouldShowOnboarding()) {
+    onboardingWindowManager.show();
+    return;
+  }
+
+  settingsWindowManager.show();
 }
 
 function isTerminalApplication(bundleId: string | null | undefined): boolean {
@@ -728,6 +738,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.on("complete-onboarding", () => {
     onboardingManager.completeOnboarding();
     onboardingWindowManager.close();
+    settingsWindowManager.show();
   });
 
   ipcMain.handle("open-accessibility-settings", async () => {
@@ -864,11 +875,7 @@ async function bootstrap(): Promise<void> {
   }, 60_000);
 
   // Show onboarding on first launch; once completed it will not reappear.
-  if (onboardingManager.shouldShowOnboarding()) {
-    onboardingWindowManager.show();
-  } else if (SHOW_SETTINGS_ON_START) {
-    settingsWindowManager.show();
-  }
+  showInitialDesktopSurface();
 
   // Input monitoring and active-application tracking are wired to the same
   // in-memory buffer. In a production build these are fed by a macOS native
@@ -903,7 +910,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  settingsWindowManager.show();
+  showInitialDesktopSurface();
 });
 
 // Exposed for the native input bridge and for tests.

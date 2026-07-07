@@ -33,6 +33,7 @@ export type TabbPreloadApi = {
   revealAppInFinder: () => Promise<void>;
   relaunchForPermissions: () => Promise<void>;
   completeOnboarding: () => void;
+  skipOnboarding: () => void;
 
   // Settings / status
   onStatusChanged: (callback: (status: DesktopStatus) => void) => void;
@@ -74,6 +75,9 @@ contextBridge.exposeInMainWorld("tabb", {
   revealAppInFinder: () => ipcRenderer.invoke("reveal-app-in-finder"),
   relaunchForPermissions: () => ipcRenderer.invoke("relaunch-for-permissions"),
   completeOnboarding: () => {
+    ipcRenderer.send("complete-onboarding");
+  },
+  skipOnboarding: () => {
     ipcRenderer.send("complete-onboarding");
   },
 

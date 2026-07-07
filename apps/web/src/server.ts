@@ -288,7 +288,47 @@ export function createWebApp(config: WebAppConfig) {
     return html(layout(`${appName} Pricing`, content, { path }));
   }
 
-  function loginPage(error?: string, path = "/login", searchParams = new URLSearchParams()): Response {
+  function preserveAuthSearchParams(searchParams: URLSearchParams): string {
+    const params = new URLSearchParams();
+    const deviceId = searchParams.get("device_id");
+    const callback = searchParams.get("callback");
+
+    if (deviceId) params.set("device_id", deviceId);
+    if (callback) params.set("callback", callback);
+
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }
+
+  async function authorizeDeviceRedirect(
+    callback: string,
+    cookieHeader: string,
+    sourceResponse?: Response,
+  ): Promise<Response> {
+    const authorizeResponse = await apiRequest(
+      "/api/auth/device/authorize",
+      { method: "POST" },
+      cookieHeader,
+    );
+
+    if (authorizeResponse.status !== 200) {
+      return loginPage("Signed in, but failed to authorize this device.");
+    }
+
+    const authorize = DeviceAuthorizeResponseSchema.parse(await authorizeResponse.json());
+    const callbackUrl = new URL(callback);
+    callbackUrl.searchParams.set("code", authorize.code);
+    const response = redirect(callbackUrl.toString());
+    if (sourceResponse) setCookies(response, sourceResponse);
+    return response;
+  }
+
+  async function loginPage(
+    error?: string,
+    path = "/login",
+    searchParams = new URLSearchParams(),
+    cookieHeader?: string,
+  ): Promise<Response> {
     const errorBlock = error
       ? `<p class="error">${escapeHtml(error)}</p>`
       : "";
@@ -297,6 +337,14 @@ export function createWebApp(config: WebAppConfig) {
     const handoffFields = `${
       deviceId ? `<input type="hidden" name="device_id" value="${escapeHtml(deviceId)}">` : ""
     }${callback ? `<input type="hidden" name="callback" value="${escapeHtml(callback)}">` : ""}`;
+    if (!error && deviceId && callback && cookieHeader) {
+      const session = await getSession(cookieHeader);
+      if (session.ok) {
+        return authorizeDeviceRedirect(callback, cookieHeader);
+      }
+    }
+
+    const signupHref = `/signup${preserveAuthSearchParams(searchParams)}`;
     const content = `
       <h1>Sign in to ${escapeHtml(appName)}</h1>
       <form method="post" action="/login" class="card">
@@ -309,18 +357,26 @@ export function createWebApp(config: WebAppConfig) {
           <input type="password" name="password" required autocomplete="current-password">
         </label>
         <p style="margin-top:1rem"><button type="submit">Sign in</button></p>
+        <p class="muted">Need an account? <a href="${signupHref}">Create one</a>.</p>
       </form>`;
     return html(layout(`Sign in — ${appName}`, content, { path }));
   }
 
-  function signupPage(error?: string, path = "/signup"): Response {
+  function signupPage(error?: string, path = "/signup", searchParams = new URLSearchParams()): Response {
     const errorBlock = error
       ? `<p class="error">${escapeHtml(error)}</p>`
       : "";
+    const deviceId = searchParams.get("device_id") ?? "";
+    const callback = searchParams.get("callback") ?? "";
+    const handoffFields = `${
+      deviceId ? `<input type="hidden" name="device_id" value="${escapeHtml(deviceId)}">` : ""
+    }${callback ? `<input type="hidden" name="callback" value="${escapeHtml(callback)}">` : ""}`;
+    const loginHref = `/login${preserveAuthSearchParams(searchParams)}`;
     const content = `
       <h1>Create your ${escapeHtml(appName)} account</h1>
       <form method="post" action="/signup" class="card">
         ${errorBlock}
+        ${handoffFields}
         <label>Name
           <input type="text" name="name" required autocomplete="name">
         </label>
@@ -331,6 +387,7 @@ export function createWebApp(config: WebAppConfig) {
           <input type="password" name="password" required autocomplete="new-password">
         </label>
         <p style="margin-top:1rem"><button type="submit">Sign up</button></p>
+        <p class="muted">Already have an account? <a href="${loginHref}">Sign in</a>.</p>
       </form>`;
     return html(layout(`Sign up — ${appName}`, content, { path }));
   }
@@ -364,20 +421,10 @@ export function createWebApp(config: WebAppConfig) {
 
     if (deviceId && callback) {
       const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
-      const authorizeResponse = await apiRequest(
-        "/api/auth/device/authorize",
-        { method: "POST" },
-        signedInCookieHeader,
-      );
-
-      if (authorizeResponse.status !== 200) {
+      if (!signedInCookieHeader) {
         return loginPage("Signed in, but failed to authorize this device.");
       }
-
-      const authorize = DeviceAuthorizeResponseSchema.parse(await authorizeResponse.json());
-      const callbackUrl = new URL(callback);
-      callbackUrl.searchParams.set("code", authorize.code);
-      return redirect(callbackUrl.toString());
+      return authorizeDeviceRedirect(callback, signedInCookieHeader, signInResponse);
     }
 
     const response = redirect("/dashboard");
@@ -396,6 +443,8 @@ export function createWebApp(config: WebAppConfig) {
     const name = String(formData.get("name") ?? "");
     const email = String(formData.get("email") ?? "");
     const password = String(formData.get("password") ?? "");
+    const deviceId = String(formData.get("device_id") ?? "");
+    const callback = String(formData.get("callback") ?? "");
 
     const signUpResponse = await apiRequest(
       "/api/auth/sign-up/email",
@@ -420,6 +469,13 @@ export function createWebApp(config: WebAppConfig) {
       },
       cookieHeader,
     );
+
+    if (deviceId && callback && signInResponse.status === 200) {
+      const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
+      if (signedInCookieHeader) {
+        return authorizeDeviceRedirect(callback, signedInCookieHeader, signInResponse);
+      }
+    }
 
     const response = redirect("/dashboard");
     setCookies(response, signInResponse.status === 200 ? signInResponse : signUpResponse);
@@ -625,8 +681,10 @@ export function createWebApp(config: WebAppConfig) {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
 
-    await apiRequest("/api/auth/sign-out", { method: "POST" }, cookieHeader);
-    return redirect("/");
+    const signOutResponse = await apiRequest("/api/auth/sign-out", { method: "POST" }, cookieHeader);
+    const response = redirect("/");
+    setCookies(response, signOutResponse);
+    return response;
   }
 
   function downloadPage(): Response {
@@ -655,12 +713,12 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/login") {
-        if (request.method === "GET") return loginPage(undefined, path, url.searchParams);
+        if (request.method === "GET") return loginPage(undefined, path, url.searchParams, cookieHeader);
         if (request.method === "POST") return loginHandler(request, cookieHeader);
       }
 
       if (path === "/signup") {
-        if (request.method === "GET") return signupPage(undefined, path);
+        if (request.method === "GET") return signupPage(undefined, path, url.searchParams);
         if (request.method === "POST") return signupHandler(request, cookieHeader);
       }
 
