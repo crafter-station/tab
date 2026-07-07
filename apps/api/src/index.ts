@@ -136,6 +136,22 @@ function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
   return `\nRelevant personal memory:\n${lines.join("\n")}`;
 }
 
+export function normalizeGeneratedSuggestion(
+  typingContext: string,
+  generatedText: string,
+): string {
+  const text = generatedText.replace(/[\r\n]+/g, " ").trim();
+  if (text.length === 0) return "";
+
+  const lastContextChar = typingContext.at(-1) ?? "";
+  const firstSuggestionChar = text.at(0) ?? "";
+  if (/\w/.test(lastContextChar) && /\w/.test(firstSuggestionChar)) {
+    return ` ${text}`;
+  }
+
+  return text;
+}
+
 function createRealSuggestionGenerator(): SuggestionGenerator {
   const apiKey = process.env.GROQ_API_KEY;
 
@@ -147,13 +163,16 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
     const { text } = await generateText({
       model: groq(SUGGESTION_MODEL_ID),
       system:
-        "You are a concise autocomplete assistant. Given the user's recent typing context, respond with only the most likely next few words that continue their thought. Do not explain, prefix, or quote the continuation. If there is no clear continuation, respond with an empty string.",
+        "You are a concise autocomplete assistant. Given the user's recent typing context, respond with only the most likely next few words that continue their thought. Do not explain, prefix, or quote the continuation. Make a best-effort continuation for ordinary prose. Return an empty string only when the context is not enough to infer any safe text continuation, such as commands, passwords, code secrets, or nonsensical input.",
       prompt: `Active application: ${input.activeApplication.bundleId}\nSource: ${input.contextSource}\nContext: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
       maxOutputTokens: 32,
       temperature: 0.3,
     });
 
-    return { text: text.trim(), modelId: SUGGESTION_MODEL_ID };
+    return {
+      text: normalizeGeneratedSuggestion(input.typingContext, text),
+      modelId: SUGGESTION_MODEL_ID,
+    };
   };
 }
 

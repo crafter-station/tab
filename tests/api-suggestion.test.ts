@@ -1,7 +1,10 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
-import { createApp } from "../apps/api/src/index.ts";
+import {
+  createApp,
+  normalizeGeneratedSuggestion,
+} from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
 import type { SuggestionGenerator, SuggestionInput } from "../apps/api/src/index.ts";
@@ -44,6 +47,13 @@ function authHeaders(token: string) {
 }
 
 describe("Hono suggestion API", () => {
+  it("normalizes generated suggestions without joining words", () => {
+    expect(normalizeGeneratedSuggestion("Hello", "world")).toBe(" world");
+    expect(normalizeGeneratedSuggestion("Hello ", "world")).toBe("world");
+    expect(normalizeGeneratedSuggestion("Hello", "\nworld\n")).toBe(" world");
+    expect(normalizeGeneratedSuggestion("Hello", "   ")).toBe("");
+  });
+
   it("returns one suggestion when the provider generates text", async () => {
     const { app, token } = await createAuthenticatedTestApp(async () => ({ text: " world" }));
 
