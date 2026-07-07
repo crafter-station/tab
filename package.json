@@ -16,6 +16,7 @@
     "dev": "bun scripts/dev.ts",
     "desktop:dev": "bun apps/desktop/scripts/dev.ts",
     "desktop:permissions": "bun run --cwd apps/desktop dev:permissions",
+    "polar:setup": "bun scripts/polar-setup.ts",
     "sandcastle": "bun --env-file=.sandcastle/.env .sandcastle/main.ts",
     "sandcastle:verify-gh": "bun --env-file=.sandcastle/.env .sandcastle/verify-gh.ts"
   },

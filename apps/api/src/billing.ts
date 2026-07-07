@@ -130,7 +130,7 @@ export interface BillingCheckoutClient {
 export type CreatePolarBillingCheckoutClientOptions = {
   accessToken?: string;
   server?: "production" | "sandbox";
-  productIds?: Partial<Record<Exclude<PlanId, "free">, string>>;
+  productIds?: Partial<Record<PlanId, string>>;
   successUrl?: string;
 };
 
@@ -146,7 +146,7 @@ export class StubBillingCheckoutClient implements BillingCheckoutClient {
 
 export class PolarBillingCheckoutClient implements BillingCheckoutClient {
   private readonly polar: Polar;
-  private readonly productIds: Record<Exclude<PlanId, "free">, string>;
+  private readonly productIds: Record<PlanId, string>;
   private readonly successUrl: string | undefined;
 
   constructor(options: CreatePolarBillingCheckoutClientOptions = {}) {
@@ -155,13 +155,14 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
       throw new Error("POLAR_ACCESS_TOKEN is not configured");
     }
 
-    const productIds: Partial<Record<Exclude<PlanId, "free">, string>> = {
+    const productIds: Partial<Record<PlanId, string>> = {
+      free: process.env.POLAR_PRODUCT_ID_FREE,
       pro: process.env.POLAR_PRODUCT_ID_PRO,
       max: process.env.POLAR_PRODUCT_ID_MAX,
       ...options.productIds,
     };
 
-    if (!productIds.pro || !productIds.max) {
+    if (!productIds.free || !productIds.pro || !productIds.max) {
       throw new Error("Polar product ids are not configured");
     }
 
@@ -169,15 +170,11 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
       accessToken,
       server: options.server ?? "production",
     });
-    this.productIds = productIds as Record<Exclude<PlanId, "free">, string>;
+    this.productIds = productIds as Record<PlanId, string>;
     this.successUrl = options.successUrl ?? process.env.POLAR_CHECKOUT_SUCCESS_URL;
   }
 
   async createCheckoutUrl(planId: PlanId, userId: string): Promise<string> {
-    if (planId === "free") {
-      throw new Error("No checkout required for the free plan");
-    }
-
     const checkout = await this.polar.checkouts.create({
       products: [this.productIds[planId]],
       externalCustomerId: userId,
@@ -203,7 +200,12 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
 export function createBillingCheckoutClient(
   options?: CreatePolarBillingCheckoutClientOptions,
 ): BillingCheckoutClient {
-  if (process.env.POLAR_ACCESS_TOKEN && process.env.POLAR_PRODUCT_ID_PRO) {
+  if (
+    process.env.POLAR_ACCESS_TOKEN &&
+    process.env.POLAR_PRODUCT_ID_FREE &&
+    process.env.POLAR_PRODUCT_ID_PRO &&
+    process.env.POLAR_PRODUCT_ID_MAX
+  ) {
     return new PolarBillingCheckoutClient(options);
   }
   return new StubBillingCheckoutClient();

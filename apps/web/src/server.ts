@@ -45,7 +45,7 @@ function formatDate(iso: string): string {
 }
 
 function formatPlanName(planId: string): string {
-  return planId.charAt(0).toUpperCase() + planId.slice(1);
+  return planQuotas[planId as PlanId]?.name ?? planId.charAt(0).toUpperCase() + planId.slice(1);
 }
 
 function formatMonthlyPrice(monthlyPriceUsd: number): string {
@@ -260,16 +260,14 @@ export function createWebApp(config: WebAppConfig) {
   function pricingPage(path: string): Response {
     const plans = Object.entries(planQuotas).map(([planId, plan]) => ({
       planId: planId as PlanId,
-      name: formatPlanName(planId),
       ...plan,
     }));
 
     const cards = plans
       .map((plan) => {
-        const cta =
-          plan.planId === "free"
-            ? `<span class="muted">Free forever</span>`
-            : `<a href="/billing/checkout?plan=${plan.planId}" class="button">Choose ${plan.name}</a>`;
+        const cta = `<a href="/billing/checkout?plan=${plan.planId}" class="button">${
+          plan.planId === "free" ? "Start free" : `Choose ${plan.name}`
+        }</a>`;
         return `
           <div class="card">
             <h3>${escapeHtml(plan.name)}</h3>
@@ -477,6 +475,24 @@ export function createWebApp(config: WebAppConfig) {
       }
     }
 
+    if (signInResponse.status === 200) {
+      const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
+      if (signedInCookieHeader) {
+        const checkoutResponse = await apiRequest(
+          "/api/billing/checkout?plan=free",
+          {},
+          signedInCookieHeader,
+        );
+
+        if (checkoutResponse.status === 200) {
+          const body = (await checkoutResponse.json()) as { data: { url: string } };
+          const response = redirect(body.data.url);
+          setCookies(response, signInResponse);
+          return response;
+        }
+      }
+    }
+
     const response = redirect("/dashboard");
     setCookies(response, signInResponse.status === 200 ? signInResponse : signUpResponse);
     return response;
@@ -509,6 +525,14 @@ export function createWebApp(config: WebAppConfig) {
         ? `<div class="alert"><strong>Quota exhausted.</strong> You have used ${quota.data.usage.toLocaleString()} of ${quota.data.quota.toLocaleString()} autocompletes this month. <a href="/pricing">Upgrade to continue</a>.</div>`
         : "";
 
+    const upgradeLinks = Object.entries(planQuotas)
+      .filter(([planId]) => planId !== quota.data.planId)
+      .map(([planId, plan]) => {
+        const label = plan.monthlyPriceUsd === 0 ? `Switch to ${plan.name}` : `Upgrade to ${plan.name}`;
+        return `<a href="/billing/checkout?plan=${planId}" class="button">${label}</a>`;
+      })
+      .join(" ");
+
     const usageBar = `
       <div class="card">
         <h2>Monthly usage</h2>
@@ -516,7 +540,7 @@ export function createWebApp(config: WebAppConfig) {
         <p>${quota.data.usage.toLocaleString()} / ${quota.data.quota.toLocaleString()} autocompletes used this month</p>
         <p class="muted">Resets ${formatDate(quota.data.resetAt)}</p>
         ${upgradeAlert}
-        <p><a href="/billing/portal" class="button secondary">Manage billing</a></p>
+        <p>${upgradeLinks} <a href="/billing/portal" class="button secondary">Manage billing</a></p>
       </div>`;
 
     const devicesRows = deviceList.data.devices

@@ -136,6 +136,23 @@ describe("Web account surface", () => {
     expect(body).toInclude("1,000,000");
     expect(body).toInclude("$10/mo");
     expect(body).toInclude("$100/mo");
+    expect(body).toInclude("Start free");
+  });
+
+  it("redirects a new web signup to the free Polar checkout", async () => {
+    const { webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+
+    const response = await webRequest(webApp, "/signup", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ name: "Test User", email, password }),
+    });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toInclude("polar.sh/checkout/free");
+    expect(response.headers.get("set-cookie")).toBeTruthy();
   });
 
   it("renders the sign-in entry point", async () => {
@@ -175,6 +192,8 @@ describe("Web account surface", () => {
     const body = await accountResponse.text();
     expect(body).toInclude("Monthly usage");
     expect(body).toInclude("Free plan");
+    expect(body).toInclude("Upgrade to Pro");
+    expect(body).toInclude("Upgrade to Max");
     expect(body).toInclude("Manage billing");
   });
 

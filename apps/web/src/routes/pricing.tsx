@@ -4,7 +4,7 @@ import { Button, Card, CardContent, CardDescription, CardFooter, CardHeader, Car
 import { rootRoute } from "./__root.tsx";
 
 function formatPlanName(planId: string) {
-  return planId.charAt(0).toUpperCase() + planId.slice(1);
+  return planQuotas[planId as PlanId]?.name ?? planId.charAt(0).toUpperCase() + planId.slice(1);
 }
 
 function formatMonthlyPrice(monthlyPriceUsd: number) {
@@ -32,7 +32,7 @@ function PricingPage() {
                 <CardDescription>Personal Memory included</CardDescription>
               </CardContent>
               <CardFooter>
-                {plan.planId === "free" ? <span className="text-muted-foreground">Free forever</span> : <Button asChild><a href={`/billing/checkout?plan=${plan.planId}`}>Choose {name}</a></Button>}
+                <Button asChild><a href={`/billing/checkout?plan=${plan.planId}`}>{plan.planId === "free" ? "Start free" : `Choose ${name}`}</a></Button>
               </CardFooter>
             </Card>
           );
