@@ -20,9 +20,10 @@ type DebugContext = {
 };
 
 export type TabbPreloadApi = {
-  onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => void;
-  onDebugContext: (callback: (debug: DebugContext) => void) => void;
-  onHide: (callback: () => void) => void;
+  onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => () => void;
+  onDebugContext: (callback: (debug: DebugContext) => void) => () => void;
+  onHide: (callback: () => void) => () => void;
+  overlayReady: () => void;
   acceptSuggestion: () => void;
 
   // Onboarding
@@ -46,13 +47,22 @@ export type TabbPreloadApi = {
 
 contextBridge.exposeInMainWorld("tabb", {
   onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => {
-    ipcRenderer.on("suggestion", (_event, suggestion) => callback(suggestion));
+    const listener = (_event: Electron.IpcRendererEvent, suggestion: { id: string; text: string }) => callback(suggestion);
+    ipcRenderer.on("suggestion", listener);
+    return () => ipcRenderer.off("suggestion", listener);
   },
   onDebugContext: (callback: (debug: DebugContext) => void) => {
-    ipcRenderer.on("debug-context", (_event, debug) => callback(debug));
+    const listener = (_event: Electron.IpcRendererEvent, debug: DebugContext) => callback(debug);
+    ipcRenderer.on("debug-context", listener);
+    return () => ipcRenderer.off("debug-context", listener);
   },
   onHide: (callback: () => void) => {
-    ipcRenderer.on("hide", () => callback());
+    const listener = () => callback();
+    ipcRenderer.on("hide", listener);
+    return () => ipcRenderer.off("hide", listener);
+  },
+  overlayReady: () => {
+    ipcRenderer.send("overlay-ready");
   },
   acceptSuggestion: () => {
     ipcRenderer.send("accept-suggestion");

@@ -12,23 +12,31 @@ export function OverlaySurface() {
   useEffect(() => {
     if (!window.tabb) return;
 
-    window.tabb.onSuggestion((nextSuggestion) => {
+    const unsubscribeSuggestion = window.tabb.onSuggestion((nextSuggestion) => {
       setSuggestion(nextSuggestion);
       setDebugContext(null);
       setMode("suggestion");
     });
 
-    window.tabb.onDebugContext((debug) => {
+    const unsubscribeDebugContext = window.tabb.onDebugContext((debug) => {
       setDebugContext(debug);
       setSuggestion(null);
       setMode("debug");
     });
 
-    window.tabb.onHide(() => {
+    const unsubscribeHide = window.tabb.onHide(() => {
       setSuggestion(null);
       setDebugContext(null);
       setMode("hidden");
     });
+
+    window.tabb.overlayReady();
+
+    return () => {
+      unsubscribeSuggestion();
+      unsubscribeDebugContext();
+      unsubscribeHide();
+    };
   }, []);
 
   return (

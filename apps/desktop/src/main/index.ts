@@ -53,6 +53,7 @@ let overlayWindow: BrowserWindow | null = null;
 let debugOverlayWindow: BrowserWindow | null = null;
 let suggestionLoop: ReturnType<typeof createSuggestionLoop> | null = null;
 let currentSuggestion: Suggestion | null = null;
+let overlayRendererReady = false;
 let previouslyActiveApplication: ActiveApplication | null = null;
 let observationPaused = false;
 let tray: TabbTray | null = null;
@@ -397,6 +398,7 @@ function createOverlayWindow(): BrowserWindow {
   win.on("closed", () => {
     if (overlayWindow === win) {
       overlayWindow = null;
+      overlayRendererReady = false;
     }
   });
   win.loadFile(OVERLAY_RENDERER_PATH);
@@ -454,7 +456,7 @@ function resizeOverlayWindow(height: number): void {
 
 function showOverlay(suggestion: Suggestion): void {
   currentSuggestion = suggestion;
-  if (!isUsableWebContents(overlayWindow)) return;
+  if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   resizeOverlayWindow(OVERLAY_SUGGESTION_HEIGHT);
   overlayWindow.webContents.send("suggestion", suggestion);
   overlayWindow.showInactive();
@@ -462,7 +464,7 @@ function showOverlay(suggestion: Suggestion): void {
 
 function clearSuggestionOverlay(): void {
   currentSuggestion = null;
-  if (!isUsableWebContents(overlayWindow)) return;
+  if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   overlayWindow.webContents.send("hide");
   overlayWindow.hide();
 }
@@ -674,6 +676,15 @@ async function bootstrap(): Promise<void> {
   // Onboarding should guide the user to grant Accessibility and Input Monitoring
   // permissions. Tabb deliberately does not request Screen Recording or Full
   // Disk Access; those are out of scope for the MVP per ADR-0037.
+  ipcMain.on("overlay-ready", (event) => {
+    if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
+
+    overlayRendererReady = true;
+    if (currentSuggestion) {
+      showOverlay(currentSuggestion);
+    }
+  });
+
   overlayWindow = createOverlayWindow();
   debugOverlayWindow = SHOW_DEBUG_TYPING_OVERLAY ? createDebugOverlayWindow() : null;
 
