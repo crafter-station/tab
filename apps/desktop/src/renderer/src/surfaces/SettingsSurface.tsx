@@ -13,6 +13,14 @@ import type { PersonalMemory } from "@tabb/contracts";
 import type { DesktopStatus } from "../../../main/status";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tabb>["getInitialState"]>>;
+type SettingsTab = "account" | "controls" | "permissions" | "memory";
+
+const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
+  { value: "account", label: "Account", description: "Sign-in, quota, and connectivity" },
+  { value: "controls", label: "Controls", description: "Pause or resume observation" },
+  { value: "permissions", label: "Permissions", description: "macOS access required by Tabb" },
+  { value: "memory", label: "Memory", description: "Personalization snippets" },
+];
 
 function getAuthTone(auth: DesktopStatus["auth"]) {
   if (auth === "signed_in") return "ok";
@@ -49,6 +57,7 @@ function SettingsRow({ label, children }: { label: string; children: React.React
 }
 
 export function SettingsSurface() {
+  const [activeTab, setActiveTab] = useState<SettingsTab>("account");
   const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
@@ -108,19 +117,47 @@ export function SettingsSurface() {
 
   return (
     <main className="desktop-shell">
-      <SectionCard className="mx-auto flex h-full max-w-4xl flex-col overflow-hidden p-0">
-        <div className="drag-region border-b border-border px-7 py-5">
-          <p className="eyebrow">Tabb Settings</p>
-          <h1 className="mt-2 text-3xl font-black tracking-[-0.05em]">Control your native typing assistant.</h1>
-        </div>
+      <SectionCard className="settings-tabs mx-auto grid h-full max-w-5xl overflow-hidden p-0">
+        <aside className="settings-tabs__sidebar drag-region">
+          <div className="settings-tabs__brand">
+            <div className="settings-tabs__mark">T</div>
+            <div>
+              <p className="eyebrow">Tabb</p>
+              <h1>Settings</h1>
+            </div>
+          </div>
 
-        <div className="no-drag flex min-h-0 flex-1 flex-col gap-5 overflow-auto p-7">
+          <nav className="settings-tabs__nav no-drag" aria-label="Settings sections">
+            {SETTINGS_TABS.map((tab) => (
+              <button
+                aria-current={activeTab === tab.value ? "page" : undefined}
+                className="settings-tabs__item"
+                data-active={activeTab === tab.value}
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                type="button"
+              >
+                <span className="settings-tabs__item-label">{tab.label}</span>
+                <span className="settings-tabs__item-desc">{tab.description}</span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="no-drag flex min-h-0 flex-col overflow-hidden">
+          <div className="drag-region border-b border-border px-7 py-5">
+            <p className="eyebrow">{SETTINGS_TABS.find((tab) => tab.value === activeTab)?.label}</p>
+            <h2 className="mt-2 text-3xl font-black tracking-[-0.05em]">Control your native typing assistant.</h2>
+          </div>
+
+          <div className="settings-tabs__content">
           {paused ? (
             <div className="rounded-2xl border border-[color-mix(in_srgb,var(--tabb-signal)_24%,transparent)] bg-[var(--tabb-signal-tint)] px-4 py-3 text-sm font-medium text-[var(--tabb-signal)]">
               Tabb is paused. Typing observation and suggestions are disabled.
             </div>
           ) : null}
 
+          {activeTab === "account" ? (
           <Card className="bg-muted/50 shadow-none">
             <CardHeader>
               <CardTitle>Account</CardTitle>
@@ -154,7 +191,9 @@ export function SettingsSurface() {
               </div>
             </CardContent>
           </Card>
+          ) : null}
 
+          {activeTab === "controls" ? (
           <Card className="bg-muted/50 shadow-none">
             <CardHeader>
               <CardTitle>Controls</CardTitle>
@@ -168,7 +207,9 @@ export function SettingsSurface() {
               </SettingsRow>
             </CardContent>
           </Card>
+          ) : null}
 
+          {activeTab === "permissions" ? (
           <Card className="bg-muted/50 shadow-none">
             <CardHeader>
               <CardTitle>Permissions</CardTitle>
@@ -201,7 +242,9 @@ export function SettingsSurface() {
               </p>
             </CardContent>
           </Card>
+          ) : null}
 
+          {activeTab === "memory" ? (
           <Card className="bg-muted/50 shadow-none">
             <CardHeader>
               <CardTitle>Quick Memory</CardTitle>
@@ -227,6 +270,8 @@ export function SettingsSurface() {
               )}
             </CardContent>
           </Card>
+          ) : null}
+          </div>
         </div>
       </SectionCard>
     </main>
