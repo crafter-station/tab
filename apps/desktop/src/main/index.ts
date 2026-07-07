@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { exec, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { promisify } from "node:util";
-import { createTypingContextBuffer, getLastWords } from "./typing-context.ts";
+import { createTypingContextBuffer, getLastWords, type TypingDeletionUnit } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
 import { createDesktopAuthClient } from "./auth.ts";
@@ -630,7 +630,14 @@ function checkForUpdates(errorMessage: string): void {
 
 function handleInputTapMessage(message: unknown): void {
   if (!message || typeof message !== "object") return;
-  const payload = message as { type?: unknown; text?: unknown; bundleId?: unknown; windowId?: unknown; message?: unknown };
+  const payload = message as {
+    type?: unknown;
+    text?: unknown;
+    unit?: unknown;
+    bundleId?: unknown;
+    windowId?: unknown;
+    message?: unknown;
+  };
 
   if (payload.type === "ready") {
     console.log("macOS input tap ready.");
@@ -649,6 +656,10 @@ function handleInputTapMessage(message: unknown): void {
   }
   if (payload.type === "text" && typeof payload.text === "string") {
     handleTextInput(payload.text);
+    return;
+  }
+  if (payload.type === "delete") {
+    handleDeleteBackward(payload.unit === "token" ? "token" : "character");
   }
 }
 
@@ -915,6 +926,10 @@ export function handleTextInput(text: string): void {
 
 export function handlePastedText(text: string): void {
   nativeSuggestionSession.appendPastedText(text);
+}
+
+export function handleDeleteBackward(unit: TypingDeletionUnit = "character"): void {
+  nativeSuggestionSession.deleteBackward(unit);
 }
 
 export function handleShortcutOrNavigation(): void {

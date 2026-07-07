@@ -15,6 +15,7 @@ export type TypingContextState = {
 export type TypingContextBuffer = {
   appendText(text: string, source?: SuggestionContextSource): void;
   appendPastedText(text: string): void;
+  deleteBackward(unit?: TypingDeletionUnit): void;
   setActiveApplication(app: ActiveApplication | null): void;
   setSecureInput(active: boolean): void;
   setPaused(active: boolean): void;
@@ -22,6 +23,8 @@ export type TypingContextBuffer = {
   getState(): TypingContextState;
   getSnapshot(): SafeTypingContextSnapshot;
 };
+
+export type TypingDeletionUnit = "character" | "token";
 
 export type TypingContextSuppressionReason =
   | "empty"
@@ -125,6 +128,14 @@ export function getLastWords(text: string, maxWords: number): string {
   return words.slice(-maxWords).join(" ");
 }
 
+function removeLastCharacter(text: string): string {
+  return Array.from(text).slice(0, -1).join("");
+}
+
+function removeLastToken(text: string): string {
+  return text.replace(/\s*\S+\s*$/, "");
+}
+
 export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffer {
   let context = "";
   let activeApplication: ActiveApplication | null = null;
@@ -180,6 +191,15 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
       const redacted = redactSensitiveText(text);
       if (redacted.text.length === 0) return;
       append(redacted.text, "pasted_text");
+    },
+    deleteBackward(unit = "character") {
+      if (paused) return;
+      if (secureInput || isPasswordManagerContext()) {
+        context = "";
+        return;
+      }
+      context = unit === "token" ? removeLastToken(context) : removeLastCharacter(context);
+      lastSource = "typed_text";
     },
     setActiveApplication(app) {
       if (paused) return;

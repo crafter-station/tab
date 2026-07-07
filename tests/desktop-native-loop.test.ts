@@ -73,6 +73,17 @@ describe("desktop native suggestion loop", () => {
       expect(buffer.getState().context).toBe("");
     });
 
+    it("does not resume old context when switching back to a previous window", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:1" });
+      buffer.appendText("Hello");
+      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:2" });
+      buffer.appendText("World");
+      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:1" });
+      buffer.appendText("Again");
+      expect(buffer.getState().context).toBe("Again");
+    });
+
     it("clears context on secure input", () => {
       const buffer = createTypingContextBuffer();
       buffer.appendText("Hello");
@@ -93,6 +104,20 @@ describe("desktop native suggestion loop", () => {
       buffer.appendText("Hello");
       buffer.clear();
       expect(buffer.getState().context).toBe("");
+    });
+
+    it("removes deleted characters from typing context", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.appendText("Hello");
+      buffer.deleteBackward();
+      expect(buffer.getState().context).toBe("Hell");
+    });
+
+    it("removes deleted tokens from typing context", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.appendText("Hello brave world");
+      buffer.deleteBackward("token");
+      expect(buffer.getState().context).toBe("Hello brave");
     });
 
     it("rolls off old context beyond max length", () => {
@@ -397,6 +422,16 @@ describe("desktop native suggestion loop", () => {
 
       expect(session.isPaused()).toBe(true);
       expect(buffer.getState().context).toBe("");
+    });
+
+    it("updates context when the user deletes text", () => {
+      const { buffer, session } = makeSession();
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Hello world");
+      session.deleteBackward("token");
+
+      expect(buffer.getState().context).toBe("Hello");
     });
   });
 

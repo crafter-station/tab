@@ -67,6 +67,18 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
 
   let flags = event.flags
   let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+  let isDeleteKey = keyCode == 51 || keyCode == 117
+
+  if isDeleteKey {
+    if flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskHelp) {
+      return Unmanaged.passUnretained(event)
+    }
+
+    emitActiveWindowIfChanged()
+    emit(["type": "delete", "unit": flags.contains(.maskAlternate) ? "token" : "character"])
+    return Unmanaged.passUnretained(event)
+  }
+
   if keyCode == 48 {
     return Unmanaged.passUnretained(event)
   }

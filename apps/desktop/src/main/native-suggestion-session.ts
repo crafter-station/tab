@@ -1,7 +1,7 @@
 import type { ActiveApplication, Suggestion, SuggestionContextSource } from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
-import type { RequestableTypingContextSnapshot, TypingContextBuffer } from "./typing-context.ts";
+import type { RequestableTypingContextSnapshot, TypingContextBuffer, TypingDeletionUnit } from "./typing-context.ts";
 
 export type NativeSuggestionSessionDependencies = {
   readonly typingContext: TypingContextBuffer;
@@ -78,6 +78,11 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     appendPastedText(text: string): void {
       if (observationPaused) return;
       deps.typingContext.appendPastedText(text);
+      contextChanged();
+    },
+    deleteBackward(unit: TypingDeletionUnit = "character"): void {
+      if (observationPaused) return;
+      deps.typingContext.deleteBackward(unit);
       contextChanged();
     },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
