@@ -11,10 +11,14 @@ export type AuthDatabase = Database | unknown;
 
 export type AuthInstance = ReturnType<typeof betterAuth>;
 
-function deliverAuthEmail(email: Parameters<typeof sendEmail>[0]): void {
-  void sendEmail(email).catch((error) => {
+async function deliverAuthEmail(
+  email: Parameters<typeof sendEmail>[0],
+): Promise<void> {
+  try {
+    await sendEmail(email);
+  } catch (error) {
     console.error("Failed to send auth email", error);
-  });
+  }
 }
 
 export type CreateAuthInstanceOptions = {
@@ -41,7 +45,7 @@ export function createAuthInstance(
       requireEmailVerification,
       revokeSessionsOnPasswordReset: true,
       sendResetPassword: async ({ user, url }) => {
-        deliverAuthEmail({
+        await deliverAuthEmail({
           to: user.email,
           subject: "Reset your Tabb password",
           text: `Reset your Tabb password: ${url}`,
@@ -58,7 +62,7 @@ export function createAuthInstance(
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
-        deliverAuthEmail({
+        await deliverAuthEmail({
           to: user.email,
           subject: "Verify your Tabb email",
           text: `Verify your Tabb email address: ${url}`,

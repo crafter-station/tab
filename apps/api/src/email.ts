@@ -1,7 +1,6 @@
-import { Resend } from "resend";
 import { env } from "./env.ts";
 
-const resendFromEmail = "Tab <tab@cueva.io>";
+const resendFromEmail = "Tabb <tabb@cueva.io>";
 
 type SendEmailInput = {
   to: string;
@@ -21,16 +20,28 @@ export async function sendEmail({
     return;
   }
 
-  const resend = new Resend(env.RESEND_API_KEY);
-  const { error } = await resend.emails.send({
-    from: resendFromEmail,
-    to,
-    subject,
-    text,
-    html,
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: resendFromEmail,
+      to,
+      subject,
+      text,
+      html,
+    }),
   });
 
-  if (error) {
-    throw new Error(`Resend email failed: ${error.message}`);
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Resend email failed (${response.status}): ${body}`);
   }
+
+  const data = (await response.json()) as { id?: string } | null;
+  console.log(
+    `Sent email to ${to} from ${resendFromEmail}, id: ${data?.id ?? "unknown"}`,
+  );
 }
