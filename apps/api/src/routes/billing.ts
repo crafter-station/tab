@@ -24,6 +24,22 @@ export function registerBillingRoutes(
 
     const quotaCheck = await deps.billingService.checkQuota(sessionCheck.session.user.id);
 
+    if (!quotaCheck.ok && quotaCheck.reason === "billing_required") {
+      return c.json(
+        createErrorResponse(
+          "billing_required",
+          "Choose the free plan in Polar to continue using Tabb.",
+          {
+            quota: quotaCheck.quota,
+            usage: quotaCheck.usage,
+            resetAt: quotaCheck.resetAt.toISOString(),
+            upgradeUrl: "/billing/checkout?plan=free",
+          },
+        ),
+        402,
+      );
+    }
+
     return c.json(
       BillingQuotaResponseSchema.parse({
         status: "ok",
@@ -42,6 +58,16 @@ export function registerBillingRoutes(
   app.get("/api/billing/checkout", async (c) => {
     const sessionCheck = await requireSession(c, deps.auth);
     if (!sessionCheck.ok) return sessionCheck.response;
+
+    if (!sessionCheck.session.user.emailVerified) {
+      return c.json(
+        createErrorResponse(
+          "email_unverified",
+          "Verify your email address before starting checkout.",
+        ),
+        403,
+      );
+    }
 
     const planIdParam = c.req.query("plan");
     if (!planIdParam || !(planIdParam in planQuotas)) {

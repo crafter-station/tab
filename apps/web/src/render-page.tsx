@@ -1,8 +1,17 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { buttonVariants } from "@tabb/ui";
+import type { User } from "./components/web-pages.tsx";
 
-function WebDocument({ title, children }: { title: string; children: ReactNode }) {
+function WebDocument({
+  title,
+  children,
+  user,
+}: {
+  title: string;
+  children: ReactNode;
+  user?: User;
+}) {
   return (
     <html lang="en">
       <head>
@@ -18,7 +27,11 @@ function WebDocument({ title, children }: { title: string; children: ReactNode }
             <nav className="flex flex-wrap items-center gap-3 font-bold">
               <a className="no-underline" href="/pricing">Pricing</a>
               <a className="no-underline" href="/download">Download</a>
-              <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>
+              {user ? (
+                <a className={buttonVariants({ variant: "secondary" })} href="/dashboard">Dashboard</a>
+              ) : (
+                <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>
+              )}
             </nav>
           </header>
           <main className="py-12">{children}</main>
@@ -32,6 +45,6 @@ function WebDocument({ title, children }: { title: string; children: ReactNode }
   );
 }
 
-export function renderPage(title: string, children: ReactNode): string {
-  return `<!doctype html>${renderToStaticMarkup(<WebDocument title={title}>{children}</WebDocument>)}`;
+export function renderPage(title: string, children: ReactNode, user?: User): string {
+  return `<!doctype html>${renderToStaticMarkup(<WebDocument title={title} user={user}>{children}</WebDocument>)}`;
 }

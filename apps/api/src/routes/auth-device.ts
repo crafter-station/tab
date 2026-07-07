@@ -6,17 +6,39 @@ import {
 } from "@tabb/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
+import type { BillingService } from "../billing.ts";
 import type { DeviceTokenService } from "../device-tokens.ts";
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse, formatValidationIssues } from "../http/responses.ts";
 
 export function registerDeviceAuthRoutes(
   app: ApiApp,
-  deps: { auth: AuthInstance; deviceTokenService: DeviceTokenService },
+  deps: {
+    auth: AuthInstance;
+    billingService: BillingService;
+    deviceTokenService: DeviceTokenService;
+  },
 ) {
   app.post("/api/auth/device/authorize", async (c) => {
     const sessionCheck = await requireSession(c, deps.auth);
     if (!sessionCheck.ok) return sessionCheck.response;
+
+    const quotaCheck = await deps.billingService.checkQuota(sessionCheck.session.user.id);
+    if (!quotaCheck.ok && quotaCheck.reason === "billing_required") {
+      return c.json(
+        createErrorResponse(
+          "billing_required",
+          "Choose the free plan in Polar before connecting a device.",
+          {
+            quota: quotaCheck.quota,
+            usage: quotaCheck.usage,
+            resetAt: quotaCheck.resetAt.toISOString(),
+            upgradeUrl: "/billing/checkout?plan=free",
+          },
+        ),
+        402,
+      );
+    }
 
     const code = await deps.deviceTokenService.createExchangeCode(
       sessionCheck.session.user.id,

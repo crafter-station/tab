@@ -2,13 +2,17 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import {
+  DeviceTokenService,
+  InMemoryDeviceTokenStorage,
+} from "../apps/api/src/device-tokens.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import {
   type BillingCheckoutClient,
   BillingService,
   InMemoryBillingStorage,
 } from "../apps/api/src/billing.ts";
+import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import { createWebApp, type WebApp } from "../apps/web/src/index.ts";
 import type { Hono } from "hono";
 
@@ -40,7 +44,8 @@ async function createWebTestEnv() {
   });
   await migrateAuth(auth);
 
-  const deviceTokenService = new DeviceTokenService();
+  const deviceTokenStorage = new InMemoryDeviceTokenStorage();
+  const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
   const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
   const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
@@ -52,6 +57,7 @@ async function createWebTestEnv() {
     personalMemoryStorage,
     billingService,
     billingCheckoutClient,
+    telemetryStorage: new InMemoryTelemetryStorage(),
   });
 
   const webApp = createWebApp({
@@ -66,6 +72,7 @@ async function createWebTestEnv() {
   });
 
   return {
+    database,
     apiApp,
     webApp,
     auth,
@@ -77,8 +84,10 @@ async function createWebTestEnv() {
 
 async function signUpUser(
   apiApp: Hono,
+  database: Database,
   email: string,
   password: string,
+  options: { emailVerified?: boolean } = {},
 ): Promise<{ cookie: string; userId: string }> {
   const signUpResponse = await apiApp.request("/api/auth/sign-up/email", {
     method: "POST",
@@ -91,6 +100,12 @@ async function signUpUser(
 
   expect(signUpResponse.status).toBe(200);
   const signUpBody = (await signUpResponse.json()) as { user: { id: string } };
+
+  if (options.emailVerified ?? true) {
+    database
+      .query("UPDATE user SET emailVerified = 1 WHERE id = ?")
+      .run(signUpBody.user.id);
+  }
 
   const signInResponse = await apiApp.request("/api/auth/sign-in/email", {
     method: "POST",
@@ -105,6 +120,17 @@ async function signUpUser(
   const cookie = signInResponse.headers.get("set-cookie");
   expect(cookie).toBeTruthy();
   return { cookie: cookie!, userId: signUpBody.user.id };
+}
+
+async function activateFreePlan(billingService: BillingService, userId: string) {
+  await billingService.applyEntitlement({
+    userId,
+    planId: "free",
+    polarCustomerId: "polar-customer-free",
+    polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
+  });
 }
 
 function webRequest(
@@ -157,9 +183,32 @@ describe("Web account surface", () => {
     expect(body).toInclude("$10/mo");
     expect(body).toInclude("$100/mo");
     expect(body).toInclude("Start free");
+    expect(body).toInclude(
+      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro"',
+    );
+    expect(body).not.toInclude('href="/billing/checkout?plan=pro"');
   });
 
-  it("redirects a new web signup to the free checkout", async () => {
+  it("shows dashboard navigation and direct checkout links on pricing when signed in", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie } = await signUpUser(apiApp, database, email, password);
+
+    const response = await webRequest(webApp, "/pricing", {}, cookie);
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude('href="/dashboard"');
+    expect(body).toInclude("Dashboard");
+    expect(body).not.toInclude('href="/login">Sign in</a>');
+    expect(body).toInclude('href="/billing/checkout?plan=pro"');
+    expect(body).not.toInclude(
+      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro"',
+    );
+  });
+
+  it("asks a new web signup to verify email before checkout", async () => {
     const { webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
@@ -170,11 +219,23 @@ describe("Web account surface", () => {
       body: new URLSearchParams({ name: "Test User", email, password }),
     });
 
-    expect(response.status).toBe(302);
-    const location = response.headers.get("location");
-    expect(location).toInclude("checkout.test/free");
-    expect(location).toInclude(encodeURIComponent(email));
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude("Check your email");
+    expect(body).toInclude("Verify your email address before choosing a plan in Polar.");
     expect(response.headers.get("set-cookie")).toBeTruthy();
+  });
+
+  it("redirects signed-in users without a Polar entitlement to the free checkout", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie } = await signUpUser(apiApp, database, email, password);
+
+    const response = await webRequest(webApp, "/dashboard", {}, cookie);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/billing/checkout?plan=free");
   });
 
   it("renders the sign-in entry point", async () => {
@@ -190,10 +251,11 @@ describe("Web account surface", () => {
   });
 
   it("signs in through the web form and reaches the account dashboard", async () => {
-    const { apiApp, webApp } = await createWebTestEnv();
+    const { apiApp, billingService, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
-    await signUpUser(apiApp, email, password);
+    const { userId } = await signUpUser(apiApp, database, email, password);
+    await activateFreePlan(billingService, userId);
 
     const loginResponse = await webRequest(
       webApp,
@@ -218,13 +280,18 @@ describe("Web account surface", () => {
     expect(body).toInclude("Upgrade to Pro");
     expect(body).toInclude("Upgrade to Max");
     expect(body).toInclude("Manage billing");
+    expect(body).toInclude('action="/logout"');
+    expect(body).toInclude("Sign out");
+    expect(body).toInclude('href="/dashboard"');
+    expect(body).toInclude("Dashboard");
+    expect(body).not.toInclude('href="/login">Sign in</a>');
   });
 
   it("redirects to a checkout URL for a paid plan", async () => {
-    const { apiApp, webApp } = await createWebTestEnv();
+    const { apiApp, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, email, password);
+    const { cookie } = await signUpUser(apiApp, database, email, password);
 
     const response = await webRequest(
       webApp,
@@ -239,11 +306,103 @@ describe("Web account surface", () => {
     expect(location).toInclude("checkout.test/pro");
   });
 
-  it("redirects to the customer portal", async () => {
-    const { apiApp, webApp } = await createWebTestEnv();
+  it("blocks checkout until the signed-in user verifies email", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, email, password);
+    const { cookie } = await signUpUser(apiApp, database, email, password, {
+      emailVerified: false,
+    });
+
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=pro",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude("Check your email");
+    expect(body).toInclude("Verify your email address before choosing a plan in Polar.");
+  });
+
+  it("redirects unauthenticated checkout requests to login before checkout", async () => {
+    const { webApp } = await createWebTestEnv();
+
+    const response = await webRequest(webApp, "/billing/checkout?plan=pro");
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
+    );
+  });
+
+  it("resumes paid checkout after login", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    await signUpUser(apiApp, database, email, password);
+
+    const loginPageResponse = await webRequest(
+      webApp,
+      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dmax",
+    );
+    expect(loginPageResponse.status).toBe(200);
+    const loginPageBody = await loginPageResponse.text();
+    expect(loginPageBody).toInclude('name="next"');
+    expect(loginPageBody).toInclude('/billing/checkout?plan=max');
+
+    const loginResponse = await webRequest(webApp, "/login", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        email,
+        password,
+        next: "/billing/checkout?plan=max",
+      }),
+    });
+
+    expect(loginResponse.status).toBe(302);
+    expect(loginResponse.headers.get("location")).toBe(
+      "/billing/checkout?plan=max",
+    );
+
+    const checkoutResponse = await webRequest(
+      webApp,
+      "/billing/checkout?plan=max",
+      {},
+      loginResponse.headers.get("set-cookie")!,
+    );
+    expect(checkoutResponse.status).toBe(302);
+    expect(checkoutResponse.headers.get("location")).toInclude("checkout.test/max");
+  });
+
+  it("redirects authenticated login and signup page visits to the dashboard", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie } = await signUpUser(apiApp, database, email, password);
+
+    const loginResponse = await webRequest(
+      webApp,
+      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
+      {},
+      cookie,
+    );
+    const signupResponse = await webRequest(webApp, "/signup", {}, cookie);
+
+    expect(loginResponse.status).toBe(302);
+    expect(loginResponse.headers.get("location")).toBe("/dashboard");
+    expect(signupResponse.status).toBe(302);
+    expect(signupResponse.headers.get("location")).toBe("/dashboard");
+  });
+
+  it("redirects to the customer portal", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie } = await signUpUser(apiApp, database, email, password);
 
     const response = await webRequest(webApp, "/billing/portal", {}, cookie);
 
@@ -254,10 +413,11 @@ describe("Web account surface", () => {
   });
 
   it("lists and deletes Personal Memory from the account surface", async () => {
-    const { apiApp, webApp, personalMemoryStorage } = await createWebTestEnv();
+    const { apiApp, billingService, database, webApp, personalMemoryStorage } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, email, password);
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activateFreePlan(billingService, userId);
 
     const memory = await personalMemoryStorage.createMemory({
       userId,
@@ -289,10 +449,11 @@ describe("Web account surface", () => {
   });
 
   it("lists and revokes native devices from the account surface", async () => {
-    const { apiApp, webApp, deviceTokenService } = await createWebTestEnv();
+    const { apiApp, billingService, database, webApp, deviceTokenService } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, email, password);
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activateFreePlan(billingService, userId);
 
     await deviceTokenService.createDeviceToken(userId, {
       deviceId: "macbook-pro-1",

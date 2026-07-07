@@ -7,7 +7,9 @@ import {
 export const ERROR_CODES = [
   "invalid_request",
   "unauthenticated",
+  "email_unverified",
   "revoked_device",
+  "billing_required",
   "quota_exhausted",
   "rate_limited",
   "provider_failure",

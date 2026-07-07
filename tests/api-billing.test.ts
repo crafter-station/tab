@@ -3,16 +3,19 @@ import { Database } from "bun:sqlite";
 import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import {
   BillingService,
   BillingWebhookHandler,
   D1BillingStorage,
   InMemoryBillingStorage,
   InMemoryUsageMeterClient,
+  PolarUsageMeterClient,
   UsageMeterService,
   createBillingCheckoutClient,
 } from "../apps/api/src/billing.ts";
+import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
+import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type { SuggestionGenerator } from "../apps/api/src/index.ts";
 
 const validRequest = {
@@ -38,7 +41,8 @@ async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
   await migrateAuth(auth);
-  const deviceTokenService = new DeviceTokenService();
+  const deviceTokenStorage = new InMemoryDeviceTokenStorage();
+  const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
   const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
   const usageMeterClient = new InMemoryUsageMeterClient();
@@ -52,11 +56,21 @@ async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
     deviceTokenService,
     billingService,
     usageMeterService,
+    personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
+    telemetryStorage: new InMemoryTelemetryStorage(),
   });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
     deviceId: "device-1",
     platform: "darwin",
     appVersion: "0.0.1",
+  });
+  await billingService.applyEntitlement({
+    userId: "user-1",
+    planId: "free",
+    polarCustomerId: "polar-customer-free",
+    polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
   });
   return { app, token, billingService, usageMeterClient };
 }
@@ -134,6 +148,8 @@ describe("Billing and quota enforcement", () => {
     await billingService.applyEntitlement({
       userId: "user-1",
       planId: "free",
+      polarCustomerId: "polar-customer-free",
+      polarSubscriptionId: "polar-sub-free",
       status: "active",
       cachedAt: new Date(),
     });
@@ -181,6 +197,7 @@ describe("Billing and quota enforcement", () => {
     expect(events).toHaveLength(1);
     expect(events[0].userId).toBe("user-1");
     expect(events[0].requestId).toBe("req-1");
+    expect(events[0].creditsSpent).toBe(1);
   });
 
   it("does not record a Polar usage event for empty suggestions", async () => {
@@ -226,11 +243,45 @@ describe("Billing and quota enforcement", () => {
     ).toThrow("Polar checkout is partially configured");
   });
 
+  it("requires a Polar-backed active entitlement before serving suggestions", async () => {
+    const { app, token, billingService } = await createBillingTestApp(
+      async () => ({ text: " world" }),
+    );
+
+    await billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "free",
+      status: "inactive",
+      cachedAt: new Date(),
+    });
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+
+    expect(response.status).toBe(402);
+    const body = await parseApiResponse(response);
+    expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
+    expect(body.error.code).toBe("billing_required");
+    expect(body.error.details?.upgradeUrl).toBe("/billing/checkout?plan=free");
+  });
+
   it("rejects webhook requests with an invalid signature", async () => {
     const database = new Database(":memory:");
     const auth = createAuthInstance({ database });
     await migrateAuth(auth);
-    const app = createApp({ auth, deviceTokenService: new DeviceTokenService() });
+    const billingStorage = new InMemoryBillingStorage();
+    const billingService = new BillingService({ storage: billingStorage });
+    const app = createApp({
+      auth,
+      deviceTokenService: new DeviceTokenService({ storage: new InMemoryDeviceTokenStorage() }),
+      billingService,
+      personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
+      telemetryStorage: new InMemoryTelemetryStorage(),
+    });
 
     const response = await app.request("/api/billing/webhook", {
       method: "POST",
@@ -258,6 +309,8 @@ describe("Billing and quota enforcement", () => {
     await billingService.applyEntitlement({
       userId: "user-1",
       planId: "free",
+      polarCustomerId: "polar-customer-free",
+      polarSubscriptionId: "polar-sub-free",
       status: "active",
       cachedAt: new Date(),
     });
@@ -326,6 +379,49 @@ describe("Billing and quota enforcement", () => {
 
     const usage = await storage.getUsage("user-d1", currentMonth());
     expect(usage).toBe(2);
+  });
+});
+
+describe("PolarUsageMeterClient", () => {
+  it("ingests an event with organization id, external customer id and request id", async () => {
+    const captured: { events: unknown[] }[] = [];
+    const mockPolar = {
+      events: {
+        ingest: async (request: { events: unknown[] }) => {
+          captured.push(request);
+        },
+      },
+    } as unknown as import("@polar-sh/sdk").Polar;
+
+    const client = new PolarUsageMeterClient({
+      meterId: "meter-123",
+      polar: mockPolar,
+      organizationId: "org-123",
+    });
+
+    await client.ingest({
+      userId: "user-1",
+      requestId: "req-1",
+      timestamp: new Date("2026-07-07T00:00:00.000Z"),
+      creditsSpent: 1,
+    });
+
+    expect(captured).toHaveLength(1);
+    const event = captured[0].events[0] as {
+      name: string;
+      externalCustomerId: string;
+      externalId: string;
+      organizationId: string;
+      metadata: { requestId: string; creditsSpent: number };
+      timestamp: Date;
+    };
+    expect(event.name).toBe("autocomplete.used");
+    expect(event.externalCustomerId).toBe("user-1");
+    expect(event.externalId).toBe("req-1");
+    expect(event.organizationId).toBe("org-123");
+    expect(event.metadata.requestId).toBe("req-1");
+    expect(event.metadata.creditsSpent).toBe(1);
+    expect(event.timestamp).toEqual(new Date("2026-07-07T00:00:00.000Z"));
   });
 });
 

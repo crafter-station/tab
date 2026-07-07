@@ -7,7 +7,9 @@ import { z } from "zod";
 const errorCodes = [
   "invalid_request",
   "unauthenticated",
+  "email_unverified",
   "revoked_device",
+  "billing_required",
   "quota_exhausted",
   "rate_limited",
   "provider_failure",

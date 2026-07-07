@@ -5,25 +5,36 @@ import {
   createApp,
   normalizeGeneratedSuggestion,
 } from "../apps/api/src/index.ts";
-import { BillingService, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
+import { BillingService, InMemoryBillingStorage, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import { InMemoryMemoryJobQueue } from "../apps/api/src/memory-agent.ts";
-import { PersonalMemoryService } from "../apps/api/src/personal-memory.ts";
+import { InMemoryPersonalMemoryStorage, PersonalMemoryService } from "../apps/api/src/personal-memory.ts";
+import { InMemoryTelemetryStorage, TelemetryService } from "../apps/api/src/telemetry.ts";
 import { SuggestionUseCase } from "../apps/api/src/suggestion-use-case.ts";
-import { TelemetryService } from "../apps/api/src/telemetry.ts";
 import type { SuggestionGenerator, SuggestionInput } from "../apps/api/src/index.ts";
 
 async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerator) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
   await migrateAuth(auth);
-  const deviceTokenService = new DeviceTokenService();
-  const app = createApp({ generateSuggestion, auth, deviceTokenService });
+  const deviceTokenStorage = new InMemoryDeviceTokenStorage();
+  const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
+  const billingStorage = new InMemoryBillingStorage();
+  const billingService = new BillingService({ storage: billingStorage });
+  const app = createApp({ generateSuggestion, auth, deviceTokenService, billingService, telemetryStorage: new InMemoryTelemetryStorage(), personalMemoryStorage: new InMemoryPersonalMemoryStorage() });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
     deviceId: "device-1",
     platform: "darwin",
     appVersion: "0.0.1",
+  });
+  await billingService.applyEntitlement({
+    userId: "user-1",
+    planId: "free",
+    polarCustomerId: "polar-customer-free",
+    polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
   });
   return { app, token };
 }
@@ -167,7 +178,10 @@ describe("Hono suggestion API", () => {
     const app = createApp({
       generateSuggestion: async () => ({ text: " world" }),
       auth,
-      deviceTokenService: new DeviceTokenService(),
+      deviceTokenService: new DeviceTokenService({ storage: new InMemoryDeviceTokenStorage() }),
+      billingService: new BillingService({ storage: new InMemoryBillingStorage() }),
+      telemetryStorage: new InMemoryTelemetryStorage(),
+      personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
     });
 
     const response = await app.request("/suggestions", {
@@ -187,11 +201,14 @@ describe("Hono suggestion API", () => {
     const database = new Database(":memory:");
     const auth = createAuthInstance({ database });
     await migrateAuth(auth);
-    const deviceTokenService = new DeviceTokenService();
+    const deviceTokenService = new DeviceTokenService({ storage: new InMemoryDeviceTokenStorage() });
     const app = createApp({
       generateSuggestion: async () => ({ text: " world" }),
       auth,
       deviceTokenService,
+      billingService: new BillingService({ storage: new InMemoryBillingStorage() }),
+      telemetryStorage: new InMemoryTelemetryStorage(),
+      personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
     });
 
     const { token, device } = await deviceTokenService.createDeviceToken("user-1", {
@@ -217,12 +234,12 @@ describe("Hono suggestion API", () => {
 
 describe("SuggestionUseCase", () => {
   function createUseCase(generateSuggestion: SuggestionGenerator) {
-    const billingService = new BillingService();
+    const billingService = new BillingService({ storage: new InMemoryBillingStorage() });
     const usageMeterClient = new InMemoryUsageMeterClient();
     const usageMeterService = new UsageMeterService({ client: usageMeterClient, retryDelayMs: 0 });
-    const personalMemoryService = new PersonalMemoryService();
+    const personalMemoryService = new PersonalMemoryService({ storage: new InMemoryPersonalMemoryStorage() });
     const memoryJobQueue = new InMemoryMemoryJobQueue();
-    const telemetryService = new TelemetryService();
+    const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
     const useCase = new SuggestionUseCase({
       billingService,
       usageMeterService,
@@ -242,6 +259,17 @@ describe("SuggestionUseCase", () => {
     };
   }
 
+  async function activateFreePlan(billingService: BillingService) {
+    await billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "free",
+      polarCustomerId: "polar-customer-free",
+      polarSubscriptionId: "polar-sub-free",
+      status: "active",
+      cachedAt: new Date(),
+    });
+  }
+
   it("orchestrates quota, relevant memory, generation, telemetry, billing, and memory enqueueing", async () => {
     let capturedInput: SuggestionInput | null = null;
     const { billingService, memoryJobQueue, personalMemoryService, telemetryService, useCase } = createUseCase(async (input) => {
@@ -255,6 +283,7 @@ describe("SuggestionUseCase", () => {
       source: "manual",
       sensitivity: "normal",
     });
+    await activateFreePlan(billingService);
 
     const result = await useCase.handle(validDevice, validRequest);
 
@@ -275,6 +304,7 @@ describe("SuggestionUseCase", () => {
       generated = true;
       return { text: " world" };
     });
+    await activateFreePlan(billingService);
 
     for (let i = 0; i < 100; i += 1) {
       await billingService.consumeSuggestion("user-1");
@@ -291,9 +321,10 @@ describe("SuggestionUseCase", () => {
   });
 
   it("records provider failures without enqueueing memory jobs", async () => {
-    const { memoryJobQueue, telemetryService, useCase } = createUseCase(async () => {
+    const { billingService, memoryJobQueue, telemetryService, useCase } = createUseCase(async () => {
       throw new Error("model timeout");
     });
+    await activateFreePlan(billingService);
 
     const result = await useCase.handle(validDevice, validRequest);
 

@@ -286,7 +286,10 @@ export class PersonalMemoryService {
   private maxRelevantMemories: number;
 
   constructor(deps: PersonalMemoryServiceDependencies = {}) {
-    this.storage = deps.storage ?? new InMemoryPersonalMemoryStorage();
+    if (!deps.storage) {
+      throw new Error("PersonalMemoryService requires a storage implementation");
+    }
+    this.storage = deps.storage;
     this.maxRelevantMemories = deps.maxRelevantMemories ?? 5;
   }
 

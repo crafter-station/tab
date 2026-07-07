@@ -43,8 +43,26 @@ function redirect(location: string, status = 302): Response {
   return new Response(null, { status, headers: { location } });
 }
 
-function html(body: ReactNode, title: string, status = 200): Response {
-  return new Response(renderPage(title, body), {
+function safeNextPath(next: string | null | undefined): string | undefined {
+  if (!next?.startsWith("/") || next.startsWith("//")) return undefined;
+  try {
+    const url = new URL(next, "http://localhost");
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function loginRedirect(next?: string): Response {
+  const params = new URLSearchParams();
+  const safeNext = safeNextPath(next);
+  if (safeNext) params.set("next", safeNext);
+  const query = params.toString();
+  return redirect(`/login${query ? `?${query}` : ""}`);
+}
+
+function html(body: ReactNode, title: string, status = 200, user?: User): Response {
+  return new Response(renderPage(title, body, user), {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
@@ -55,6 +73,13 @@ function htmlErrorPage(
   message: string,
 ): Response {
   return html(createElement(MessagePage, { title, message }), title);
+}
+
+function verifyEmailPage(): Response {
+  return htmlErrorPage(
+    "Check your email",
+    "We sent you a verification link. Verify your email address before choosing a plan in Polar.",
+  );
 }
 
 function json(body: unknown, status = 200): Response {
@@ -113,19 +138,33 @@ export function createWebApp(config: WebAppConfig) {
     if (response.status !== 200) {
       return {
         ok: false,
-        response: redirect("/login"),
+        response: loginRedirect(),
       };
     }
 
-    const body = (await response.json()) as { user?: User };
-    if (!body.user?.id) {
+    const body = (await response.json()) as { user?: User } | null;
+    if (!body?.user?.id) {
       return {
         ok: false,
-        response: redirect("/login"),
+        response: loginRedirect(),
       };
     }
 
     return { ok: true, user: body.user };
+  }
+
+  async function getOptionalUser(cookieHeader: string | undefined): Promise<User | undefined> {
+    let response: Response;
+    try {
+      response = await apiRequest("/api/auth/get-session", {}, cookieHeader);
+    } catch {
+      return undefined;
+    }
+
+    if (response.status !== 200) return undefined;
+
+    const body = (await response.json()) as { user?: User } | null;
+    return body?.user?.id ? body.user : undefined;
   }
 
   async function requireSession(
@@ -134,12 +173,19 @@ export function createWebApp(config: WebAppConfig) {
     return getSession(cookieHeader);
   }
 
-  function homePage(): Response {
-    return html(createElement(HomePage), `${appName} - Native autocomplete for macOS`);
+  async function homePage(cookieHeader: string | undefined): Promise<Response> {
+    const user = await getOptionalUser(cookieHeader);
+    return html(createElement(HomePage), `${appName} - Native autocomplete for macOS`, 200, user);
   }
 
-  function pricingPage(): Response {
-    return html(createElement(PricingPage), `${appName} Pricing`);
+  async function pricingPage(cookieHeader: string | undefined): Promise<Response> {
+    const user = await getOptionalUser(cookieHeader);
+    return html(
+      createElement(PricingPage, { authenticated: Boolean(user) }),
+      `${appName} Pricing`,
+      200,
+      user,
+    );
   }
 
   async function authorizeDeviceRedirect(
@@ -152,6 +198,25 @@ export function createWebApp(config: WebAppConfig) {
       { method: "POST" },
       cookieHeader,
     );
+
+    if (authorizeResponse.status === 402) {
+      const checkoutResponse = await apiRequest(
+        "/api/billing/checkout?plan=free",
+        {},
+        cookieHeader,
+      );
+
+      if (checkoutResponse.status === 200) {
+        const body = await parseCheckout(checkoutResponse);
+        const response = redirect(body.data.url);
+        if (sourceResponse) appendSetCookies(response, sourceResponse);
+        return response;
+      }
+
+      const response = redirect("/billing/checkout?plan=free");
+      if (sourceResponse) appendSetCookies(response, sourceResponse);
+      return response;
+    }
 
     if (authorizeResponse.status !== 200) {
       return loginPage("Signed in, but failed to authorize this device.");
@@ -169,6 +234,7 @@ export function createWebApp(config: WebAppConfig) {
     return {
       device_id: searchParams.get("device_id") ?? undefined,
       callback: searchParams.get("callback") ?? undefined,
+      next: safeNextPath(searchParams.get("next")),
     };
   }
 
@@ -187,13 +253,28 @@ export function createWebApp(config: WebAppConfig) {
       }
     }
 
+    if (!error && cookieHeader) {
+      const session = await getSession(cookieHeader);
+      if (session.ok) return redirect("/dashboard");
+    }
+
     return html(
       createElement(LoginPage, { search: authSearchFromParams(searchParams), error }),
       `Sign in - ${appName}`,
     );
   }
 
-  function signupPage(error?: string, _path = "/signup", searchParams = new URLSearchParams()): Response {
+  async function signupPage(
+    error?: string,
+    _path = "/signup",
+    searchParams = new URLSearchParams(),
+    cookieHeader?: string,
+  ): Promise<Response> {
+    if (!error && cookieHeader) {
+      const session = await getSession(cookieHeader);
+      if (session.ok) return redirect("/dashboard");
+    }
+
     return html(
       createElement(SignupPage, { search: authSearchFromParams(searchParams), error }),
       `Sign up - ${appName}`,
@@ -226,6 +307,7 @@ export function createWebApp(config: WebAppConfig) {
     const password = String(formData.get("password") ?? "");
     const deviceId = String(formData.get("device_id") ?? "");
     const callback = String(formData.get("callback") ?? "");
+    const next = safeNextPath(String(formData.get("next") ?? ""));
 
     const signInResponse = await apiRequest(
       "/api/auth/sign-in/email",
@@ -252,7 +334,7 @@ export function createWebApp(config: WebAppConfig) {
       return authorizeDeviceRedirect(callback, signedInCookieHeader, signInResponse);
     }
 
-    const response = redirect("/dashboard");
+    const response = redirect(next ?? "/dashboard");
     appendSetCookies(response, signInResponse);
     return response;
   }
@@ -270,6 +352,7 @@ export function createWebApp(config: WebAppConfig) {
     const password = String(formData.get("password") ?? "");
     const deviceId = String(formData.get("device_id") ?? "");
     const callback = String(formData.get("callback") ?? "");
+    const next = safeNextPath(String(formData.get("next") ?? ""));
 
     const signUpResponse = await apiRequest(
       "/api/auth/sign-up/email",
@@ -296,10 +379,19 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (signInResponse.status === 403) {
-      return htmlErrorPage(
-        "Check your email",
-        "We sent you a verification link. Verify your email address before signing in to Tabb.",
-      );
+      return verifyEmailPage();
+    }
+
+    if (signInResponse.status === 200) {
+      const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
+      if (signedInCookieHeader) {
+        const session = await getSession(signedInCookieHeader);
+        if (session.ok && !session.user.emailVerified) {
+          const response = verifyEmailPage();
+          appendSetCookies(response, signInResponse);
+          return response;
+        }
+      }
     }
 
     if (deviceId && callback && signInResponse.status === 200) {
@@ -307,6 +399,12 @@ export function createWebApp(config: WebAppConfig) {
       if (signedInCookieHeader) {
         return authorizeDeviceRedirect(callback, signedInCookieHeader, signInResponse);
       }
+    }
+
+    if (next && signInResponse.status === 200) {
+      const response = redirect(next);
+      appendSetCookies(response, signInResponse);
+      return response;
     }
 
     if (signInResponse.status === 200) {
@@ -400,6 +498,10 @@ export function createWebApp(config: WebAppConfig) {
       return redirect("/login");
     }
 
+    if (quotaResponse.status === 402) {
+      return redirect("/billing/checkout?plan=free");
+    }
+
     const quota = await parseBillingQuota(quotaResponse);
     const deviceList = await parseDevices(devicesResponse);
     const memoryList = await parseMemories(memoriesResponse);
@@ -413,6 +515,8 @@ export function createWebApp(config: WebAppConfig) {
         },
       }),
       `Dashboard - ${appName}`,
+      200,
+      sessionCheck.user,
     );
   }
 
@@ -421,16 +525,18 @@ export function createWebApp(config: WebAppConfig) {
     searchParams: URLSearchParams,
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
-    if (!sessionCheck.ok) return sessionCheck.response;
-
     const plan = searchParams.get("plan") ?? "pro";
+    const checkoutPath = `/billing/checkout?plan=${encodeURIComponent(plan)}`;
+    if (!sessionCheck.ok) return loginRedirect(checkoutPath);
+
     const response = await apiRequest(
       `/api/billing/checkout?plan=${encodeURIComponent(plan)}`,
       {},
       cookieHeader,
     );
 
-    if (response.status === 401) return redirect("/login");
+    if (response.status === 401) return loginRedirect(checkoutPath);
+    if (response.status === 403) return verifyEmailPage();
     if (response.status !== 200) {
       return htmlErrorPage(
         "Checkout error",
@@ -511,8 +617,9 @@ export function createWebApp(config: WebAppConfig) {
     return response;
   }
 
-  function downloadPage(): Response {
-    return html(createElement(DownloadPage, { latestVersion }), `${appName} Download`);
+  async function downloadPage(cookieHeader: string | undefined): Promise<Response> {
+    const user = await getOptionalUser(cookieHeader);
+    return html(createElement(DownloadPage, { latestVersion }), `${appName} Download`, 200, user);
   }
 
   return {
@@ -526,11 +633,11 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/" && request.method === "GET") {
-        return homePage();
+        return homePage(cookieHeader);
       }
 
       if (path === "/pricing" && request.method === "GET") {
-        return pricingPage();
+        return pricingPage(cookieHeader);
       }
 
       if (path === "/login") {
@@ -539,7 +646,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/signup") {
-        if (request.method === "GET") return signupPage(undefined, path, url.searchParams);
+        if (request.method === "GET") return signupPage(undefined, path, url.searchParams, cookieHeader);
         if (request.method === "POST") return signupHandler(request, cookieHeader);
       }
 
@@ -601,7 +708,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/download" && request.method === "GET") {
-        return downloadPage();
+        return downloadPage(cookieHeader);
       }
 
       if (path === "/download/tabb.dmg" && request.method === "GET") {

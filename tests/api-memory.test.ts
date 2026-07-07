@@ -2,13 +2,15 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
+import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import {
   ApiResponseSchema,
   MemoryDeleteResponseSchema,
   MemoryListResponseSchema,
 } from "../packages/contracts/src/index.ts";
+import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type {
   SuggestionGenerator,
   SuggestionInput,
@@ -20,18 +22,31 @@ async function createAuthenticatedTestApp(
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
   await migrateAuth(auth);
-  const deviceTokenService = new DeviceTokenService();
+  const deviceTokenStorage = new InMemoryDeviceTokenStorage();
+  const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
+  const billingStorage = new InMemoryBillingStorage();
+  const billingService = new BillingService({ storage: billingStorage });
   const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
   const app = createApp({
     generateSuggestion,
     auth,
+    billingService,
     deviceTokenService,
     personalMemoryStorage,
+    telemetryStorage: new InMemoryTelemetryStorage(),
   });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
     deviceId: "device-1",
     platform: "darwin",
     appVersion: "0.0.1",
+  });
+  await billingService.applyEntitlement({
+    userId: "user-1",
+    planId: "free",
+    polarCustomerId: "polar-customer-free",
+    polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
   });
   return { app, token, personalMemoryStorage, deviceTokenService };
 }

@@ -9,18 +9,11 @@ if (!accessToken) {
 
 const server = env.POLAR_SERVER;
 const organizationId = env.POLAR_ORGANIZATION_ID;
-const shouldSendOrganizationId = env.POLAR_SEND_ORGANIZATION_ID === "true";
 
 const polar = new Polar({ accessToken, server });
 
-if (organizationId && !shouldSendOrganizationId) {
-  console.warn(
-    "POLAR_ORGANIZATION_ID is set but will be omitted. Polar organization tokens reject organizationId in create requests.",
-  );
-}
-
-function organizationScope(): { organizationId?: string } {
-  return shouldSendOrganizationId && organizationId ? { organizationId } : {};
+function organizationScope(): { organizationId: string } {
+  return { organizationId };
 }
 
 type CreatedResource = {
@@ -36,19 +29,42 @@ function unwrapResource<T extends CreatedResource>(result: unknown, key: string)
 
 async function createAutocompleteMeter(): Promise<CreatedResource> {
   const result = await polar.meters.create({
-    name: "Autocomplete suggestions",
+    name: "Autocomplete credits spent",
     unit: "custom",
-    customLabel: "suggestion",
+    customLabel: "credit",
     filter: {
       conjunction: "and",
       clauses: [{ property: "name", operator: "eq", value: "autocomplete.used" }],
     },
-    aggregation: { func: "count" },
+    aggregation: { func: "sum", property: "creditsSpent" },
     metadata: { slug: "autocomplete.used" },
     ...organizationScope(),
   });
 
   return unwrapResource<CreatedResource>(result, "meter");
+}
+
+async function createPlanCreditsBenefit(
+  planId: PlanId,
+  meterId: string,
+): Promise<CreatedResource> {
+  const plan = planQuotas[planId];
+  const result = await polar.benefits.create({
+    type: "meter_credit",
+    description: `${plan.monthlyAutocompleteSuggestions.toLocaleString()} autocomplete credits/mo`,
+    properties: {
+      units: plan.monthlyAutocompleteSuggestions,
+      rollover: false,
+      meterId,
+    },
+    metadata: {
+      planId,
+      monthlyAutocompleteCredits: plan.monthlyAutocompleteSuggestions,
+    },
+    ...organizationScope(),
+  });
+
+  return unwrapResource<CreatedResource>(result, "benefit");
 }
 
 async function createPlanProduct(planId: PlanId): Promise<CreatedResource> {
@@ -79,6 +95,13 @@ async function createPlanProduct(planId: PlanId): Promise<CreatedResource> {
   return unwrapResource<CreatedResource>(result, "product");
 }
 
+async function attachBenefitToProduct(productId: string, benefitId: string): Promise<void> {
+  await polar.products.updateBenefits({
+    id: productId,
+    productBenefitsUpdate: { benefits: [benefitId] },
+  });
+}
+
 async function createWebhookEndpoint(url: string): Promise<CreatedResource> {
   const result = await polar.webhooks.createWebhookEndpoint({
     url,
@@ -102,9 +125,22 @@ async function createWebhookEndpoint(url: string): Promise<CreatedResource> {
 const meter = await createAutocompleteMeter();
 console.log(`POLAR_AUTOCOMPLETE_METER_ID=${meter.id ?? "<unknown>"}`);
 
+if (!meter.id) {
+  throw new Error("Polar meter creation did not return an id");
+}
+
 for (const planId of Object.keys(planQuotas) as PlanId[]) {
+  const benefit = await createPlanCreditsBenefit(planId, meter.id);
   const product = await createPlanProduct(planId);
+  if (!benefit.id) {
+    throw new Error(`Polar ${planId} credits benefit creation did not return an id`);
+  }
+  if (!product.id) {
+    throw new Error(`Polar ${planId} product creation did not return an id`);
+  }
+  await attachBenefitToProduct(product.id, benefit.id);
   console.log(`POLAR_PRODUCT_ID_${planId.toUpperCase()}=${product.id ?? "<unknown>"}`);
+  console.log(`POLAR_CREDITS_BENEFIT_ID_${planId.toUpperCase()}=${benefit.id}`);
 }
 
 if (env.POLAR_WEBHOOK_URL) {

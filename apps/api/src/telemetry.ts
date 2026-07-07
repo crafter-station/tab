@@ -17,7 +17,10 @@ export class TelemetryService {
   private readonly storage: TelemetryStorage;
 
   constructor(deps: TelemetryServiceDependencies = {}) {
-    this.storage = deps.storage ?? new InMemoryTelemetryStorage();
+    if (!deps.storage) {
+      throw new Error("TelemetryService requires a storage implementation");
+    }
+    this.storage = deps.storage;
   }
 
   async record(event: Omit<TelemetryEvent, "id">): Promise<TelemetryEvent> {

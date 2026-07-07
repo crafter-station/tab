@@ -65,6 +65,7 @@ export type QuotaCheckResult =
     }
   | {
       readonly ok: false;
+      readonly reason: "billing_required" | "quota_exhausted";
       readonly entitlement: UserEntitlement;
       readonly usage: number;
       readonly quota: number;
@@ -82,6 +83,7 @@ export type PolarUsageEvent = {
   readonly userId: string;
   readonly requestId: string;
   readonly timestamp: Date;
+  readonly creditsSpent?: number;
 };
 
 export interface UsageMeterClient {
@@ -92,38 +94,56 @@ export type CreatePolarUsageMeterClientOptions = {
   readonly accessToken?: string;
   readonly server?: PolarServer;
   readonly meterId?: string;
+  readonly organizationId?: string;
+  readonly polar?: Polar;
 };
 
 export class PolarUsageMeterClient implements UsageMeterClient {
   private readonly polar: Polar;
   private readonly meterId: string;
+  private readonly organizationId: string;
 
   constructor(options: CreatePolarUsageMeterClientOptions = {}) {
-    const accessToken = options.accessToken ?? env.POLAR_ACCESS_TOKEN;
-    if (!accessToken) {
-      throw new Error("POLAR_ACCESS_TOKEN is not configured");
-    }
-
     const meterId = options.meterId ?? env.POLAR_AUTOCOMPLETE_METER_ID;
     if (!meterId) {
       throw new Error("POLAR_AUTOCOMPLETE_METER_ID is not configured");
     }
 
-    this.polar = new Polar({
-      accessToken,
-      server: getPolarServer(options.server),
-    });
+    const organizationId = options.organizationId ?? env.POLAR_ORGANIZATION_ID;
+    if (!organizationId) {
+      throw new Error("POLAR_ORGANIZATION_ID is not configured");
+    }
+
+    if (options.polar) {
+      this.polar = options.polar;
+    } else {
+      const accessToken = options.accessToken ?? env.POLAR_ACCESS_TOKEN;
+      if (!accessToken) {
+        throw new Error("POLAR_ACCESS_TOKEN is not configured");
+      }
+      this.polar = new Polar({
+        accessToken,
+        server: getPolarServer(options.server),
+      });
+    }
+
     this.meterId = meterId;
+    this.organizationId = organizationId;
   }
 
   async ingest(event: PolarUsageEvent): Promise<void> {
+    const creditsSpent = event.creditsSpent ?? 1;
+
     await this.polar.events.ingest({
       events: [
         {
           name: "autocomplete.used",
           externalCustomerId: event.userId,
+          externalId: event.requestId,
+          organizationId: this.organizationId,
           metadata: {
             requestId: event.requestId,
+            creditsSpent,
           },
           timestamp: event.timestamp,
         },
@@ -160,7 +180,12 @@ export function createUsageMeterClient(
   const meterId = options?.meterId ?? env.POLAR_AUTOCOMPLETE_METER_ID;
 
   if (accessToken && meterId) {
-    return new PolarUsageMeterClient(options);
+    return new PolarUsageMeterClient({
+      accessToken,
+      meterId,
+      server: options?.server,
+      organizationId: options?.organizationId,
+    });
   }
 
   if (accessToken || meterId) {
@@ -323,6 +348,14 @@ function nextResetDate(): Date {
   return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
 }
 
+export function hasActivePolarEntitlement(entitlement: UserEntitlement): boolean {
+  return Boolean(
+    entitlement.status === "active" &&
+      entitlement.polarCustomerId &&
+      entitlement.polarSubscriptionId,
+  );
+}
+
 export type BillingServiceDependencies = {
   readonly storage?: BillingStorage;
 };
@@ -331,7 +364,10 @@ export class BillingService {
   readonly storage: BillingStorage;
 
   constructor(deps: BillingServiceDependencies = {}) {
-    this.storage = deps.storage ?? new InMemoryBillingStorage();
+    if (!deps.storage) {
+      throw new Error("BillingService requires a storage implementation");
+    }
+    this.storage = deps.storage;
   }
 
   async getEntitlement(userId: string): Promise<UserEntitlement> {
@@ -356,8 +392,26 @@ export class BillingService {
     const usage = await this.storage.getUsage(userId, month);
     const resetAt = nextResetDate();
 
+    if (!hasActivePolarEntitlement(entitlement)) {
+      return {
+        ok: false,
+        reason: "billing_required",
+        entitlement,
+        usage,
+        quota,
+        resetAt,
+      };
+    }
+
     if (usage >= quota) {
-      return { ok: false, entitlement, usage, quota, resetAt };
+      return {
+        ok: false,
+        reason: "quota_exhausted",
+        entitlement,
+        usage,
+        quota,
+        resetAt,
+      };
     }
 
     return { ok: true, entitlement, usage, quota, resetAt };
@@ -386,7 +440,10 @@ export class UsageMeterService {
   private readonly retryDelayMs: number;
 
   constructor(deps: UsageMeterServiceDependencies = {}) {
-    this.client = deps.client ?? new InMemoryUsageMeterClient();
+    if (!deps.client) {
+      throw new Error("UsageMeterService requires a client implementation");
+    }
+    this.client = deps.client;
     this.maxRetries = deps.maxRetries ?? 3;
     this.retryDelayMs = deps.retryDelayMs ?? 500;
   }
@@ -405,6 +462,12 @@ export class UsageMeterService {
         }
       }
     }
+
+    console.error("Polar usage metering failed after retries:", {
+      userId: event.userId,
+      requestId: event.requestId,
+      error: lastError?.message,
+    });
 
     throw lastError ?? new Error("Usage metering failed after retries");
   }
@@ -620,7 +683,10 @@ export class BillingWebhookHandler {
   private readonly secret: string | undefined;
 
   constructor(deps: WebhookHandlerDependencies = {}) {
-    this.storage = deps.storage ?? new InMemoryBillingStorage();
+    if (!deps.storage) {
+      throw new Error("BillingWebhookHandler requires a storage implementation");
+    }
+    this.storage = deps.storage;
     this.secret = deps.secret ?? env.POLAR_WEBHOOK_SECRET;
   }
 

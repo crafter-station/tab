@@ -47,7 +47,7 @@ export type SuggestionUseCaseResult =
   | {
       readonly ok: false;
       readonly status: 402 | 503;
-      readonly code: "quota_exhausted" | "provider_failure";
+      readonly code: "billing_required" | "quota_exhausted" | "provider_failure";
       readonly message: string;
       readonly details?: EntitlementErrorDetails;
     };
@@ -121,6 +121,19 @@ export class SuggestionUseCase {
   async handle(device: Device, request: SuggestionRequest): Promise<SuggestionUseCaseResult> {
     const quotaCheck = await this.deps.billingService.checkQuota(device.userId);
     if (!quotaCheck.ok) {
+      if (quotaCheck.reason === "billing_required") {
+        return {
+          ok: false,
+          status: 402,
+          code: "billing_required",
+          message: "Choose the free plan in Polar to continue using Tabb.",
+          details: {
+            ...createQuotaExhaustedDetails(quotaCheck),
+            upgradeUrl: "/billing/checkout?plan=free",
+          },
+        };
+      }
+
       return {
         ok: false,
         status: 402,
@@ -191,6 +204,7 @@ export class SuggestionUseCase {
             userId: device.userId,
             requestId: request.requestId,
             timestamp: new Date(),
+            creditsSpent: 1,
           })
           .catch(() => {
             // Ingestion failures are retried by the meter service; do not fail

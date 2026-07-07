@@ -61,6 +61,7 @@ export const apiAppBoundary = {
 } as const;
 
 export type ApiDependencies = {
+  readonly db?: D1Database;
   readonly generateSuggestion?: SuggestionGenerator;
   readonly auth?: AuthInstance;
   readonly deviceTokenService?: DeviceTokenService;
@@ -75,14 +76,45 @@ export type ApiDependencies = {
 };
 
 export function createApp(deps: ApiDependencies = {}) {
+  const d1Deps: Partial<
+    Pick<
+      ApiDependencies,
+      | "auth"
+      | "deviceTokenService"
+      | "billingService"
+      | "usageMeterService"
+      | "personalMemoryStorage"
+      | "telemetryStorage"
+    >
+  > = deps.db ? createD1Dependencies(deps.db) : {};
+
   const generateSuggestion = deps.generateSuggestion ?? createRealSuggestionGenerator();
-  const auth = deps.auth ?? createAuthInstance();
-  const deviceTokenService = deps.deviceTokenService ?? new DeviceTokenService();
-  const billingService = deps.billingService ?? new BillingService();
-  const usageMeterService = deps.usageMeterService ?? new UsageMeterService();
+  const auth = deps.auth ?? d1Deps.auth ?? createAuthInstance();
+  const deviceTokenService = deps.deviceTokenService ?? d1Deps.deviceTokenService;
+  const billingService = deps.billingService ?? d1Deps.billingService;
+  const usageMeterService =
+    deps.usageMeterService ??
+    d1Deps.usageMeterService ??
+    new UsageMeterService({ client: createUsageMeterClient() });
   const billingCheckoutClient = deps.billingCheckoutClient ?? createBillingCheckoutClient();
+  const personalMemoryStorage = deps.personalMemoryStorage ?? d1Deps.personalMemoryStorage;
+  const telemetryStorage = deps.telemetryStorage ?? d1Deps.telemetryStorage;
+
+  if (!deviceTokenService) {
+    throw new Error("createApp requires either a D1 database or a deviceTokenService");
+  }
+  if (!billingService) {
+    throw new Error("createApp requires either a D1 database or a billingService");
+  }
+  if (!personalMemoryStorage) {
+    throw new Error("createApp requires either a D1 database or a personalMemoryStorage");
+  }
+  if (!deps.telemetryService && !telemetryStorage) {
+    throw new Error("createApp requires either a D1 database, a telemetryService, or a telemetryStorage");
+  }
+
   const personalMemoryService = new PersonalMemoryService({
-    storage: deps.personalMemoryStorage,
+    storage: personalMemoryStorage,
   });
   const memoryJobQueue = deps.memoryJobQueue ?? new InMemoryMemoryJobQueue();
   const memoryAgent =
@@ -92,7 +124,7 @@ export function createApp(deps: ApiDependencies = {}) {
       model: deps.generateSuggestion ? undefined : BackgroundMemoryAgent.createRealModel(),
     });
   const telemetryService =
-    deps.telemetryService ?? new TelemetryService({ storage: deps.telemetryStorage });
+    deps.telemetryService ?? new TelemetryService({ storage: telemetryStorage! });
   const suggestionUseCase = new SuggestionUseCase({
     billingService,
     usageMeterService,
@@ -111,7 +143,7 @@ export function createApp(deps: ApiDependencies = {}) {
 
   app.use("*", logger());
 
-  registerDeviceAuthRoutes(app, { auth, deviceTokenService });
+  registerDeviceAuthRoutes(app, { auth, billingService, deviceTokenService });
   app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
 
   app.use("/api/status", authenticateDevice);
@@ -128,9 +160,17 @@ export function createApp(deps: ApiDependencies = {}) {
   return app;
 }
 
-const defaultApp = createApp();
-
-function createD1Dependencies(db: D1Database): ApiDependencies {
+function createD1Dependencies(db: D1Database): Required<
+  Pick<
+    ApiDependencies,
+    | "auth"
+    | "deviceTokenService"
+    | "billingService"
+    | "usageMeterService"
+    | "personalMemoryStorage"
+    | "telemetryStorage"
+  >
+> {
   const database = createDatabase(db);
   const deviceTokenStorage = new D1DeviceTokenStorage(db);
   const billingStorage = new D1BillingStorage(db);
@@ -153,12 +193,14 @@ function createD1Dependencies(db: D1Database): ApiDependencies {
 const appsByDatabase = new WeakMap<D1Database, ReturnType<typeof createApp>>();
 
 function getAppForEnv(env: ApiBindings | undefined) {
-  if (!env?.DB) return defaultApp;
+  if (!env?.DB) {
+    throw new Error("D1 database binding is required");
+  }
 
   const existing = appsByDatabase.get(env.DB);
   if (existing) return existing;
 
-  const app = createApp(createD1Dependencies(env.DB));
+  const app = createApp({ db: env.DB });
   appsByDatabase.set(env.DB, app);
   return app;
 }

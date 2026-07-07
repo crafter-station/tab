@@ -28,11 +28,13 @@ export type User = {
   id: string;
   name?: string;
   email?: string;
+  emailVerified?: boolean;
 };
 
 export type AuthSearch = {
   device_id?: string;
   callback?: string;
+  next?: string;
 };
 
 export type DashboardData = {
@@ -59,10 +61,16 @@ function formatPlanName(planId: string): string {
   return planQuotas[planId as PlanId]?.name ?? planId.charAt(0).toUpperCase() + planId.slice(1);
 }
 
+function checkoutAuthHref(planId: PlanId): string {
+  const next = `/billing/checkout?plan=${encodeURIComponent(planId)}`;
+  return `/login?next=${encodeURIComponent(next)}`;
+}
+
 function preserveAuthSearchParams(search: AuthSearch): string {
   const params = new URLSearchParams();
   if (search.device_id) params.set("device_id", search.device_id);
   if (search.callback) params.set("callback", search.callback);
+  if (search.next) params.set("next", search.next);
   const query = params.toString();
   return query ? `?${query}` : "";
 }
@@ -77,6 +85,7 @@ function HandoffFields({ search }: { search: AuthSearch }) {
     <>
       {search.device_id ? <input type="hidden" name="device_id" value={search.device_id} /> : null}
       {search.callback ? <input type="hidden" name="callback" value={search.callback} /> : null}
+      {search.next ? <input type="hidden" name="next" value={search.next} /> : null}
     </>
   );
 }
@@ -111,7 +120,7 @@ export function HomePage() {
   );
 }
 
-export function PricingPage() {
+export function PricingPage({ authenticated = false }: { authenticated?: boolean }) {
   const plans = Object.entries(planQuotas).map(([planId, plan]) => ({
     planId: planId as PlanId,
     ...plan,
@@ -133,7 +142,7 @@ export function PricingPage() {
               <CardDescription>Personal Memory included</CardDescription>
             </CardContent>
             <CardFooter>
-              <a className={buttonVariants()} href={`/billing/checkout?plan=${plan.planId}`}>{plan.planId === "free" ? "Start free" : `Choose ${plan.name}`}</a>
+              <a className={buttonVariants()} href={authenticated ? `/billing/checkout?plan=${plan.planId}` : checkoutAuthHref(plan.planId)}>{plan.planId === "free" ? "Start free" : `Choose ${plan.name}`}</a>
             </CardFooter>
           </Card>
         ))}
@@ -244,6 +253,9 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
             <p><strong className="text-foreground">{data.user.email ?? data.user.name ?? data.user.id}</strong></p>
             <p>Identity is managed by Tabb auth. Additional account settings will appear here when supported by the API.</p>
           </CardContent>
+          <CardFooter>
+            <form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>
+          </CardFooter>
         </Card>
         <Card>
           <CardHeader>
