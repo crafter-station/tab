@@ -1,7 +1,8 @@
 import { createWebApp } from "./server.ts";
+import { env } from "./env.ts";
 
-const port = Number(process.env.PORT ?? 3000);
-const apiBaseUrl = process.env.TABB_API_BASE_URL ?? "http://localhost:8787";
+const port = env.PORT;
+const apiBaseUrl = env.TABB_API_BASE_URL;
 
 Bun.serve({
   port,

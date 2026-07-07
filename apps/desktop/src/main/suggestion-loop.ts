@@ -1,5 +1,5 @@
 import type { Suggestion, ActiveApplication } from "@tabb/contracts";
-import { redactSensitiveText } from "@tabb/redaction";
+import { createSafeTypingContextSnapshot, type SafeTypingContextSnapshot } from "./typing-context.ts";
 
 export type TypingContextSnapshot = {
   context: string;
@@ -7,6 +7,8 @@ export type TypingContextSnapshot = {
   secureInput: boolean;
   paused?: boolean;
   privateContext?: boolean;
+  contextSource?: SafeTypingContextSnapshot["contextSource"];
+  memoryEligible?: boolean;
 };
 
 export type SuggestionLoopState =
@@ -26,17 +28,20 @@ export type SuggestionLoopDependencies = {
   maxVisibleMs?: number;
 };
 
-function contextHash(snapshot: TypingContextSnapshot): string {
-  return `${snapshot.activeApplication?.bundleId ?? "none"}:${snapshot.activeApplication?.windowId ?? "window-unknown"}:${snapshot.context}:${snapshot.secureInput}`;
-}
+function safeSnapshot(snapshot: TypingContextSnapshot): SafeTypingContextSnapshot {
+  if ("requestable" in snapshot && "sanitizedContext" in snapshot && "contextHash" in snapshot) {
+    return snapshot as SafeTypingContextSnapshot;
+  }
 
-function shouldSuppressSuggestions(snapshot: TypingContextSnapshot): boolean {
-  return Boolean(
-    snapshot.secureInput ||
-      snapshot.paused ||
-      snapshot.privateContext ||
-      snapshot.context.trim().length === 0,
-  );
+  return createSafeTypingContextSnapshot({
+    context: snapshot.context,
+    activeApplication: snapshot.activeApplication,
+    secureInput: snapshot.secureInput,
+    paused: snapshot.paused ?? false,
+    privateContext: snapshot.privateContext ?? false,
+    contextSource: snapshot.contextSource ?? "typed_text",
+    memoryEligible: snapshot.memoryEligible ?? true,
+  });
 }
 
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
@@ -58,10 +63,13 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   }
 
   function onContextChanged(): void {
-    const snapshot = deps.getContext();
-    const hash = contextHash(snapshot);
+    const snapshot = safeSnapshot(deps.getContext());
+    const hash = snapshot.contextHash;
 
-    if (shouldSuppressSuggestions(snapshot)) {
+    if (!snapshot.requestable) {
+      if (snapshot.suppressionReason === "secret_like_context") {
+        deps.onSecretLikeContextDetected?.();
+      }
       invalidate();
       return;
     }
@@ -82,24 +90,14 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
-        const latest = deps.getContext();
-        if (contextHash(latest) !== hash) {
+        const latest = safeSnapshot(deps.getContext());
+        if (latest.contextHash !== hash) {
           state = { status: "idle" };
           return;
         }
 
-        // Redact obvious secrets locally before any suggestion request can be
-        // sent to an API. If secret-like values are detected, treat this as
-        // secret-like context detection per ADR-0018 and suppress the request.
-        const redaction = redactSensitiveText(latest.context);
-        if (redaction.redactions.length > 0) {
-          deps.onSecretLikeContextDetected?.();
-          invalidate();
-          return;
-        }
-
-        deps.onRequestStarted?.(redaction.text);
-        const suggestion = await deps.requestSuggestion(redaction.text);
+        deps.onRequestStarted?.(latest.sanitizedContext);
+        const suggestion = await deps.requestSuggestion(latest.sanitizedContext);
 
         if (state.status !== "debouncing" || state.contextHash !== hash) {
           return;

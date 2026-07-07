@@ -1,4 +1,4 @@
-import type { ActiveApplication, SuggestionContextSource } from "@tabb/contracts";
+import type { ActiveApplication, RedactionSummary, SuggestionContextSource } from "@tabb/contracts";
 import { redactSensitiveText } from "@tabb/redaction";
 import { getMemoryEligibility } from "@tabb/memory-policy";
 
@@ -20,6 +20,17 @@ export type TypingContextBuffer = {
   setPaused(active: boolean): void;
   clear(): void;
   getState(): TypingContextState;
+  getSnapshot(): SafeTypingContextSnapshot;
+};
+
+export type TypingContextSuppressionReason = "empty" | "paused" | "secure_input" | "private_context" | "secret_like_context";
+
+export type SafeTypingContextSnapshot = TypingContextState & {
+  sanitizedContext: string;
+  redaction: RedactionSummary;
+  contextHash: string;
+  requestable: boolean;
+  suppressionReason: TypingContextSuppressionReason | null;
 };
 
 const PASSWORD_MANAGER_BUNDLE_IDS = new Set([
@@ -46,9 +57,46 @@ function isPasswordManager(bundleId: string | null | undefined): boolean {
   return PASSWORD_MANAGER_BUNDLE_ID_PATTERNS.some((id) => normalizedBundleId.includes(id));
 }
 
-function activeApplicationKey(app: ActiveApplication | null): string | null {
+export function activeApplicationKey(app: ActiveApplication | null): string | null {
   if (!app) return null;
   return `${app.bundleId}:${app.windowId ?? "window-unknown"}`;
+}
+
+export function buildTypingContextHash(state: Pick<TypingContextState, "activeApplication" | "secureInput">, context: string): string {
+  return `${state.activeApplication?.bundleId ?? "none"}:${state.activeApplication?.windowId ?? "window-unknown"}:${context}:${state.secureInput}`;
+}
+
+function toRedactionSummary(redaction: ReturnType<typeof redactSensitiveText>): RedactionSummary {
+  return {
+    applied: redaction.redactions.length > 0,
+    redactionCount: redaction.redactions.length,
+    kinds: [...new Set(redaction.redactions.map((item) => item.kind))],
+  };
+}
+
+export function createSafeTypingContextSnapshot(state: TypingContextState): SafeTypingContextSnapshot {
+  const redaction = redactSensitiveText(state.context);
+  const redactionSummary = toRedactionSummary(redaction);
+  const suppressionReason: TypingContextSuppressionReason | null = state.paused
+    ? "paused"
+    : state.secureInput
+      ? "secure_input"
+      : state.privateContext
+        ? "private_context"
+        : state.context.trim().length === 0
+          ? "empty"
+          : redactionSummary.applied
+            ? "secret_like_context"
+            : null;
+
+  return {
+    ...state,
+    sanitizedContext: redaction.text,
+    redaction: redactionSummary,
+    contextHash: buildTypingContextHash(state, redaction.text),
+    requestable: suppressionReason === null,
+    suppressionReason,
+  };
 }
 
 export function getLastWords(text: string, maxWords: number): string {
@@ -86,6 +134,18 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
     if (text.length === 0) return;
     lastSource = source;
     context = (context + text).slice(-maxLength);
+  }
+
+  function getState(): TypingContextState {
+    return {
+      context,
+      activeApplication,
+      secureInput,
+      paused,
+      privateContext: isPrivateContext(),
+      contextSource: lastSource,
+      memoryEligible: getMemoryEligibility(lastSource).eligible,
+    };
   }
 
   return {
@@ -126,16 +186,9 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
     clear() {
       context = "";
     },
-    getState() {
-      return {
-        context,
-        activeApplication,
-        secureInput,
-        paused,
-        privateContext: isPrivateContext(),
-        contextSource: lastSource,
-        memoryEligible: getMemoryEligibility(lastSource).eligible,
-      };
+    getState,
+    getSnapshot() {
+      return createSafeTypingContextSnapshot(getState());
     },
   };
 }

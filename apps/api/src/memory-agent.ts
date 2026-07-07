@@ -8,6 +8,7 @@ import {
 import { generateText, Output } from "ai";
 import { validateMemoryContent } from "@tabb/memory-policy";
 import type { PersonalMemoryService } from "./personal-memory.ts";
+import { env } from "./env.ts";
 import { z } from "zod";
 
 export type { MemoryJob };
@@ -151,7 +152,7 @@ class AiGatewayMemoryAgentModel implements MemoryAgentModel {
     job: MemoryJob,
     memories: readonly PersonalMemory[],
   ): Promise<readonly ProposedMemoryOperation[]> {
-    if (!process.env.AI_GATEWAY_API_KEY) {
+    if (!env.AI_GATEWAY_API_KEY) {
       throw new Error("AI_GATEWAY_API_KEY is not configured");
     }
 

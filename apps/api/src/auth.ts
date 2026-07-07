@@ -3,6 +3,7 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { getMigrations } from "better-auth/db/migration";
 import type { Database } from "bun:sqlite";
 import * as authSchema from "./db/schema.ts";
+import { env } from "./env.ts";
 
 export type AuthDatabase = Database | unknown;
 
@@ -18,14 +19,8 @@ export type CreateAuthInstanceOptions = {
 export function createAuthInstance(
   options: CreateAuthInstanceOptions = {},
 ): AuthInstance {
-  const baseURL =
-    options.baseURL ??
-    process.env.BETTER_AUTH_URL ??
-    "http://localhost:8787";
-  const secret =
-    options.secret ??
-    process.env.BETTER_AUTH_SECRET ??
-    "tabb-local-secret-must-be-at-least-32-characters-long";
+  const baseURL = options.baseURL ?? env.BETTER_AUTH_URL;
+  const secret = options.secret ?? env.BETTER_AUTH_SECRET;
 
   const authOptions: BetterAuthOptions = {
     secret,

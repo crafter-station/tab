@@ -30,6 +30,7 @@
   },
   "dependencies": {
     "@ai-hero/sandcastle": "^0.12.0",
+    "@t3-oss/env-core": "^0.13.11",
     "zod": "^4.4.3"
   }
 }

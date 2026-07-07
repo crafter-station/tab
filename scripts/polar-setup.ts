@@ -1,14 +1,15 @@
 import { Polar } from "@polar-sh/sdk";
 import { planQuotas, type PlanId } from "@tabb/billing";
+import { env } from "./env.ts";
 
-const accessToken = process.env.POLAR_ACCESS_TOKEN;
+const accessToken = env.POLAR_ACCESS_TOKEN;
 if (!accessToken) {
   throw new Error("POLAR_ACCESS_TOKEN is required");
 }
 
-const server = process.env.POLAR_SERVER === "sandbox" ? "sandbox" : "production";
-const organizationId = process.env.POLAR_ORGANIZATION_ID;
-const shouldSendOrganizationId = process.env.POLAR_SEND_ORGANIZATION_ID === "true";
+const server = env.POLAR_SERVER;
+const organizationId = env.POLAR_ORGANIZATION_ID;
+const shouldSendOrganizationId = env.POLAR_SEND_ORGANIZATION_ID === "true";
 
 const polar = new Polar({ accessToken, server });
 

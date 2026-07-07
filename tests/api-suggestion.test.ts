@@ -5,8 +5,13 @@ import {
   createApp,
   normalizeGeneratedSuggestion,
 } from "../apps/api/src/index.ts";
+import { BillingService, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import { InMemoryMemoryJobQueue } from "../apps/api/src/memory-agent.ts";
+import { PersonalMemoryService } from "../apps/api/src/personal-memory.ts";
+import { SuggestionUseCase } from "../apps/api/src/suggestion-use-case.ts";
+import { TelemetryService } from "../apps/api/src/telemetry.ts";
 import type { SuggestionGenerator, SuggestionInput } from "../apps/api/src/index.ts";
 
 async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerator) {
@@ -37,6 +42,18 @@ const validRequest = {
   memoryEnabled: true,
   contextHash: "com.apple.TextEdit:Hello:false",
   clientMetadata: { appVersion: "0.0.1", platform: "darwin" },
+} as const;
+
+const validDevice = {
+  id: "dt-1",
+  userId: "user-1",
+  deviceId: "device-1",
+  platform: "darwin",
+  appVersion: "0.0.1",
+  tokenHash: "token-hash",
+  createdAt: new Date().toISOString(),
+  lastUsedAt: new Date().toISOString(),
+  revokedAt: null,
 } as const;
 
 function authHeaders(token: string) {
@@ -195,5 +212,98 @@ describe("Hono suggestion API", () => {
     expect(body.status).toBe("error");
     if (body.status !== "error") throw new Error("Expected error response");
     expect(body.error.code).toBe("revoked_device");
+  });
+});
+
+describe("SuggestionUseCase", () => {
+  function createUseCase(generateSuggestion: SuggestionGenerator) {
+    const billingService = new BillingService();
+    const usageMeterClient = new InMemoryUsageMeterClient();
+    const usageMeterService = new UsageMeterService({ client: usageMeterClient, retryDelayMs: 0 });
+    const personalMemoryService = new PersonalMemoryService();
+    const memoryJobQueue = new InMemoryMemoryJobQueue();
+    const telemetryService = new TelemetryService();
+    const useCase = new SuggestionUseCase({
+      billingService,
+      usageMeterService,
+      personalMemoryService,
+      memoryJobQueue,
+      telemetryService,
+      generateSuggestion,
+    });
+
+    return {
+      billingService,
+      memoryJobQueue,
+      personalMemoryService,
+      telemetryService,
+      usageMeterClient,
+      useCase,
+    };
+  }
+
+  it("orchestrates quota, relevant memory, generation, telemetry, billing, and memory enqueueing", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const { billingService, memoryJobQueue, personalMemoryService, telemetryService, useCase } = createUseCase(async (input) => {
+      capturedInput = input;
+      return { text: " world", modelId: "test-model" };
+    });
+    await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Hello messages should stay concise",
+      category: "writing preference",
+      source: "manual",
+      sensitivity: "normal",
+    });
+
+    const result = await useCase.handle(validDevice, validRequest);
+
+    expect(result).toEqual({ ok: true, suggestions: [{ id: "sg-req-1", text: " world" }] });
+    expect(capturedInput?.memories).toHaveLength(1);
+    expect((await billingService.checkQuota("user-1")).usage).toBe(1);
+    expect(memoryJobQueue.getJobs()).toHaveLength(1);
+    expect(memoryJobQueue.getJobs()[0].typingContext).toBe("Hello");
+    expect((await telemetryService.listEvents()).map((event) => event.eventType)).toEqual([
+      "suggestion_shown",
+      "memory_job_enqueued",
+    ]);
+  });
+
+  it("returns quota exhaustion before generating suggestions", async () => {
+    let generated = false;
+    const { billingService, useCase } = createUseCase(async () => {
+      generated = true;
+      return { text: " world" };
+    });
+
+    for (let i = 0; i < 100; i += 1) {
+      await billingService.consumeSuggestion("user-1");
+    }
+
+    const result = await useCase.handle(validDevice, validRequest);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected quota error");
+    expect(result.status).toBe(402);
+    expect(result.code).toBe("quota_exhausted");
+    expect(result.details?.quota).toBe(100);
+    expect(generated).toBe(false);
+  });
+
+  it("records provider failures without enqueueing memory jobs", async () => {
+    const { memoryJobQueue, telemetryService, useCase } = createUseCase(async () => {
+      throw new Error("model timeout");
+    });
+
+    const result = await useCase.handle(validDevice, validRequest);
+
+    expect(result.ok).toBe(false);
+    if (result.ok) throw new Error("Expected provider failure");
+    expect(result.status).toBe(503);
+    expect(result.code).toBe("provider_failure");
+    expect(memoryJobQueue.getJobs()).toHaveLength(0);
+    expect((await telemetryService.listEvents()).map((event) => event.eventType)).toEqual([
+      "suggestion_error",
+    ]);
   });
 });

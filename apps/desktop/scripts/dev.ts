@@ -1,5 +1,6 @@
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
+import { env } from "../src/main/env.ts";
 
 const desktopRoot = path.resolve(import.meta.dir, "..");
 const workspaceRoot = path.resolve(desktopRoot, "../..");
@@ -99,7 +100,7 @@ async function main() {
       TABB_OVERLAY_RENDERER_PATH: overlayRendererHtmlPath,
       TABB_TRAY_ICON_PATH: trayIconPath,
       ...(inputTapPath ? { TABB_INPUT_TAP_PATH: inputTapPath } : {}),
-      TABB_DEVICE_ID: process.env.TABB_DEVICE_ID ?? "dev-device",
+      TABB_DEVICE_ID: env.TABB_DEVICE_ID,
     },
     stdin: "inherit",
     stdout: "inherit",

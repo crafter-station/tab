@@ -7,6 +7,7 @@ import {
   MemoryListResponseSchema,
   type PersonalMemory,
 } from "@tabb/contracts";
+import { env } from "./env.ts";
 
 export type WebAppConfig = {
   apiBaseUrl: string;
@@ -182,14 +183,8 @@ export function createWebApp(config: WebAppConfig) {
   const baseUrl = config.apiBaseUrl.replace(/\/$/, "");
   const fetchImpl = config.fetch ?? globalThis.fetch;
   const appName = config.appName ?? "Tabb";
-  const macDownloadUrl =
-    config.macDownloadUrl ??
-    process.env.TABB_MAC_DOWNLOAD_URL ??
-    "https://downloads.tabb.app/tabb.dmg";
-  const latestVersion =
-    config.latestVersion ??
-    process.env.TABB_DESKTOP_LATEST_VERSION ??
-    "0.1.0";
+  const macDownloadUrl = config.macDownloadUrl ?? env.TABB_MAC_DOWNLOAD_URL;
+  const latestVersion = config.latestVersion ?? env.TABB_DESKTOP_LATEST_VERSION;
 
   async function apiRequest(
     path: string,
@@ -812,7 +807,7 @@ export function createWebApp(config: WebAppConfig) {
 export type WebApp = ReturnType<typeof createWebApp>;
 
 const devServerApp = createWebApp({
-  apiBaseUrl: process.env.TABB_API_BASE_URL ?? "http://localhost:8787",
+  apiBaseUrl: env.TABB_API_BASE_URL,
 });
 
 export default {

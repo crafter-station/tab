@@ -1,0 +1,15 @@
+import { createEnv } from "@t3-oss/env-core";
+import { z } from "zod";
+
+export const env = createEnv({
+  server: {
+    API_PORT: z.coerce.number().int().positive().default(8787),
+    POLAR_ACCESS_TOKEN: z.string().optional(),
+    POLAR_ORGANIZATION_ID: z.string().optional(),
+    POLAR_SEND_ORGANIZATION_ID: z.enum(["true", "false"]).default("false"),
+    POLAR_SERVER: z.enum(["production", "sandbox"]).default("production"),
+    WEB_PORT: z.coerce.number().int().positive().default(3000),
+  },
+  runtimeEnv: process.env,
+  emptyStringAsUndefined: true,
+});

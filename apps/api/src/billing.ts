@@ -1,11 +1,16 @@
 import { Polar } from "@polar-sh/sdk";
 import { validateEvent } from "@polar-sh/sdk/webhooks";
 import { planQuotas, type PlanId } from "@tabb/billing";
+import { env } from "./env.ts";
 
 type PolarServer = "production" | "sandbox";
 
 function getPolarServer(server?: PolarServer): PolarServer {
-  return server ?? (process.env.POLAR_SERVER === "sandbox" ? "sandbox" : "production");
+  return server ?? env.POLAR_SERVER;
+}
+
+function optionalEnvString(value: string | undefined): string | undefined {
+  return value && value.trim() ? value : undefined;
 }
 
 export type UserEntitlement = {
@@ -74,12 +79,12 @@ export class PolarUsageMeterClient implements UsageMeterClient {
   private readonly meterId: string;
 
   constructor(options: CreatePolarUsageMeterClientOptions = {}) {
-    const accessToken = options.accessToken ?? process.env.POLAR_ACCESS_TOKEN;
+    const accessToken = options.accessToken ?? env.POLAR_ACCESS_TOKEN;
     if (!accessToken) {
       throw new Error("POLAR_ACCESS_TOKEN is not configured");
     }
 
-    const meterId = options.meterId ?? process.env.POLAR_AUTOCOMPLETE_METER_ID;
+    const meterId = options.meterId ?? env.POLAR_AUTOCOMPLETE_METER_ID;
     if (!meterId) {
       throw new Error("POLAR_AUTOCOMPLETE_METER_ID is not configured");
     }
@@ -160,15 +165,15 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
   private readonly successUrl: string | undefined;
 
   constructor(options: CreatePolarBillingCheckoutClientOptions = {}) {
-    const accessToken = options.accessToken ?? process.env.POLAR_ACCESS_TOKEN;
+    const accessToken = options.accessToken ?? env.POLAR_ACCESS_TOKEN;
     if (!accessToken) {
       throw new Error("POLAR_ACCESS_TOKEN is not configured");
     }
 
     const productIds: Partial<Record<PlanId, string>> = {
-      free: process.env.POLAR_PRODUCT_ID_FREE,
-      pro: process.env.POLAR_PRODUCT_ID_PRO,
-      max: process.env.POLAR_PRODUCT_ID_MAX,
+      free: env.POLAR_PRODUCT_ID_FREE,
+      pro: env.POLAR_PRODUCT_ID_PRO,
+      max: env.POLAR_PRODUCT_ID_MAX,
       ...options.productIds,
     };
 
@@ -181,7 +186,9 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
       server: getPolarServer(options.server),
     });
     this.productIds = productIds as Record<PlanId, string>;
-    this.successUrl = options.successUrl ?? process.env.POLAR_CHECKOUT_SUCCESS_URL;
+    this.successUrl = optionalEnvString(
+      options.successUrl ?? env.POLAR_CHECKOUT_SUCCESS_URL,
+    );
   }
 
   async createCheckoutUrl(planId: PlanId, userId: string): Promise<string> {
@@ -211,12 +218,12 @@ export function createBillingCheckoutClient(
   options?: CreatePolarBillingCheckoutClientOptions,
 ): BillingCheckoutClient {
   const productIds = {
-    free: process.env.POLAR_PRODUCT_ID_FREE,
-    pro: process.env.POLAR_PRODUCT_ID_PRO,
-    max: process.env.POLAR_PRODUCT_ID_MAX,
+    free: env.POLAR_PRODUCT_ID_FREE,
+    pro: env.POLAR_PRODUCT_ID_PRO,
+    max: env.POLAR_PRODUCT_ID_MAX,
     ...options?.productIds,
   };
-  const accessToken = options?.accessToken ?? process.env.POLAR_ACCESS_TOKEN;
+  const accessToken = options?.accessToken ?? env.POLAR_ACCESS_TOKEN;
 
   if (accessToken && productIds.free && productIds.pro && productIds.max) {
     return new PolarBillingCheckoutClient(options);
@@ -520,7 +527,7 @@ export class BillingWebhookHandler {
 
   constructor(deps: WebhookHandlerDependencies = {}) {
     this.storage = deps.storage ?? new InMemoryBillingStorage();
-    this.secret = deps.secret ?? process.env.POLAR_WEBHOOK_SECRET;
+    this.secret = deps.secret ?? env.POLAR_WEBHOOK_SECRET;
   }
 
   validateRequest(

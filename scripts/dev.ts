@@ -1,13 +1,15 @@
+import { env } from "./env.ts";
+
 const processes = [
   {
     name: "api",
     command: ["bun", "--hot", "apps/api/src/index.ts"],
-    env: { PORT: process.env.API_PORT ?? "8787" },
+    env: { PORT: String(env.API_PORT) },
   },
   {
     name: "web",
     command: ["bun", "run", "--cwd", "apps/web", "dev"],
-    env: { PORT: process.env.WEB_PORT ?? "3000" },
+    env: { PORT: String(env.WEB_PORT) },
   },
 ];
 

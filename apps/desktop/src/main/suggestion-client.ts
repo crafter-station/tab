@@ -4,8 +4,7 @@ import {
   type Suggestion,
   type SuggestionRequest,
 } from "@tabb/contracts";
-import { redactSensitiveText } from "@tabb/redaction";
-import type { TypingContextState } from "./typing-context.ts";
+import { createSafeTypingContextSnapshot, type TypingContextState } from "./typing-context.ts";
 
 type ActiveTypingContextState = TypingContextState & {
   activeApplication: NonNullable<TypingContextState["activeApplication"]>;
@@ -22,30 +21,22 @@ export type ApiSuggestionClientDependencies = {
   getAuthorizationHeader?: () => Promise<string | null>;
 };
 
-function buildContextHash(state: TypingContextState, context: string): string {
-  return `${state.activeApplication?.bundleId ?? "none"}:${state.activeApplication?.windowId ?? "window-unknown"}:${context}:${state.secureInput}`;
-}
-
 function buildSuggestionRequest(
   deps: ApiSuggestionClientDependencies,
   state: ActiveTypingContextState,
   context: string,
 ): SuggestionRequest {
-  const redaction = redactSensitiveText(context);
+  const snapshot = createSafeTypingContextSnapshot({ ...state, context });
 
   return {
     requestId: crypto.randomUUID(),
     deviceId: deps.deviceId,
-    typingContext: redaction.text,
+    typingContext: snapshot.sanitizedContext,
     contextSource: state.contextSource,
-    redaction: {
-      applied: redaction.redactions.length > 0,
-      redactionCount: redaction.redactions.length,
-      kinds: [...new Set(redaction.redactions.map((redaction) => redaction.kind))],
-    },
+    redaction: snapshot.redaction,
     activeApplication: state.activeApplication,
     memoryEnabled: deps.memoryEnabled ?? true,
-    contextHash: buildContextHash(state, context),
+    contextHash: snapshot.contextHash,
     clientMetadata: {
       appVersion: deps.appVersion,
       platform: deps.platform,

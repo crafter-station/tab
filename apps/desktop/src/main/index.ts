@@ -15,9 +15,8 @@ import { exec, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { promisify } from "node:util";
 import { createTypingContextBuffer, getLastWords } from "./typing-context.ts";
-import { createSuggestionLoop } from "./suggestion-loop.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
-import { acceptAndInsertSuggestion } from "./acceptance.ts";
+import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -29,16 +28,17 @@ import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createUpdateChecker } from "./release.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tabb/contracts";
+import { env } from "./env.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
 const runtimeRoot = app.isPackaged ? path.join(app.getAppPath(), "dist") : __dirname;
-const PRELOAD_PATH = process.env.TABB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
-const OVERLAY_RENDERER_PATH = process.env.TABB_OVERLAY_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "overlay.html");
-const APP_RENDERER_PATH = process.env.TABB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
-const TRAY_ICON_PATH = process.env.TABB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
+const PRELOAD_PATH = env.TABB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
+const OVERLAY_RENDERER_PATH = env.TABB_OVERLAY_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "overlay.html");
+const APP_RENDERER_PATH = env.TABB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
+const TRAY_ICON_PATH = env.TABB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
-const INPUT_TAP_PATH = process.env.TABB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
+const INPUT_TAP_PATH = env.TABB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
 
 const TERMINAL_BUNDLE_IDS = new Set([
   "com.apple.Terminal",
@@ -51,11 +51,7 @@ const TERMINAL_BUNDLE_IDS = new Set([
 
 let overlayWindow: BrowserWindow | null = null;
 let debugOverlayWindow: BrowserWindow | null = null;
-let suggestionLoop: ReturnType<typeof createSuggestionLoop> | null = null;
-let currentSuggestion: Suggestion | null = null;
 let overlayRendererReady = false;
-let previouslyActiveApplication: ActiveApplication | null = null;
-let observationPaused = false;
 let tray: TabbTray | null = null;
 let relaunchAfterPermissionQuit = false;
 type InputTapProcess = {
@@ -91,14 +87,14 @@ const settingsWindowManager = createSettingsWindowManager({
   preloadPath: PRELOAD_PATH,
 });
 
-const API_BASE_URL = process.env.TABB_API_BASE_URL ?? "http://localhost:8787";
-const WEB_BASE_URL = process.env.TABB_WEB_BASE_URL ?? "http://localhost:3000";
-const DEVICE_ID = process.env.TABB_DEVICE_ID ?? "device-unknown";
+const API_BASE_URL = env.TABB_API_BASE_URL;
+const WEB_BASE_URL = env.TABB_WEB_BASE_URL;
+const DEVICE_ID = env.TABB_DEVICE_ID;
 const APP_VERSION = app.getVersion() || "0.0.0";
-const SHOW_SETTINGS_ON_START = process.argv.includes("--permission-debug") || process.env.TABB_SHOW_SETTINGS_ON_START === "1";
+const SHOW_SETTINGS_ON_START = process.argv.includes("--permission-debug") || env.TABB_SHOW_SETTINGS_ON_START === "1";
 const SHOW_DEBUG_TYPING_OVERLAY =
-  process.env.TABB_DEBUG_TYPING_OVERLAY !== "0" &&
-  (!app.isPackaged || process.env.TABB_DEBUG_TYPING_OVERLAY === "1" || process.argv.includes("--typing-debug") || SHOW_SETTINGS_ON_START);
+  env.TABB_DEBUG_TYPING_OVERLAY !== "0" &&
+  (!app.isPackaged || env.TABB_DEBUG_TYPING_OVERLAY === "1" || process.argv.includes("--typing-debug") || SHOW_SETTINGS_ON_START);
 const DEBUG_TYPING_DEBOUNCE_MS = 300;
 const DEBUG_TYPING_HIDE_MS = 3_600;
 const DEBUG_TYPING_WORD_LIMIT = 100;
@@ -186,6 +182,51 @@ type DebugApiState =
   | { status: "suggestion"; text: string };
 let debugApiState: DebugApiState = { status: "idle" };
 
+const nativeSuggestionSession = createNativeSuggestionSession({
+  typingContext: typingContextBuffer,
+  requestSuggestion,
+  getContextSource: getTypedContextSource,
+  showSuggestion: showOverlay,
+  clearSuggestion: clearSuggestionOverlay,
+  hideOverlay,
+  showDebugContext: showDebugTypingOverlay,
+  resetDebugApiState: () => {
+    debugApiState = { status: "idle" };
+  },
+  onRequestStarted: () => updateDebugApiState({ status: "loading" }),
+  onRequestFinished: (suggestion) => {
+    updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
+  },
+  createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
+    getCurrentSuggestion,
+    getPreviouslyActiveApplication,
+    setClipboard: async (text) => {
+      const previous = clipboard.readText();
+      clipboard.writeText(text);
+      return previous;
+    },
+    sendPaste: async () => {
+      // On macOS, send Cmd+V via System Events. This requires Accessibility
+      // and Automation permissions, which are the same permissions the app
+      // already guides the user to grant. The overlay is focusable: false so
+      // the previously active application remains frontmost for Option+Tab.
+      if (process.platform === "darwin") {
+        await execAsync('osascript -e \'tell application "System Events" to keystroke "v" using command down\'');
+      }
+    },
+    waitForPaste: async () => {
+      // Some target apps process the paste event after osascript returns. Keep
+      // the suggestion on the pasteboard until the app has consumed Cmd+V.
+      await delay(CLIPBOARD_RESTORE_DELAY_MS);
+    },
+    restoreClipboard: async (previous) => {
+      clipboard.writeText(previous);
+    },
+  }),
+  debounceMs: 300,
+  maxVisibleMs: SUGGESTION_VISIBLE_MS,
+});
+
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -206,7 +247,7 @@ function updateTray(): void {
 
 function createTrayState(status: DesktopStatus) {
   return {
-    paused: observationPaused,
+    paused: nativeSuggestionSession.isPaused(),
     auth: status.auth,
     quotaExhausted: status.quota?.exhausted ?? false,
     updateAvailable,
@@ -214,11 +255,11 @@ function createTrayState(status: DesktopStatus) {
 }
 
 async function togglePause(): Promise<void> {
-  observationPaused = !observationPaused;
-  typingContextBuffer.setPaused(observationPaused);
-  settingsWindowManager.sendPaused(observationPaused);
+  const paused = !nativeSuggestionSession.isPaused();
+  nativeSuggestionSession.setPaused(paused);
+  settingsWindowManager.sendPaused(paused);
   updateTray();
-  if (observationPaused) {
+  if (paused) {
     clearContextAndHide();
   }
 }
@@ -482,7 +523,6 @@ function resizeOverlayWindow(height: number): void {
 }
 
 function showOverlay(suggestion: Suggestion): void {
-  currentSuggestion = suggestion;
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   resizeOverlayWindow(OVERLAY_SUGGESTION_HEIGHT);
   overlayWindow.webContents.send("suggestion", suggestion);
@@ -490,7 +530,6 @@ function showOverlay(suggestion: Suggestion): void {
 }
 
 function clearSuggestionOverlay(): void {
-  currentSuggestion = null;
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   overlayWindow.webContents.send("hide");
   overlayWindow.hide();
@@ -583,43 +622,11 @@ function showDebugTypingOverlay(): void {
 }
 
 async function acceptCurrentSuggestion(): Promise<void> {
-  if (!suggestionLoop) return;
-
-  const result = await acceptAndInsertSuggestion({
-    getCurrentSuggestion: () => currentSuggestion,
-    getPreviouslyActiveApplication: () => previouslyActiveApplication,
-    setClipboard: async (text) => {
-      const previous = clipboard.readText();
-      clipboard.writeText(text);
-      return previous;
-    },
-    sendPaste: async () => {
-      // On macOS, send Cmd+V via System Events. This requires Accessibility
-      // and Automation permissions, which are the same permissions the app
-      // already guides the user to grant. The overlay is focusable: false so
-      // the previously active application remains frontmost for Option+Tab.
-      if (process.platform === "darwin") {
-        await execAsync('osascript -e \'tell application "System Events" to keystroke "v" using command down\'');
-      }
-    },
-    waitForPaste: async () => {
-      // Some target apps process the paste event after osascript returns. Keep
-      // the suggestion on the pasteboard until the app has consumed Cmd+V.
-      await delay(CLIPBOARD_RESTORE_DELAY_MS);
-    },
-    restoreClipboard: async (previous) => {
-      clipboard.writeText(previous);
-    },
-  });
-
-  if (result === "inserted") {
-    hideOverlay();
-    typingContextBuffer.clear();
-  }
+  await nativeSuggestionSession.acceptCurrentSuggestion();
 }
 
 function clearContextAndHide(): void {
-  typingContextBuffer.clear();
+  nativeSuggestionSession.clearContext();
   debugApiState = { status: "idle" };
   if (debugTypingTimer) {
     clearTimeout(debugTypingTimer);
@@ -629,7 +636,6 @@ function clearContextAndHide(): void {
     clearTimeout(debugTypingHideTimer);
     debugTypingHideTimer = null;
   }
-  suggestionLoop?.invalidate();
 }
 
 function checkForUpdates(errorMessage: string): void {
@@ -707,6 +713,7 @@ async function bootstrap(): Promise<void> {
     if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
 
     overlayRendererReady = true;
+    const currentSuggestion = nativeSuggestionSession.getCurrentSuggestion();
     if (currentSuggestion) {
       showOverlay(currentSuggestion);
     }
@@ -714,24 +721,6 @@ async function bootstrap(): Promise<void> {
 
   overlayWindow = createOverlayWindow();
   debugOverlayWindow = SHOW_DEBUG_TYPING_OVERLAY ? createDebugOverlayWindow() : null;
-
-  suggestionLoop = createSuggestionLoop({
-    getContext: () => typingContextBuffer.getState(),
-    requestSuggestion,
-    onShowSuggestion: showOverlay,
-    onHideSuggestion: hideOverlay,
-    onRequestStarted: () => updateDebugApiState({ status: "loading" }),
-    onRequestFinished: (suggestion) => {
-      updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
-    },
-    onSecretLikeContextDetected: () => {
-      // Clear the in-memory buffer as soon as secret-like context is detected,
-      // before any network call can happen.
-      typingContextBuffer.clear();
-    },
-    debounceMs: 300,
-    maxVisibleMs: SUGGESTION_VISIBLE_MS,
-  });
 
   const registered = globalShortcut.register("Alt+Tab", () => {
     acceptCurrentSuggestion().catch((error) => {
@@ -816,7 +805,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle("get-initial-state", () => ({
     status: statusService.getCurrentStatus(),
     memories: currentMemories,
-    paused: observationPaused,
+    paused: nativeSuggestionSession.isPaused(),
   }));
 
   // Register the custom URL scheme so the browser handoff can land back in the
@@ -937,21 +926,11 @@ app.on("activate", () => {
 
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
-  if (observationPaused) return;
-  typingContextBuffer.appendText(text, getTypedContextSource());
-  debugApiState = { status: "idle" };
-  clearSuggestionOverlay();
-  suggestionLoop?.onContextChanged();
-  showDebugTypingOverlay();
+  nativeSuggestionSession.appendText(text);
 }
 
 export function handlePastedText(text: string): void {
-  if (observationPaused) return;
-  typingContextBuffer.appendPastedText(text);
-  debugApiState = { status: "idle" };
-  clearSuggestionOverlay();
-  suggestionLoop?.onContextChanged();
-  showDebugTypingOverlay();
+  nativeSuggestionSession.appendPastedText(text);
 }
 
 export function handleShortcutOrNavigation(): void {
@@ -959,49 +938,17 @@ export function handleShortcutOrNavigation(): void {
 }
 
 export function handleActiveApplicationChanged(bundleId: string | null, windowId: string | null = null): void {
-  if (observationPaused) return;
-
-  const activeApp = bundleId ? { bundleId, ...(windowId ? { windowId } : {}) } : null;
-  const previousActiveApp = typingContextBuffer.getState().activeApplication;
-  const previousActiveKey = previousActiveApp ? `${previousActiveApp.bundleId}:${previousActiveApp.windowId ?? "window-unknown"}` : null;
-  const activeKey = activeApp ? `${activeApp.bundleId}:${activeApp.windowId ?? "window-unknown"}` : null;
-
-  // Do not treat Tabb's own windows as the previously active application,
-  // otherwise clicking the overlay would paste back into Tabb.
-  const isTabb = bundleId?.toLowerCase().includes("tabb") ?? false;
-  if (activeApp && !isTabb) {
-    previouslyActiveApplication = activeApp;
-  }
-
-  if (activeKey === previousActiveKey) {
-    return;
-  }
-
-  typingContextBuffer.setActiveApplication(activeApp);
-  debugApiState = { status: "idle" };
-  clearSuggestionOverlay();
-  suggestionLoop?.onContextChanged();
-  showDebugTypingOverlay();
+  nativeSuggestionSession.setActiveApplication(bundleId, windowId);
 }
 
 export function handleSecureInputChanged(active: boolean): void {
-  typingContextBuffer.setSecureInput(active);
-  debugApiState = { status: "idle" };
-  clearSuggestionOverlay();
-  suggestionLoop?.onContextChanged();
-  showDebugTypingOverlay();
+  nativeSuggestionSession.setSecureInput(active);
 }
 
 export function handlePauseChanged(active: boolean): void {
-  observationPaused = active;
-  typingContextBuffer.setPaused(active);
-  debugApiState = { status: "idle" };
-  if (active) {
-    clearContextAndHide();
-  }
-  showDebugTypingOverlay();
+  nativeSuggestionSession.setPaused(active);
 }
 
 export function getCurrentSuggestionForTest(): Suggestion | null {
-  return currentSuggestion;
+  return nativeSuggestionSession.getCurrentSuggestion();
 }

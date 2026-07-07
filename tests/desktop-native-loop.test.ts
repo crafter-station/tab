@@ -3,6 +3,7 @@ import { createTypingContextBuffer, getLastWords } from "../apps/desktop/src/mai
 import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engine.ts";
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
+import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
 import type { Suggestion, ActiveApplication } from "@tabb/contracts";
@@ -298,6 +299,80 @@ describe("desktop native suggestion loop", () => {
         restoreClipboard: async () => {},
       });
       expect(result).toBe("no_target_app");
+    });
+  });
+
+  describe("native suggestion session", () => {
+    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+    function makeSession() {
+      const buffer = createTypingContextBuffer();
+      const calls: Array<{ type: string; value?: unknown }> = [];
+      const session = createNativeSuggestionSession({
+        typingContext: buffer,
+        requestSuggestion: async (context) => {
+          calls.push({ type: "requestSuggestion", value: context });
+          return { id: "s-1", text: " world" };
+        },
+        getContextSource: () => "typed_text",
+        showSuggestion: (suggestion) => calls.push({ type: "showSuggestion", value: suggestion }),
+        clearSuggestion: () => calls.push({ type: "clearSuggestion" }),
+        hideOverlay: () => calls.push({ type: "hideOverlay" }),
+        showDebugContext: () => calls.push({ type: "showDebugContext" }),
+        resetDebugApiState: () => calls.push({ type: "resetDebugApiState" }),
+        createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
+          getCurrentSuggestion,
+          getPreviouslyActiveApplication,
+          setClipboard: async (text) => {
+            calls.push({ type: "setClipboard", value: text });
+            return "previous-clipboard";
+          },
+          sendPaste: async () => calls.push({ type: "sendPaste" }),
+          restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
+        }),
+        debounceMs: 5,
+      });
+      return { buffer, calls, session };
+    }
+
+    it("owns context changes and current suggestion state behind one session seam", async () => {
+      const { buffer, calls, session } = makeSession();
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Hello");
+      await wait(10);
+
+      expect(buffer.getState().context).toBe("Hello");
+      expect(calls.map((call) => call.type)).toContain("resetDebugApiState");
+      expect(calls.map((call) => call.type)).toContain("clearSuggestion");
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: "Hello" });
+      expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
+    });
+
+    it("accepts the visible suggestion into the previously active application", async () => {
+      const { buffer, calls, session } = makeSession();
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Hello");
+      await wait(10);
+      await session.acceptCurrentSuggestion();
+
+      expect(calls.map((call) => call.type)).toContain("setClipboard");
+      expect(calls).toContainEqual({ type: "setClipboard", value: " world" });
+      expect(calls.map((call) => call.type)).toContain("sendPaste");
+      expect(buffer.getState().context).toBe("");
+      expect(session.getCurrentSuggestion()).toBeNull();
+    });
+
+    it("clears context and suppresses observation while paused", () => {
+      const { buffer, session } = makeSession();
+
+      session.appendText("Hello");
+      session.setPaused(true);
+      session.appendText(" world");
+
+      expect(session.isPaused()).toBe(true);
+      expect(buffer.getState().context).toBe("");
     });
   });
 
