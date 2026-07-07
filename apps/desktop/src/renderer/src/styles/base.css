@@ -1,0 +1,81 @@
+* {
+  box-sizing: border-box;
+}
+
+:root {
+  --bg: #11110f;
+  --bg-elevated: #171612;
+  --surface: rgba(255, 255, 255, 0.065);
+  --surface-strong: rgba(255, 255, 255, 0.105);
+  --border: rgba(255, 255, 255, 0.14);
+  --border-strong: rgba(255, 255, 255, 0.22);
+  --text: rgba(255, 255, 255, 0.92);
+  --text-subtle: rgba(255, 255, 255, 0.68);
+  --text-muted: rgba(255, 255, 255, 0.48);
+  --signal: #dabe4d;
+  --signal-dim: #8d7622;
+  --signal-tint: rgba(218, 190, 77, 0.16);
+  --on-signal: #17140a;
+  --success: #78d596;
+  --success-tint: rgba(120, 213, 150, 0.16);
+  --glass-bg: rgba(24, 22, 17, 0.78);
+  --glass-border: rgba(255, 255, 255, 0.14);
+  --glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--text);
+  background: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html,
+body,
+#root {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+body {
+  color: var(--text);
+  background: transparent;
+}
+
+body[data-surface="settings"],
+body[data-surface="onboarding"] {
+  background:
+    radial-gradient(circle at 16% 0%, rgba(218, 190, 77, 0.16), transparent 34%),
+    radial-gradient(circle at 90% 8%, rgba(255, 255, 255, 0.08), transparent 26%), var(--bg);
+  pointer-events: auto;
+}
+
+body[data-surface="overlay"],
+body[data-surface="overlay"] #root {
+  background: transparent;
+  pointer-events: none;
+}
+
+button {
+  font: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 1ms !important;
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

@@ -80,7 +80,7 @@ const onboardingManager = createOnboardingManager({
 });
 
 const onboardingWindowManager = createOnboardingWindowManager({
-  htmlPath: path.join(runtimeRoot, "onboarding.html"),
+  rendererPath: RENDERER_PATH,
   preloadPath: PRELOAD_PATH,
 });
 
@@ -393,7 +393,7 @@ function createOverlayWindow(): BrowserWindow {
   configureFloatingPanel(win);
   installOverlayPositionTracking(win, () => getSuggestionOverlayBounds(win.getBounds().height));
   installAlphaClickThrough(win);
-  win.loadFile(RENDERER_PATH);
+  win.loadFile(RENDERER_PATH, { hash: "overlay" });
   return win;
 }
 
@@ -423,7 +423,7 @@ function createDebugOverlayWindow(): BrowserWindow {
 
   configureFloatingPanel(win);
   installOverlayPositionTracking(win, getDebugOverlayBounds);
-  win.loadFile(RENDERER_PATH);
+  win.loadFile(RENDERER_PATH, { hash: "overlay" });
   win.setIgnoreMouseEvents(true, { forward: true });
   return win;
 }

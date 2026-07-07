@@ -1,43 +1,41 @@
 import { useEffect, useState } from "react";
-import { DebugContextCard, type DebugContext } from "./components/DebugContextCard";
-import { FloatingSuggestionBar, type Suggestion } from "./components/FloatingSuggestionBar";
+import { getAppRoute, type AppRoute } from "./routes";
+import { OverlaySurface } from "./surfaces/OverlaySurface";
+import { OnboardingSurface } from "./surfaces/OnboardingSurface";
 
-type OverlayMode = "hidden" | "suggestion" | "debug";
-
-export function App() {
-  const [mode, setMode] = useState<OverlayMode>("hidden");
-  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
-  const [debugContext, setDebugContext] = useState<DebugContext | null>(null);
-
-  useEffect(() => {
-    if (!window.tabb) return;
-
-    window.tabb.onSuggestion((nextSuggestion) => {
-      setSuggestion(nextSuggestion);
-      setDebugContext(null);
-      setMode("suggestion");
-    });
-
-    window.tabb.onDebugContext((debug) => {
-      setDebugContext(debug);
-      setSuggestion(null);
-      setMode("debug");
-    });
-
-    window.tabb.onHide(() => {
-      setSuggestion(null);
-      setDebugContext(null);
-      setMode("hidden");
-    });
-  }, []);
-
+function SettingsPlaceholder() {
   return (
-    <main className="overlay-shell" data-mode={mode}>
-      <FloatingSuggestionBar
-        suggestion={mode === "suggestion" ? suggestion : null}
-        onAccept={() => window.tabb?.acceptSuggestion()}
-      />
-      <DebugContextCard debug={mode === "debug" ? debugContext : null} />
+    <main className="desktop-shell desktop-shell--centered">
+      <section className="section-card section-card--narrow">
+        <p className="eyebrow">Tabb Settings</p>
+        <h1>Settings are moving into React.</h1>
+        <p className="lede">
+          This routed renderer is ready for the next migration phase. The production settings window still uses the
+          existing settings surface for now.
+        </p>
+      </section>
     </main>
   );
+}
+
+export function App() {
+  const [route, setRoute] = useState<AppRoute>(() => getAppRoute());
+
+  useEffect(() => {
+    const syncRoute = () => setRoute(getAppRoute());
+    window.addEventListener("hashchange", syncRoute);
+    return () => window.removeEventListener("hashchange", syncRoute);
+  }, []);
+
+  useEffect(() => {
+    document.body.dataset.surface = route;
+    return () => {
+      delete document.body.dataset.surface;
+    };
+  }, [route]);
+
+  if (route === "onboarding") return <OnboardingSurface />;
+  if (route === "settings") return <SettingsPlaceholder />;
+
+  return <OverlaySurface />;
 }

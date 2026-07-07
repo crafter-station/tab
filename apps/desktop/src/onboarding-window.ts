@@ -1,33 +1,38 @@
 import { BrowserWindow } from "electron";
 
 export type CreateOnboardingWindowDependencies = {
-  htmlPath: string;
+  rendererPath: string;
   preloadPath: string;
 };
 
 export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies): BrowserWindow {
   const win = new BrowserWindow({
-    width: 560,
-    height: 640,
+    width: 620,
+    height: 690,
     resizable: false,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
     show: false,
     title: "Welcome to Tabb",
+    titleBarStyle: "hiddenInset",
+    trafficLightPosition: { x: 16, y: 16 },
+    backgroundColor: "#11110f",
     webPreferences: {
       preload: deps.preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
-  win.loadFile(deps.htmlPath);
+  win.loadFile(deps.rendererPath, { hash: "onboarding" });
   win.once("ready-to-show", () => win?.show());
 
   return win;
 }
 
 export type OnboardingWindowManagerDependencies = {
-  htmlPath: string;
+  rendererPath: string;
   preloadPath: string;
 };
 
@@ -41,7 +46,7 @@ export function createOnboardingWindowManager(deps: OnboardingWindowManagerDepen
     }
 
     win = createOnboardingWindow({
-      htmlPath: deps.htmlPath,
+      rendererPath: deps.rendererPath,
       preloadPath: deps.preloadPath,
     });
 
