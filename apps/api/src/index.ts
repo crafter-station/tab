@@ -82,7 +82,7 @@ export type SuggestionGenerator = (
   input: SuggestionInput,
 ) => Promise<{ text: string; modelId?: string } | null>;
 
-const SUGGESTION_MODEL_ID = "openai/gpt-oss-20b";
+const DEFAULT_SUGGESTION_MODEL_ID = "llama-3.1-8b-instant";
 
 type ApiVariables = {
   device: Device;
@@ -167,6 +167,7 @@ export function normalizeGeneratedSuggestion(
 
 function createRealSuggestionGenerator(): SuggestionGenerator {
   const apiKey = process.env.GROQ_API_KEY;
+  const modelId = process.env.TABB_SUGGESTION_MODEL_ID ?? DEFAULT_SUGGESTION_MODEL_ID;
 
   return async (input) => {
     if (!apiKey) {
@@ -174,9 +175,9 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
     }
 
     const { text } = await generateText({
-      model: groq(SUGGESTION_MODEL_ID),
+      model: groq(modelId),
       system:
-        "You are a concise autocomplete assistant. Given the user's recent typing context, respond with only the most likely next few words that continue their thought. Do not explain, prefix, or quote the continuation. Make a best-effort continuation for ordinary prose. Return an empty string only when the context is not enough to infer any safe text continuation, such as commands, passwords, code secrets, or nonsensical input.",
+        "You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.",
       prompt: `Active application: ${input.activeApplication.bundleId}\nSource: ${input.contextSource}\nContext: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
       maxOutputTokens: 32,
       temperature: 0.3,
@@ -184,7 +185,7 @@ function createRealSuggestionGenerator(): SuggestionGenerator {
 
     return {
       text: normalizeGeneratedSuggestion(input.typingContext, text),
-      modelId: SUGGESTION_MODEL_ID,
+      modelId,
     };
   };
 }

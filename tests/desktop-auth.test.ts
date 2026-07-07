@@ -10,12 +10,12 @@ import type { TypingContextState } from "../apps/desktop/src/main/typing-context
 
 const TEST_ORIGIN = "http://localhost:8787";
 
-async function createApiFixture() {
+async function createApiFixture(generateSuggestion?: Parameters<typeof createApp>[0]["generateSuggestion"]) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database, baseURL: TEST_ORIGIN });
   await migrateAuth(auth);
   const deviceTokenService = new DeviceTokenService();
-  const app = createApp({ auth, deviceTokenService });
+  const app = createApp({ auth, deviceTokenService, generateSuggestion });
   return { app, auth, deviceTokenService };
 }
 
@@ -110,7 +110,7 @@ describe("desktop auth client", () => {
   });
 
   it("uses the stored device token when calling the suggestion API", async () => {
-    const { app } = await createApiFixture();
+    const { app } = await createApiFixture(async () => ({ text: " world" }));
     const { cookie } = await signUpAndSignIn(app);
 
     const authorizeResponse = await app.request("/api/auth/device/authorize", {
@@ -142,11 +142,11 @@ describe("desktop auth client", () => {
     });
 
     const suggestion = await suggestionClient("hello");
-    expect(suggestion).toBeNull();
+    expect(suggestion?.text).toBe(" world");
   });
 
   it("fails silently when the device token is revoked", async () => {
-    const { app, deviceTokenService } = await createApiFixture();
+    const { app, deviceTokenService } = await createApiFixture(async () => ({ text: " world" }));
     const { cookie } = await signUpAndSignIn(app);
 
     const authorizeResponse = await app.request("/api/auth/device/authorize", {
