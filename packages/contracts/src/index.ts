@@ -1,3 +1,7 @@
+import {
+  PERSONAL_MEMORY_SOURCES,
+  SUGGESTION_CONTEXT_SOURCES,
+} from "@tabb/memory-policy";
 import { z } from "zod";
 
 const errorCodes = [
@@ -15,11 +19,7 @@ export const ActiveApplicationSchema = z.object({
   windowId: z.string().min(1).optional(),
 });
 
-export const SuggestionContextSourceSchema = z.enum([
-  "typed_text",
-  "pasted_text",
-  "terminal_input",
-]);
+export const SuggestionContextSourceSchema = z.enum(SUGGESTION_CONTEXT_SOURCES);
 
 export const RedactionSummarySchema = z.object({
   applied: z.boolean(),
@@ -55,12 +55,7 @@ export const DeviceMetadataSchema = z.object({
   revoked: z.boolean(),
 });
 
-export const PersonalMemorySourceSchema = z.enum([
-  "typed_text",
-  "pasted_text",
-  "terminal_input",
-  "manual",
-]);
+export const PersonalMemorySourceSchema = z.enum(PERSONAL_MEMORY_SOURCES);
 
 export const PersonalMemorySensitivitySchema = z.enum([
   "normal",

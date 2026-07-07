@@ -4,11 +4,7 @@ import {
   type Suggestion,
   type SuggestionRequest,
 } from "@tabb/contracts";
-import { createSafeTypingContextSnapshot, type TypingContextState } from "./typing-context.ts";
-
-type ActiveTypingContextState = TypingContextState & {
-  activeApplication: NonNullable<TypingContextState["activeApplication"]>;
-};
+import type { RequestableTypingContextSnapshot } from "./typing-context.ts";
 
 export type ApiSuggestionClientDependencies = {
   apiBaseUrl: string;
@@ -16,25 +12,21 @@ export type ApiSuggestionClientDependencies = {
   appVersion: string;
   platform: string;
   memoryEnabled?: boolean;
-  getState(): TypingContextState;
   fetch?: typeof globalThis.fetch;
   getAuthorizationHeader?: () => Promise<string | null>;
 };
 
 function buildSuggestionRequest(
   deps: ApiSuggestionClientDependencies,
-  state: ActiveTypingContextState,
-  context: string,
+  snapshot: RequestableTypingContextSnapshot,
 ): SuggestionRequest {
-  const snapshot = createSafeTypingContextSnapshot({ ...state, context });
-
   return {
     requestId: crypto.randomUUID(),
     deviceId: deps.deviceId,
     typingContext: snapshot.sanitizedContext,
-    contextSource: state.contextSource,
+    contextSource: snapshot.contextSource,
     redaction: snapshot.redaction,
-    activeApplication: state.activeApplication,
+    activeApplication: snapshot.activeApplication,
     memoryEnabled: deps.memoryEnabled ?? true,
     contextHash: snapshot.contextHash,
     clientMetadata: {
@@ -47,18 +39,10 @@ function buildSuggestionRequest(
 export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
 
-  return async function requestSuggestion(context: string): Promise<Suggestion | null> {
-    const state = deps.getState();
-
-    if (!state.activeApplication) {
-      return null;
-    }
-
-    const payload = buildSuggestionRequest(
-      deps,
-      { ...state, activeApplication: state.activeApplication },
-      context,
-    );
+  return async function requestSuggestion(
+    snapshot: RequestableTypingContextSnapshot,
+  ): Promise<Suggestion | null> {
+    const payload = buildSuggestionRequest(deps, snapshot);
     const parsed = SuggestionRequestSchema.safeParse(payload);
     if (!parsed.success) {
       return null;

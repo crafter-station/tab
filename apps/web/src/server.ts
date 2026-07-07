@@ -1,13 +1,17 @@
 import { planQuotas, type PlanId } from "@tabb/billing";
-import {
-  BillingQuotaResponseSchema,
-  DeviceAuthorizeResponseSchema,
-  type DeviceListItem,
-  DeviceListResponseSchema,
-  MemoryListResponseSchema,
-  type PersonalMemory,
-} from "@tabb/contracts";
+import { type DeviceListItem, type PersonalMemory } from "@tabb/contracts";
 import { env } from "./env.ts";
+import {
+  apiRequest as requestApi,
+  appendSetCookies,
+  cookieHeaderFromSetCookie,
+  parseBillingQuota,
+  parseDeviceAuthorize,
+  parseDevices,
+  parseMemories,
+  parseCheckout,
+  parsePortal,
+} from "./lib/api.ts";
 
 export type WebAppConfig = {
   apiBaseUrl: string;
@@ -164,21 +168,6 @@ function routeSegment(path: string, index: number): string | undefined {
   return segment ? decodeURIComponent(segment) : undefined;
 }
 
-function setCookies(response: Response, source: Response): void {
-  const cookies = source.headers.getSetCookie?.() ?? [];
-  for (const cookie of cookies) {
-    response.headers.append("set-cookie", cookie);
-  }
-}
-
-function cookieHeaderFromSetCookie(source: Response): string | undefined {
-  const cookies = source.headers.getSetCookie?.() ?? [];
-  const pairs = cookies
-    .map((cookie) => cookie.split(";", 1)[0] ?? "")
-    .filter((cookie) => cookie.length > 0);
-  return pairs.length > 0 ? pairs.join("; ") : undefined;
-}
-
 export function createWebApp(config: WebAppConfig) {
   const baseUrl = config.apiBaseUrl.replace(/\/$/, "");
   const fetchImpl = config.fetch ?? globalThis.fetch;
@@ -191,16 +180,12 @@ export function createWebApp(config: WebAppConfig) {
     init: RequestInit = {},
     cookieHeader?: string,
   ): Promise<Response> {
-    const headers = new Headers(init.headers);
-    if (cookieHeader) {
-      headers.set("cookie", cookieHeader);
-    }
-    if (!headers.has("origin")) {
-      headers.set("origin", baseUrl);
-    }
-
-    const url = `${baseUrl}${path}`;
-    return fetchImpl(url, { ...init, headers });
+    return requestApi(path, {
+      ...init,
+      apiBaseUrl: baseUrl,
+      cookie: cookieHeader,
+      fetch: fetchImpl,
+    });
   }
 
   async function getSession(
@@ -308,11 +293,11 @@ export function createWebApp(config: WebAppConfig) {
       return loginPage("Signed in, but failed to authorize this device.");
     }
 
-    const authorize = DeviceAuthorizeResponseSchema.parse(await authorizeResponse.json());
+    const authorize = await parseDeviceAuthorize(authorizeResponse);
     const callbackUrl = new URL(callback);
     callbackUrl.searchParams.set("code", authorize.code);
     const response = redirect(callbackUrl.toString());
-    if (sourceResponse) setCookies(response, sourceResponse);
+    if (sourceResponse) appendSetCookies(response, sourceResponse);
     return response;
   }
 
@@ -421,7 +406,7 @@ export function createWebApp(config: WebAppConfig) {
     }
 
     const response = redirect("/dashboard");
-    setCookies(response, signInResponse);
+    appendSetCookies(response, signInResponse);
     return response;
   }
 
@@ -480,16 +465,16 @@ export function createWebApp(config: WebAppConfig) {
         );
 
         if (checkoutResponse.status === 200) {
-          const body = (await checkoutResponse.json()) as { data: { url: string } };
+          const body = await parseCheckout(checkoutResponse);
           const response = redirect(body.data.url);
-          setCookies(response, signInResponse);
+          appendSetCookies(response, signInResponse);
           return response;
         }
       }
     }
 
     const response = redirect("/dashboard");
-    setCookies(response, signInResponse.status === 200 ? signInResponse : signUpResponse);
+    appendSetCookies(response, signInResponse.status === 200 ? signInResponse : signUpResponse);
     return response;
   }
 
@@ -511,9 +496,9 @@ export function createWebApp(config: WebAppConfig) {
       return redirect("/login");
     }
 
-    const quota = BillingQuotaResponseSchema.parse(await quotaResponse.json());
-    const deviceList = DeviceListResponseSchema.parse(await devicesResponse.json());
-    const memoryList = MemoryListResponseSchema.parse(await memoriesResponse.json());
+    const quota = await parseBillingQuota(quotaResponse);
+    const deviceList = await parseDevices(devicesResponse);
+    const memoryList = await parseMemories(memoriesResponse);
 
     const upgradeAlert =
       quota.data.usage >= quota.data.quota
@@ -632,7 +617,7 @@ export function createWebApp(config: WebAppConfig) {
       );
     }
 
-    const body = (await response.json()) as { data: { url: string } };
+    const body = await parseCheckout(response);
     return redirect(body.data.url);
   }
 
@@ -652,7 +637,7 @@ export function createWebApp(config: WebAppConfig) {
       );
     }
 
-    const body = (await response.json()) as { data: { url: string } };
+    const body = await parsePortal(response);
     return redirect(body.data.url);
   }
 
@@ -702,7 +687,7 @@ export function createWebApp(config: WebAppConfig) {
 
     const signOutResponse = await apiRequest("/api/auth/sign-out", { method: "POST" }, cookieHeader);
     const response = redirect("/");
-    setCookies(response, signOutResponse);
+    appendSetCookies(response, signOutResponse);
     return response;
   }
 

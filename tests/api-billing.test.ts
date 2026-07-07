@@ -307,7 +307,7 @@ describe("Billing and quota enforcement", () => {
   it("stores entitlements and usage in D1-compatible storage", async () => {
     const db = new Database(":memory:");
     const storage = new D1BillingStorage(createD1LikeDatabase(db));
-    await storage.ensureTables();
+    bootstrapBillingTestSchema(db);
 
     await storage.setEntitlement({
       userId: "user-d1",
@@ -354,6 +354,28 @@ function createD1LikeDatabase(db: Database) {
       db.exec(sql);
     },
   };
+}
+
+function bootstrapBillingTestSchema(db: Database): void {
+  db.exec(`
+    CREATE TABLE user_entitlements (
+      user_id TEXT PRIMARY KEY,
+      plan_id TEXT NOT NULL,
+      polar_customer_id TEXT,
+      polar_subscription_id TEXT,
+      status TEXT NOT NULL,
+      current_period_end TEXT,
+      cached_at TEXT NOT NULL
+    );
+
+    CREATE TABLE usage_records (
+      user_id TEXT NOT NULL,
+      month TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (user_id, month)
+    );
+  `);
 }
 
 function currentMonth(): string {

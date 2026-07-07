@@ -127,23 +127,6 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     this.db = db as D1DatabaseLike;
   }
 
-  async ensureTables(): Promise<void> {
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS personal_memories (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        content TEXT NOT NULL,
-        category TEXT NOT NULL,
-        source TEXT NOT NULL,
-        sensitivity TEXT NOT NULL,
-        active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_personal_memories_user ON personal_memories(user_id);
-    `);
-  }
-
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
     const memory = createMemoryRecord(input);
 

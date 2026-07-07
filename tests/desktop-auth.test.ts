@@ -6,7 +6,11 @@ import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
 import { createDesktopAuthClient } from "../apps/desktop/src/main/auth.ts";
 import { createMemoryKeychain } from "../apps/desktop/src/main/keychain.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
-import type { TypingContextState } from "../apps/desktop/src/main/typing-context.ts";
+import {
+  createSafeTypingContextSnapshot,
+  type RequestableTypingContextSnapshot,
+  type TypingContextState,
+} from "../apps/desktop/src/main/typing-context.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
 
@@ -56,6 +60,16 @@ function makeState(overrides: Partial<TypingContextState> = {}): TypingContextSt
     memoryEligible: true,
     ...overrides,
   };
+}
+
+function makeSnapshot(
+  overrides: Partial<TypingContextState> = {},
+): RequestableTypingContextSnapshot {
+  const snapshot = createSafeTypingContextSnapshot(makeState(overrides));
+  if (!snapshot.requestable || !snapshot.activeApplication) {
+    throw new Error("test snapshot must be requestable");
+  }
+  return snapshot as RequestableTypingContextSnapshot;
 }
 
 describe("desktop auth client", () => {
@@ -136,12 +150,11 @@ describe("desktop auth client", () => {
       deviceId: "desktop-device-1",
       appVersion: "0.0.1",
       platform: "darwin",
-      getState: () => makeState(),
       fetch: makeFetch(app),
       getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
     });
 
-    const suggestion = await suggestionClient("hello");
+    const suggestion = await suggestionClient(makeSnapshot());
     expect(suggestion?.text).toBe(" world");
   });
 
@@ -178,12 +191,11 @@ describe("desktop auth client", () => {
       deviceId: "desktop-device-revoked",
       appVersion: "0.0.1",
       platform: "darwin",
-      getState: () => makeState(),
       fetch: makeFetch(app),
       getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
     });
 
-    const suggestion = await suggestionClient("hello");
+    const suggestion = await suggestionClient(makeSnapshot());
     expect(suggestion).toBeNull();
   });
 

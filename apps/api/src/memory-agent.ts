@@ -2,11 +2,15 @@ import {
   MemoryJobSchema,
   type MemoryJob,
   type PersonalMemory,
-  type PersonalMemorySource,
   type PersonalMemorySensitivity,
 } from "@tabb/contracts";
 import { generateText, Output } from "ai";
-import { validateMemoryContent } from "@tabb/memory-policy";
+import {
+  MODEL_PROPOSED_MEMORY_SOURCES,
+  isEligiblePersonalMemorySource,
+  validateMemoryContent,
+  type ModelProposedMemorySource,
+} from "@tabb/memory-policy";
 import type { PersonalMemoryService } from "./personal-memory.ts";
 import { env } from "./env.ts";
 import { z } from "zod";
@@ -61,7 +65,7 @@ export type ProposedCreateMemory = {
   readonly type: "create";
   readonly content: string;
   readonly category: string;
-  readonly source: PersonalMemorySource;
+  readonly source: ModelProposedMemorySource;
   readonly sensitivity: PersonalMemorySensitivity;
 };
 
@@ -70,7 +74,7 @@ export type ProposedUpdateMemory = {
   readonly id: string;
   readonly content: string;
   readonly category: string;
-  readonly source: PersonalMemorySource;
+  readonly source: ModelProposedMemorySource;
   readonly sensitivity: PersonalMemorySensitivity;
 };
 
@@ -84,11 +88,6 @@ export type ProposedMemoryOperation =
   | ProposedUpdateMemory
   | ProposedArchiveMemory;
 
-const ELIGIBLE_MEMORY_SOURCES: readonly PersonalMemorySource[] = [
-  "typed_text",
-  "terminal_input",
-];
-
 const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
 
 const MemoryOperationOutputSchema = z.object({
@@ -98,7 +97,7 @@ const MemoryOperationOutputSchema = z.object({
         type: z.literal("create"),
         content: z.string().min(1),
         category: z.string().min(1),
-        source: z.enum(["typed_text", "terminal_input"]),
+        source: z.enum(MODEL_PROPOSED_MEMORY_SOURCES),
         sensitivity: z.enum(["normal", "sensitive", "private"]),
       }),
       z.object({
@@ -106,7 +105,7 @@ const MemoryOperationOutputSchema = z.object({
         id: z.string().min(1),
         content: z.string().min(1),
         category: z.string().min(1),
-        source: z.enum(["typed_text", "terminal_input"]),
+        source: z.enum(MODEL_PROPOSED_MEMORY_SOURCES),
         sensitivity: z.enum(["normal", "sensitive", "private"]),
       }),
       z.object({
@@ -116,12 +115,6 @@ const MemoryOperationOutputSchema = z.object({
     ]),
   ),
 });
-
-function isEligibleMemorySource(
-  source: PersonalMemorySource,
-): source is "typed_text" | "terminal_input" {
-  return (ELIGIBLE_MEMORY_SOURCES as readonly string[]).includes(source);
-}
 
 function isSafeMemoryText(content: string, category: string): boolean {
   return (
@@ -229,7 +222,7 @@ export class BackgroundMemoryAgent {
   ): Promise<void> {
     switch (operation.type) {
       case "create": {
-        if (!isEligibleMemorySource(operation.source)) {
+        if (!isEligiblePersonalMemorySource(operation.source)) {
           return;
         }
 
@@ -253,7 +246,7 @@ export class BackgroundMemoryAgent {
           return;
         }
 
-        if (!isEligibleMemorySource(operation.source)) {
+        if (!isEligiblePersonalMemorySource(operation.source)) {
           return;
         }
 
