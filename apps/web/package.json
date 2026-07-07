@@ -4,8 +4,9 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "bun --hot src/dev.ts",
-    "build": "vite build",
+    "dev": "bun run styles:build && bun --hot src/dev.ts",
+    "styles:build": "tailwindcss -i src/styles.css -o src/generated/styles.css --minify",
+    "build": "bun run styles:build && vite build",
     "start": "vite preview"
   },
   "dependencies": {

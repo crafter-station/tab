@@ -64,6 +64,23 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
+async function stylesheet(): Promise<Response> {
+  const file = Bun.file(new URL("./generated/styles.css", import.meta.url));
+  if (!(await file.exists())) {
+    return new Response("Run `bun run --cwd apps/web styles:build` to generate Tailwind CSS.", {
+      status: 404,
+      headers: { "content-type": "text/plain; charset=utf-8" },
+    });
+  }
+
+  return new Response(file, {
+    headers: {
+      "cache-control": "no-cache",
+      "content-type": "text/css; charset=utf-8",
+    },
+  });
+}
+
 function routeSegment(path: string, index: number): string | undefined {
   const segment = path.split("/")[index];
   return segment ? decodeURIComponent(segment) : undefined;
@@ -503,6 +520,10 @@ export function createWebApp(config: WebAppConfig) {
       const url = new URL(request.url);
       const path = url.pathname;
       const cookieHeader = request.headers.get("cookie") ?? undefined;
+
+      if (path === "/styles.css" && request.method === "GET") {
+        return stylesheet();
+      }
 
       if (path === "/" && request.method === "GET") {
         return homePage();

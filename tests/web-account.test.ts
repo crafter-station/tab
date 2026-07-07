@@ -184,6 +184,7 @@ describe("Web account surface", () => {
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toInclude("Sign in");
+    expect(body).toInclude('href="/styles.css"');
     expect(body).toInclude('name="email"');
     expect(body).toInclude('name="password"');
   });
