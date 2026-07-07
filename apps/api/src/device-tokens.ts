@@ -250,7 +250,10 @@ export class DeviceTokenService {
   private exchangeCodeTtlMs: number;
 
   constructor(deps: DeviceTokenServiceDependencies = {}) {
-    this.storage = deps.storage ?? new InMemoryDeviceTokenStorage();
+    if (!deps.storage) {
+      throw new Error("DeviceTokenService requires a storage implementation");
+    }
+    this.storage = deps.storage;
     this.exchangeCodeTtlMs = deps.exchangeCodeTtlMs ?? 1000 * 60 * 5;
   }
 
@@ -272,6 +275,19 @@ export class DeviceTokenService {
     const token = generateOpaqueToken();
     const tokenHash = await hashToken(token);
     const now = new Date();
+
+    const existing = await this.storage.findDeviceByDeviceId(deviceInfo.deviceId);
+    if (existing && existing.userId === userId) {
+      const updated: Device = {
+        ...existing,
+        tokenHash,
+        appVersion: deviceInfo.appVersion,
+        lastSeenAt: now,
+        revoked: false,
+      };
+      await this.storage.updateDevice(updated);
+      return { token, device: updated };
+    }
 
     const device = await this.storage.createDevice({
       userId,

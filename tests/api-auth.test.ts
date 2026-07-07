@@ -2,7 +2,11 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
+import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
+import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
+import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
+import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import {
   ApiResponseSchema,
   DeviceAuthorizeResponseSchema,
@@ -19,12 +23,23 @@ async function createAuthApp() {
     requireEmailVerification: false,
   });
   await migrateAuth(auth);
-  const deviceTokenService = new DeviceTokenService();
-  const app = createApp({ auth, deviceTokenService });
-  return { app, auth, deviceTokenService };
+  const deviceTokenStorage = new InMemoryDeviceTokenStorage();
+  const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
+  const billingStorage = new InMemoryBillingStorage();
+  const billingService = new BillingService({ storage: billingStorage });
+  const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+  const telemetryStorage = new InMemoryTelemetryStorage();
+  const app = createApp({
+    auth,
+    billingService,
+    deviceTokenService,
+    personalMemoryStorage,
+    telemetryStorage,
+  });
+  return { app, auth, billingService, deviceTokenService };
 }
 
-async function signUpAndSignIn(app: ReturnType<typeof createApp>) {
+async function signUpAndSignIn(app: ReturnType<typeof createApp>, billingService: BillingService) {
   const email = `user-${crypto.randomUUID()}@example.com`;
   const password = "password123456";
 
@@ -44,6 +59,15 @@ async function signUpAndSignIn(app: ReturnType<typeof createApp>) {
   expect(signUpResponse.status).toBe(200);
   const signUpBody = (await signUpResponse.json()) as { user?: { id: string } };
   expect(signUpBody.user?.id).toBeDefined();
+
+  await billingService.applyEntitlement({
+    userId: signUpBody.user!.id,
+    planId: "free",
+    polarCustomerId: "polar-customer-free",
+    polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
+  });
 
   const signInResponse = await app.request("/api/auth/sign-in/email", {
     method: "POST",
@@ -84,8 +108,8 @@ describe("Better Auth browser handoff and device tokens", () => {
   });
 
   it("issues an exchange code to a signed-in browser", async () => {
-    const { app } = await createAuthApp();
-    const { cookie } = await signUpAndSignIn(app);
+    const { app, billingService } = await createAuthApp();
+    const { cookie } = await signUpAndSignIn(app, billingService);
 
     const response = await app.request("/api/auth/device/authorize", {
       method: "POST",
@@ -117,8 +141,8 @@ describe("Better Auth browser handoff and device tokens", () => {
   });
 
   it("exchanges a callback code for a device token", async () => {
-    const { app, deviceTokenService } = await createAuthApp();
-    const { cookie, userId } = await signUpAndSignIn(app);
+    const { app, billingService, deviceTokenService } = await createAuthApp();
+    const { cookie, userId } = await signUpAndSignIn(app, billingService);
 
     const authorizeResponse = await app.request("/api/auth/device/authorize", {
       method: "POST",
@@ -179,9 +203,55 @@ describe("Better Auth browser handoff and device tokens", () => {
     expect(body.error.code).toBe("invalid_request");
   });
 
+  it("re-issues a device token for an existing device id on re-sign-in", async () => {
+    const { app, billingService, deviceTokenService } = await createAuthApp();
+    const { cookie, userId } = await signUpAndSignIn(app, billingService);
+
+    const authorize = async () => {
+      const authorizeResponse = await app.request("/api/auth/device/authorize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie,
+        },
+      });
+      return DeviceAuthorizeResponseSchema.parse(await authorizeResponse.json()).code;
+    };
+
+    const exchange = async (code: string) => {
+      const exchangeResponse = await app.request("/api/auth/device/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          deviceId: "desktop-device-reuse",
+          platform: "darwin",
+          appVersion: "0.0.1",
+        }),
+      });
+      expect(exchangeResponse.status).toBe(200);
+      return DeviceTokenExchangeResponseSchema.parse(await exchangeResponse.json()).token;
+    };
+
+    const firstToken = await exchange(await authorize());
+    const secondToken = await exchange(await authorize());
+
+    expect(secondToken).not.toBe(firstToken);
+
+    const devices = await deviceTokenService.listDevices(userId);
+    expect(devices).toHaveLength(1);
+    expect(devices[0].revoked).toBe(false);
+
+    const statusResponse = await app.request("/api/status", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${secondToken}` },
+    });
+    expect(statusResponse.status).toBe(200);
+  });
+
   it("revokes a device and rejects its token at the suggestion API", async () => {
-    const { app, deviceTokenService } = await createAuthApp();
-    const { cookie, userId } = await signUpAndSignIn(app);
+    const { app, billingService, deviceTokenService } = await createAuthApp();
+    const { cookie, userId } = await signUpAndSignIn(app, billingService);
 
     const authorizeResponse = await app.request("/api/auth/device/authorize", {
       method: "POST",

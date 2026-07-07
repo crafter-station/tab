@@ -2,8 +2,10 @@ import { describe, it, expect, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
+import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
+import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
 
@@ -11,14 +13,25 @@ async function createApiFixture() {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database, baseURL: TEST_ORIGIN });
   await migrateAuth(auth);
-  const deviceTokenService = new DeviceTokenService();
+  const deviceTokenStorage = new InMemoryDeviceTokenStorage();
+  const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
   const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
-  const app = createApp({ auth, deviceTokenService, billingService });
+  const app = createApp({
+    auth,
+    deviceTokenService,
+    billingService,
+    personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
+    telemetryStorage: new InMemoryTelemetryStorage(),
+  });
   return { app, auth, deviceTokenService, billingStorage, billingService };
 }
 
-async function signUpAndAuthorize(app: ReturnType<typeof createApp>, deviceTokenService: DeviceTokenService) {
+async function signUpAndAuthorize(
+  app: ReturnType<typeof createApp>,
+  deviceTokenService: DeviceTokenService,
+  billingService: BillingService,
+) {
   const email = `status-${crypto.randomUUID()}@example.com`;
   const password = "password123456";
 
@@ -36,6 +49,21 @@ async function signUpAndAuthorize(app: ReturnType<typeof createApp>, deviceToken
 
   const cookie = signInResponse.headers.get("set-cookie");
   if (!cookie) throw new Error("Missing session cookie after sign in");
+
+  const session = await app.request("/api/auth/get-session", {
+    headers: { Cookie: cookie },
+  });
+  const sessionBody = (await session.json()) as { user?: { id?: string } } | null;
+  const userId = sessionBody?.user?.id;
+  if (!userId) throw new Error("Missing signed-in user id");
+  await billingService.applyEntitlement({
+    userId,
+    planId: "free",
+    polarCustomerId: "polar-customer-free",
+    polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
+  });
 
   const authorizeResponse = await app.request("/api/auth/device/authorize", {
     method: "POST",
@@ -55,8 +83,8 @@ async function signUpAndAuthorize(app: ReturnType<typeof createApp>, deviceToken
 
 describe("API status endpoint", () => {
   it("returns signed-in status with quota for an authenticated device", async () => {
-    const { app, deviceTokenService, billingStorage } = await createApiFixture();
-    const { token } = await signUpAndAuthorize(app, deviceTokenService);
+    const { app, deviceTokenService, billingStorage, billingService } = await createApiFixture();
+    const { token } = await signUpAndAuthorize(app, deviceTokenService, billingService);
 
     const response = await app.request("/api/status", {
       headers: { Authorization: `Bearer ${token}` },
@@ -87,8 +115,8 @@ describe("API status endpoint", () => {
   });
 
   it("returns revoked_device when the device token has been revoked", async () => {
-    const { app, deviceTokenService } = await createApiFixture();
-    const { token, email } = await signUpAndAuthorize(app, deviceTokenService);
+    const { app, billingService, deviceTokenService } = await createApiFixture();
+    const { token, email } = await signUpAndAuthorize(app, deviceTokenService, billingService);
 
     // Re-sign in to obtain a session cookie for revocation.
     const signInResponse = await app.request("/api/auth/sign-in/email", {

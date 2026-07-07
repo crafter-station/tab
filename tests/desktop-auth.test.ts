@@ -2,7 +2,10 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
+import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
+import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
+import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
+import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import { createDesktopAuthClient } from "../apps/desktop/src/main/auth.ts";
 import { createMemoryKeychain } from "../apps/desktop/src/main/keychain.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
@@ -18,12 +21,22 @@ async function createApiFixture(generateSuggestion?: Parameters<typeof createApp
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database, baseURL: TEST_ORIGIN });
   await migrateAuth(auth);
-  const deviceTokenService = new DeviceTokenService();
-  const app = createApp({ auth, deviceTokenService, generateSuggestion });
-  return { app, auth, deviceTokenService };
+  const deviceTokenService = new DeviceTokenService({ storage: new InMemoryDeviceTokenStorage() });
+  const billingService = new BillingService({ storage: new InMemoryBillingStorage() });
+  const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+  const telemetryStorage = new InMemoryTelemetryStorage();
+  const app = createApp({
+    auth,
+    billingService,
+    deviceTokenService,
+    generateSuggestion,
+    personalMemoryStorage,
+    telemetryStorage,
+  });
+  return { app, auth, billingService, deviceTokenService };
 }
 
-async function signUpAndSignIn(app: ReturnType<typeof createApp>) {
+async function signUpAndSignIn(app: ReturnType<typeof createApp>, billingService: BillingService) {
   const email = `desktop-${crypto.randomUUID()}@example.com`;
   const password = "password123456";
 
@@ -41,6 +54,20 @@ async function signUpAndSignIn(app: ReturnType<typeof createApp>) {
 
   const cookie = signInResponse.headers.get("set-cookie");
   if (!cookie) throw new Error("Missing session cookie after sign in");
+  const session = await app.request("/api/auth/get-session", {
+    headers: { Cookie: cookie },
+  });
+  const sessionBody = (await session.json()) as { user?: { id?: string } } | null;
+  const userId = sessionBody?.user?.id;
+  if (!userId) throw new Error("Missing signed-in user id");
+  await billingService.applyEntitlement({
+    userId,
+    planId: "free",
+    polarCustomerId: "polar-customer-free",
+    polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
+  });
   return { cookie };
 }
 
@@ -95,8 +122,8 @@ describe("desktop auth client", () => {
   });
 
   it("exchanges a callback code for a device token and stores it in keychain", async () => {
-    const { app } = await createApiFixture();
-    const { cookie } = await signUpAndSignIn(app);
+    const { app, billingService } = await createApiFixture();
+    const { cookie } = await signUpAndSignIn(app, billingService);
 
     const authorizeResponse = await app.request("/api/auth/device/authorize", {
       method: "POST",
@@ -124,8 +151,8 @@ describe("desktop auth client", () => {
   });
 
   it("uses the stored device token when calling the suggestion API", async () => {
-    const { app } = await createApiFixture(async () => ({ text: " world" }));
-    const { cookie } = await signUpAndSignIn(app);
+    const { app, billingService } = await createApiFixture(async () => ({ text: " world" }));
+    const { cookie } = await signUpAndSignIn(app, billingService);
 
     const authorizeResponse = await app.request("/api/auth/device/authorize", {
       method: "POST",
@@ -159,8 +186,8 @@ describe("desktop auth client", () => {
   });
 
   it("fails silently when the device token is revoked", async () => {
-    const { app, deviceTokenService } = await createApiFixture(async () => ({ text: " world" }));
-    const { cookie } = await signUpAndSignIn(app);
+    const { app, billingService, deviceTokenService } = await createApiFixture(async () => ({ text: " world" }));
+    const { cookie } = await signUpAndSignIn(app, billingService);
 
     const authorizeResponse = await app.request("/api/auth/device/authorize", {
       method: "POST",

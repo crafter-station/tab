@@ -81,8 +81,18 @@ const settingsWindowManager = createSettingsWindowManager({
 
 const API_BASE_URL = env.TABB_API_BASE_URL;
 const WEB_BASE_URL = env.TABB_WEB_BASE_URL;
-const DEVICE_ID = env.TABB_DEVICE_ID;
 const APP_VERSION = app.getVersion() || "0.0.0";
+
+function getOrCreateDeviceId(): string {
+  const prefs = preferencesManager.get();
+  if (prefs.deviceId) return prefs.deviceId;
+  const deviceId = env.TABB_DEVICE_ID || crypto.randomUUID();
+  preferencesManager.update({ deviceId });
+  console.log("Generated and persisted new device id:", deviceId);
+  return deviceId;
+}
+
+const DEVICE_ID = getOrCreateDeviceId();
 const SHOW_SETTINGS_ON_START = process.argv.includes("--permission-debug") || env.TABB_SHOW_SETTINGS_ON_START === "1";
 const SHOW_DEBUG_TYPING_OVERLAY =
   env.TABB_DEBUG_TYPING_OVERLAY !== "0" &&
@@ -127,6 +137,8 @@ const memoryClient = createDesktopMemoryClient({
 });
 
 let updateAvailable = false;
+let consecutiveAuthFailures = 0;
+const MAX_CONSECUTIVE_AUTH_FAILURES = 3;
 
 const updateChecker = createUpdateChecker({
   currentVersion: APP_VERSION,
@@ -144,11 +156,18 @@ const statusService = createDesktopStatusService({
     settingsWindowManager.sendStatus(status);
     onboardingWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
-    if (status.auth === "revoked_device" || status.auth === "sign_in_required") {
-      // If a token is stored but the API reports revoked or unauthenticated,
-      // clear it so the user is prompted to sign in again. The initial
-      // sign_in_required state has no stored token, so isAuthenticated guards
-      // against clearing an already-empty keychain.
+
+    if (status.auth === "signed_in") {
+      if (consecutiveAuthFailures > 0) {
+        console.log(`Auth recovered after ${consecutiveAuthFailures} transient failure(s).`);
+        consecutiveAuthFailures = 0;
+      }
+      return;
+    }
+
+    if (status.auth === "revoked_device") {
+      consecutiveAuthFailures = 0;
+      console.warn("Device token revoked by server; signing out.");
       authClient
         .isAuthenticated()
         .then((authenticated) => {
@@ -157,7 +176,37 @@ const statusService = createDesktopStatusService({
           }
         })
         .catch((error) => {
-          console.error("Failed to clear invalid device token:", error);
+          console.error("Failed to clear revoked device token:", error);
+        });
+      return;
+    }
+
+    if (status.auth === "sign_in_required") {
+      authClient
+        .isAuthenticated()
+        .then((authenticated) => {
+          if (!authenticated) {
+            consecutiveAuthFailures = 0;
+            return;
+          }
+
+          consecutiveAuthFailures += 1;
+          console.warn(
+            `Server reported sign-in required (failure ${consecutiveAuthFailures}/${MAX_CONSECUTIVE_AUTH_FAILURES}).`,
+          );
+
+          if (consecutiveAuthFailures < MAX_CONSECUTIVE_AUTH_FAILURES) {
+            return;
+          }
+
+          console.error("Clearing device token after repeated sign-in-required responses.");
+          return authClient.clearToken().then(() => {
+            consecutiveAuthFailures = 0;
+            showSignedOutSurface();
+          });
+        })
+        .catch((error) => {
+          console.error("Failed to handle sign-in-required status:", error);
         });
     }
   },
@@ -256,6 +305,7 @@ async function togglePause(): Promise<void> {
 }
 
 async function signOut(): Promise<void> {
+  console.log("Signing out device:", DEVICE_ID);
   await authClient.clearToken();
   clearContextAndHide();
   await statusService.refresh();
@@ -264,6 +314,7 @@ async function signOut(): Promise<void> {
 }
 
 async function signIn(): Promise<void> {
+  console.log("Opening browser sign-in for device:", DEVICE_ID);
   await authClient.openBrowserLogin();
 }
 
@@ -812,10 +863,11 @@ async function bootstrap(): Promise<void> {
   app.on("open-url", (event, url) => {
     if (url.startsWith("tabb://")) {
       event.preventDefault();
+      console.log("Received auth callback:", url);
       authClient
         .handleCallback(url)
-        .then(async () => {
-          console.log("Device token stored after browser handoff.");
+        .then(async (token) => {
+          console.log("Device token stored after browser handoff for device:", DEVICE_ID);
           await statusService.refresh();
           await refreshMemories();
           showAuthenticatedDesktopSurface();

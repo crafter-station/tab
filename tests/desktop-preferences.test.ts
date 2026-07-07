@@ -39,6 +39,18 @@ describe("desktop preferences", () => {
     expect(manager.get().onboarding.completed).toBe(false);
   });
 
+  it("persists a device id", () => {
+    const storage = createMemoryPreferencesStorage();
+    const manager = createPreferencesManager({ storage });
+
+    manager.update({ deviceId: "persistent-device-1" });
+
+    expect(manager.get().deviceId).toBe("persistent-device-1");
+
+    const reloaded = createPreferencesManager({ storage });
+    expect(reloaded.get().deviceId).toBe("persistent-device-1");
+  });
+
   describe("file-backed storage", () => {
     const tmpDir = process.env.TMPDIR ?? process.env.TEMP ?? "/tmp";
 

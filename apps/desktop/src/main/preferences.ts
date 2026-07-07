@@ -3,6 +3,7 @@ import type { OnboardingPreferences } from "./onboarding.ts";
 
 export type DesktopPreferences = {
   onboarding: OnboardingPreferences;
+  deviceId?: string;
 };
 
 export type PreferencesStorage = {
@@ -19,12 +20,18 @@ function isDesktopPreferences(value: unknown): value is DesktopPreferences {
   if (!("onboarding" in value)) return false;
 
   const onboarding = value.onboarding;
-  return (
+  const hasValidOnboarding =
     !!onboarding &&
     typeof onboarding === "object" &&
     "completed" in onboarding &&
-    typeof onboarding.completed === "boolean"
-  );
+    typeof onboarding.completed === "boolean";
+  if (!hasValidOnboarding) return false;
+
+  if ("deviceId" in value && typeof value.deviceId !== "string") {
+    return false;
+  }
+
+  return true;
 }
 
 export function createMemoryPreferencesStorage(
