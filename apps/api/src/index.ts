@@ -27,15 +27,21 @@ import {
   type TelemetryEvent,
 } from "@tabb/contracts";
 import { createAuthInstance, type AuthInstance } from "./auth.ts";
-import { DeviceTokenService, type Device } from "./device-tokens.ts";
+import {
+  D1DeviceTokenStorage,
+  DeviceTokenService,
+  type Device,
+} from "./device-tokens.ts";
 import {
   BillingService,
   BillingWebhookHandler,
+  D1BillingStorage,
   type BillingCheckoutClient,
   createBillingCheckoutClient,
   UsageMeterService,
 } from "./billing.ts";
 import {
+  D1PersonalMemoryStorage,
   PersonalMemoryService,
   type PersonalMemoryStorage,
 } from "./personal-memory.ts";
@@ -46,9 +52,12 @@ import {
 } from "./memory-agent.ts";
 import { getMemoryEligibility } from "@tabb/memory-policy";
 import {
+  D1TelemetryStorage,
   TelemetryService,
   type TelemetryStorage,
 } from "./telemetry.ts";
+import { createDatabase } from "./db/index.ts";
+import type { D1Database, ExecutionContext } from "@cloudflare/workers-types";
 
 export const apiAppBoundary = {
   runtime: "cloudflare-worker-hono",
@@ -77,6 +86,10 @@ const SUGGESTION_MODEL_ID = "openai/gpt-oss-20b";
 
 type ApiVariables = {
   device: Device;
+};
+
+type ApiBindings = {
+  DB?: D1Database;
 };
 
 const ERROR_CODES = [
@@ -220,7 +233,7 @@ export function createApp(deps: ApiDependencies = {}) {
     memoryJobQueue.subscribe(async (job) => memoryAgent.processJob(job));
   }
 
-  const app = new Hono<{ Variables: ApiVariables }>();
+  const app = new Hono<{ Bindings: ApiBindings; Variables: ApiVariables }>();
 
   app.use("*", logger());
 
@@ -419,6 +432,7 @@ export function createApp(deps: ApiDependencies = {}) {
 
   app.use("/api/status", authenticateDevice);
   app.use("/api/memory/*", authenticateDevice);
+  app.use("/suggestions", authenticateDevice);
 
   app.get("/api/status", async (c) => {
     const device = c.get("device");
@@ -623,17 +637,7 @@ app.post("/suggestions", async (c) => {
     }
 
     const request = parseResult.data;
-    const device = (c.get("device") as Device | undefined) ?? {
-      id: "public-suggestions-device",
-      userId: "public-suggestions-user",
-      deviceId: request.deviceId,
-      tokenHash: "public",
-      platform: request.clientMetadata?.platform ?? "unknown",
-      appVersion: request.clientMetadata?.appVersion ?? "unknown",
-      createdAt: new Date(),
-      lastSeenAt: new Date(),
-      revoked: false,
-    };
+    const device = c.get("device");
     console.log("[suggestions] parsed request", {
       requestId: request.requestId,
       deviceId: device.deviceId,
@@ -890,7 +894,40 @@ app.post("/suggestions", async (c) => {
 
 const defaultApp = createApp();
 
-export default defaultApp;
+function createD1Dependencies(db: D1Database): ApiDependencies {
+  const database = createDatabase(db);
+  const deviceTokenStorage = new D1DeviceTokenStorage(db);
+  const billingStorage = new D1BillingStorage(db);
+  const personalMemoryStorage = new D1PersonalMemoryStorage(db);
+  const telemetryStorage = new D1TelemetryStorage(db);
+
+  return {
+    auth: createAuthInstance({ drizzleDatabase: database }),
+    deviceTokenService: new DeviceTokenService({ storage: deviceTokenStorage }),
+    billingService: new BillingService({ storage: billingStorage }),
+    personalMemoryStorage,
+    telemetryStorage,
+  };
+}
+
+const appsByDatabase = new WeakMap<D1Database, ReturnType<typeof createApp>>();
+
+function getAppForEnv(env: ApiBindings | undefined) {
+  if (!env?.DB) return defaultApp;
+
+  const existing = appsByDatabase.get(env.DB);
+  if (existing) return existing;
+
+  const app = createApp(createD1Dependencies(env.DB));
+  appsByDatabase.set(env.DB, app);
+  return app;
+}
+
+export default {
+  fetch(request: Request, env?: ApiBindings, executionCtx?: ExecutionContext) {
+    return getAppForEnv(env).fetch(request, env, executionCtx);
+  },
+};
 
 // Backwards-compatible helper for callers that only need payload validation.
 export function validateSuggestionPayload(payload: unknown) {

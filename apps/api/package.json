@@ -10,10 +10,14 @@
     "@tabb/billing": "workspace:*",
     "ai": "^7.0.15",
     "better-auth": "^1.6.23",
+    "drizzle-orm": "^0.45.2",
     "hono": "^4.12.27",
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "standardwebhooks": "^1.0.0"
+    "@cloudflare/workers-types": "^5.20260707.1",
+    "drizzle-kit": "^0.31.10",
+    "standardwebhooks": "^1.0.0",
+    "wrangler": "^4.107.1"
   }
 }
