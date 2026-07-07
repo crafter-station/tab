@@ -166,7 +166,7 @@ const statusService = createDesktopStatusService({
         .isAuthenticated()
         .then((authenticated) => {
           if (authenticated) {
-            return authClient.clearToken();
+            return authClient.clearToken().then(() => showSignedOutSurface());
           }
         })
         .catch((error) => {
@@ -228,19 +228,36 @@ async function signOut(): Promise<void> {
   clearContextAndHide();
   await statusService.refresh();
   await refreshMemories();
+  showSignedOutSurface();
 }
 
 async function signIn(): Promise<void> {
   await authClient.openBrowserLogin();
 }
 
-function showInitialDesktopSurface(): void {
+function showSignedOutSurface(): void {
+  onboardingWindowManager.close();
+  settingsWindowManager.show("sign-in");
+}
+
+function showAuthenticatedDesktopSurface(): void {
   if (onboardingManager.shouldShowOnboarding()) {
+    settingsWindowManager.close();
     onboardingWindowManager.show();
     return;
   }
 
+  onboardingWindowManager.close();
   settingsWindowManager.show();
+}
+
+async function showInitialDesktopSurface(): Promise<void> {
+  if (!(await authClient.isAuthenticated())) {
+    showSignedOutSurface();
+    return;
+  }
+
+  showAuthenticatedDesktopSurface();
 }
 
 function isTerminalApplication(bundleId: string | null | undefined): boolean {
@@ -817,6 +834,7 @@ async function bootstrap(): Promise<void> {
           console.log("Device token stored after browser handoff.");
           await statusService.refresh();
           await refreshMemories();
+          showAuthenticatedDesktopSurface();
         })
         .catch((error) => {
           console.error("Failed to complete browser handoff:", error);
@@ -834,8 +852,12 @@ async function bootstrap(): Promise<void> {
   tray = createTrayMenu({
     icon: TRAY_ICON_PATH,
     actions: {
-      showSettings: () => settingsWindowManager.show(),
-      showQuickMemory: () => settingsWindowManager.show(),
+      showSettings: () => {
+        showInitialDesktopSurface().catch((error) => console.error("Failed to show settings from tray:", error));
+      },
+      showQuickMemory: () => {
+        showInitialDesktopSurface().catch((error) => console.error("Failed to show quick memory from tray:", error));
+      },
       togglePause: () => {
         togglePause().catch((error) => console.error("Failed to toggle pause from tray:", error));
       },
@@ -875,7 +897,7 @@ async function bootstrap(): Promise<void> {
   }, 60_000);
 
   // Show onboarding on first launch; once completed it will not reappear.
-  showInitialDesktopSurface();
+  showInitialDesktopSurface().catch((error) => console.error("Failed to show initial desktop surface:", error));
 
   // Input monitoring and active-application tracking are wired to the same
   // in-memory buffer. In a production build these are fed by a macOS native
@@ -910,7 +932,7 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-  showInitialDesktopSurface();
+  showInitialDesktopSurface().catch((error) => console.error("Failed to show desktop surface:", error));
 });
 
 // Exposed for the native input bridge and for tests.

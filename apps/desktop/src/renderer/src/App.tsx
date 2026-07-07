@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { getAppRoute, type ControlAppRoute } from "./routes";
 import { OnboardingSurface } from "./surfaces/OnboardingSurface";
+import { SignInSurface } from "./surfaces/SignInSurface";
 import { SettingsSurface } from "./surfaces/SettingsSurface";
 
 export function App() {
@@ -20,5 +21,6 @@ export function App() {
   }, [route]);
 
   if (route === "onboarding") return <OnboardingSurface />;
+  if (route === "sign-in") return <SignInSurface />;
   return <SettingsSurface />;
 }
