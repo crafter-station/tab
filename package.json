@@ -11,7 +11,7 @@
     "db:migrate": "bunx drizzle-kit migrate --config=apps/api/drizzle.config.ts",
     "db:migrate:local": "bunx wrangler d1 migrations apply tabb-db --local --config wrangler.jsonc",
     "db:migrate:remote": "bunx wrangler d1 migrations apply tabb-db --remote --config wrangler.jsonc",
-    "api:dev": "PORT=8787 bun --hot apps/api/src/index.ts",
+    "api:dev": "bunx wrangler dev --config wrangler.jsonc",
     "web:dev": "bun run --cwd apps/web dev",
     "dev": "bun scripts/dev.ts",
     "desktop:dev": "bun apps/desktop/scripts/dev.ts",

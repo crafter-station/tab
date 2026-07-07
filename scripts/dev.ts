@@ -3,8 +3,8 @@ import { env } from "./env.ts";
 const processes = [
   {
     name: "api",
-    command: ["bun", "--hot", "apps/api/src/index.ts"],
-    env: { PORT: String(env.API_PORT) },
+    command: ["bunx", "wrangler", "dev", "--config", "wrangler.jsonc"],
+    env: {},
   },
   {
     name: "web",

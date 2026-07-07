@@ -4,6 +4,7 @@ node_modules/
 .env.*
 !.env.example
 !.sandcastle/.env.example
+.dev.vars
 dist/
 build/
 apps/desktop/.dev/
