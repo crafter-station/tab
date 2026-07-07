@@ -166,11 +166,11 @@ describe("Web account surface", () => {
     );
 
     expect(loginResponse.status).toBe(302);
-    expect(loginResponse.headers.get("location")).toBe("/account");
+    expect(loginResponse.headers.get("location")).toBe("/dashboard");
     const setCookie = loginResponse.headers.get("set-cookie");
     expect(setCookie).toBeTruthy();
 
-    const accountResponse = await webRequest(webApp, "/account", {}, setCookie!);
+    const accountResponse = await webRequest(webApp, "/dashboard", {}, setCookie!);
     expect(accountResponse.status).toBe(200);
     const body = await accountResponse.text();
     expect(body).toInclude("Monthly usage");
@@ -225,7 +225,7 @@ describe("Web account surface", () => {
       sensitivity: "normal",
     });
 
-    const accountBefore = await webRequest(webApp, "/account", {}, cookie);
+    const accountBefore = await webRequest(webApp, "/dashboard", {}, cookie);
     expect(accountBefore.status).toBe(200);
     await textIncludes(accountBefore, "Lives in Portland");
 
@@ -237,10 +237,10 @@ describe("Web account surface", () => {
     );
     expect(deleteResponse.status).toBe(302);
     expect(deleteResponse.headers.get("location")).toBe(
-      "/account?tab=memories",
+      "/dashboard?tab=memories",
     );
 
-    const accountAfter = await webRequest(webApp, "/account", {}, cookie);
+    const accountAfter = await webRequest(webApp, "/dashboard", {}, cookie);
     expect(accountAfter.status).toBe(200);
     const bodyAfter = await accountAfter.text();
     expect(bodyAfter).not.toInclude("Lives in Portland");
@@ -258,7 +258,7 @@ describe("Web account surface", () => {
       appVersion: "0.0.1",
     });
 
-    const accountBefore = await webRequest(webApp, "/account", {}, cookie);
+    const accountBefore = await webRequest(webApp, "/dashboard", {}, cookie);
     expect(accountBefore.status).toBe(200);
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("macbook-pro-1");
@@ -272,10 +272,10 @@ describe("Web account surface", () => {
     );
     expect(revokeResponse.status).toBe(302);
     expect(revokeResponse.headers.get("location")).toBe(
-      "/account?tab=devices",
+      "/dashboard?tab=devices",
     );
 
-    const accountAfter = await webRequest(webApp, "/account", {}, cookie);
+    const accountAfter = await webRequest(webApp, "/dashboard", {}, cookie);
     expect(accountAfter.status).toBe(200);
     const bodyAfter = await accountAfter.text();
     expect(bodyAfter).toInclude("Revoked");

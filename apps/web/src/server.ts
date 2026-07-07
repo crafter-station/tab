@@ -77,7 +77,7 @@ function layout(
   const nav = [
     { href: "/", label: "Home" },
     { href: "/pricing", label: "Pricing" },
-    ...(user ? [{ href: "/account", label: "Account" }] : []),
+    ...(user ? [{ href: "/dashboard", label: "Dashboard" }] : []),
   ];
 
   const authLink = user
@@ -313,6 +313,28 @@ export function createWebApp(config: WebAppConfig) {
     return html(layout(`Sign in — ${appName}`, content, { path }));
   }
 
+  function signupPage(error?: string, path = "/signup"): Response {
+    const errorBlock = error
+      ? `<p class="error">${escapeHtml(error)}</p>`
+      : "";
+    const content = `
+      <h1>Create your ${escapeHtml(appName)} account</h1>
+      <form method="post" action="/signup" class="card">
+        ${errorBlock}
+        <label>Name
+          <input type="text" name="name" required autocomplete="name">
+        </label>
+        <label>Email
+          <input type="email" name="email" required autocomplete="email">
+        </label>
+        <label>Password
+          <input type="password" name="password" required autocomplete="new-password">
+        </label>
+        <p style="margin-top:1rem"><button type="submit">Sign up</button></p>
+      </form>`;
+    return html(layout(`Sign up — ${appName}`, content, { path }));
+  }
+
   async function loginHandler(request: Request, cookieHeader?: string): Promise<Response> {
     let formData;
     try {
@@ -358,8 +380,49 @@ export function createWebApp(config: WebAppConfig) {
       return redirect(callbackUrl.toString());
     }
 
-    const response = redirect("/account");
+    const response = redirect("/dashboard");
     setCookies(response, signInResponse);
+    return response;
+  }
+
+  async function signupHandler(request: Request, cookieHeader?: string): Promise<Response> {
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return signupPage("Invalid form submission.");
+    }
+
+    const name = String(formData.get("name") ?? "");
+    const email = String(formData.get("email") ?? "");
+    const password = String(formData.get("password") ?? "");
+
+    const signUpResponse = await apiRequest(
+      "/api/auth/sign-up/email",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ name, email, password }),
+      },
+      cookieHeader,
+    );
+
+    if (signUpResponse.status !== 200) {
+      return signupPage("Could not create that account.");
+    }
+
+    const signInResponse = await apiRequest(
+      "/api/auth/sign-in/email",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ email, password, rememberMe: true }),
+      },
+      cookieHeader,
+    );
+
+    const response = redirect("/dashboard");
+    setCookies(response, signInResponse.status === 200 ? signInResponse : signUpResponse);
     return response;
   }
 
@@ -408,6 +471,7 @@ export function createWebApp(config: WebAppConfig) {
 
         return `
           <tr>
+            <td>${escapeHtml(device.deviceId)}</td>
             <td>${escapeHtml(device.platform)}</td>
             <td>${escapeHtml(device.appVersion)}</td>
             <td>${formatDate(device.createdAt)}</td>
@@ -418,7 +482,7 @@ export function createWebApp(config: WebAppConfig) {
       .join("");
 
     const devicesTableHeader =
-      "<tr><th>Platform</th><th>Version</th><th>Added</th><th>Status</th><th></th></tr>";
+      "<tr><th>Device</th><th>Platform</th><th>Version</th><th>Added</th><th>Status</th><th></th></tr>";
 
     const devicesSection = `
       <div class="card" id="devices">
@@ -456,13 +520,18 @@ export function createWebApp(config: WebAppConfig) {
       : "";
 
     const content = `
-      <h1>Account</h1>
+      <h1>Dashboard</h1>
+      <div class="card">
+        <h2>Account configuration</h2>
+        <p><strong>${escapeHtml(sessionCheck.user.email ?? sessionCheck.user.name ?? sessionCheck.user.id)}</strong></p>
+        <p class="muted">Identity is managed by Tabb auth. Additional account settings will appear here when supported by the API.</p>
+      </div>
       ${usageBar}
       ${devicesSection}
       ${memoriesSection}
       ${focusScript}`;
 
-    return html(layout(`Account — ${appName}`, content, { user: sessionCheck.user, path }));
+    return html(layout(`Dashboard — ${appName}`, content, { user: sessionCheck.user, path }));
   }
 
   async function checkoutRedirect(
@@ -530,7 +599,7 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (response.status === 401) return redirect("/login");
-    return redirect("/account?tab=devices");
+    return redirect("/dashboard?tab=devices");
   }
 
   async function deleteMemoryHandler(
@@ -547,7 +616,7 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (response.status === 401) return redirect("/login");
-    return redirect("/account?tab=memories");
+    return redirect("/dashboard?tab=memories");
   }
 
   async function logoutHandler(
@@ -590,11 +659,20 @@ export function createWebApp(config: WebAppConfig) {
         if (request.method === "POST") return loginHandler(request, cookieHeader);
       }
 
+      if (path === "/signup") {
+        if (request.method === "GET") return signupPage(undefined, path);
+        if (request.method === "POST") return signupHandler(request, cookieHeader);
+      }
+
       if (path === "/logout" && request.method === "POST") {
         return logoutHandler(cookieHeader);
       }
 
       if (path === "/account" && request.method === "GET") {
+        return redirect("/dashboard");
+      }
+
+      if (path === "/dashboard" && request.method === "GET") {
         return accountPage(cookieHeader, path, url.searchParams);
       }
 
@@ -607,7 +685,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (
-        path.startsWith("/account/devices/") &&
+        (path.startsWith("/account/devices/") || path.startsWith("/dashboard/devices/")) &&
         path.endsWith("/revoke") &&
         request.method === "POST"
       ) {
@@ -618,7 +696,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (
-        path.startsWith("/account/memory/") &&
+        (path.startsWith("/account/memory/") || path.startsWith("/dashboard/memory/")) &&
         path.endsWith("/delete") &&
         request.method === "POST"
       ) {

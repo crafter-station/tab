@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { createWebApp, type WebApp } from "../apps/web/src/server.ts";
+import { createWebApp, type WebApp } from "../apps/web/src/index.ts";
 
 function webRequest(
   webApp: WebApp,

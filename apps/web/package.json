@@ -3,9 +3,26 @@
   "type": "module",
   "private": true,
   "main": "src/index.ts",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "start": "vite preview"
+  },
   "dependencies": {
+    "@tanstack/react-router": "latest",
+    "@tanstack/react-start": "latest",
     "@tabb/billing": "workspace:*",
     "@tabb/contracts": "workspace:*",
-    "better-auth": "^1.6.23"
+    "better-auth": "^1.6.23",
+    "react": "latest",
+    "react-dom": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "@vitejs/plugin-react": "latest",
+    "typescript": "^5",
+    "vite": "latest"
   }
 }

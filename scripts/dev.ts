@@ -6,7 +6,7 @@ const processes = [
   },
   {
     name: "web",
-    command: ["bun", "--hot", "apps/web/src/dev.ts"],
+    command: ["bun", "run", "--cwd", "apps/web", "dev"],
     env: { PORT: process.env.WEB_PORT ?? "3000" },
   },
 ];

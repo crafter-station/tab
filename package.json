@@ -8,7 +8,7 @@
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test tests/*.test.mjs && bun test",
     "api:dev": "PORT=8787 bun --hot apps/api/src/index.ts",
-    "web:dev": "PORT=3000 bun --hot apps/web/src/dev.ts",
+    "web:dev": "bun run --cwd apps/web dev",
     "dev": "bun scripts/dev.ts",
     "desktop:dev": "bun apps/desktop/scripts/dev.ts",
     "desktop:permissions": "bun run --cwd apps/desktop dev:permissions",
