@@ -3,7 +3,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { getMigrations } from "better-auth/db/migration";
 import type { Database } from "bun:sqlite";
 import * as authSchema from "./db/schema.ts";
-import { linkEmailHtml, sendEmail } from "./email.ts";
+import { sendEmail } from "./email.ts";
+import { renderLinkEmail } from "./emails/link-email.tsx";
 import { env } from "./env.ts";
 
 export type AuthDatabase = Database | unknown;
@@ -44,7 +45,11 @@ export function createAuthInstance(
           to: user.email,
           subject: "Reset your Tabb password",
           text: `Reset your Tabb password: ${url}`,
-          html: linkEmailHtml("Use this link to reset your Tabb password.", url),
+          html: await renderLinkEmail({
+            message: "Use this link to reset your Tabb password.",
+            preview: "Reset your Tabb password",
+            url,
+          }),
         });
       },
     },
@@ -57,7 +62,11 @@ export function createAuthInstance(
           to: user.email,
           subject: "Verify your Tabb email",
           text: `Verify your Tabb email address: ${url}`,
-          html: linkEmailHtml("Use this link to verify your Tabb email address.", url),
+          html: await renderLinkEmail({
+            message: "Use this link to verify your Tabb email address.",
+            preview: "Verify your Tabb email address",
+            url,
+          }),
         });
       },
     },
