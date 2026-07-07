@@ -1,5 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { createTypingContextBuffer, getLastWords } from "../apps/desktop/src/main/typing-context.ts";
+import {
+  createSafeTypingContextSnapshot,
+  createTypingContextBuffer,
+  getLastWords,
+  type RequestableTypingContextSnapshot,
+  type SafeTypingContextSnapshot,
+} from "../apps/desktop/src/main/typing-context.ts";
 import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engine.ts";
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
@@ -9,6 +15,24 @@ import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
 import type { Suggestion, ActiveApplication } from "@tabb/contracts";
 
 describe("desktop native suggestion loop", () => {
+  function makeSnapshot(overrides: {
+    context?: string;
+    activeApplication?: ActiveApplication | null;
+    secureInput?: boolean;
+    paused?: boolean;
+    privateContext?: boolean;
+  } = {}): SafeTypingContextSnapshot {
+    return createSafeTypingContextSnapshot({
+      context: overrides.context ?? "hello",
+      activeApplication: overrides.activeApplication ?? { bundleId: "com.apple.TextEdit" },
+      secureInput: overrides.secureInput ?? false,
+      paused: overrides.paused ?? false,
+      privateContext: overrides.privateContext ?? false,
+      contextSource: "typed_text",
+      memoryEligible: true,
+    });
+  }
+
   describe("typing context buffer", () => {
     it("accumulates user-authored text input", () => {
       const buffer = createTypingContextBuffer();
@@ -116,15 +140,15 @@ describe("desktop native suggestion loop", () => {
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     function makeDeps(overrides: {
-      requestSuggestion?: (context: string) => Promise<Suggestion | null>;
-      getContext?: () => { context: string; activeApplication: ActiveApplication | null; secureInput: boolean };
+      requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+      getContext?: () => SafeTypingContextSnapshot;
       maxVisibleMs?: number;
     } = {}) {
       const events: Array<{ type: string; payload?: unknown }> = [];
       return {
         events,
         deps: {
-          getContext: overrides.getContext ?? (() => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false })),
+          getContext: overrides.getContext ?? (() => makeSnapshot()),
           requestSuggestion: overrides.requestSuggestion ?? (async () => ({ id: "s-1", text: " world" })),
           onShowSuggestion: (suggestion: Suggestion) => events.push({ type: "show", payload: suggestion }),
           onHideSuggestion: () => events.push({ type: "hide" }),
@@ -169,7 +193,7 @@ describe("desktop native suggestion loop", () => {
     it("cancels stale debounced requests when context changes", async () => {
       const { events, deps } = makeDeps();
       let context = "hello";
-      deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+      deps.getContext = () => makeSnapshot({ context });
       const loop = createSuggestionLoop(deps);
       loop.onContextChanged();
       await wait(3);
@@ -182,7 +206,7 @@ describe("desktop native suggestion loop", () => {
     it("hides a suggestion when context changes after it is shown", async () => {
       const { events, deps } = makeDeps();
       let context = "hello";
-      deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+      deps.getContext = () => makeSnapshot({ context });
       const loop = createSuggestionLoop(deps);
       loop.onContextChanged();
       await wait(10);
@@ -194,7 +218,7 @@ describe("desktop native suggestion loop", () => {
 
     it("does not show a suggestion for empty context", async () => {
       const { events, deps } = makeDeps();
-      deps.getContext = () => ({ context: "", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+      deps.getContext = () => makeSnapshot({ context: "" });
       const loop = createSuggestionLoop(deps);
       loop.onContextChanged();
       await wait(10);
@@ -203,7 +227,7 @@ describe("desktop native suggestion loop", () => {
 
     it("does not show a suggestion while secure input is active", async () => {
       const { events, deps } = makeDeps();
-      deps.getContext = () => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: true });
+      deps.getContext = () => makeSnapshot({ secureInput: true });
       const loop = createSuggestionLoop(deps);
       loop.onContextChanged();
       await wait(10);
@@ -213,7 +237,7 @@ describe("desktop native suggestion loop", () => {
     it("hides an existing suggestion when secure input activates", async () => {
       const { events, deps } = makeDeps();
       let secureInput = false;
-      deps.getContext = () => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput });
+      deps.getContext = () => makeSnapshot({ secureInput });
       const loop = createSuggestionLoop(deps);
       loop.onContextChanged();
       await wait(10);
@@ -226,7 +250,7 @@ describe("desktop native suggestion loop", () => {
     it("does not show a stale response if the active application switched during debounce", async () => {
       const { events, deps } = makeDeps();
       let app: ActiveApplication | null = { bundleId: "com.apple.TextEdit" };
-      deps.getContext = () => ({ context: "hello", activeApplication: app, secureInput: false });
+      deps.getContext = () => makeSnapshot({ activeApplication: app });
       const loop = createSuggestionLoop(deps);
       loop.onContextChanged();
       await wait(3);
@@ -248,7 +272,7 @@ describe("desktop native suggestion loop", () => {
     it("hides a suggestion when the active window changes within the same application", async () => {
       const { events, deps } = makeDeps();
       let app: ActiveApplication | null = { bundleId: "com.apple.TextEdit", windowId: "window:1" };
-      deps.getContext = () => ({ context: "hello", activeApplication: app, secureInput: false });
+      deps.getContext = () => makeSnapshot({ activeApplication: app });
       const loop = createSuggestionLoop(deps);
       loop.onContextChanged();
       await wait(10);
@@ -310,8 +334,8 @@ describe("desktop native suggestion loop", () => {
       const calls: Array<{ type: string; value?: unknown }> = [];
       const session = createNativeSuggestionSession({
         typingContext: buffer,
-        requestSuggestion: async (context) => {
-          calls.push({ type: "requestSuggestion", value: context });
+        requestSuggestion: async (snapshot) => {
+          calls.push({ type: "requestSuggestion", value: snapshot.sanitizedContext });
           return { id: "s-1", text: " world" };
         },
         getContextSource: () => "typed_text",
@@ -388,7 +412,7 @@ describe("desktop native suggestion loop", () => {
 
     function makePrivacyDeps(overrides: {
       getContext?: () => PrivacyContext;
-      requestSuggestion?: (context: string) => Promise<Suggestion | null>;
+      requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
     } = {}) {
       const events: Array<{ type: string; payload?: unknown }> = [];
       const requestSuggestionCalls: string[] = [];
@@ -398,10 +422,10 @@ describe("desktop native suggestion loop", () => {
         deps: {
           getContext:
             overrides.getContext ??
-            (() => ({ context: "hello", activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false })),
-          requestSuggestion: async (context: string) => {
-            requestSuggestionCalls.push(context);
-            return overrides.requestSuggestion?.(context) ?? { id: "s-1", text: " world" };
+            (() => makeSnapshot()),
+          requestSuggestion: async (snapshot: RequestableTypingContextSnapshot) => {
+            requestSuggestionCalls.push(snapshot.sanitizedContext);
+            return overrides.requestSuggestion?.(snapshot) ?? { id: "s-1", text: " world" };
           },
           onShowSuggestion: (suggestion: Suggestion) => events.push({ type: "show", payload: suggestion }),
           onHideSuggestion: () => events.push({ type: "hide" }),
@@ -457,7 +481,7 @@ describe("desktop native suggestion loop", () => {
       it("redacts api keys in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "api_key=sk-abc1234567890";
-        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        deps.getContext = () => makeSnapshot({ context });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
         await wait(10);
@@ -468,7 +492,7 @@ describe("desktop native suggestion loop", () => {
       it("redacts bearer tokens in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
-        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        deps.getContext = () => makeSnapshot({ context });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
         await wait(10);
@@ -479,7 +503,7 @@ describe("desktop native suggestion loop", () => {
       it("redacts private key blocks in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc123\n-----END OPENSSH PRIVATE KEY-----";
-        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        deps.getContext = () => makeSnapshot({ context });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
         await wait(10);
@@ -490,7 +514,7 @@ describe("desktop native suggestion loop", () => {
       it("redacts database URLs in typed context and suppresses the request", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "DATABASE_URL=postgres://user:pass@localhost:5432/db";
-        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        deps.getContext = () => makeSnapshot({ context });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
         await wait(10);
@@ -501,7 +525,7 @@ describe("desktop native suggestion loop", () => {
       it("allows normal typed prose to request suggestions", async () => {
         const { requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "hello world";
-        deps.getContext = () => ({ context, activeApplication: { bundleId: "com.apple.TextEdit" }, secureInput: false });
+        deps.getContext = () => makeSnapshot({ context });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
         await wait(10);
@@ -512,11 +536,12 @@ describe("desktop native suggestion loop", () => {
       it("clears the typing context buffer when secret-like context is detected", async () => {
         const buffer = createTypingContextBuffer();
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
-        deps.getContext = () => buffer.getState();
+        deps.getContext = () => buffer.getSnapshot();
         deps.onSecretLikeContextDetected = () => {
           buffer.clear();
           events.push({ type: "secretDetected" });
         };
+        buffer.setActiveApplication({ bundleId: "com.apple.TextEdit" });
         buffer.appendText("api_key=sk-abc1234567890");
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
@@ -540,10 +565,8 @@ describe("desktop native suggestion loop", () => {
 
       it("suppresses suggestion requests in password manager contexts", async () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
-        deps.getContext = () => ({
-          context: "hello",
+        deps.getContext = () => makeSnapshot({
           activeApplication: { bundleId: "com.1password.1password" },
-          secureInput: false,
           privateContext: true,
         });
         const loop = createSuggestionLoop(deps);
@@ -567,12 +590,7 @@ describe("desktop native suggestion loop", () => {
 
       it("suppresses suggestion requests while paused", async () => {
         const { requestSuggestionCalls, deps } = makePrivacyDeps();
-        deps.getContext = () => ({
-          context: "hello",
-          activeApplication: { bundleId: "com.apple.TextEdit" },
-          secureInput: false,
-          paused: true,
-        });
+        deps.getContext = () => makeSnapshot({ paused: true });
         const loop = createSuggestionLoop(deps);
         loop.onContextChanged();
         await wait(10);

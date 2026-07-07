@@ -1,15 +1,9 @@
-import type { Suggestion, ActiveApplication } from "@tabb/contracts";
-import { createSafeTypingContextSnapshot, type SafeTypingContextSnapshot } from "./typing-context.ts";
-
-export type TypingContextSnapshot = {
-  context: string;
-  activeApplication: ActiveApplication | null;
-  secureInput: boolean;
-  paused?: boolean;
-  privateContext?: boolean;
-  contextSource?: SafeTypingContextSnapshot["contextSource"];
-  memoryEligible?: boolean;
-};
+import type { Suggestion } from "@tabb/contracts";
+import {
+  isRequestableTypingContextSnapshot,
+  type RequestableTypingContextSnapshot,
+  type SafeTypingContextSnapshot,
+} from "./typing-context.ts";
 
 export type SuggestionLoopState =
   | { status: "idle" }
@@ -17,8 +11,8 @@ export type SuggestionLoopState =
   | { status: "showing"; suggestion: Suggestion; contextHash: string; expiryTimer: ReturnType<typeof setTimeout> };
 
 export type SuggestionLoopDependencies = {
-  getContext(): TypingContextSnapshot;
-  requestSuggestion(context: string): Promise<Suggestion | null>;
+  getContext(): SafeTypingContextSnapshot;
+  requestSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null>;
   onShowSuggestion(suggestion: Suggestion): void;
   onHideSuggestion(): void;
   onRequestStarted?: (context: string) => void;
@@ -27,22 +21,6 @@ export type SuggestionLoopDependencies = {
   debounceMs: number;
   maxVisibleMs?: number;
 };
-
-function safeSnapshot(snapshot: TypingContextSnapshot): SafeTypingContextSnapshot {
-  if ("requestable" in snapshot && "sanitizedContext" in snapshot && "contextHash" in snapshot) {
-    return snapshot as SafeTypingContextSnapshot;
-  }
-
-  return createSafeTypingContextSnapshot({
-    context: snapshot.context,
-    activeApplication: snapshot.activeApplication,
-    secureInput: snapshot.secureInput,
-    paused: snapshot.paused ?? false,
-    privateContext: snapshot.privateContext ?? false,
-    contextSource: snapshot.contextSource ?? "typed_text",
-    memoryEligible: snapshot.memoryEligible ?? true,
-  });
-}
 
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   let state: SuggestionLoopState = { status: "idle" };
@@ -63,7 +41,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   }
 
   function onContextChanged(): void {
-    const snapshot = safeSnapshot(deps.getContext());
+    const snapshot = deps.getContext();
     const hash = snapshot.contextHash;
 
     if (!snapshot.requestable) {
@@ -90,14 +68,19 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
-        const latest = safeSnapshot(deps.getContext());
+        const latest = deps.getContext();
         if (latest.contextHash !== hash) {
           state = { status: "idle" };
           return;
         }
 
+        if (!isRequestableTypingContextSnapshot(latest)) {
+          state = { status: "idle" };
+          return;
+        }
+
         deps.onRequestStarted?.(latest.sanitizedContext);
-        const suggestion = await deps.requestSuggestion(latest.sanitizedContext);
+        const suggestion = await deps.requestSuggestion(latest);
 
         if (state.status !== "debouncing" || state.contextHash !== hash) {
           return;

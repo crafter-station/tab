@@ -23,7 +23,13 @@ export type TypingContextBuffer = {
   getSnapshot(): SafeTypingContextSnapshot;
 };
 
-export type TypingContextSuppressionReason = "empty" | "paused" | "secure_input" | "private_context" | "secret_like_context";
+export type TypingContextSuppressionReason =
+  | "empty"
+  | "paused"
+  | "secure_input"
+  | "private_context"
+  | "secret_like_context"
+  | "no_active_application";
 
 export type SafeTypingContextSnapshot = TypingContextState & {
   sanitizedContext: string;
@@ -32,6 +38,18 @@ export type SafeTypingContextSnapshot = TypingContextState & {
   requestable: boolean;
   suppressionReason: TypingContextSuppressionReason | null;
 };
+
+export type RequestableTypingContextSnapshot = SafeTypingContextSnapshot & {
+  readonly activeApplication: NonNullable<TypingContextState["activeApplication"]>;
+  readonly requestable: true;
+  readonly suppressionReason: null;
+};
+
+export function isRequestableTypingContextSnapshot(
+  snapshot: SafeTypingContextSnapshot,
+): snapshot is RequestableTypingContextSnapshot {
+  return snapshot.requestable && snapshot.activeApplication !== null;
+}
 
 const PASSWORD_MANAGER_BUNDLE_IDS = new Set([
   "com.apple.passwords",
@@ -83,11 +101,13 @@ export function createSafeTypingContextSnapshot(state: TypingContextState): Safe
       ? "secure_input"
       : state.privateContext
         ? "private_context"
-        : state.context.trim().length === 0
-          ? "empty"
-          : redactionSummary.applied
-            ? "secret_like_context"
-            : null;
+        : state.activeApplication === null
+          ? "no_active_application"
+          : state.context.trim().length === 0
+            ? "empty"
+            : redactionSummary.applied
+              ? "secret_like_context"
+              : null;
 
   return {
     ...state,

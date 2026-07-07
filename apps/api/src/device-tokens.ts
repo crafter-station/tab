@@ -125,7 +125,6 @@ export type D1Statement = {
 
 export type D1DatabaseLike = {
   prepare(sql: string): D1Statement;
-  exec(sql: string): Promise<void>;
 };
 
 function asD1Database(db: unknown): D1DatabaseLike {
@@ -156,29 +155,6 @@ export class D1DeviceTokenStorage implements DeviceTokenStorage {
 
   constructor(db: unknown) {
     this.db = asD1Database(db);
-  }
-
-  async ensureTables(): Promise<void> {
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS device_tokens (
-        id TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        device_id TEXT NOT NULL UNIQUE,
-        token_hash TEXT NOT NULL UNIQUE,
-        platform TEXT NOT NULL,
-        app_version TEXT NOT NULL,
-        created_at TEXT NOT NULL,
-        last_seen_at TEXT NOT NULL,
-        revoked INTEGER NOT NULL DEFAULT 0
-      );
-      CREATE INDEX IF NOT EXISTS idx_device_tokens_user ON device_tokens(user_id);
-
-      CREATE TABLE IF NOT EXISTS device_exchange_codes (
-        code TEXT PRIMARY KEY,
-        user_id TEXT NOT NULL,
-        expires_at TEXT NOT NULL
-      );
-    `);
   }
 
   async createDevice(record: Omit<Device, "id">): Promise<Device> {

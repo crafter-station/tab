@@ -95,33 +95,6 @@ export class D1TelemetryStorage implements TelemetryStorage {
     this.db = db as D1DatabaseLike;
   }
 
-  async ensureTables(): Promise<void> {
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS telemetry_events (
-        id TEXT PRIMARY KEY,
-        request_id TEXT NOT NULL,
-        user_id TEXT NOT NULL,
-        device_id TEXT,
-        event_type TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        active_application_bundle_id TEXT,
-        context_source TEXT,
-        suggestion_length INTEGER,
-        plan_id TEXT,
-        model_id TEXT,
-        latency_ms INTEGER,
-        error_code TEXT,
-        memory_eligible INTEGER,
-        redaction_applied INTEGER,
-        redaction_count INTEGER,
-        client_app_version TEXT,
-        client_platform TEXT
-      );
-      CREATE INDEX IF NOT EXISTS idx_telemetry_events_user ON telemetry_events(user_id);
-      CREATE INDEX IF NOT EXISTS idx_telemetry_events_request ON telemetry_events(request_id);
-    `);
-  }
-
   async recordEvent(event: TelemetryEvent): Promise<void> {
     await this.db
       .prepare(

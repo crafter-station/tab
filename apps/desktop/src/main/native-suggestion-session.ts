@@ -1,11 +1,11 @@
 import type { ActiveApplication, Suggestion, SuggestionContextSource } from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
-import type { TypingContextBuffer } from "./typing-context.ts";
+import type { RequestableTypingContextSnapshot, TypingContextBuffer } from "./typing-context.ts";
 
 export type NativeSuggestionSessionDependencies = {
   readonly typingContext: TypingContextBuffer;
-  readonly requestSuggestion: (context: string) => Promise<Suggestion | null>;
+  readonly requestSuggestion: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
   readonly getContextSource: () => SuggestionContextSource;
   readonly showSuggestion: (suggestion: Suggestion) => void;
   readonly clearSuggestion: () => void;
@@ -34,7 +34,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let observationPaused = false;
 
   const suggestionLoop = createSuggestionLoop({
-    getContext: () => deps.typingContext.getState(),
+    getContext: () => deps.typingContext.getSnapshot(),
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;

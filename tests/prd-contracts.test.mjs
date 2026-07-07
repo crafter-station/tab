@@ -108,13 +108,13 @@ describe("Tabb MVP PRD contracts", () => {
 
   it("keeps PRD context sources aligned with shared request schema", () => {
     const prd = readText(prdPath);
-    const contracts = readText("packages/contracts/src/index.ts");
+    const sharedSourceDefinitions = `${readText("packages/contracts/src/index.ts")}\n${readText("packages/memory-policy/src/index.ts")}`;
 
     for (const expectation of contextSourceExpectations) {
       assert.match(
-        contracts,
+        sharedSourceDefinitions,
         new RegExp(`"${expectation.schemaValue}"`),
-        `contracts schema includes ${expectation.schemaValue}`,
+        `shared source definitions include ${expectation.schemaValue}`,
       );
       assert.match(
         prd,

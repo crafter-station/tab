@@ -1,7 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import { SuggestionRequestSchema } from "../packages/contracts/src/index.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
-import type { TypingContextState } from "../apps/desktop/src/main/typing-context.ts";
+import {
+  createSafeTypingContextSnapshot,
+  type RequestableTypingContextSnapshot,
+  type TypingContextState,
+} from "../apps/desktop/src/main/typing-context.ts";
 
 function makeState(overrides: Partial<TypingContextState> = {}): TypingContextState {
   return {
@@ -14,6 +18,16 @@ function makeState(overrides: Partial<TypingContextState> = {}): TypingContextSt
     memoryEligible: true,
     ...overrides,
   };
+}
+
+function makeSnapshot(
+  overrides: Partial<TypingContextState> = {},
+): RequestableTypingContextSnapshot {
+  const snapshot = createSafeTypingContextSnapshot(makeState(overrides));
+  if (!snapshot.requestable || !snapshot.activeApplication) {
+    throw new Error("test snapshot must be requestable");
+  }
+  return snapshot as RequestableTypingContextSnapshot;
 }
 
 describe("desktop API suggestion client", () => {
@@ -33,11 +47,10 @@ describe("desktop API suggestion client", () => {
       deviceId: "device-1",
       appVersion: "0.0.1",
       platform: "darwin",
-      getState: () => makeState(),
       fetch,
     });
 
-    const suggestion = await requestSuggestion("hello");
+    const suggestion = await requestSuggestion(makeSnapshot());
 
     expect(suggestion).not.toBeNull();
     expect(suggestion?.text).toBe(" world");
@@ -62,11 +75,10 @@ describe("desktop API suggestion client", () => {
       appVersion: "0.0.1",
       platform: "darwin",
       memoryEnabled: false,
-      getState: () => makeState(),
       fetch,
     });
 
-    await requestSuggestion("hello");
+    await requestSuggestion(makeSnapshot());
 
     const request = SuggestionRequestSchema.parse(captured.body);
     expect(request.memoryEnabled).toBe(false);
@@ -84,29 +96,10 @@ describe("desktop API suggestion client", () => {
       deviceId: "device-1",
       appVersion: "0.0.1",
       platform: "darwin",
-      getState: () => makeState(),
       fetch,
     });
 
-    const suggestion = await requestSuggestion("hello");
-    expect(suggestion).toBeNull();
-  });
-
-  it("returns null when there is no active application", async () => {
-    const fetch = async () => {
-      throw new Error("should not be called");
-    };
-
-    const requestSuggestion = createApiSuggestionClient({
-      apiBaseUrl: "http://localhost:8787",
-      deviceId: "device-1",
-      appVersion: "0.0.1",
-      platform: "darwin",
-      getState: () => makeState({ activeApplication: null }),
-      fetch,
-    });
-
-    const suggestion = await requestSuggestion("hello");
+    const suggestion = await requestSuggestion(makeSnapshot());
     expect(suggestion).toBeNull();
   });
 
@@ -122,11 +115,10 @@ describe("desktop API suggestion client", () => {
       deviceId: "device-1",
       appVersion: "0.0.1",
       platform: "darwin",
-      getState: () => makeState(),
       fetch,
     });
 
-    const suggestion = await requestSuggestion("hello");
+    const suggestion = await requestSuggestion(makeSnapshot());
     expect(suggestion).toBeNull();
   });
 
@@ -140,11 +132,10 @@ describe("desktop API suggestion client", () => {
       deviceId: "device-1",
       appVersion: "0.0.1",
       platform: "darwin",
-      getState: () => makeState(),
       fetch,
     });
 
-    const suggestion = await requestSuggestion("hello");
+    const suggestion = await requestSuggestion(makeSnapshot());
     expect(suggestion).toBeNull();
   });
 });

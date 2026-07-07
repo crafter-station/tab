@@ -452,7 +452,6 @@ type D1Statement = {
 
 type D1DatabaseLike = {
   prepare(sql: string): D1Statement;
-  exec(sql: string): Promise<void>;
 };
 
 function entitlementRowToEntitlement(row: Record<string, unknown>): UserEntitlement {
@@ -476,28 +475,6 @@ export class D1BillingStorage implements BillingStorage {
 
   constructor(db: unknown) {
     this.db = db as D1DatabaseLike;
-  }
-
-  async ensureTables(): Promise<void> {
-    await this.db.exec(`
-      CREATE TABLE IF NOT EXISTS user_entitlements (
-        user_id TEXT PRIMARY KEY,
-        plan_id TEXT NOT NULL,
-        polar_customer_id TEXT,
-        polar_subscription_id TEXT,
-        status TEXT NOT NULL,
-        current_period_end TEXT,
-        cached_at TEXT NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS usage_records (
-        user_id TEXT NOT NULL,
-        month TEXT NOT NULL,
-        count INTEGER NOT NULL DEFAULT 0,
-        updated_at TEXT NOT NULL,
-        PRIMARY KEY (user_id, month)
-      );
-    `);
   }
 
   async getEntitlement(userId: string): Promise<UserEntitlement | null> {

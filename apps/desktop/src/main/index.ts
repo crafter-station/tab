@@ -28,6 +28,7 @@ import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createUpdateChecker } from "./release.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tabb/contracts";
+import { classifyTypingContextSource } from "@tabb/memory-policy";
 import { env } from "./env.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,15 +40,6 @@ const APP_RENDERER_PATH = env.TABB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "
 const TRAY_ICON_PATH = env.TABB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
 const INPUT_TAP_PATH = env.TABB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
-
-const TERMINAL_BUNDLE_IDS = new Set([
-  "com.apple.Terminal",
-  "com.googlecode.iterm2",
-  "com.mitchellh.ghostty",
-  "net.kovidgoyal.kitty",
-  "com.microsoft.WindowsTerminal",
-  "dev.tabby",
-]);
 
 let overlayWindow: BrowserWindow | null = null;
 let debugOverlayWindow: BrowserWindow | null = null;
@@ -126,7 +118,6 @@ const requestSuggestion = createApiSuggestionClient({
   appVersion: APP_VERSION,
   platform: process.platform,
   memoryEnabled: false,
-  getState: () => typingContextBuffer.getState(),
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
 
@@ -301,15 +292,8 @@ async function showInitialDesktopSurface(): Promise<void> {
   showAuthenticatedDesktopSurface();
 }
 
-function isTerminalApplication(bundleId: string | null | undefined): boolean {
-  if (!bundleId) return false;
-  return TERMINAL_BUNDLE_IDS.has(bundleId);
-}
-
 function getTypedContextSource(): SuggestionContextSource {
-  const bundleId = typingContextBuffer.getState().activeApplication?.bundleId;
-  if (isTerminalApplication(bundleId)) return "terminal_input";
-  return "typed_text";
+  return classifyTypingContextSource(typingContextBuffer.getState().activeApplication);
 }
 
 function getCurrentDisplay(): Electron.Display {
