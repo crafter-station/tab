@@ -5,15 +5,25 @@ import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import {
+  type BillingCheckoutClient,
   BillingService,
   InMemoryBillingStorage,
-  StubBillingCheckoutClient,
 } from "../apps/api/src/billing.ts";
 import { createWebApp, type WebApp } from "../apps/web/src/index.ts";
 import type { Hono } from "hono";
 
 const TEST_ORIGIN = "http://localhost:8787";
 const WEB_ORIGIN = "http://localhost:3000";
+
+class TestBillingCheckoutClient implements BillingCheckoutClient {
+  async createCheckoutUrl(planId: string, userId: string): Promise<string> {
+    return `https://checkout.test/${planId}?customer=${encodeURIComponent(userId)}`;
+  }
+
+  async createPortalUrl(userId: string, customerId?: string): Promise<string> {
+    return `https://portal.test/${encodeURIComponent(customerId ?? userId)}`;
+  }
+}
 
 async function createWebTestEnv() {
   const database = new Database(":memory:");
@@ -24,7 +34,7 @@ async function createWebTestEnv() {
   const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
   const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
-  const billingCheckoutClient = new StubBillingCheckoutClient();
+  const billingCheckoutClient = new TestBillingCheckoutClient();
 
   const apiApp = createApp({
     auth,
@@ -139,7 +149,7 @@ describe("Web account surface", () => {
     expect(body).toInclude("Start free");
   });
 
-  it("redirects a new web signup to the free Polar checkout", async () => {
+  it("redirects a new web signup to the free checkout", async () => {
     const { webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
@@ -151,7 +161,7 @@ describe("Web account surface", () => {
     });
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toInclude("polar.sh/checkout/free");
+    expect(response.headers.get("location")).toInclude("checkout.test/free");
     expect(response.headers.get("set-cookie")).toBeTruthy();
   });
 
@@ -197,7 +207,7 @@ describe("Web account surface", () => {
     expect(body).toInclude("Manage billing");
   });
 
-  it("redirects to a Polar checkout URL for a paid plan", async () => {
+  it("redirects to a checkout URL for a paid plan", async () => {
     const { apiApp, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
@@ -213,10 +223,10 @@ describe("Web account surface", () => {
     expect(response.status).toBe(302);
     const location = response.headers.get("location");
     expect(location).toBeTruthy();
-    expect(location).toInclude("polar.sh/checkout/pro");
+    expect(location).toInclude("checkout.test/pro");
   });
 
-  it("redirects to the Polar customer portal", async () => {
+  it("redirects to the customer portal", async () => {
     const { apiApp, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
@@ -227,7 +237,7 @@ describe("Web account surface", () => {
     expect(response.status).toBe(302);
     const location = response.headers.get("location");
     expect(location).toBeTruthy();
-    expect(location).toInclude("polar.sh/portal/");
+    expect(location).toInclude("portal.test/");
   });
 
   it("lists and deletes Personal Memory from the account surface", async () => {

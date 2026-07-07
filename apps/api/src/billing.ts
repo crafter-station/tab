@@ -2,6 +2,12 @@ import { Polar } from "@polar-sh/sdk";
 import { validateEvent } from "@polar-sh/sdk/webhooks";
 import { planQuotas, type PlanId } from "@tabb/billing";
 
+type PolarServer = "production" | "sandbox";
+
+function getPolarServer(server?: PolarServer): PolarServer {
+  return server ?? (process.env.POLAR_SERVER === "sandbox" ? "sandbox" : "production");
+}
+
 export type UserEntitlement = {
   readonly userId: string;
   readonly planId: PlanId;
@@ -59,7 +65,7 @@ export interface UsageMeterClient {
 
 export type CreatePolarUsageMeterClientOptions = {
   readonly accessToken?: string;
-  readonly server?: "production" | "sandbox";
+  readonly server?: PolarServer;
   readonly meterId?: string;
 };
 
@@ -80,7 +86,7 @@ export class PolarUsageMeterClient implements UsageMeterClient {
 
     this.polar = new Polar({
       accessToken,
-      server: options.server ?? "production",
+      server: getPolarServer(options.server),
     });
     this.meterId = meterId;
   }
@@ -129,18 +135,22 @@ export interface BillingCheckoutClient {
 
 export type CreatePolarBillingCheckoutClientOptions = {
   accessToken?: string;
-  server?: "production" | "sandbox";
+  server?: PolarServer;
   productIds?: Partial<Record<PlanId, string>>;
   successUrl?: string;
 };
 
 export class StubBillingCheckoutClient implements BillingCheckoutClient {
   async createCheckoutUrl(planId: PlanId, userId: string): Promise<string> {
-    return `https://polar.sh/checkout/${planId}?customer=${encodeURIComponent(userId)}`;
+    void planId;
+    void userId;
+    throw new Error("Polar checkout is not configured");
   }
 
   async createPortalUrl(userId: string, customerId?: string): Promise<string> {
-    return `https://polar.sh/portal/${customerId ?? userId}`;
+    void userId;
+    void customerId;
+    throw new Error("Polar customer portal is not configured");
   }
 }
 
@@ -168,7 +178,7 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
 
     this.polar = new Polar({
       accessToken,
-      server: options.server ?? "production",
+      server: getPolarServer(options.server),
     });
     this.productIds = productIds as Record<PlanId, string>;
     this.successUrl = options.successUrl ?? process.env.POLAR_CHECKOUT_SUCCESS_URL;
@@ -200,14 +210,24 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
 export function createBillingCheckoutClient(
   options?: CreatePolarBillingCheckoutClientOptions,
 ): BillingCheckoutClient {
-  if (
-    process.env.POLAR_ACCESS_TOKEN &&
-    process.env.POLAR_PRODUCT_ID_FREE &&
-    process.env.POLAR_PRODUCT_ID_PRO &&
-    process.env.POLAR_PRODUCT_ID_MAX
-  ) {
+  const productIds = {
+    free: process.env.POLAR_PRODUCT_ID_FREE,
+    pro: process.env.POLAR_PRODUCT_ID_PRO,
+    max: process.env.POLAR_PRODUCT_ID_MAX,
+    ...options?.productIds,
+  };
+  const accessToken = options?.accessToken ?? process.env.POLAR_ACCESS_TOKEN;
+
+  if (accessToken && productIds.free && productIds.pro && productIds.max) {
     return new PolarBillingCheckoutClient(options);
   }
+
+  if (accessToken || productIds.free || productIds.pro || productIds.max) {
+    throw new Error(
+      "Polar checkout is partially configured. Set POLAR_ACCESS_TOKEN, POLAR_PRODUCT_ID_FREE, POLAR_PRODUCT_ID_PRO, and POLAR_PRODUCT_ID_MAX.",
+    );
+  }
+
   return new StubBillingCheckoutClient();
 }
 

@@ -11,6 +11,7 @@ import {
   InMemoryBillingStorage,
   InMemoryUsageMeterClient,
   UsageMeterService,
+  createBillingCheckoutClient,
 } from "../apps/api/src/billing.ts";
 import type { SuggestionGenerator } from "../apps/api/src/index.ts";
 
@@ -214,6 +215,15 @@ describe("Billing and quota enforcement", () => {
     expect(response.status).toBe(200);
     await new Promise((resolve) => setTimeout(resolve, 150));
     expect(usageMeterClient.getEvents()).toHaveLength(1);
+  });
+
+  it("does not fall back to hardcoded checkout URLs when Polar is partially configured", () => {
+    expect(() =>
+      createBillingCheckoutClient({
+        accessToken: "polar-token",
+        productIds: { free: "", pro: "prod-pro", max: "prod-max" },
+      }),
+    ).toThrow("Polar checkout is partially configured");
   });
 
   it("rejects webhook requests with an invalid signature", async () => {
