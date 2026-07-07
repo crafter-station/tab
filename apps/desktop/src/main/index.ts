@@ -34,7 +34,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
 const runtimeRoot = app.isPackaged ? path.join(app.getAppPath(), "dist") : __dirname;
 const PRELOAD_PATH = process.env.TABB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
-const RENDERER_PATH = process.env.TABB_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "index.html");
+const OVERLAY_RENDERER_PATH = process.env.TABB_OVERLAY_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "overlay.html");
+const APP_RENDERER_PATH = process.env.TABB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
 const TRAY_ICON_PATH = process.env.TABB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
 const INPUT_TAP_PATH = process.env.TABB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
@@ -80,12 +81,12 @@ const onboardingManager = createOnboardingManager({
 });
 
 const onboardingWindowManager = createOnboardingWindowManager({
-  rendererPath: RENDERER_PATH,
+  rendererPath: APP_RENDERER_PATH,
   preloadPath: PRELOAD_PATH,
 });
 
 const settingsWindowManager = createSettingsWindowManager({
-  htmlPath: path.join(runtimeRoot, "settings.html"),
+  rendererPath: APP_RENDERER_PATH,
   preloadPath: PRELOAD_PATH,
 });
 
@@ -393,7 +394,12 @@ function createOverlayWindow(): BrowserWindow {
   configureFloatingPanel(win);
   installOverlayPositionTracking(win, () => getSuggestionOverlayBounds(win.getBounds().height));
   installAlphaClickThrough(win);
-  win.loadFile(RENDERER_PATH, { hash: "overlay" });
+  win.on("closed", () => {
+    if (overlayWindow === win) {
+      overlayWindow = null;
+    }
+  });
+  win.loadFile(OVERLAY_RENDERER_PATH);
   return win;
 }
 
@@ -423,19 +429,32 @@ function createDebugOverlayWindow(): BrowserWindow {
 
   configureFloatingPanel(win);
   installOverlayPositionTracking(win, getDebugOverlayBounds);
-  win.loadFile(RENDERER_PATH, { hash: "overlay" });
+  win.on("closed", () => {
+    if (debugOverlayWindow === win) {
+      debugOverlayWindow = null;
+    }
+  });
+  win.loadFile(OVERLAY_RENDERER_PATH);
   win.setIgnoreMouseEvents(true, { forward: true });
   return win;
 }
 
+function isUsableWindow(win: BrowserWindow | null): win is BrowserWindow {
+  return win !== null && !win.isDestroyed();
+}
+
+function isUsableWebContents(win: BrowserWindow | null): win is BrowserWindow {
+  return isUsableWindow(win) && !win.webContents.isDestroyed();
+}
+
 function resizeOverlayWindow(height: number): void {
-  if (!overlayWindow) return;
+  if (!isUsableWindow(overlayWindow)) return;
   overlayWindow.setBounds(getSuggestionOverlayBounds(height), false);
 }
 
 function showOverlay(suggestion: Suggestion): void {
   currentSuggestion = suggestion;
-  if (!overlayWindow) return;
+  if (!isUsableWebContents(overlayWindow)) return;
   resizeOverlayWindow(OVERLAY_SUGGESTION_HEIGHT);
   overlayWindow.webContents.send("suggestion", suggestion);
   overlayWindow.showInactive();
@@ -443,14 +462,14 @@ function showOverlay(suggestion: Suggestion): void {
 
 function clearSuggestionOverlay(): void {
   currentSuggestion = null;
-  if (!overlayWindow) return;
+  if (!isUsableWebContents(overlayWindow)) return;
   overlayWindow.webContents.send("hide");
   overlayWindow.hide();
 }
 
 function hideOverlay(): void {
   clearSuggestionOverlay();
-  if (!debugOverlayWindow) return;
+  if (!isUsableWindow(debugOverlayWindow)) return;
   if (SHOW_DEBUG_TYPING_OVERLAY && typingContextBuffer.getState().context.length > 0) {
     showDebugTypingOverlay();
     return;
@@ -459,7 +478,7 @@ function hideOverlay(): void {
 }
 
 function hideDebugTypingOverlay(): void {
-  if (!debugOverlayWindow) return;
+  if (!isUsableWebContents(debugOverlayWindow)) return;
   debugOverlayWindow.webContents.send("hide");
   debugOverlayWindow.hide();
   if (debugTypingTimer) {
@@ -473,7 +492,7 @@ function hideDebugTypingOverlay(): void {
 }
 
 function sendDebugContext(): void {
-  if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !isUsableWebContents(debugOverlayWindow)) return;
 
   const state = typingContextBuffer.getState();
   const context = getLastWords(state.context, DEBUG_TYPING_WORD_LIMIT);
@@ -491,7 +510,7 @@ function sendDebugContext(): void {
 
 function updateDebugApiState(apiState: DebugApiState): void {
   debugApiState = apiState;
-  if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !isUsableWindow(debugOverlayWindow)) return;
   if (typingContextBuffer.getState().context.length === 0) return;
 
   sendDebugContext();
@@ -499,7 +518,7 @@ function updateDebugApiState(apiState: DebugApiState): void {
 }
 
 function showDebugTypingOverlay(): void {
-  if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
+  if (!SHOW_DEBUG_TYPING_OVERLAY || !isUsableWindow(debugOverlayWindow)) return;
   if (SHOW_DEBUG_TYPING_OVERLAY && typingContextBuffer.getState().context.length > 0) {
     if (debugTypingTimer) {
       clearTimeout(debugTypingTimer);
@@ -510,13 +529,15 @@ function showDebugTypingOverlay(): void {
     }
     debugTypingTimer = setTimeout(() => {
       debugTypingTimer = null;
-      if (!SHOW_DEBUG_TYPING_OVERLAY || !debugOverlayWindow) return;
+      if (!SHOW_DEBUG_TYPING_OVERLAY || !isUsableWindow(debugOverlayWindow)) return;
 
       sendDebugContext();
       debugOverlayWindow.showInactive();
       debugTypingHideTimer = setTimeout(() => {
         debugTypingHideTimer = null;
-        debugOverlayWindow?.hide();
+        if (isUsableWindow(debugOverlayWindow)) {
+          debugOverlayWindow.hide();
+        }
       }, DEBUG_TYPING_HIDE_MS);
     }, DEBUG_TYPING_DEBOUNCE_MS);
   } else {
@@ -858,7 +879,9 @@ app.on("will-quit", () => {
     app.relaunch({ args: process.argv.slice(1) });
   }
   globalShortcut.unregisterAll();
-  debugOverlayWindow?.close();
+  if (isUsableWindow(debugOverlayWindow)) {
+    debugOverlayWindow.close();
+  }
   inputTapProcess?.kill();
   typingContextBuffer.clear();
 });

@@ -10,6 +10,12 @@ export default defineConfig({
     build: {
       outDir: path.resolve(__dirname, "dist/renderer"),
       emptyOutDir: true,
+      rollupOptions: {
+        input: {
+          app: path.resolve(__dirname, "src/renderer/app.html"),
+          overlay: path.resolve(__dirname, "src/renderer/overlay.html"),
+        },
+      },
     },
   },
 });

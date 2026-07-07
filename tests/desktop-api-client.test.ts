@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { SuggestionRequestSchema } from "../packages/contracts/src/index.ts";
-import { createApiSuggestionClient } from "../apps/desktop/src/suggestion-client.ts";
-import type { TypingContextState } from "../apps/desktop/src/typing-context.ts";
+import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
+import type { TypingContextState } from "../apps/desktop/src/main/typing-context.ts";
 
 function makeState(overrides: Partial<TypingContextState> = {}): TypingContextState {
   return {

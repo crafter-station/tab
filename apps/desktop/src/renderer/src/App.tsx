@@ -1,26 +1,10 @@
-import { SectionCard } from "@tabb/ui";
 import { useEffect, useState } from "react";
-import { getAppRoute, type AppRoute } from "./routes";
-import { OverlaySurface } from "./surfaces/OverlaySurface";
+import { getAppRoute, type ControlAppRoute } from "./routes";
 import { OnboardingSurface } from "./surfaces/OnboardingSurface";
-
-function SettingsPlaceholder() {
-  return (
-    <main className="desktop-shell desktop-shell--centered">
-      <SectionCard className="section-card--narrow">
-        <p className="eyebrow">Tabb Settings</p>
-        <h1>Settings are moving into React.</h1>
-        <p className="lede">
-          This routed renderer is ready for the next migration phase. The production settings window still uses the
-          existing settings surface for now.
-        </p>
-      </SectionCard>
-    </main>
-  );
-}
+import { SettingsSurface } from "./surfaces/SettingsSurface";
 
 export function App() {
-  const [route, setRoute] = useState<AppRoute>(() => getAppRoute());
+  const [route, setRoute] = useState<ControlAppRoute>(() => getAppRoute());
 
   useEffect(() => {
     const syncRoute = () => setRoute(getAppRoute());
@@ -36,7 +20,5 @@ export function App() {
   }, [route]);
 
   if (route === "onboarding") return <OnboardingSurface />;
-  if (route === "settings") return <SettingsPlaceholder />;
-
-  return <OverlaySurface />;
+  return <SettingsSurface />;
 }

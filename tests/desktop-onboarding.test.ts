@@ -5,7 +5,7 @@ import {
   MACOS_PERMISSION_SETTINGS_URLS,
   ONBOARDING_PERMISSIONS_COPY,
   type OnboardingPreferences,
-} from "../apps/desktop/src/onboarding.ts";
+} from "../apps/desktop/src/main/onboarding.ts";
 
 describe("desktop onboarding", () => {
   it("shows onboarding when it has not been completed", () => {

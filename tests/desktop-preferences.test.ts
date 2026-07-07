@@ -5,7 +5,7 @@ import {
   createPreferencesManager,
   createMemoryPreferencesStorage,
   createFilePreferencesStorage,
-} from "../apps/desktop/src/preferences.ts";
+} from "../apps/desktop/src/main/preferences.ts";
 
 describe("desktop preferences", () => {
   it("returns default preferences when storage is empty", () => {

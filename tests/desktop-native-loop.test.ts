@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test";
-import { createTypingContextBuffer, getLastWords } from "../apps/desktop/src/typing-context.ts";
-import { generateFakeSuggestion } from "../apps/desktop/src/suggestion-engine.ts";
-import { createSuggestionLoop } from "../apps/desktop/src/suggestion-loop.ts";
-import { acceptAndInsertSuggestion } from "../apps/desktop/src/acceptance.ts";
+import { createTypingContextBuffer, getLastWords } from "../apps/desktop/src/main/typing-context.ts";
+import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engine.ts";
+import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
+import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
 import type { Suggestion, ActiveApplication } from "@tabb/contracts";

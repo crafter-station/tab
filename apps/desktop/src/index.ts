@@ -16,15 +16,15 @@ export function createDesktopSuggestionRequest(input: SuggestionRequest): Sugges
   return input;
 }
 
-export { createTypingContextBuffer } from "./typing-context.ts";
-export { generateFakeSuggestion } from "./suggestion-engine.ts";
-export { createSuggestionLoop } from "./suggestion-loop.ts";
-export { acceptAndInsertSuggestion } from "./acceptance.ts";
-export { createApiSuggestionClient } from "./suggestion-client.ts";
-export { createDesktopAuthClient } from "./auth.ts";
-export { createMemoryKeychain, createMacOSKeychain } from "./keychain.ts";
-export { createDesktopStatusService, type DesktopStatus } from "./status.ts";
-export { createDesktopMemoryClient } from "./memory-client.ts";
-export { createOnboardingManager, ONBOARDING_PERMISSIONS_COPY, type OnboardingPreferences } from "./onboarding.ts";
-export { createPreferencesManager, createMemoryPreferencesStorage, type DesktopPreferences } from "./preferences.ts";
-export { createUpdateChecker, type UpdateChecker } from "./release.ts";
+export { createTypingContextBuffer } from "./main/typing-context.ts";
+export { generateFakeSuggestion } from "./main/suggestion-engine.ts";
+export { createSuggestionLoop } from "./main/suggestion-loop.ts";
+export { acceptAndInsertSuggestion } from "./main/acceptance.ts";
+export { createApiSuggestionClient } from "./main/suggestion-client.ts";
+export { createDesktopAuthClient } from "./main/auth.ts";
+export { createMemoryKeychain, createMacOSKeychain } from "./main/keychain.ts";
+export { createDesktopStatusService, type DesktopStatus } from "./main/status.ts";
+export { createDesktopMemoryClient } from "./main/memory-client.ts";
+export { createOnboardingManager, ONBOARDING_PERMISSIONS_COPY, type OnboardingPreferences } from "./main/onboarding.ts";
+export { createPreferencesManager, createMemoryPreferencesStorage, type DesktopPreferences } from "./main/preferences.ts";
+export { createUpdateChecker, type UpdateChecker } from "./main/release.ts";

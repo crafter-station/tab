@@ -3,33 +3,36 @@ import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tabb/contracts";
 
 export type CreateSettingsWindowDependencies = {
-  htmlPath: string;
+  rendererPath: string;
   preloadPath: string;
 };
 
 export function createSettingsWindow(deps: CreateSettingsWindowDependencies): BrowserWindow {
   const win = new BrowserWindow({
-    width: 600,
-    height: 720,
+    width: 760,
+    height: 780,
     resizable: true,
     minimizable: true,
     maximizable: false,
     fullscreenable: false,
     show: false,
     title: "Tabb Settings",
+    backgroundColor: "#11110f",
+    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
+    trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,
     webPreferences: {
       preload: deps.preloadPath,
     },
   });
 
-  win.loadFile(deps.htmlPath);
+  win.loadFile(deps.rendererPath, { hash: "settings" });
   win.once("ready-to-show", () => win?.show());
 
   return win;
 }
 
 export type SettingsWindowManagerDependencies = {
-  htmlPath: string;
+  rendererPath: string;
   preloadPath: string;
 };
 
@@ -42,7 +45,7 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
       return win;
     }
 
-    win = createSettingsWindow({ htmlPath: deps.htmlPath, preloadPath: deps.preloadPath });
+    win = createSettingsWindow({ rendererPath: deps.rendererPath, preloadPath: deps.preloadPath });
 
     win.on("closed", () => {
       win = null;

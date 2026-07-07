@@ -4,7 +4,7 @@ import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
 import { PersonalMemoryService, InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
-import { createDesktopMemoryClient } from "../apps/desktop/src/memory-client.ts";
+import { createDesktopMemoryClient } from "../apps/desktop/src/main/memory-client.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
 

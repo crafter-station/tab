@@ -3,10 +3,10 @@ import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService } from "../apps/api/src/device-tokens.ts";
-import { createDesktopAuthClient } from "../apps/desktop/src/auth.ts";
-import { createMemoryKeychain } from "../apps/desktop/src/keychain.ts";
-import { createApiSuggestionClient } from "../apps/desktop/src/suggestion-client.ts";
-import type { TypingContextState } from "../apps/desktop/src/typing-context.ts";
+import { createDesktopAuthClient } from "../apps/desktop/src/main/auth.ts";
+import { createMemoryKeychain } from "../apps/desktop/src/main/keychain.ts";
+import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
+import type { TypingContextState } from "../apps/desktop/src/main/typing-context.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
 

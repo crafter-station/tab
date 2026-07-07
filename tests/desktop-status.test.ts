@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { createDesktopStatusService, type DesktopStatus } from "../apps/desktop/src/status.ts";
+import { createDesktopStatusService, type DesktopStatus } from "../apps/desktop/src/main/status.ts";
 
 type StatusEvent = { type: "changed"; status: DesktopStatus };
 

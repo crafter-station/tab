@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from "electron";
-import type { DesktopStatus } from "./status.ts";
+import type { DesktopStatus } from "../main/status.ts";
 import type { PersonalMemory } from "@tabb/contracts";
 
 type DebugApiState =

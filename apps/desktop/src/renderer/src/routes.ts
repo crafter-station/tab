@@ -1,8 +1,8 @@
-export type AppRoute = "overlay" | "settings" | "onboarding";
+export type ControlAppRoute = "settings" | "onboarding";
 
-const routes = new Set<AppRoute>(["overlay", "settings", "onboarding"]);
+const routes = new Set<ControlAppRoute>(["settings", "onboarding"]);
 
-export function getAppRoute(hash = window.location.hash): AppRoute {
+export function getAppRoute(hash = window.location.hash): ControlAppRoute {
   const route = hash.replace(/^#/, "");
-  return routes.has(route as AppRoute) ? (route as AppRoute) : "overlay";
+  return routes.has(route as ControlAppRoute) ? (route as ControlAppRoute) : "settings";
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { createUpdateChecker } from "../apps/desktop/src/release.ts";
+import { createUpdateChecker } from "../apps/desktop/src/main/release.ts";
 import { DesktopReleaseFeedSchema } from "../packages/contracts/src/index.ts";
 
 describe("Desktop release packaging", () => {
