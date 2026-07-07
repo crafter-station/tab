@@ -26,6 +26,7 @@ function organizationScope(): { organizationId?: string } {
 type CreatedResource = {
   readonly id?: string;
   readonly name?: string;
+  readonly secret?: string;
 };
 
 function unwrapResource<T extends CreatedResource>(result: unknown, key: string): T {
@@ -78,10 +79,38 @@ async function createPlanProduct(planId: PlanId): Promise<CreatedResource> {
   return unwrapResource<CreatedResource>(result, "product");
 }
 
+async function createWebhookEndpoint(url: string): Promise<CreatedResource> {
+  const result = await polar.webhooks.createWebhookEndpoint({
+    url,
+    name: "Tabb billing sync",
+    format: "raw",
+    events: [
+      "subscription.created",
+      "subscription.updated",
+      "subscription.active",
+      "subscription.canceled",
+      "subscription.uncanceled",
+      "subscription.revoked",
+      "subscription.past_due",
+    ],
+    ...organizationScope(),
+  });
+
+  return unwrapResource<CreatedResource>(result, "webhookEndpoint");
+}
+
 const meter = await createAutocompleteMeter();
 console.log(`POLAR_AUTOCOMPLETE_METER_ID=${meter.id ?? "<unknown>"}`);
 
 for (const planId of Object.keys(planQuotas) as PlanId[]) {
   const product = await createPlanProduct(planId);
   console.log(`POLAR_PRODUCT_ID_${planId.toUpperCase()}=${product.id ?? "<unknown>"}`);
+}
+
+if (env.POLAR_WEBHOOK_URL) {
+  const endpoint = await createWebhookEndpoint(env.POLAR_WEBHOOK_URL);
+  console.log(`POLAR_WEBHOOK_ENDPOINT_ID=${endpoint.id ?? "<unknown>"}`);
+  console.log(`POLAR_WEBHOOK_SECRET=${endpoint.secret ?? "<copy from Polar dashboard>"}`);
+} else {
+  console.log("Set POLAR_WEBHOOK_URL to create the Polar webhook endpoint.");
 }

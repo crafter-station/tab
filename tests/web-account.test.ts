@@ -16,8 +16,14 @@ const TEST_ORIGIN = "http://localhost:8787";
 const WEB_ORIGIN = "http://localhost:3000";
 
 class TestBillingCheckoutClient implements BillingCheckoutClient {
-  async createCheckoutUrl(planId: string, userId: string): Promise<string> {
-    return `https://checkout.test/${planId}?customer=${encodeURIComponent(userId)}`;
+  async createCheckoutUrl(
+    planId: string,
+    user: { id: string; email?: string; name?: string },
+  ): Promise<string> {
+    const url = new URL(`https://checkout.test/${planId}`);
+    url.searchParams.set("customer", user.id);
+    if (user.email) url.searchParams.set("email", user.email);
+    return url.toString();
   }
 
   async createPortalUrl(userId: string, customerId?: string): Promise<string> {
@@ -27,7 +33,11 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
 
 async function createWebTestEnv() {
   const database = new Database(":memory:");
-  const auth = createAuthInstance({ database, baseURL: TEST_ORIGIN });
+  const auth = createAuthInstance({
+    database,
+    baseURL: TEST_ORIGIN,
+    requireEmailVerification: false,
+  });
   await migrateAuth(auth);
 
   const deviceTokenService = new DeviceTokenService();
@@ -161,7 +171,9 @@ describe("Web account surface", () => {
     });
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toInclude("checkout.test/free");
+    const location = response.headers.get("location");
+    expect(location).toInclude("checkout.test/free");
+    expect(location).toInclude(encodeURIComponent(email));
     expect(response.headers.get("set-cookie")).toBeTruthy();
   });
 

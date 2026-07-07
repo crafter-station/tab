@@ -8,6 +8,7 @@ export const env = createEnv({
     POLAR_ORGANIZATION_ID: z.string().optional(),
     POLAR_SEND_ORGANIZATION_ID: z.enum(["true", "false"]).default("false"),
     POLAR_SERVER: z.enum(["production", "sandbox"]).default("production"),
+    POLAR_WEBHOOK_URL: z.url().optional(),
     WEB_PORT: z.coerce.number().int().positive().default(3000),
   },
   runtimeEnv: process.env,

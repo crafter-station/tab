@@ -13,6 +13,26 @@ function optionalEnvString(value: string | undefined): string | undefined {
   return value && value.trim() ? value : undefined;
 }
 
+function isPolarInvalidCustomerEmailError(error: unknown): boolean {
+  const details = (error as { detail?: unknown }).detail;
+  if (!Array.isArray(details)) return false;
+
+  return details.some((detail) => {
+    const record = optionalObject(detail);
+    const location = Array.isArray(record?.loc) ? record.loc : [];
+    return (
+      location.includes("customer_email") &&
+      optionalString(record?.type) === "value_error"
+    );
+  });
+}
+
+function optionalObject(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
 export type UserEntitlement = {
   readonly userId: string;
   readonly planId: PlanId;
@@ -133,8 +153,30 @@ export class InMemoryUsageMeterClient implements UsageMeterClient {
   }
 }
 
+export function createUsageMeterClient(
+  options?: CreatePolarUsageMeterClientOptions,
+): UsageMeterClient {
+  const accessToken = options?.accessToken ?? env.POLAR_ACCESS_TOKEN;
+  const meterId = options?.meterId ?? env.POLAR_AUTOCOMPLETE_METER_ID;
+
+  if (accessToken && meterId) {
+    return new PolarUsageMeterClient(options);
+  }
+
+  if (accessToken || meterId) {
+    throw new Error(
+      "Polar usage metering is partially configured. Set POLAR_ACCESS_TOKEN and POLAR_AUTOCOMPLETE_METER_ID.",
+    );
+  }
+
+  return new InMemoryUsageMeterClient();
+}
+
 export interface BillingCheckoutClient {
-  createCheckoutUrl(planId: PlanId, userId: string): Promise<string>;
+  createCheckoutUrl(
+    planId: PlanId,
+    user: { id: string; email?: string; name?: string },
+  ): Promise<string>;
   createPortalUrl(userId: string, customerId?: string): Promise<string>;
 }
 
@@ -146,9 +188,12 @@ export type CreatePolarBillingCheckoutClientOptions = {
 };
 
 export class StubBillingCheckoutClient implements BillingCheckoutClient {
-  async createCheckoutUrl(planId: PlanId, userId: string): Promise<string> {
+  async createCheckoutUrl(
+    planId: PlanId,
+    user: { id: string; email?: string; name?: string },
+  ): Promise<string> {
     void planId;
-    void userId;
+    void user;
     throw new Error("Polar checkout is not configured");
   }
 
@@ -191,10 +236,40 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
     );
   }
 
-  async createCheckoutUrl(planId: PlanId, userId: string): Promise<string> {
+  async createCheckoutUrl(
+    planId: PlanId,
+    user: { id: string; email?: string; name?: string },
+  ): Promise<string> {
+    try {
+      return await this.createCheckoutUrlWithEmail(planId, user);
+    } catch (error) {
+      if (!user.email || !isPolarInvalidCustomerEmailError(error)) {
+        throw error;
+      }
+
+      return this.createCheckoutUrlWithEmail(planId, {
+        ...user,
+        email: undefined,
+      });
+    }
+  }
+
+  private async createCheckoutUrlWithEmail(
+    planId: PlanId,
+    user: { id: string; email?: string; name?: string },
+  ): Promise<string> {
     const checkout = await this.polar.checkouts.create({
       products: [this.productIds[planId]],
-      externalCustomerId: userId,
+      externalCustomerId: user.id,
+      customerEmail: user.email,
+      customerName: user.name,
+      customerMetadata: {
+        tabbUserId: user.id,
+      },
+      metadata: {
+        planId,
+        tabbUserId: user.id,
+      },
       successUrl: this.successUrl,
     });
 
@@ -501,7 +576,32 @@ function optionalDate(value: unknown): Date | undefined {
 }
 
 function optionalRecord(value: unknown): Record<string, unknown> | undefined {
-  return value as Record<string, unknown> | undefined;
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function firstString(...values: unknown[]): string | undefined {
+  for (const value of values) {
+    const stringValue = optionalString(value);
+    if (stringValue) return stringValue;
+  }
+  return undefined;
+}
+
+function normalizeStatus(value: string | undefined): UserEntitlement["status"] {
+  switch (value) {
+    case "active":
+    case "canceled":
+    case "past_due":
+    case "unpaid":
+    case "inactive":
+      return value;
+    case "revoked":
+      return "inactive";
+    default:
+      return "inactive";
+  }
 }
 
 function planIdFromProductName(name: string): PlanId | null {
@@ -510,6 +610,23 @@ function planIdFromProductName(name: string): PlanId | null {
   if (lower.includes("pro")) return "pro";
   if (lower.includes("free")) return "free";
   return null;
+}
+
+function planIdFromProductId(
+  productId: string | undefined,
+): PlanId | null {
+  if (!productId) return null;
+  if (productId === env.POLAR_PRODUCT_ID_FREE) return "free";
+  if (productId === env.POLAR_PRODUCT_ID_PRO) return "pro";
+  if (productId === env.POLAR_PRODUCT_ID_MAX) return "max";
+  return null;
+}
+
+function planIdFromMetadata(
+  metadata: Record<string, unknown> | undefined,
+): PlanId | null {
+  const planId = optionalString(metadata?.planId ?? metadata?.plan_id);
+  return planId && planId in planQuotas ? (planId as PlanId) : null;
 }
 
 export type WebhookValidationResult =
@@ -557,29 +674,61 @@ export class BillingWebhookHandler {
     const data = payload.data;
 
     switch (payload.type) {
+      case "subscription.active":
       case "subscription.created":
-      case "subscription.updated": {
+      case "subscription.updated":
+      case "subscription.past_due":
+      case "subscription.revoked": {
         const customer = optionalRecord(data.customer);
         const product = optionalRecord(data.product);
-        const userId = optionalString(customer?.external_id);
-        const customerId = optionalString(data.customer_id);
+        const metadata = optionalRecord(data.metadata);
+        const customerMetadata = optionalRecord(customer?.metadata);
+        const productMetadata = optionalRecord(product?.metadata);
+        const userId = firstString(
+          customer?.external_id,
+          customer?.externalCustomerId,
+          data.external_customer_id,
+          data.externalCustomerId,
+          metadata?.tabbUserId,
+          metadata?.tabb_user_id,
+          customerMetadata?.tabbUserId,
+          customerMetadata?.tabb_user_id,
+        );
+        const customerId = firstString(data.customer_id, data.customerId, customer?.id);
         const subscriptionId = optionalString(data.id);
-        const status = optionalString(data.status) ?? "inactive";
+        const status =
+          payload.type === "subscription.active"
+            ? "active"
+            : payload.type === "subscription.past_due"
+              ? "past_due"
+              : payload.type === "subscription.revoked"
+                ? "inactive"
+                : normalizeStatus(optionalString(data.status));
         const productName = optionalString(product?.name);
-        const currentPeriodEnd = optionalDate(data.current_period_end);
+        const productId = firstString(data.product_id, data.productId, product?.id);
+        const currentPeriodEnd = optionalDate(
+          data.current_period_end ?? data.currentPeriodEnd,
+        );
 
-        if (!userId || !customerId || !subscriptionId || !productName) {
+        if (!userId || !customerId || !subscriptionId) {
           return;
         }
 
-        const planId = planIdFromProductName(productName) ?? "free";
+        const existing = await this.storage.getEntitlement(userId);
+        const planId =
+          planIdFromMetadata(metadata) ??
+          planIdFromMetadata(productMetadata) ??
+          planIdFromProductId(productId) ??
+          (productName ? planIdFromProductName(productName) : null) ??
+          existing?.planId ??
+          "free";
 
         await this.storage.setEntitlement({
           userId,
           planId,
           polarCustomerId: customerId,
           polarSubscriptionId: subscriptionId,
-          status: status as UserEntitlement["status"],
+          status,
           currentPeriodEnd,
           cachedAt: new Date(),
         });

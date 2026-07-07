@@ -1,13 +1,26 @@
-import { planQuotas, type PlanId } from "@tabb/billing";
 import {
   BillingQuotaResponseSchema,
   DeviceAuthorizeResponseSchema,
-  type DeviceListItem,
   DeviceListResponseSchema,
   MemoryListResponseSchema,
-  type PersonalMemory,
 } from "@tabb/contracts";
+import { createElement } from "react";
+import type { ReactNode } from "react";
+import {
+  DashboardPage,
+  DownloadPage,
+  ForgotPasswordPage,
+  HomePage,
+  LoginPage,
+  MessagePage,
+  PricingPage,
+  ResetPasswordPage,
+  SignupPage,
+  type AuthSearch,
+  type User,
+} from "./components/web-pages.tsx";
 import { env } from "./env.ts";
+import { renderPage } from "./render-page.tsx";
 
 export type WebAppConfig = {
   apiBaseUrl: string;
@@ -17,128 +30,16 @@ export type WebAppConfig = {
   latestVersion?: string;
 };
 
-type User = {
-  id: string;
-  name?: string;
-  email?: string;
-};
-
 type SessionResult =
   | { ok: true; user: User }
   | { ok: false; response: Response };
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  return date.toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-  });
-}
-
-function formatPlanName(planId: string): string {
-  return planQuotas[planId as PlanId]?.name ?? planId.charAt(0).toUpperCase() + planId.slice(1);
-}
-
-function formatMonthlyPrice(monthlyPriceUsd: number): string {
-  if (monthlyPriceUsd === 0) {
-    return "Free";
-  }
-
-  return `$${monthlyPriceUsd}/mo`;
-}
-
-function renderTableOrEmpty(
-  rows: string,
-  header: string,
-  emptyMessage: string,
-): string {
-  if (!rows) {
-    return `<p>${emptyMessage}</p>`;
-  }
-
-  return `<table><thead>${header}</thead><tbody>${rows}</tbody></table>`;
-}
-
-function layout(
-  title: string,
-  content: string,
-  options: { user?: User; path?: string } = {},
-): string {
-  const { user, path } = options;
-  const nav = [
-    { href: "/", label: "Home" },
-    { href: "/pricing", label: "Pricing" },
-    ...(user ? [{ href: "/dashboard", label: "Dashboard" }] : []),
-  ];
-
-  const authLink = user
-    ? `<form method="post" action="/logout" style="display:inline"><button type="submit" class="link-button">Sign out</button></form>`
-    : `<a href="/login" class="button">Sign in</a>`;
-
-  const navItems = nav
-    .map(
-      (item) =>
-        `<a href="${item.href}" class="${path === item.href ? "active" : ""}">${item.label}</a>`,
-    )
-    .join("");
-
-  return `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>${escapeHtml(title)}</title>
-  <style>
-    :root { color-scheme: light dark; }
-    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; line-height: 1.5; max-width: 960px; margin: 0 auto; padding: 1rem; color: #111; background: #fff; }
-    header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #ddd; padding-bottom: 1rem; margin-bottom: 1.5rem; }
-    header a { text-decoration: none; color: inherit; }
-    nav { display: flex; gap: 1rem; align-items: center; }
-    nav a.active { font-weight: 600; text-decoration: underline; }
-    .button, button { display: inline-block; padding: 0.5rem 0.75rem; border-radius: 0.375rem; border: 1px solid #111; background: #111; color: #fff; text-decoration: none; cursor: pointer; }
-    .button.secondary { background: #fff; color: #111; }
-    .link-button { background: transparent; color: inherit; border: none; padding: 0; font: inherit; cursor: pointer; text-decoration: underline; }
-    .card { border: 1px solid #ddd; border-radius: 0.5rem; padding: 1rem; margin: 1rem 0; }
-    .pricing-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1rem; }
-    .price { font-size: 1.5rem; font-weight: 700; }
-    .muted { color: #666; }
-    table { width: 100%; border-collapse: collapse; margin-top: 0.5rem; }
-    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #eee; }
-    form.inline { display: inline; }
-    .alert { background: #fff3cd; border: 1px solid #ffeaa7; padding: 0.75rem; border-radius: 0.375rem; }
-    footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #ddd; font-size: 0.875rem; color: #666; }
-    label { display: block; margin-top: 0.75rem; font-weight: 500; }
-    input { width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }
-    .error { color: #c0392b; }
-  </style>
-</head>
-<body>
-  <header>
-    <a href="/" style="font-weight:700;font-size:1.25rem">Tabb</a>
-    <nav>${navItems} ${authLink}</nav>
-  </header>
-  <main>${content}</main>
-  <footer>Tabb — native autocomplete for macOS.</footer>
-</body>
-</html>`;
-}
 
 function redirect(location: string, status = 302): Response {
   return new Response(null, { status, headers: { location } });
 }
 
-function html(body: string, status = 200): Response {
-  return new Response(body, {
+function html(body: ReactNode, title: string, status = 200): Response {
+  return new Response(renderPage(title, body), {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
@@ -147,9 +48,8 @@ function html(body: string, status = 200): Response {
 function htmlErrorPage(
   title: string,
   message: string,
-  user?: User,
 ): Response {
-  return html(layout(title, `<p class="error">${message}</p>`, { user }));
+  return html(createElement(MessagePage, { title, message }), title);
 }
 
 function json(body: unknown, status = 200): Response {
@@ -231,66 +131,12 @@ export function createWebApp(config: WebAppConfig) {
     return getSession(cookieHeader);
   }
 
-  function homePage(path: string): Response {
-    const content = `
-      <section class="card">
-        <h1>Native autocomplete for macOS</h1>
-        <p>Tabb suggests the next few words while you type in Mail, Slack, Notes, Ghostty, and everywhere else you write.</p>
-        <p>Your typing context stays on your Mac. Personal Memory is stored in your account and visible only to you.</p>
-        <a href="/download" class="button">Download for macOS</a>
-        <a href="/pricing" class="button secondary">See pricing</a>
-      </section>
-      <section>
-        <h2>How it works</h2>
-        <ol>
-          <li>Install the Tabb app and grant Accessibility permissions.</li>
-          <li>Sign in with your Tabb account.</li>
-          <li>Tabb shows a lightweight suggestion overlay after you pause typing.</li>
-          <li>Press Option+Tab or click the overlay to accept a suggestion.</li>
-        </ol>
-      </section>`;
-    return html(layout(`${appName} — Native autocomplete for macOS`, content, { path }));
+  function homePage(): Response {
+    return html(createElement(HomePage), `${appName} - Native autocomplete for macOS`);
   }
 
-  function pricingPage(path: string): Response {
-    const plans = Object.entries(planQuotas).map(([planId, plan]) => ({
-      planId: planId as PlanId,
-      ...plan,
-    }));
-
-    const cards = plans
-      .map((plan) => {
-        const cta = `<a href="/billing/checkout?plan=${plan.planId}" class="button">${
-          plan.planId === "free" ? "Start free" : `Choose ${plan.name}`
-        }</a>`;
-        return `
-          <div class="card">
-            <h3>${escapeHtml(plan.name)}</h3>
-            <div class="price">${formatMonthlyPrice(plan.monthlyPriceUsd)}</div>
-            <p>${plan.monthlyAutocompleteSuggestions.toLocaleString()} autocompletes per month</p>
-            <p>Personal Memory included</p>
-            ${cta}
-          </div>`;
-      })
-      .join("");
-
-    const content = `
-      <h1>Pricing</h1>
-      <p>Choose the plan that fits how much you write. Upgrade or downgrade at any time.</p>
-      <div class="pricing-grid">${cards}</div>`;
-    return html(layout(`${appName} Pricing`, content, { path }));
-  }
-
-  function preserveAuthSearchParams(searchParams: URLSearchParams): string {
-    const params = new URLSearchParams();
-    const deviceId = searchParams.get("device_id");
-    const callback = searchParams.get("callback");
-
-    if (deviceId) params.set("device_id", deviceId);
-    if (callback) params.set("callback", callback);
-
-    const query = params.toString();
-    return query ? `?${query}` : "";
+  function pricingPage(): Response {
+    return html(createElement(PricingPage), `${appName} Pricing`);
   }
 
   async function authorizeDeviceRedirect(
@@ -316,20 +162,21 @@ export function createWebApp(config: WebAppConfig) {
     return response;
   }
 
+  function authSearchFromParams(searchParams: URLSearchParams): AuthSearch {
+    return {
+      device_id: searchParams.get("device_id") ?? undefined,
+      callback: searchParams.get("callback") ?? undefined,
+    };
+  }
+
   async function loginPage(
     error?: string,
-    path = "/login",
+    _path = "/login",
     searchParams = new URLSearchParams(),
     cookieHeader?: string,
   ): Promise<Response> {
-    const errorBlock = error
-      ? `<p class="error">${escapeHtml(error)}</p>`
-      : "";
     const deviceId = searchParams.get("device_id") ?? "";
     const callback = searchParams.get("callback") ?? "";
-    const handoffFields = `${
-      deviceId ? `<input type="hidden" name="device_id" value="${escapeHtml(deviceId)}">` : ""
-    }${callback ? `<input type="hidden" name="callback" value="${escapeHtml(callback)}">` : ""}`;
     if (!error && deviceId && callback && cookieHeader) {
       const session = await getSession(cookieHeader);
       if (session.ok) {
@@ -337,52 +184,31 @@ export function createWebApp(config: WebAppConfig) {
       }
     }
 
-    const signupHref = `/signup${preserveAuthSearchParams(searchParams)}`;
-    const content = `
-      <h1>Sign in to ${escapeHtml(appName)}</h1>
-      <form method="post" action="/login" class="card">
-        ${errorBlock}
-        ${handoffFields}
-        <label>Email
-          <input type="email" name="email" required autocomplete="email">
-        </label>
-        <label>Password
-          <input type="password" name="password" required autocomplete="current-password">
-        </label>
-        <p style="margin-top:1rem"><button type="submit">Sign in</button></p>
-        <p class="muted">Need an account? <a href="${signupHref}">Create one</a>.</p>
-      </form>`;
-    return html(layout(`Sign in — ${appName}`, content, { path }));
+    return html(
+      createElement(LoginPage, { search: authSearchFromParams(searchParams), error }),
+      `Sign in - ${appName}`,
+    );
   }
 
-  function signupPage(error?: string, path = "/signup", searchParams = new URLSearchParams()): Response {
-    const errorBlock = error
-      ? `<p class="error">${escapeHtml(error)}</p>`
-      : "";
-    const deviceId = searchParams.get("device_id") ?? "";
-    const callback = searchParams.get("callback") ?? "";
-    const handoffFields = `${
-      deviceId ? `<input type="hidden" name="device_id" value="${escapeHtml(deviceId)}">` : ""
-    }${callback ? `<input type="hidden" name="callback" value="${escapeHtml(callback)}">` : ""}`;
-    const loginHref = `/login${preserveAuthSearchParams(searchParams)}`;
-    const content = `
-      <h1>Create your ${escapeHtml(appName)} account</h1>
-      <form method="post" action="/signup" class="card">
-        ${errorBlock}
-        ${handoffFields}
-        <label>Name
-          <input type="text" name="name" required autocomplete="name">
-        </label>
-        <label>Email
-          <input type="email" name="email" required autocomplete="email">
-        </label>
-        <label>Password
-          <input type="password" name="password" required autocomplete="new-password">
-        </label>
-        <p style="margin-top:1rem"><button type="submit">Sign up</button></p>
-        <p class="muted">Already have an account? <a href="${loginHref}">Sign in</a>.</p>
-      </form>`;
-    return html(layout(`Sign up — ${appName}`, content, { path }));
+  function signupPage(error?: string, _path = "/signup", searchParams = new URLSearchParams()): Response {
+    return html(
+      createElement(SignupPage, { search: authSearchFromParams(searchParams), error }),
+      `Sign up - ${appName}`,
+    );
+  }
+
+  function forgotPasswordPage(error?: string, sent = false): Response {
+    return html(
+      createElement(ForgotPasswordPage, { error, sent }),
+      `Reset password - ${appName}`,
+    );
+  }
+
+  function resetPasswordPage(error?: string, token?: string): Response {
+    return html(
+      createElement(ResetPasswordPage, { error, token }),
+      `Choose a new password - ${appName}`,
+    );
   }
 
   async function loginHandler(request: Request, cookieHeader?: string): Promise<Response> {
@@ -409,6 +235,9 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (signInResponse.status !== 200) {
+      if (signInResponse.status === 403) {
+        return loginPage("Check your email to verify your account before signing in.");
+      }
       return loginPage("Invalid email or password.");
     }
 
@@ -463,6 +292,13 @@ export function createWebApp(config: WebAppConfig) {
       cookieHeader,
     );
 
+    if (signInResponse.status === 403) {
+      return htmlErrorPage(
+        "Check your email",
+        "We sent you a verification link. Verify your email address before signing in to Tabb.",
+      );
+    }
+
     if (deviceId && callback && signInResponse.status === 200) {
       const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
       if (signedInCookieHeader) {
@@ -485,6 +321,10 @@ export function createWebApp(config: WebAppConfig) {
           setCookies(response, signInResponse);
           return response;
         }
+
+        const response = redirect("/billing/checkout?plan=free");
+        setCookies(response, signInResponse);
+        return response;
       }
     }
 
@@ -493,10 +333,56 @@ export function createWebApp(config: WebAppConfig) {
     return response;
   }
 
+  async function forgotPasswordHandler(request: Request): Promise<Response> {
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return forgotPasswordPage("Invalid form submission.");
+    }
+
+    const email = String(formData.get("email") ?? "");
+    const redirectTo = new URL("/reset-password", request.url).toString();
+    const response = await apiRequest("/api/auth/request-password-reset", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ email, redirectTo }),
+    });
+
+    if (response.status !== 200) {
+      return forgotPasswordPage("Could not send a reset link. Please try again.");
+    }
+
+    return forgotPasswordPage(undefined, true);
+  }
+
+  async function resetPasswordHandler(request: Request): Promise<Response> {
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch {
+      return resetPasswordPage("Invalid form submission.");
+    }
+
+    const token = String(formData.get("token") ?? "");
+    const newPassword = String(formData.get("password") ?? "");
+    const response = await apiRequest("/api/auth/reset-password", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ token, newPassword }),
+    });
+
+    if (response.status !== 200) {
+      return resetPasswordPage("Could not update your password. Request a new reset link and try again.", token);
+    }
+
+    return redirect("/login");
+  }
+
   async function accountPage(
     cookieHeader: string | undefined,
-    path: string,
-    searchParams: URLSearchParams,
+    _path: string,
+    _searchParams: URLSearchParams,
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
@@ -514,99 +400,17 @@ export function createWebApp(config: WebAppConfig) {
     const quota = BillingQuotaResponseSchema.parse(await quotaResponse.json());
     const deviceList = DeviceListResponseSchema.parse(await devicesResponse.json());
     const memoryList = MemoryListResponseSchema.parse(await memoriesResponse.json());
-
-    const upgradeAlert =
-      quota.data.usage >= quota.data.quota
-        ? `<div class="alert"><strong>Quota exhausted.</strong> You have used ${quota.data.usage.toLocaleString()} of ${quota.data.quota.toLocaleString()} autocompletes this month. <a href="/pricing">Upgrade to continue</a>.</div>`
-        : "";
-
-    const upgradeLinks = Object.entries(planQuotas)
-      .filter(([planId]) => planId !== quota.data.planId)
-      .map(([planId, plan]) => {
-        const label = plan.monthlyPriceUsd === 0 ? `Switch to ${plan.name}` : `Upgrade to ${plan.name}`;
-        return `<a href="/billing/checkout?plan=${planId}" class="button">${label}</a>`;
-      })
-      .join(" ");
-
-    const usageBar = `
-      <div class="card">
-        <h2>Monthly usage</h2>
-        <p><strong>${formatPlanName(quota.data.planId)} plan</strong></p>
-        <p>${quota.data.usage.toLocaleString()} / ${quota.data.quota.toLocaleString()} autocompletes used this month</p>
-        <p class="muted">Resets ${formatDate(quota.data.resetAt)}</p>
-        ${upgradeAlert}
-        <p>${upgradeLinks} <a href="/billing/portal" class="button secondary">Manage billing</a></p>
-      </div>`;
-
-    const devicesRows = deviceList.data.devices
-      .map((device: DeviceListItem) => {
-        const revokeForm = device.revoked
-          ? ""
-          : `<form class="inline" method="post" action="/account/devices/${encodeURIComponent(device.deviceId)}/revoke"><button type="submit">Revoke</button></form>`;
-
-        return `
-          <tr>
-            <td>${escapeHtml(device.deviceId)}</td>
-            <td>${escapeHtml(device.platform)}</td>
-            <td>${escapeHtml(device.appVersion)}</td>
-            <td>${formatDate(device.createdAt)}</td>
-            <td>${device.revoked ? "Revoked" : "Active"}</td>
-            <td>${revokeForm}</td>
-          </tr>`;
-      })
-      .join("");
-
-    const devicesTableHeader =
-      "<tr><th>Device</th><th>Platform</th><th>Version</th><th>Added</th><th>Status</th><th></th></tr>";
-
-    const devicesSection = `
-      <div class="card" id="devices">
-        <h2>Devices</h2>
-        ${renderTableOrEmpty(devicesRows, devicesTableHeader, "No devices linked to your account.")}
-      </div>`;
-
-    const memoryRows = memoryList.data.memories
-      .map(
-        (memory: PersonalMemory) => `
-          <tr>
-            <td>${escapeHtml(memory.category)}</td>
-            <td>${escapeHtml(memory.content)}</td>
-            <td>${escapeHtml(memory.source)}</td>
-            <td>${formatDate(memory.createdAt)}</td>
-            <td>
-              <form class="inline" method="post" action="/account/memory/${encodeURIComponent(memory.id)}/delete"><button type="submit">Delete</button></form>
-            </td>
-          </tr>`,
-      )
-      .join("");
-
-    const memoriesTableHeader =
-      "<tr><th>Category</th><th>Content</th><th>Source</th><th>Added</th><th></th></tr>";
-
-    const memoriesSection = `
-      <div class="card" id="memories">
-        <h2>Personal Memory</h2>
-        ${renderTableOrEmpty(memoryRows, memoriesTableHeader, "No memories stored yet.")}
-      </div>`;
-
-    const tab = searchParams.get("tab");
-    const focusScript = tab
-      ? `<script>document.getElementById("${escapeHtml(tab)}")?.scrollIntoView();</script>`
-      : "";
-
-    const content = `
-      <h1>Dashboard</h1>
-      <div class="card">
-        <h2>Account configuration</h2>
-        <p><strong>${escapeHtml(sessionCheck.user.email ?? sessionCheck.user.name ?? sessionCheck.user.id)}</strong></p>
-        <p class="muted">Identity is managed by Tabb auth. Additional account settings will appear here when supported by the API.</p>
-      </div>
-      ${usageBar}
-      ${devicesSection}
-      ${memoriesSection}
-      ${focusScript}`;
-
-    return html(layout(`Dashboard — ${appName}`, content, { user: sessionCheck.user, path }));
+    return html(
+      createElement(DashboardPage, {
+        data: {
+          user: sessionCheck.user,
+          quota: quota.data,
+          devices: deviceList.data.devices,
+          memories: memoryList.data.memories,
+        },
+      }),
+      `Dashboard - ${appName}`,
+    );
   }
 
   async function checkoutRedirect(
@@ -628,7 +432,6 @@ export function createWebApp(config: WebAppConfig) {
       return htmlErrorPage(
         "Checkout error",
         "Could not start checkout. Please try again.",
-        sessionCheck.user,
       );
     }
 
@@ -648,7 +451,6 @@ export function createWebApp(config: WebAppConfig) {
       return htmlErrorPage(
         "Billing error",
         "Could not open billing portal. Please try again.",
-        sessionCheck.user,
       );
     }
 
@@ -707,14 +509,7 @@ export function createWebApp(config: WebAppConfig) {
   }
 
   function downloadPage(): Response {
-    const content = `
-      <section class="card">
-        <h1>Download Tabb for macOS</h1>
-        <p>Install the native autocomplete app directly on your Mac.</p>
-        <p><a href="/download/tabb.dmg" class="button">Download Tabb.dmg</a></p>
-        <p class="muted">Version ${escapeHtml(latestVersion)} · macOS 14+. Notarization and code signing are handled during release packaging.</p>
-      </section>`;
-    return html(layout(`${appName} Download`, content));
+    return html(createElement(DownloadPage, { latestVersion }), `${appName} Download`);
   }
 
   return {
@@ -724,11 +519,11 @@ export function createWebApp(config: WebAppConfig) {
       const cookieHeader = request.headers.get("cookie") ?? undefined;
 
       if (path === "/" && request.method === "GET") {
-        return homePage(path);
+        return homePage();
       }
 
       if (path === "/pricing" && request.method === "GET") {
-        return pricingPage(path);
+        return pricingPage();
       }
 
       if (path === "/login") {
@@ -739,6 +534,21 @@ export function createWebApp(config: WebAppConfig) {
       if (path === "/signup") {
         if (request.method === "GET") return signupPage(undefined, path, url.searchParams);
         if (request.method === "POST") return signupHandler(request, cookieHeader);
+      }
+
+      if (path === "/forgot-password") {
+        if (request.method === "GET") return forgotPasswordPage();
+        if (request.method === "POST") return forgotPasswordHandler(request);
+      }
+
+      if (path === "/reset-password") {
+        if (request.method === "GET") {
+          const error = url.searchParams.get("error") === "INVALID_TOKEN"
+            ? "This reset link is invalid or expired."
+            : undefined;
+          return resetPasswordPage(error, url.searchParams.get("token") ?? undefined);
+        }
+        if (request.method === "POST") return resetPasswordHandler(request);
       }
 
       if (path === "/logout" && request.method === "POST") {
@@ -799,7 +609,11 @@ export function createWebApp(config: WebAppConfig) {
         });
       }
 
-      return html(layout("Not found", `<h1>Not found</h1><p>The page <code>${escapeHtml(path)}</code> does not exist.</p>`), 404);
+      return html(
+        createElement(MessagePage, { title: "Not found", message: `The page ${path} does not exist.` }),
+        "Not found",
+        404,
+      );
     },
   };
 }

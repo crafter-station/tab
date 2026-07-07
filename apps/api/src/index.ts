@@ -32,6 +32,7 @@ import {
   D1BillingStorage,
   type BillingCheckoutClient,
   createBillingCheckoutClient,
+  createUsageMeterClient,
   UsageMeterService,
 } from "./billing.ts";
 import {
@@ -463,7 +464,11 @@ export function createApp(deps: ApiDependencies = {}) {
     try {
       const url = await billingCheckoutClient.createCheckoutUrl(
         planIdParam as keyof typeof planQuotas,
-        sessionCheck.session.user.id,
+        {
+          id: sessionCheck.session.user.id,
+          email: sessionCheck.session.user.email,
+          name: sessionCheck.session.user.name,
+        },
       );
       return c.json(
         BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
@@ -671,9 +676,13 @@ function createD1Dependencies(db: D1Database): ApiDependencies {
   const telemetryStorage = new D1TelemetryStorage(db);
 
   return {
-    auth: createAuthInstance({ drizzleDatabase: database }),
+    auth: createAuthInstance({
+      drizzleDatabase: database,
+      requireEmailVerification: true,
+    }),
     deviceTokenService: new DeviceTokenService({ storage: deviceTokenStorage }),
     billingService: new BillingService({ storage: billingStorage }),
+    usageMeterService: new UsageMeterService({ client: createUsageMeterClient() }),
     personalMemoryStorage,
     telemetryStorage,
   };

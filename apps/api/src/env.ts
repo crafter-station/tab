@@ -21,6 +21,8 @@ export const env = createEnv({
     POLAR_PRODUCT_ID_PRO: z.string().optional(),
     POLAR_SERVER: z.enum(["production", "sandbox"]).default("production"),
     POLAR_WEBHOOK_SECRET: z.string().optional(),
+    RESEND_API_KEY: z.string().optional(),
+    RESEND_FROM_EMAIL: z.string().default("Tabb <onboarding@resend.dev>"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

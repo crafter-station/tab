@@ -13,7 +13,11 @@ const TEST_ORIGIN = "http://localhost:8787";
 
 async function createAuthApp() {
   const database = new Database(":memory:");
-  const auth = createAuthInstance({ database, baseURL: TEST_ORIGIN });
+  const auth = createAuthInstance({
+    database,
+    baseURL: TEST_ORIGIN,
+    requireEmailVerification: false,
+  });
   await migrateAuth(auth);
   const deviceTokenService = new DeviceTokenService();
   const app = createApp({ auth, deviceTokenService });
