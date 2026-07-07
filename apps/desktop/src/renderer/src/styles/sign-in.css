@@ -4,7 +4,9 @@
   height: 100%;
   overflow: hidden;
   color: var(--text);
-  background: var(--bg);
+  background:
+    radial-gradient(circle at 64% 0%, rgba(218, 190, 77, 0.1), transparent 34%),
+    var(--bg);
 }
 
 .sign-in-hero {
@@ -30,7 +32,7 @@
   flex-shrink: 0;
   align-items: center;
   justify-content: center;
-  padding: 42px;
+  padding: 52px 42px 42px;
   background:
     radial-gradient(circle at 100% 0%, rgba(218, 190, 77, 0.14), transparent 32%),
     linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%), var(--bg);
@@ -84,7 +86,7 @@
 
 .sign-in-copy h1 {
   max-width: 300px;
-  font-size: 38px;
+  font-size: 36px;
   font-weight: 900;
   letter-spacing: -0.06em;
   line-height: 0.95;
@@ -100,13 +102,13 @@
   line-height: 1.45;
 }
 
-@media (max-width: 760px) {
+@media (max-width: 839px) {
   .sign-in-shell {
     flex-direction: column;
   }
 
   .sign-in-hero {
-    height: 210px;
+    height: 200px;
     flex: none;
     border-right: 0;
     border-bottom: 1px solid var(--border);
@@ -115,6 +117,10 @@
   .sign-in-panel {
     width: 100%;
     flex: 1;
-    padding: 32px;
+    padding: 36px 32px 32px;
+  }
+
+  .sign-in-panel__content {
+    max-width: 360px;
   }
 }

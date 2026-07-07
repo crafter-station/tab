@@ -9,10 +9,28 @@ export type CreateSettingsWindowDependencies = {
   preloadPath: string;
 };
 
+const controlWindowSizes = {
+  settings: { width: 940, height: 720, minWidth: 840, minHeight: 640 },
+  "sign-in": { width: 900, height: 620, minWidth: 840, minHeight: 580 },
+  onboarding: { width: 760, height: 760, minWidth: 720, minHeight: 720 },
+} satisfies Record<ControlWindowRoute, { width: number; height: number; minWidth: number; minHeight: number }>;
+
+function applyControlWindowSize(win: BrowserWindow, route: ControlWindowRoute): void {
+  const size = controlWindowSizes[route];
+  win.setMinimumSize(size.minWidth, size.minHeight);
+  win.setSize(size.width, size.height);
+  win.center();
+}
+
 export function createSettingsWindow(deps: CreateSettingsWindowDependencies, route: ControlWindowRoute = "settings"): BrowserWindow {
+  const size = controlWindowSizes[route];
   const win = new BrowserWindow({
-    width: 760,
-    height: 780,
+    width: size.width,
+    height: size.height,
+    minWidth: size.minWidth,
+    minHeight: size.minHeight,
+    useContentSize: true,
+    center: true,
     resizable: true,
     minimizable: true,
     maximizable: false,
@@ -43,6 +61,7 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
 
   function show(route: ControlWindowRoute = "settings"): BrowserWindow {
     if (win && !win.isDestroyed()) {
+      applyControlWindowSize(win, route);
       if (win.webContents.getURL() && !win.webContents.getURL().endsWith(`#${route}`)) {
         win.loadFile(deps.rendererPath, { hash: route });
       }

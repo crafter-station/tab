@@ -8,8 +8,12 @@ export type CreateOnboardingWindowDependencies = {
 
 export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies): BrowserWindow {
   const win = new BrowserWindow({
-    width: 700,
+    width: 760,
     height: 760,
+    minWidth: 720,
+    minHeight: 720,
+    useContentSize: true,
+    center: true,
     resizable: false,
     minimizable: false,
     maximizable: false,

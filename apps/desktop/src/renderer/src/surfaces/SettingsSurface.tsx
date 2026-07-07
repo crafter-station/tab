@@ -49,9 +49,9 @@ function createFallbackStatus(): DesktopStatus {
 
 function SettingsRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-4 border-b border-border py-4 last:border-b-0">
-      <span className="text-sm font-medium">{label}</span>
-      <div className="flex min-w-0 flex-wrap items-center justify-end gap-2 text-sm text-muted-foreground">{children}</div>
+    <div className="settings-row">
+      <span className="settings-row__label">{label}</span>
+      <div className="settings-row__value">{children}</div>
     </div>
   );
 }
@@ -145,9 +145,9 @@ export function SettingsSurface() {
         </aside>
 
         <div className="no-drag flex min-h-0 flex-col overflow-hidden">
-          <div className="drag-region border-b border-border px-7 py-5">
+          <div className="settings-tabs__header drag-region">
             <p className="eyebrow">{SETTINGS_TABS.find((tab) => tab.value === activeTab)?.label}</p>
-            <h2 className="mt-2 text-3xl font-black tracking-[-0.05em]">Control your native typing assistant.</h2>
+            <h2 className="settings-tabs__title">Control your native typing assistant.</h2>
           </div>
 
           <div className="settings-tabs__content">
@@ -158,7 +158,7 @@ export function SettingsSurface() {
           ) : null}
 
           {activeTab === "account" ? (
-          <Card className="bg-muted/50 shadow-none">
+          <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Account</CardTitle>
               <CardDescription>Sign-in, quota, and device connectivity for this Mac.</CardDescription>
@@ -194,7 +194,7 @@ export function SettingsSurface() {
           ) : null}
 
           {activeTab === "controls" ? (
-          <Card className="bg-muted/50 shadow-none">
+          <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Controls</CardTitle>
               <CardDescription>Pause local observation without signing out.</CardDescription>
@@ -210,7 +210,7 @@ export function SettingsSurface() {
           ) : null}
 
           {activeTab === "permissions" ? (
-          <Card className="bg-muted/50 shadow-none">
+          <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Permissions</CardTitle>
               <CardDescription>macOS permissions required for suggestions and acceptance.</CardDescription>
@@ -245,7 +245,7 @@ export function SettingsSurface() {
           ) : null}
 
           {activeTab === "memory" ? (
-          <Card className="bg-muted/50 shadow-none">
+          <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Quick Memory</CardTitle>
               <CardDescription>Review memory snippets stored for autocomplete personalization.</CardDescription>

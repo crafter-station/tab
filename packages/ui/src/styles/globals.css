@@ -67,6 +67,7 @@
 .dark,
 body[data-surface="settings"],
 body[data-surface="onboarding"],
+body[data-surface="sign-in"],
 body[data-surface="overlay"] {
   --background: #11110f;
   --foreground: rgba(255, 255, 255, 0.92);
