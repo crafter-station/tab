@@ -5,8 +5,10 @@ import {
   type PersonalMemorySource,
   type PersonalMemorySensitivity,
 } from "@tabb/contracts";
+import { generateText, Output } from "ai";
 import { validateMemoryContent } from "@tabb/memory-policy";
 import type { PersonalMemoryService } from "./personal-memory.ts";
+import { z } from "zod";
 
 export type { MemoryJob };
 
@@ -86,6 +88,34 @@ const ELIGIBLE_MEMORY_SOURCES: readonly PersonalMemorySource[] = [
   "terminal_input",
 ];
 
+const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
+
+const MemoryOperationOutputSchema = z.object({
+  operations: z.array(
+    z.discriminatedUnion("type", [
+      z.object({
+        type: z.literal("create"),
+        content: z.string().min(1),
+        category: z.string().min(1),
+        source: z.enum(["typed_text", "terminal_input"]),
+        sensitivity: z.enum(["normal", "sensitive", "private"]),
+      }),
+      z.object({
+        type: z.literal("update"),
+        id: z.string().min(1),
+        content: z.string().min(1),
+        category: z.string().min(1),
+        source: z.enum(["typed_text", "terminal_input"]),
+        sensitivity: z.enum(["normal", "sensitive", "private"]),
+      }),
+      z.object({
+        type: z.literal("archive"),
+        id: z.string().min(1),
+      }),
+    ]),
+  ),
+});
+
 function isEligibleMemorySource(
   source: PersonalMemorySource,
 ): source is "typed_text" | "terminal_input" {
@@ -116,6 +146,51 @@ class NoOpMemoryAgentModel implements MemoryAgentModel {
   }
 }
 
+class AiGatewayMemoryAgentModel implements MemoryAgentModel {
+  async proposeOperations(
+    job: MemoryJob,
+    memories: readonly PersonalMemory[],
+  ): Promise<readonly ProposedMemoryOperation[]> {
+    if (!process.env.AI_GATEWAY_API_KEY) {
+      throw new Error("AI_GATEWAY_API_KEY is not configured");
+    }
+
+    const { output } = await generateText({
+      model: MEMORY_EXTRACTION_MODEL_ID,
+      output: Output.object({ schema: MemoryOperationOutputSchema }),
+      system:
+        "Extract durable personal memory from first-party user typing. Return only operations that are useful for future autocomplete. Do not store secrets, credentials, payment data, medical data, or third-party pasted content. Prefer no operation over speculative memory.",
+      prompt: `Active application: ${job.activeApplication.bundleId}
+Source: ${job.contextSource}
+Redaction applied: ${job.redaction.applied}
+Redaction count: ${job.redaction.redactionCount}
+
+Existing memories:
+${formatMemoriesForPrompt(memories)}
+
+Recent user typing:
+"""${job.typingContext}"""
+
+Create a memory for stable preferences, projects, recurring facts, names, or work context. Update an existing memory only when the new text clearly refines it. Archive only when the text clearly contradicts an existing memory. Use category values like app bundle IDs, project names, or short topics.`,
+      maxOutputTokens: 1200,
+      temperature: 0,
+    });
+
+    return output.operations;
+  }
+}
+
+function formatMemoriesForPrompt(memories: readonly PersonalMemory[]): string {
+  if (memories.length === 0) return "None";
+
+  return memories
+    .map(
+      (memory) =>
+        `- id=${memory.id}; category=${memory.category}; sensitivity=${memory.sensitivity}; content=${memory.content}`,
+    )
+    .join("\n");
+}
+
 export class BackgroundMemoryAgent {
   private readonly personalMemoryService: PersonalMemoryService;
   private readonly model: MemoryAgentModel;
@@ -123,6 +198,10 @@ export class BackgroundMemoryAgent {
   constructor(deps: BackgroundMemoryAgentDependencies) {
     this.personalMemoryService = deps.personalMemoryService;
     this.model = deps.model ?? new NoOpMemoryAgentModel();
+  }
+
+  static createRealModel(): MemoryAgentModel {
+    return new AiGatewayMemoryAgentModel();
   }
 
   async processJob(job: MemoryJob): Promise<void> {

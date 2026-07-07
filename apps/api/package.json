@@ -4,6 +4,7 @@
   "private": true,
   "main": "src/index.ts",
   "dependencies": {
+    "@ai-sdk/groq": "^4.0.5",
     "@ai-sdk/openai": "^4.0.8",
     "@polar-sh/sdk": "^0.48.1",
     "@tabb/billing": "workspace:*",

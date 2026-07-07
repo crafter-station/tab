@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { logger } from "hono/logger";
 import type { Context, Next } from "hono";
 import { generateText } from "ai";
+import { groq } from "@ai-sdk/groq";
 import { planQuotas, shouldCountSuggestionResponse } from "@tabb/billing";
 import {
   ApiErrorResponseSchema,
@@ -72,7 +73,7 @@ export type SuggestionGenerator = (
   input: SuggestionInput,
 ) => Promise<{ text: string; modelId?: string } | null>;
 
-const SUGGESTION_MODEL_ID = "google/gemma-4-31b-it";
+const SUGGESTION_MODEL_ID = "openai/gpt-oss-20b";
 
 type ApiVariables = {
   device: Device;
@@ -136,15 +137,15 @@ function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
 }
 
 function createRealSuggestionGenerator(): SuggestionGenerator {
-  const apiKey = process.env.AI_GATEWAY_API_KEY;
+  const apiKey = process.env.GROQ_API_KEY;
 
   return async (input) => {
     if (!apiKey) {
-      throw new Error("AI_GATEWAY_API_KEY is not configured");
+      throw new Error("GROQ_API_KEY is not configured");
     }
 
     const { text } = await generateText({
-      model: SUGGESTION_MODEL_ID,
+      model: groq(SUGGESTION_MODEL_ID),
       system:
         "You are a concise autocomplete assistant. Given the user's recent typing context, respond with only the most likely next few words that continue their thought. Do not explain, prefix, or quote the continuation. If there is no clear continuation, respond with an empty string.",
       prompt: `Active application: ${input.activeApplication.bundleId}\nSource: ${input.contextSource}\nContext: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
@@ -191,6 +192,9 @@ export function createApp(deps: ApiDependencies = {}) {
     deps.memoryAgent ??
     new BackgroundMemoryAgent({
       personalMemoryService,
+      model: deps.generateSuggestion
+        ? undefined
+        : BackgroundMemoryAgent.createRealModel(),
     });
   const telemetryService =
     deps.telemetryService ??
