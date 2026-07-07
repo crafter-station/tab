@@ -1,0 +1,26 @@
+{
+  "name": "@tabb/ui",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./components/*": "./src/components/*",
+    "./lib/*": "./src/lib/*",
+    "./styles.css": "./src/styles/globals.css"
+  },
+  "dependencies": {
+    "@radix-ui/react-label": "^2.1.11",
+    "@radix-ui/react-separator": "^1.1.11",
+    "@radix-ui/react-slot": "latest",
+    "@radix-ui/react-tooltip": "latest",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.562.0",
+    "tailwind-merge": "^3.4.0"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

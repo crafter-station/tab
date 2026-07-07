@@ -16,7 +16,9 @@
     "sandcastle:verify-gh": "bun --env-file=.sandcastle/.env .sandcastle/verify-gh.ts"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@tailwindcss/vite": "latest",
+    "@types/bun": "latest",
+    "tailwindcss": "latest"
   },
   "peerDependencies": {
     "typescript": "^5"

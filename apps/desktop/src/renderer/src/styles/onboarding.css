@@ -113,8 +113,3 @@
   gap: 10px;
   align-self: end;
 }
-
-.onboarding-actions .button:first-child,
-.onboarding-actions .button:last-child:nth-child(3) {
-  grid-column: 1 / -1;
-}

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button } from "../components/Button";
-import { PermissionCard } from "../components/PermissionCard";
+import { Button, PermissionCard, SectionCard } from "@tabb/ui";
 
 type OnboardingStep = "accessibility" | "input-monitoring" | "done";
 
@@ -122,7 +121,7 @@ export function OnboardingSurface() {
 
   return (
     <main className="onboarding-shell">
-      <section className="onboarding-card section-card">
+      <SectionCard className="onboarding-card">
         <div className="onboarding-card__chrome drag-region" aria-hidden="true" />
         <header className="onboarding-hero drag-region">
           <p className="eyebrow">Welcome to Tabb</p>
@@ -170,19 +169,19 @@ export function OnboardingSurface() {
         </details>
 
         <footer className="onboarding-actions no-drag">
-          <Button disabled={busy || (step === "accessibility" && accessibilityGranted)} onClick={handlePrimaryAction}>
+          <Button className="col-span-full" disabled={busy || (step === "accessibility" && accessibilityGranted)} onClick={handlePrimaryAction}>
             {primaryLabel}
           </Button>
           <Button disabled={busy} onClick={handleRefresh} variant="secondary">
             Refresh Permission Status
           </Button>
           {step === "done" ? (
-            <Button disabled={busy} onClick={() => window.tabb?.relaunchForPermissions?.()} variant="ghost">
+            <Button className="col-span-full" disabled={busy} onClick={() => window.tabb?.relaunchForPermissions?.()} variant="ghost">
               Relaunch Tabb
             </Button>
           ) : null}
         </footer>
-      </section>
+      </SectionCard>
     </main>
   );
 }

@@ -1,9 +1,9 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
+import "@tabb/ui/styles.css";
 import { App } from "./App";
 import "./styles/base.css";
 import "./styles/layout.css";
-import "./styles/controls.css";
 import "./styles/overlay.css";
 import "./styles/onboarding.css";
 

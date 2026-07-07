@@ -17,12 +17,9 @@
     "dist:mac": "bun run build && bunx electron-builder --mac"
   },
   "dependencies": {
-    "class-variance-authority": "^0.7.1",
-    "clsx": "^2.1.1",
-    "lucide-react": "^0.562.0",
+    "@tabb/ui": "workspace:*",
     "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "tailwind-merge": "^3.4.0"
+    "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@electron/notarize": "^3.0.1",

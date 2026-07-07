@@ -20,7 +20,9 @@
       "@tabb/contracts": ["packages/contracts/src/index.ts"],
       "@tabb/effect-services": ["packages/effect-services/src/index.ts"],
       "@tabb/memory-policy": ["packages/memory-policy/src/index.ts"],
-      "@tabb/redaction": ["packages/redaction/src/index.ts"]
+      "@tabb/redaction": ["packages/redaction/src/index.ts"],
+      "@tabb/ui": ["packages/ui/src/index.ts"],
+      "@tabb/ui/*": ["packages/ui/src/*"]
     },
 
     // Best practices
@@ -35,5 +37,5 @@
     "noUnusedParameters": false,
     "noPropertyAccessFromIndexSignature": false
   },
-  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "index.ts"]
+  "include": ["apps/**/*.ts", "apps/**/*.tsx", "packages/**/*.ts", "packages/**/*.tsx", "index.ts"]
 }

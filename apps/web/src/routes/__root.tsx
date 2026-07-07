@@ -1,5 +1,6 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
-import "../styles.css";
+import "@tabb/ui/styles.css";
+import { Button } from "@tabb/ui";
 
 function RootComponent() {
   return (
@@ -8,23 +9,23 @@ function RootComponent() {
         <HeadContent />
       </head>
       <body>
-        <div className="shell">
-          <header className="site-header">
-            <a className="brand" href="/">
+        <div className="mx-auto max-w-6xl p-5">
+          <header className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-start">
+            <a className="text-xl font-black tracking-[-0.04em] no-underline" href="/">
               Tabb
             </a>
-            <nav>
-              <a href="/pricing">Pricing</a>
-              <a href="/download">Download</a>
-              <a className="button secondary" href="/login">
-                Sign in
-              </a>
+            <nav className="flex flex-wrap items-center gap-3 font-bold">
+              <a className="no-underline" href="/pricing">Pricing</a>
+              <a className="no-underline" href="/download">Download</a>
+              <Button asChild variant="secondary">
+                <a href="/login">Sign in</a>
+              </Button>
             </nav>
           </header>
-          <main>
+          <main className="py-12">
             <Outlet />
           </main>
-          <footer className="site-footer">
+          <footer className="flex items-center justify-between gap-4 border-t py-6 text-muted-foreground max-md:flex-col max-md:items-start">
             <span>Tabb, native autocomplete for macOS.</span>
             <span>Private context. Account-controlled memory.</span>
           </footer>

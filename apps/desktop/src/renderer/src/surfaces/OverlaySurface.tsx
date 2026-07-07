@@ -1,6 +1,6 @@
+import { FloatingSuggestionBar, type Suggestion } from "@tabb/ui";
 import { useEffect, useState } from "react";
 import { DebugContextCard, type DebugContext } from "../components/DebugContextCard";
-import { FloatingSuggestionBar, type Suggestion } from "../components/FloatingSuggestionBar";
 
 type OverlayMode = "hidden" | "suggestion" | "debug";
 

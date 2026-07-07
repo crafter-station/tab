@@ -13,6 +13,7 @@
     "@tanstack/react-start": "latest",
     "@tabb/billing": "workspace:*",
     "@tabb/contracts": "workspace:*",
+    "@tabb/ui": "workspace:*",
     "better-auth": "^1.6.23",
     "react": "latest",
     "react-dom": "latest"
