@@ -65,7 +65,14 @@ async function createApiFixture(memoryExtractionModel?: MemoryAgentModel) {
   const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
   const personalMemoryService = new PersonalMemoryService({ storage: personalMemoryStorage });
   const telemetryStorage = new InMemoryTelemetryStorage();
-  const app = createApp({ auth, billingService, deviceTokenService, personalMemoryStorage, telemetryStorage, memoryExtractionModel });
+  const app = createApp({
+    auth,
+    billingService,
+    deviceTokenService,
+    personalMemoryStorage,
+    telemetryStorage,
+    memoryExtractionModel,
+  });
   return { app, auth, billingService, deviceTokenService, personalMemoryService };
 }
 
@@ -128,16 +135,20 @@ async function signUpAndAuthorize(
   return { token, cookie };
 }
 
+async function getAuthorizedUserId(app: ReturnType<typeof createApp>, token: string): Promise<string> {
+  const statusResponse = await app.request("/api/status", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return ((await statusResponse.json()) as { data: { userId?: string } }).data.userId ?? "unknown";
+}
+
 describe("desktop memory client", () => {
   it("lists personal memories for the signed-in device", async () => {
     const { app, billingService, deviceTokenService, personalMemoryService } = await createApiFixture();
     const { token } = await signUpAndAuthorize(app, deviceTokenService, billingService);
 
     // Seed a memory through the service so we know the user id without exporting it.
-    const statusResponse = await app.request("/api/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const userId = ((await statusResponse.json()) as { data: { userId?: string } }).data.userId ?? "unknown";
+    const userId = await getAuthorizedUserId(app, token);
 
     await personalMemoryService.createMemory({
       userId,
@@ -161,10 +172,7 @@ describe("desktop memory client", () => {
     const { app, billingService, deviceTokenService, personalMemoryService } = await createApiFixture();
     const { token } = await signUpAndAuthorize(app, deviceTokenService, billingService);
 
-    const statusResponse = await app.request("/api/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const userId = ((await statusResponse.json()) as { data: { userId?: string } }).data.userId ?? "unknown";
+    const userId = await getAuthorizedUserId(app, token);
 
     const memory = await personalMemoryService.createMemory({
       userId,
@@ -590,10 +598,7 @@ describe("desktop memory extraction window", () => {
       },
     });
     const { token } = await signUpAndAuthorize(app, deviceTokenService, billingService);
-    const statusResponse = await app.request("/api/status", {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    const userId = ((await statusResponse.json()) as { data: { userId?: string } }).data.userId ?? "unknown";
+    const userId = await getAuthorizedUserId(app, token);
     let currentTimeMs = Date.parse("2026-07-08T16:00:00.000Z");
     const scheduler = createManualScheduler();
     const window = createMemoryExtractionWindow({
