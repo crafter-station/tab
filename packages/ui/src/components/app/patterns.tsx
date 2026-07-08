@@ -39,6 +39,11 @@ const reviewSettingsNavItems: readonly SettingsNavItem[] = [
   { label: "Debug", href: "#debug" },
 ];
 
+const reviewPlanRows = [
+  { plan: "Free", status: <Badge variant="outline">Muted: available</Badge> },
+  { plan: "Pro", status: <Badge>Active: upgrade path</Badge> },
+] as const;
+
 type SectionBlockProps = PropsWithChildren<{
   className?: string;
   id?: string;
@@ -184,6 +189,48 @@ export function SettingsRow({ label, description, className, children }: Setting
   );
 }
 
+function ReviewPrimitiveControls({ inputId }: { inputId: string }) {
+  return (
+    <div className="grid gap-3">
+      <h3 className="text-sm font-bold">Primitive controls</h3>
+      <div className="grid gap-3 rounded-[var(--radius-card)] border border-border bg-muted/35 p-4">
+        <Label htmlFor={inputId}>Email input</Label>
+        <Input id={inputId} type="email" placeholder="writer@example.com" readOnly value="writer@example.com" />
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm">Button</Button>
+          <Button size="sm" variant="secondary">Secondary</Button>
+          <Button size="sm" variant="outline">Outline</Button>
+          <Button size="sm" variant="destructive">Destructive</Button>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button size="sm" variant="ghost">Tooltip guidance</Button>
+            </TooltipTrigger>
+            <TooltipContent>Use tooltips for brief interface clarification only.</TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+      <Table aria-label="Plan table">
+        <TableHeader>
+          <TableRow>
+            <TableHead>Plan table</TableHead>
+            <TableHead>Status</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {reviewPlanRows.map((row) => (
+            <TableRow key={row.plan}>
+              <TableCell>{row.plan}</TableCell>
+              <TableCell>{row.status}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </div>
+  );
+}
+
 function ReviewPanel({ mode }: { mode: ThemeMode }) {
   const inputId = `review-email-${mode}`;
 
@@ -204,45 +251,7 @@ function ReviewPanel({ mode }: { mode: ThemeMode }) {
           <StatusRow label="Permission" value="Info: guided setup" tone="info" description="Permission copy stays readable in both modes." />
           <StatusRow label="Delete memory" value="Destructive: confirm first" tone="destructive" description="Risky actions are labeled before color is applied." />
         </div>
-        <div className="grid gap-3">
-          <h3 className="text-sm font-bold">Primitive controls</h3>
-          <div className="grid gap-3 rounded-[var(--radius-card)] border border-border bg-muted/35 p-4">
-            <Label htmlFor={inputId}>Email input</Label>
-            <Input id={inputId} type="email" placeholder="writer@example.com" readOnly value="writer@example.com" />
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm">Button</Button>
-              <Button size="sm" variant="secondary">Secondary</Button>
-              <Button size="sm" variant="outline">Outline</Button>
-              <Button size="sm" variant="destructive">Destructive</Button>
-            </div>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button size="sm" variant="ghost">Tooltip guidance</Button>
-                </TooltipTrigger>
-                <TooltipContent>Use tooltips for brief interface clarification only.</TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-          <Table aria-label="Plan table">
-            <TableHeader>
-              <TableRow>
-                <TableHead>Plan table</TableHead>
-                <TableHead>Status</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              <TableRow>
-                <TableCell>Free</TableCell>
-                <TableCell><Badge variant="outline">Muted: available</Badge></TableCell>
-              </TableRow>
-              <TableRow>
-                <TableCell>Pro</TableCell>
-                <TableCell><Badge>Active: upgrade path</Badge></TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
-        </div>
+        <ReviewPrimitiveControls inputId={inputId} />
         <div className="grid gap-3">
           <h3 className="text-sm font-bold">Settings navigation</h3>
           <SettingsNav items={reviewSettingsNavItems} />
