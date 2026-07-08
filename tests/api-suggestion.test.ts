@@ -3,6 +3,7 @@ import { Database } from "bun:sqlite";
 import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
 import {
   createApp,
+  createSuggestionPrompt,
   normalizeGeneratedSuggestion,
 } from "../apps/api/src/index.ts";
 import { BillingService, InMemoryBillingStorage, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
@@ -53,6 +54,26 @@ const validRequest = {
   memoryEnabled: true,
   contextHash: "com.apple.TextEdit:Hello:false",
   clientMetadata: { appVersion: "0.0.1", platform: "darwin" },
+} as const;
+
+const appContext = {
+  fragments: [
+    {
+      id: "fragment-1",
+      provider: "synthetic-visible-thread",
+      kind: "conversation",
+      text: "Alex: Can you confirm the launch date?",
+      confidence: 0.92,
+      redaction: { applied: false, redactionCount: 0, kinds: [] },
+      requestable: true,
+      memoryEligible: false,
+    },
+  ],
+  metadata: {
+    provider: "synthetic-visible-thread",
+    status: "available",
+    confidence: 0.92,
+  },
 } as const;
 
 const validDevice = {
@@ -172,6 +193,25 @@ describe("Hono suggestion API", () => {
     expect(capturedInput?.requestId).toBe("req-1");
     expect(capturedInput?.typingContext).toBe("Hello");
     expect(capturedInput?.activeApplication.bundleId).toBe("com.apple.TextEdit");
+  });
+
+  it("accepts App Context separately from Typing Context", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const { app, token } = await createAuthenticatedTestApp(async (input) => {
+      capturedInput = input;
+      return { text: " tomorrow" };
+    });
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRequest, appContext }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(capturedInput?.typingContext).toBe("Hello");
+    expect(capturedInput?.appContext?.fragments[0].text).toBe("Alex: Can you confirm the launch date?");
+    expect(capturedInput?.appContext?.fragments[0].memoryEligible).toBe(false);
   });
 
   it("rejects unauthenticated suggestion requests", async () => {
@@ -299,6 +339,40 @@ describe("SuggestionUseCase", () => {
       "suggestion_shown",
       "memory_job_enqueued",
     ]);
+  });
+
+  it("keeps App Context out of Personal Memory jobs", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const { billingService, memoryJobQueue, useCase } = createUseCase(async (input) => {
+      capturedInput = input;
+      return { text: " tomorrow", modelId: "test-model" };
+    });
+    await activateFreePlan(billingService);
+
+    const result = await useCase.handle(validDevice, { ...validRequest, appContext });
+
+    expect(result.ok).toBe(true);
+    expect(capturedInput?.appContext?.fragments).toHaveLength(1);
+    expect(memoryJobQueue.getJobs()).toHaveLength(1);
+    expect(memoryJobQueue.getJobs()[0].typingContext).toBe("Hello");
+    expect(JSON.stringify(memoryJobQueue.getJobs())).not.toContain("launch date");
+  });
+
+  it("formats App Context as background while preserving the exact draft", () => {
+    const prompt = createSuggestionPrompt({
+      requestId: "req-1",
+      typingContext: "Hello",
+      contextSource: "typed_text",
+      activeApplication: { bundleId: "com.apple.TextEdit" },
+      memoryEnabled: true,
+      memories: [],
+      appContext,
+    });
+
+    expect(prompt).toContain("Continue the user's exact text");
+    expect(prompt).toContain('User draft to continue exactly: """Hello"""');
+    expect(prompt).toContain("App Context background (suggestion-only, do not continue this text directly):");
+    expect(prompt).toContain("Alex: Can you confirm the launch date?");
   });
 
   it("returns quota exhaustion before generating suggestions", async () => {

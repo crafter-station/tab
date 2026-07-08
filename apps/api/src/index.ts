@@ -31,6 +31,7 @@ import {
 } from "./telemetry.ts";
 import {
   SuggestionUseCase,
+  createSuggestionPrompt,
   createRealSuggestionGenerator,
   normalizeGeneratedSuggestion,
   type SuggestionGenerator,
@@ -47,7 +48,7 @@ import { registerBillingRoutes } from "./routes/billing.ts";
 import { registerSuggestionRoutes } from "./routes/suggestions.ts";
 import { registerTelemetryRoutes } from "./routes/telemetry.ts";
 
-export { normalizeGeneratedSuggestion };
+export { createSuggestionPrompt, normalizeGeneratedSuggestion };
 export type { SuggestionGenerator, SuggestionInput };
 
 export const apiAppBoundary = {

@@ -12,6 +12,7 @@ import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engi
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
+import { createAppContextManager, type AppContextSnapshot } from "../apps/desktop/src/main/app-context.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
@@ -717,13 +718,25 @@ describe("desktop native suggestion loop", () => {
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
       insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
       compatibilityStore?: ReturnType<typeof createApplicationCompatibilityStore>;
+      getAppContext?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
+      clearAppContext?: () => void;
     } = {}) {
       const buffer = createTypingContextBuffer();
       const calls: Array<{ type: string; value?: unknown }> = [];
       const session = createNativeSuggestionSession({
         typingContext: buffer,
         requestSuggestion: async (snapshot) => {
-          calls.push({ type: "requestSuggestion", value: snapshot.sanitizedContext });
+          calls.push({
+            type: "requestSuggestion",
+            value: snapshot.appContext
+              ? {
+                typingContext: snapshot.sanitizedContext,
+                appContextStatus: snapshot.appContext.metadata.status,
+                appContextProvider: snapshot.appContext.metadata.provider,
+                appContextFragmentCount: snapshot.appContext.fragments.length,
+              }
+              : snapshot.sanitizedContext,
+          });
           return overrides.requestSuggestion?.(snapshot) ?? { id: "s-1", text: " world" };
         },
         getContextSource: () => "typed_text",
@@ -755,6 +768,8 @@ describe("desktop native suggestion loop", () => {
         recordInteractionTelemetry: overrides.recordInteractionTelemetry,
         triggerPolicy: overrides.triggerPolicy,
         compatibilityStore: overrides.compatibilityStore,
+        getAppContext: overrides.getAppContext,
+        clearAppContext: overrides.clearAppContext,
       });
       return { buffer, calls, session };
     }
@@ -834,6 +849,66 @@ describe("desktop native suggestion loop", () => {
 
       expect(session.isPaused()).toBe(true);
       expect(buffer.getState().context).toBe("");
+    });
+
+    it("attaches suggestion-only App Context to requestable snapshots", async () => {
+      const { calls, session } = makeSession({
+        getAppContext: () => ({
+          fragments: [
+            {
+              id: "fragment-1",
+              provider: "synthetic-provider",
+              kind: "visible_text",
+              text: "Background only",
+              confidence: 0.9,
+              redaction: { applied: false, redactionCount: 0, kinds: [] },
+              requestable: true,
+              memoryEligible: false,
+            },
+          ],
+          metadata: { provider: "synthetic-provider", status: "available", confidence: 0.9 },
+        }),
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Hello");
+      await wait(10);
+
+      const requestCall = calls.find((call) => call.type === "requestSuggestion");
+      expect(requestCall?.value).toMatchObject({
+        typingContext: "Hello",
+        appContextStatus: "available",
+        appContextProvider: "synthetic-provider",
+        appContextFragmentCount: 1,
+      });
+    });
+
+    it("clears App Context on lifecycle clearing events", () => {
+      const manager = createAppContextManager();
+      manager.setSnapshot({
+        fragments: [
+          {
+            id: "fragment-1",
+            provider: "synthetic-provider",
+            kind: "visible_text",
+            text: "Temporary background",
+            confidence: 0.9,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          },
+        ],
+        metadata: { provider: "synthetic-provider", status: "available", confidence: 0.9 },
+      });
+      const { session } = makeSession({
+        getAppContext: () => manager.getSnapshot(),
+        clearAppContext: () => manager.clear(),
+      });
+
+      session.clearContext();
+
+      expect(manager.getSnapshot().fragments).toHaveLength(0);
+      expect(manager.getSnapshot().metadata.status).toBe("cleared");
     });
 
     it("updates context when the user deletes text", () => {
@@ -1193,6 +1268,31 @@ describe("desktop native suggestion loop", () => {
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
         expect(events.some((e) => e.type === "secretDetected")).toBe(true);
+      });
+
+      it("redacts and suppresses secret-like App Context fragments before requests", async () => {
+        const manager = createAppContextManager();
+        manager.setSnapshot({
+          fragments: [
+            {
+              id: "fragment-1",
+              provider: "synthetic-provider",
+              kind: "visible_text",
+              text: "api_key=sk-abc1234567890",
+              confidence: 0.9,
+              redaction: { applied: false, redactionCount: 0, kinds: [] },
+              requestable: true,
+              memoryEligible: false,
+            },
+          ],
+          metadata: { provider: "synthetic-provider", status: "available", confidence: 0.9 },
+        });
+
+        const snapshot = manager.getSnapshot();
+
+        expect(snapshot.fragments).toHaveLength(0);
+        expect(snapshot.metadata.status).toBe("suppressed");
+        expect(snapshot.metadata.suppressionReason).toBe("secret_like_context");
       });
 
       it("redacts bearer tokens in typed context and suppresses the request", async () => {

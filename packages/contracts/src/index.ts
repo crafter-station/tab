@@ -34,6 +34,29 @@ export const ClientMetadataSchema = z.object({
   platform: z.string().min(1).optional(),
 });
 
+export const AppContextFragmentSchema = z.object({
+  id: z.string().min(1),
+  provider: z.string().min(1),
+  kind: z.string().min(1),
+  text: z.string().min(1).max(2_000),
+  confidence: z.number().min(0).max(1),
+  redaction: RedactionSummarySchema,
+  requestable: z.literal(true),
+  memoryEligible: z.literal(false).default(false),
+});
+
+export const AppContextMetadataSchema = z.object({
+  provider: z.string().min(1).optional(),
+  status: z.enum(["available", "empty", "suppressed", "cleared", "unsupported"]),
+  confidence: z.number().min(0).max(1).optional(),
+  suppressionReason: z.string().min(1).optional(),
+});
+
+export const AppContextSchema = z.object({
+  fragments: z.array(AppContextFragmentSchema).max(5).default([]),
+  metadata: AppContextMetadataSchema,
+});
+
 export const DeviceTokenExchangeRequestSchema = z.object({
   code: z.string().min(1),
   deviceId: z.string().min(1),
@@ -163,6 +186,7 @@ export const SuggestionRequestSchema = z.object({
   activeApplication: ActiveApplicationSchema,
   memoryEnabled: z.boolean().default(true),
   contextHash: z.string().min(1).optional(),
+  appContext: AppContextSchema.optional(),
   clientMetadata: ClientMetadataSchema.optional(),
 });
 
@@ -270,6 +294,8 @@ export type SuggestionContextSource = z.infer<
 >;
 export type RedactionSummary = z.infer<typeof RedactionSummarySchema>;
 export type ClientMetadata = z.infer<typeof ClientMetadataSchema>;
+export type AppContextFragment = z.infer<typeof AppContextFragmentSchema>;
+export type AppContext = z.infer<typeof AppContextSchema>;
 export type SuggestionRequest = z.infer<typeof SuggestionRequestSchema>;
 export type Suggestion = z.infer<typeof SuggestionSchema>;
 export type SuggestionResponse = z.infer<typeof SuggestionResponseSchema>;

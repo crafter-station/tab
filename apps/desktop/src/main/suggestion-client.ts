@@ -41,6 +41,7 @@ function buildSuggestionRequest(
     activeApplication: snapshot.activeApplication,
     memoryEnabled: getMemoryEnabledPreference(deps) && snapshot.memoryEligible,
     contextHash: snapshot.contextHash,
+    appContext: snapshot.appContext,
     clientMetadata: {
       appVersion: deps.appVersion,
       platform: deps.platform,

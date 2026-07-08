@@ -1,4 +1,5 @@
 import type { ActiveApplication, RedactionSummary, SuggestionContextSource } from "@tabb/contracts";
+import type { AppContextSnapshot } from "./app-context.ts";
 import {
   activeApplicationKey,
   buildSuggestionContextHash,
@@ -74,6 +75,7 @@ export type SafeTypingContextSnapshot = TypingContextState & {
   requestable: boolean;
   suppressionReason: TypingContextSuppressionReason | null;
   textSession?: TextSessionSnapshot;
+  appContext?: AppContextSnapshot;
 };
 
 export type RequestableTypingContextSnapshot = SafeTypingContextSnapshot & {

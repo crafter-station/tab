@@ -4,6 +4,7 @@ import { shouldCountSuggestionResponse } from "@tabb/billing";
 import { getMemoryEligibility } from "@tabb/memory-policy";
 import type {
   ActiveApplication,
+  AppContext,
   EntitlementErrorDetails,
   PersonalMemory,
   Suggestion,
@@ -27,6 +28,7 @@ export type SuggestionInput = {
   readonly activeApplication: ActiveApplication;
   readonly memoryEnabled: boolean;
   readonly memories: readonly PersonalMemory[];
+  readonly appContext?: AppContext;
 };
 
 export type SuggestionGenerator = (
@@ -66,6 +68,23 @@ function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
   return `\nRelevant personal memory:\n${lines.join("\n")}`;
 }
 
+function formatAppContext(appContext: AppContext | undefined): string {
+  if (!appContext || appContext.fragments.length === 0) return "";
+
+  const lines = appContext.fragments.map(
+    (fragment) => `- [${fragment.provider}/${fragment.kind}, confidence ${fragment.confidence.toFixed(2)}] ${fragment.text}`,
+  );
+  return `\nApp Context background (suggestion-only, do not continue this text directly):\n${lines.join("\n")}`;
+}
+
+export function createSuggestionPrompt(input: SuggestionInput): string {
+  return `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
+
+Active application: ${input.activeApplication.bundleId}
+Source: ${input.contextSource}${formatAppContext(input.appContext)}
+User draft to continue exactly: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`;
+}
+
 export function normalizeGeneratedSuggestion(
   typingContext: string,
   generatedText: string,
@@ -100,11 +119,7 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
 
     const { text } = await generateText({
       model: groq(modelId),
-      prompt: `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
-
-Active application: ${input.activeApplication.bundleId}
-Source: ${input.contextSource}
-Context: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
+      prompt: createSuggestionPrompt(input),
       maxOutputTokens: 128,
       providerOptions: {
         groq: { reasoningEffort: "low" },
@@ -207,6 +222,7 @@ export class SuggestionUseCase {
         activeApplication: request.activeApplication,
         memoryEnabled: request.memoryEnabled,
         memories,
+        appContext: request.appContext,
       });
 
       const latencyMs = Math.round(performance.now() - suggestionStart);

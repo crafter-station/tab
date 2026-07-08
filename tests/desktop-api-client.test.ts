@@ -6,6 +6,7 @@ import {
   type RequestableTypingContextSnapshot,
   type TypingContextState,
 } from "../apps/desktop/src/main/typing-context.ts";
+import type { AppContextSnapshot } from "../apps/desktop/src/main/app-context.ts";
 
 function makeState(overrides: Partial<TypingContextState> = {}): TypingContextState {
   return {
@@ -82,6 +83,51 @@ describe("desktop API suggestion client", () => {
 
     const request = SuggestionRequestSchema.parse(captured.body);
     expect(request.memoryEnabled).toBe(false);
+  });
+
+  it("sends sanitized App Context separately from Typing Context", async () => {
+    const captured: { body?: unknown } = {};
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      return new Response(
+        JSON.stringify({ status: "ok", data: { suggestions: [{ id: "s-1", text: " there" }] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+    const appContext: AppContextSnapshot = {
+      fragments: [
+        {
+          id: "fragment-1",
+          provider: "synthetic-provider",
+          kind: "visible_text",
+          text: "Visible background context",
+          confidence: 0.9,
+          redaction: { applied: false, redactionCount: 0, kinds: [] },
+          requestable: true,
+          memoryEligible: false,
+        },
+      ],
+      metadata: {
+        provider: "synthetic-provider",
+        status: "available",
+        confidence: 0.9,
+      },
+    };
+
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      fetch,
+    });
+
+    await requestSuggestion({ ...makeSnapshot(), appContext });
+
+    const request = SuggestionRequestSchema.parse(captured.body);
+    expect(request.typingContext).toBe("hello");
+    expect(request.appContext?.fragments[0].text).toBe("Visible background context");
+    expect(request.appContext?.fragments[0].memoryEligible).toBe(false);
   });
 
   it("can enable memories in the suggestion request", async () => {

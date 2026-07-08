@@ -5,6 +5,7 @@ import type {
   SuggestionContextSource,
 } from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
+import type { AppContextSnapshot } from "./app-context.ts";
 import {
   createApplicationCompatibilityStore,
   type ApplicationCompatibilityStore,
@@ -51,6 +52,8 @@ export type NativeSuggestionSessionDependencies = {
   readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
   readonly triggerPolicy?: TriggerPolicy;
   readonly compatibilityStore?: ApplicationCompatibilityStore;
+  readonly getAppContext?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
+  readonly clearAppContext?: () => void;
 };
 
 type VisibleSuggestionTelemetry = {
@@ -167,6 +170,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       clearVisibleSuggestion();
     },
     onSecretLikeContextDetected: () => {
+      deps.clearAppContext?.();
       deps.typingContext.clear();
       outputs.onSecretLikeContextDetected?.();
     },
@@ -198,11 +202,20 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   }
 
   function currentSafeSnapshot(): SafeTypingContextSnapshot {
-    if (textSessionSnapshot) {
-      return createSafeTextSessionSnapshot(textSessionSnapshot);
+    const snapshot = textSessionSnapshot
+      ? createSafeTextSessionSnapshot(textSessionSnapshot)
+      : deps.typingContext.getSnapshot();
+
+    if (!snapshot.requestable || !deps.getAppContext) {
+      return snapshot;
     }
 
-    return deps.typingContext.getSnapshot();
+    const appContext = deps.getAppContext(snapshot);
+    if (appContext.fragments.length === 0 || appContext.metadata.status !== "available") {
+      return snapshot;
+    }
+
+    return { ...snapshot, appContext };
   }
 
   function clearContext(recordDismissed = true): void {
@@ -210,6 +223,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       recordDismissal(currentSafeSnapshot());
     }
     clearTextSessionSnapshot();
+    deps.clearAppContext?.();
     deps.typingContext.clear();
     outputs.resetDebugApiState();
     clearVisibleSuggestion();
@@ -253,11 +267,15 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
         return;
       }
 
+      deps.clearAppContext?.();
       deps.typingContext.setActiveApplication(activeApplication);
       contextChanged();
     },
     setSecureInput(active: boolean): void {
       clearTextSessionSnapshot();
+      if (active) {
+        deps.clearAppContext?.();
+      }
       deps.typingContext.setSecureInput(active);
       contextChanged();
     },
@@ -268,6 +286,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       if (textSessionSnapshot) {
         setPreviouslyActiveApplication(textSessionSnapshot.activeApplication);
         if (isPrivateTextSessionSnapshot(textSessionSnapshot)) {
+          deps.clearAppContext?.();
           deps.typingContext.clear();
         }
       }
