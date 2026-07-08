@@ -255,11 +255,35 @@ describe("Web account surface", () => {
     expect(body).toInclude("1,000,000");
     expect(body).toInclude("$10/mo");
     expect(body).toInclude("$100/mo");
+    expect(body).toInclude("Private Utility Grid pricing");
+    expect(body).toInclude("Quota included");
+    expect(body).toInclude("Muted: Personal Memory included");
+    expect(body).toInclude("Billing path: Sign in required");
     expect(body).toInclude("Start free");
     expect(body).toInclude(
       'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro"',
     );
     expect(body).not.toInclude('href="/billing/checkout?plan=pro"');
+  });
+
+  it("exposes light and dark theme controls on pricing and dashboard surfaces", async () => {
+    const { apiApp, billingService, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activateFreePlan(billingService, userId);
+
+    const pricingResponse = await webRequest(webApp, "/pricing");
+    const dashboardResponse = await webRequest(webApp, "/dashboard", {}, cookie);
+
+    expect(pricingResponse.status).toBe(200);
+    expect(dashboardResponse.status).toBe(200);
+
+    for (const body of [await pricingResponse.text(), await dashboardResponse.text()]) {
+      expect(body).toInclude('aria-label="Theme selection"');
+      expect(body).toInclude('data-theme-choice="light"');
+      expect(body).toInclude('data-theme-choice="dark"');
+    }
   });
 
   it("serves the shared component review surface in light and dark modes", async () => {
@@ -363,6 +387,13 @@ describe("Web account surface", () => {
     const body = await accountResponse.text();
     expect(body).toInclude("Monthly usage");
     expect(body).toInclude("Free plan");
+    expect(body).toInclude("Account status");
+    expect(body).toInclude("Success: signed in");
+    expect(body).toInclude("Quota status");
+    expect(body).toInclude("Active: quota available");
+    expect(body).toInclude("Billing actions");
+    expect(body).toInclude("Muted: no linked devices");
+    expect(body).toInclude("Muted: no Personal Memory stored");
     expect(body).toInclude("Upgrade to Pro");
     expect(body).toInclude("Upgrade to Max");
     expect(body).toInclude("Manage billing");
@@ -845,6 +876,8 @@ describe("Web account surface", () => {
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("macbook-pro-1");
     expect(bodyBefore).toInclude("Active");
+    expect(bodyBefore).toInclude("Active: linked device");
+    expect(bodyBefore).toInclude("Warning: revoke access");
 
     const revokeResponse = await webRequest(
       webApp,
@@ -861,5 +894,6 @@ describe("Web account surface", () => {
     expect(accountAfter.status).toBe(200);
     const bodyAfter = await accountAfter.text();
     expect(bodyAfter).toInclude("Revoked");
+    expect(bodyAfter).toInclude("Muted: device revoked");
   });
 });
