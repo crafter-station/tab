@@ -475,6 +475,10 @@ describe("Web account surface", () => {
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
     await activatePaidPlan(billingService, userId, "max");
 
+    for (let i = 0; i < 1000; i++) {
+      await billingService.consumeSuggestion(userId);
+    }
+
     const response = await webRequest(
       webApp,
       "/billing/checkout?plan=pro",
@@ -500,7 +504,9 @@ describe("Web account surface", () => {
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-max");
 
     const quota = await billingService.checkQuota(userId);
+    expect(quota.ok).toBe(true);
     expect(quota.quota).toBe(1_000_000);
+    expect(quota.usage).toBe(1000);
   });
 
   it("shows billing management when a paid plan change fails without mutating entitlement", async () => {
