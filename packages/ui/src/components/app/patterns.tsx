@@ -39,8 +39,8 @@ const reviewSettingsNavItems: readonly SettingsNavItem[] = [
 ];
 
 const reviewPlanRows = [
-  { plan: "Free", status: <Badge variant="outline">Muted: available</Badge> },
-  { plan: "Pro", status: <Badge>Active: upgrade path</Badge> },
+  { plan: "Free", status: <Badge variant="outline">Available</Badge> },
+  { plan: "Pro", status: <Badge>Upgrade available</Badge> },
 ] as const;
 
 type SectionBlockProps = PropsWithChildren<{
@@ -68,16 +68,19 @@ type SurfaceHeaderProps = {
   description?: string;
   action?: ReactNode;
   className?: string;
+  headingLevel?: 1 | 2 | 3;
 };
 
-export function SurfaceHeader({ eyebrow, title, description, action, className }: SurfaceHeaderProps) {
+export function SurfaceHeader({ eyebrow, title, description, action, className, headingLevel = 2 }: SurfaceHeaderProps) {
+  const Heading = `h${headingLevel}` as const;
+
   return (
     <div className={cn("flex items-start justify-between gap-4 max-sm:flex-col", className)}>
       <div className="grid gap-2">
         {eyebrow ? <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{eyebrow}</p> : null}
-        <h2 className="font-[var(--font-display)] text-2xl font-bold leading-tight tracking-[-0.045em] text-foreground">
+        <Heading className="font-[var(--font-display)] text-2xl font-bold leading-tight tracking-[-0.045em] text-foreground">
           {title}
-        </h2>
+        </Heading>
         {description ? <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
@@ -237,7 +240,7 @@ function ReviewPanel({ mode }: { mode: ThemeMode }) {
         <SurfaceHeader
           eyebrow={`${mode} mode`}
           title="Shared primitive review"
-          description="Buttons, cards, status rows, settings navigation, command/debug blocks, and empty states on the Private Utility Grid system."
+          description="Buttons, cards, status rows, settings navigation, command blocks, and empty states for Tab surfaces."
           action={<Button size="sm">Primary action</Button>}
         />
         <Separator />
@@ -245,19 +248,19 @@ function ReviewPanel({ mode }: { mode: ThemeMode }) {
           <h3 className="text-sm font-bold">Status rows</h3>
           <StatusRow label="Native app" value="Connected" tone="success" description="Desktop handoff is linked to this account." />
           <StatusRow label="Quota" value="Watching" tone="warning" description="Status copy remains visible without relying on color." />
-          <StatusRow label="Permission" value="Info: guided setup" tone="info" description="Permission copy stays readable in both modes." />
-          <StatusRow label="Delete memory" value="Destructive: confirm first" tone="destructive" description="Risky actions are labeled before color is applied." />
+          <StatusRow label="Permission" value="Guided setup" tone="info" description="Permission copy stays readable in both modes." />
+          <StatusRow label="Delete memory" value="Confirm first" tone="destructive" description="Risky actions are labeled before color is applied." />
         </div>
         <ReviewPrimitiveControls inputId={inputId} />
         <div className="grid gap-3">
           <h3 className="text-sm font-bold">Settings navigation</h3>
           <SettingsNav items={reviewSettingsNavItems} />
-          <SettingsRow label="Personal Memory" description="Review and delete memories from account surfaces.">
+          <SettingsRow label="Saved memories" description="Review and delete memories from account surfaces.">
             Local controls
           </SettingsRow>
         </div>
-        <CommandBlock command="debug:typing-context --active-application" label="debug:typing-context" />
-        <EmptyState title="No Personal Memory yet" description="Tab will show saved memories here after you enable personalization." action="Open settings" />
+        <CommandBlock command="tab diagnostics" label="Developer diagnostics" />
+        <EmptyState title="No saved memories yet" description="Tab will show saved memories here after you enable personalization." action="Open settings" />
       </CardContent>
     </Card>
   );
@@ -268,7 +271,7 @@ export function ComponentReviewSurface({ className }: { className?: string }) {
     <SectionBlock className={cn("pug-grid-surface grid gap-4", className)}>
       <SurfaceHeader
         eyebrow="Design system"
-        title="Private Utility Grid components"
+        title="Tab components"
         description="A lightweight review surface for shared primitives and app-level Tab patterns in both supported theme modes."
       />
       <div className="grid gap-4 lg:grid-cols-2">

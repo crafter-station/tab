@@ -27,11 +27,11 @@ type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitia
 type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
-  { value: "account", label: "Account", description: "Sign-in, quota, and connectivity" },
-  { value: "controls", label: "Controls", description: "Pause or resume observation" },
+  { value: "account", label: "Account", description: "Sign-in, usage, and connection" },
+  { value: "controls", label: "Controls", description: "Pause or resume Tab" },
   { value: "appearance", label: "Appearance", description: "Theme follows this Mac by default" },
   { value: "permissions", label: "Permissions", description: "macOS access required by Tab" },
-  { value: "memory", label: "Memory", description: "Personalization snippets" },
+  { value: "memory", label: "Memory", description: "Saved details" },
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
@@ -54,8 +54,8 @@ function formatQuota(status: DesktopStatus) {
 }
 
 function describeQuota(status: DesktopStatus) {
-  if (!status.quota) return "Quota appears after sign-in.";
-  return `Suggestion quota resets ${formatDate(status.quota.resetAt)}.`;
+  if (!status.quota) return "Monthly usage appears after sign-in.";
+  return `Monthly suggestions reset ${formatDate(status.quota.resetAt)}.`;
 }
 
 function getQuotaStatusRowTone(status: DesktopStatus) {
@@ -163,22 +163,22 @@ export function SettingsSurface() {
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Account</CardTitle>
-              <CardDescription>Sign-in, quota, and device connectivity for this Mac.</CardDescription>
+              <CardDescription>Sign-in, monthly suggestions, and connection status for this Mac.</CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               <StatusRow
                 label="Account status"
                 value={formatAuth(status.auth)}
                 tone={getAuthStatusRowTone(status.auth)}
-                description="Authentication and device-token state for this Mac."
+                description="Whether this Mac is connected to your Tab account."
               />
               <StatusRow
                 label="Plan"
                 value={status.quota?.planId ?? "Not available"}
-                description="The active entitlement used for desktop Suggestions."
+                description="The plan used for suggestions on this Mac."
               />
               <StatusRow
-                label="Quota"
+                label="Monthly suggestions"
                 value={formatQuota(status)}
                 tone={getQuotaStatusRowTone(status)}
                 description={describeQuota(status)}
@@ -187,15 +187,15 @@ export function SettingsSurface() {
                 label="Connectivity"
                 value={status.connectivity}
                 tone={status.connectivity === "online" ? "success" : "warning"}
-                description="Live API reachability for account, quota, and memory sync."
+                description="Whether Tab can reach your account and sync saved memories."
               />
               <div className="pt-4">
                 {status.auth === "signed_in" ? (
                   <Button variant="secondary" onClick={() => window.tab?.signOut?.()}>
-                    Sign Out
+                    Sign out
                   </Button>
                 ) : (
-                  <Button onClick={() => window.tab?.signIn?.()}>Sign In</Button>
+                  <Button onClick={() => window.tab?.signIn?.()}>Sign in</Button>
                 )}
               </div>
             </CardContent>
@@ -207,10 +207,10 @@ export function SettingsSurface() {
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Controls</CardTitle>
-              <CardDescription>Pause Typing Context observation and Suggestions without signing out.</CardDescription>
+              <CardDescription>Pause suggestions without signing out.</CardDescription>
             </CardHeader>
             <CardContent>
-              <SettingsRow label="Typing Context and Suggestions" description={pauseState.description}>
+              <SettingsRow label="Suggestions" description={pauseState.description}>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <StatusBadge tone={paused ? "warning" : "ok"}>{pauseState.label}</StatusBadge>
                   <Button variant={paused ? "default" : "secondary"} onClick={() => window.tab?.togglePause?.()}>
@@ -219,7 +219,7 @@ export function SettingsSurface() {
                 </div>
               </SettingsRow>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                Pause keeps your account connected while disabling local Typing Context observation and Floating Suggestion Overlay updates.
+                Pause keeps your account connected while stopping recent typing checks and suggestion bar updates.
               </p>
             </CardContent>
           </Card>
@@ -257,14 +257,14 @@ export function SettingsSurface() {
             <CardHeader>
               <CardTitle>Permissions</CardTitle>
               <CardDescription>
-                Accessibility supports Text Session understanding and accepted Suggestion insertion. Input Monitoring
-                supports typing timing, acceptance shortcuts, and fallback Typing Context signals.
+                Accessibility lets Tab read the text field you are using and add suggestions you accept. Input Monitoring
+                helps Tab notice typing and make Option+Tab work.
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
               <SettingsRow
                 label="Accessibility"
-                description="Required for Text Session understanding and reliable accepted Suggestion insertion."
+                description="Required to read the text field you are using and add suggestions you accept."
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <StatusBadge tone={accessibilityGranted ? "ok" : "warning"}>
@@ -277,7 +277,7 @@ export function SettingsSurface() {
               </SettingsRow>
               <SettingsRow
                 label="Input Monitoring"
-                description="Required for typing timing, Acceptance shortcuts, and fallback Typing Context signals."
+                description="Required to notice typing and make Option+Tab work when you accept a suggestion."
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <StatusBadge tone="warning">Manual</StatusBadge>
@@ -291,19 +291,21 @@ export function SettingsSurface() {
               </SettingsRow>
               <StatusRow
                 label="Privacy boundary"
-                value="Local control"
-                description="Tab does not request Screen Recording or Full Disk Access. Typing Context stays in memory only, Personal Memory stays visible and controlled by you, telemetry is metadata-only, and raw logs are not stored."
+                value="You stay in control"
+                description="Tab does not request Screen Recording or Full Disk Access. Recent typing is used to make suggestions, and saved memories stay visible and controlled by you."
               />
               <StatusRow
                 label={APP_CONTEXT_TRUST_COPY.title}
                 value="Suggestion-only"
                 description={`${APP_CONTEXT_TRUST_COPY.summary} ${APP_CONTEXT_TRUST_COPY.permissionScope}`}
               />
-              <CommandBlock
-                command="bun run desktop:permissions"
-                label="Development permission reset"
-                description="If macOS shows Electron in dev mode, enable Tab with this helper, then relaunch."
-              />
+              {import.meta.env.DEV ? (
+                <CommandBlock
+                  command="bun run desktop:permissions"
+                  label="Developer permission reset"
+                  description="If macOS shows Electron in dev mode, enable Tab with this helper, then relaunch."
+                />
+              ) : null}
             </CardContent>
           </Card>
         );
@@ -312,16 +314,16 @@ export function SettingsSurface() {
         return (
           <Card className="settings-pane shadow-none">
             <CardHeader>
-              <CardTitle>Personal Memory</CardTitle>
-              <CardDescription>Turn saved memories on or off for Suggestions on this Mac.</CardDescription>
+              <CardTitle>Saved memories</CardTitle>
+              <CardDescription>Turn saved memories on or off for suggestions on this Mac.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <SettingsRow
-                label="Use saved memories in Suggestions"
+                label="Use saved memories in suggestions"
                 description={
                   usePersonalMemory
-                    ? "Tab can include your saved Personal Memory when generating Suggestions."
-                    : "Tab will ignore saved Personal Memory when generating Suggestions. Your memories stay stored and editable."
+                    ? "Tab can include saved memories when making suggestions."
+                    : "Tab will ignore saved memories when making suggestions. Your memories stay stored and editable."
                 }
               >
                 <Button
@@ -332,16 +334,18 @@ export function SettingsSurface() {
                   {usePersonalMemory ? "On" : "Off"}
                 </Button>
               </SettingsRow>
-              <StatusRow label="App Context" value="Not saved" description={APP_CONTEXT_TRUST_COPY.memoryScope} />
-              <StatusRow
-                label="Supported App Context providers"
-                value={APP_CONTEXT_SUPPORTED_APP_MATRIX.map((entry) => `${entry.app}: ${entry.provider}`).join("; ")}
-                description={APP_CONTEXT_TRUST_COPY.debugScope}
-              />
+              <StatusRow label="Nearby app text" value="Not saved as memory" description={APP_CONTEXT_TRUST_COPY.memoryScope} />
+              {import.meta.env.DEV ? (
+                <StatusRow
+                  label="Supported nearby app text"
+                  value={APP_CONTEXT_SUPPORTED_APP_MATRIX.map((entry) => entry.app).join(", ")}
+                  description={APP_CONTEXT_TRUST_COPY.debugScope}
+                />
+              ) : null}
               {memories.length === 0 ? (
                 <EmptyState
-                  title="No Personal Memory stored yet"
-                  description="When Personal Memory exists, each row remains readable and deletable from this Mac."
+                  title="No saved memories yet"
+                  description="When saved memories exist, each row remains readable and deletable from this Mac."
                 />
               ) : (
                 memories.map((memory) => (
@@ -349,7 +353,7 @@ export function SettingsSurface() {
                     <div className="min-w-0">
                       <p className="text-sm leading-relaxed">{memory.content}</p>
                       <p className="mt-1 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                        Personal Memory - {describePersonalMemorySource(memory.createdBy)}
+                        Saved memory - {describePersonalMemorySource(memory.createdBy)}
                       </p>
                     </div>
                     <Button variant="secondary" size="sm" onClick={() => window.tab?.deleteMemory?.(memory.id)}>
@@ -397,8 +401,8 @@ export function SettingsSurface() {
           <div className="settings-tabs__header drag-region">
             <SurfaceHeader
               eyebrow={activeTabConfig?.label}
-              title="Control your Native Autocomplete App."
-              description="Account status, Typing Context controls, macOS permissions, quota, connectivity, and Personal Memory stay local, visible, and reversible from this Mac."
+              title="Control Tab for Mac."
+              description="Manage account status, suggestions, macOS permissions, monthly usage, connection, and saved memories from this Mac."
             />
           </div>
 

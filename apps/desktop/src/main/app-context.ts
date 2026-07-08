@@ -251,17 +251,17 @@ const SUPPORTED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[]
 ];
 
 export const APP_CONTEXT_TRUST_COPY = {
-  title: "App Context",
+  title: "Nearby app text",
   summary:
-    "App Context is temporary, suggestion-only background from supported writing apps. It is separate from Typing Context and Personal Memory.",
+    "Nearby app text is temporary context from supported writing apps. It is used only to make suggestions.",
   permissionScope:
-    "Default App Context extraction uses Accessibility metadata and semantic text only. Tabb does not request Screen Recording, Full Disk Access, raw logs, browser history, hidden DOM, screenshots, or file reads for it.",
+    "Tab uses Accessibility metadata and semantic text only. Tab does not request Screen Recording, Full Disk Access, raw logs, browser history, hidden DOM, screenshots, or file reads for it.",
   memoryScope:
-    "Passive app, conversation, document, web, and terminal context is not eligible for Personal Memory by default. Personal Memory remains based on eligible user-authored Typing Context and explicit user control.",
+    "Nearby app, conversation, document, web, and terminal text is not saved as memory by default. Saved memories remain based on eligible writing and explicit user control.",
   clearingScope:
-    "Pause Tabb or clear context to immediately clear both Typing Context and App Context. App Context is also cleared on app/window changes, secure input, secret-like detection, sleep, lock, and quit.",
+    "Pause Tab or clear context to immediately clear recent typing and nearby app text. Nearby app text is also cleared on app/window changes, secure input, secret-like detection, sleep, lock, and quit.",
   debugScope:
-    "Debug and settings surfaces show App Context status, provider, confidence, suppression reason, and supported-app allowlist state as metadata-only diagnostics.",
+    "Developer diagnostics show nearby app text status, provider, confidence, suppression reason, and supported-app allowlist state as metadata-only diagnostics.",
 } as const;
 
 export const APP_CONTEXT_SUPPORTED_APP_MATRIX = [

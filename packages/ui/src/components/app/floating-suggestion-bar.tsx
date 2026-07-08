@@ -43,7 +43,7 @@ export function FloatingSuggestionBar({ suggestion, onAccept, className }: Float
           <Sparkles size={13} strokeWidth={2.2} />
         </span>
         <span className="z-10 truncate text-left text-sm font-medium leading-tight">{suggestion?.text}</span>
-        <span className={shortcutClassName}>Option Tab</span>
+        <span className={shortcutClassName}>Option+Tab</span>
       </button>
     </section>
   );

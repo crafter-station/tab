@@ -11,33 +11,33 @@ type SetupStep = {
 
 const setupSteps: SetupStep[] = [
   {
-    title: "Browser handoff",
-    description: "Sign in opens your browser and returns this Mac to Tab without changing the device-token contract.",
+    title: "Connect this Mac",
+    description: "Sign in opens your browser, then returns you to Tab on this Mac.",
     badgeLabel: "Required",
     badgeTone: "warning",
   },
   {
     title: "Accessibility",
-    description: "Enables focused Text Session understanding and accepted Suggestion insertion.",
+    description: "Lets Tab read the text field you are using and add suggestions you accept.",
     badgeLabel: "Setup step",
     badgeTone: "muted",
   },
   {
     title: "Input Monitoring",
-    description: "Supports typing timing, acceptance shortcuts, and fallback Typing Context signals.",
+    description: "Helps Tab notice typing and make Option+Tab work.",
     badgeLabel: "Setup step",
     badgeTone: "muted",
   },
   {
     title: "Privacy scope",
-    description: "Typing Context stays in memory; no Screen Recording or Full Disk Access is requested.",
+    description: "Tab does not request Screen Recording or Full Disk Access.",
     badgeLabel: "Visible",
     badgeTone: "ok",
   },
   {
-    title: "Practice Suggestion",
-    description: "New users can accept, reject, and try mock Suggestions before Tab runs in another app.",
-    badgeLabel: "Sandboxed",
+    title: "Practice suggestion",
+    description: "Try accepting and dismissing a sample suggestion before Tab runs in another app.",
+    badgeLabel: "Practice",
     badgeTone: "ok",
   },
 ];
@@ -54,7 +54,7 @@ export function SignInSurface() {
     <main className="sign-in-shell">
       <section className="sign-in-hero drag-region" aria-label="Tab setup preview">
         <div className="sign-in-proof pug-dot-grid">
-          <p className="eyebrow">Private Utility Grid</p>
+          <p className="eyebrow">Tab for Mac</p>
           <h2>Connect this Mac, then review setup step by step.</h2>
           <div className="sign-in-proof__steps">
             {setupSteps.map((setupStep) => (
@@ -76,7 +76,7 @@ export function SignInSurface() {
           <div className="sign-in-brand">
             <div className="sign-in-brand__mark">T</div>
             <div>
-              <p className="eyebrow">Tab Desktop</p>
+              <p className="eyebrow">Tab for Mac</p>
               <strong>Private autocomplete for your Mac</strong>
             </div>
           </div>
@@ -84,13 +84,13 @@ export function SignInSurface() {
           <div className="sign-in-copy">
             <h1>Sign in to continue.</h1>
             <p className="lede">
-              Tab opens your browser to connect this desktop app. After sign-in, new users continue through onboarding;
+              Tab opens your browser to connect this Mac. After sign-in, new users continue through onboarding;
               returning users go straight to settings.
             </p>
           </div>
 
           <Button className="sign-in-cta" onClick={handleSignIn}>
-            {opened ? "Waiting for browser sign-in..." : "Sign In"}
+            {opened ? "Waiting for browser sign-in..." : "Sign in"}
           </Button>
 
           {opened ? <p className="sign-in-hint">Complete sign-in in your browser, then return to Tab.</p> : null}

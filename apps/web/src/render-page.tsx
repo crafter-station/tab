@@ -52,8 +52,8 @@ function WebDocument({
             </header>
             <main className="py-10 sm:py-12">{children}</main>
             <footer className="flex items-center justify-between gap-4 border-t border-border/70 py-6 text-sm text-muted-foreground max-md:flex-col max-md:items-start">
-              <span>Tab, Private Utility Grid Native Autocomplete App.</span>
-              <span>Private Typing Context. Account-controlled Personal Memory.</span>
+              <span>Tab, autocomplete for your Mac.</span>
+              <span>You choose when to add suggestions, and you control saved memories.</span>
             </footer>
           </div>
         </div>

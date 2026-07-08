@@ -58,40 +58,40 @@ const quotaExhaustedClassName = "rounded-lg border border-warning/30 bg-[var(--t
 
 const homeProofRows = [
   {
-    label: "Typing Context",
-    value: "Private",
+    label: "Recent typing",
+    value: "Used for suggestions",
     tone: "success",
-    description: "Writing context is handled by the Mac app and only used to prepare the next Suggestion.",
+    description: "Tab uses what you are typing to prepare a suggestion you can choose to add.",
   },
   {
-    label: "Personal Memory",
-    value: "Account controlled",
+    label: "Saved memories",
+    value: "You control them",
     tone: "info",
-    description: "Review and delete memories from your dashboard.",
+    description: "Review and delete saved details from your dashboard.",
   },
   {
-    label: "Floating Suggestion Overlay",
-    value: "Lightweight",
+    label: "Suggestion bar",
+    value: "Stays out of the way",
     tone: "neutral",
-    description: "The overlay stays out of the way until there is something useful to accept.",
+    description: "The suggestion appears only when Tab has something useful to add.",
   },
 ] as const;
 
 const homeFeatureBlocks = [
   {
     eyebrow: "01",
-    title: "Active Application aware",
-    description: "Use one native assistant across Mail, Slack, Notes, Ghostty, and the apps where you already write.",
+    title: "Works where you write",
+    description: "Use one Mac app across Mail, Slack, Notes, Ghostty, and the places you already type.",
   },
   {
     eyebrow: "02",
-    title: "Personal Memory",
-    description: "Keep personalization inspectable with account-level review and delete controls.",
+    title: "Saved details you can see",
+    description: "Keep personalization transparent with review and delete controls in your account.",
   },
   {
     eyebrow: "03",
-    title: "Usage controls",
-    description: "Track quota, billing, linked devices, and account status without leaving the web control plane.",
+    title: "Simple account controls",
+    description: "Track monthly suggestions, billing, connected Macs, and account status from the web dashboard.",
   },
 ] as const;
 
@@ -100,13 +100,13 @@ const downloadPermissionRows = [
     label: "Accessibility permission",
     value: "Required",
     tone: "warning",
-    description: "Tab needs macOS Accessibility permission to show and accept inline Suggestions.",
+    description: "Tab needs macOS Accessibility permission to read the text field you use and add suggestions you accept.",
   },
   {
     label: "Input Monitoring",
     value: "Guided",
     tone: "info",
-    description: "The desktop onboarding explains each permission before you grant it.",
+    description: "Tab explains each permission before you grant it in System Settings.",
   },
 ] as const;
 
@@ -140,8 +140,8 @@ function formatPlanName(planId: string): string {
 }
 
 function planCheckoutLabel(authenticated: boolean): string {
-  if (authenticated) return "Billing path: Direct checkout";
-  return "Billing path: Sign in required";
+  if (authenticated) return "Ready to choose this plan";
+  return "Sign in to choose this plan";
 }
 
 function checkoutPlanHref(planId: PlanId): string {
@@ -170,28 +170,28 @@ function planActionLabel(planName: string, monthlyPriceUsd: number): string {
 
 function emailStatus(emailVerified: boolean | undefined): StatusPresentation {
   if (emailVerified === false) {
-    return { value: "Warning: verification needed", tone: "warning" };
+    return { value: "Verify your email", tone: "warning" };
   }
 
-  return { value: "Active: email verified", tone: "success" };
+  return { value: "Email verified", tone: "success" };
 }
 
 function quotaStatus(quotaExhausted: boolean): StatusPresentation {
   if (quotaExhausted) {
-    return { value: "Warning: quota exhausted", tone: "warning" };
+    return { value: "Monthly suggestions used", tone: "warning" };
   }
 
-  return { value: "Active: quota available", tone: "success" };
+  return { value: "Suggestions available", tone: "success" };
 }
 
 function deviceStatus(device: DeviceListItem): string {
-  if (device.revoked) return "Muted: device revoked (Revoked)";
-  return "Active: linked device";
+  if (device.revoked) return "Access removed";
+  return "Connected";
 }
 
 function memorySourceLabel(createdBy: PersonalMemory["createdBy"]): string {
-  if (createdBy === "user") return "Active: user taught";
-  return "Muted: system learned";
+  if (createdBy === "user") return "Saved by you";
+  return "Saved from accepted writing";
 }
 
 function preserveAuthSearchParams(search: AuthSearch): string {
@@ -248,10 +248,10 @@ function AuthShell({
       <SectionBlock className="pug-dot-grid min-h-full">
         <SurfaceHeader eyebrow={eyebrow} title={title} description={description} />
         <div className="mt-6 grid gap-3">
-          <StatusRow label="Native Autocomplete App" value="Private" tone="success" description="Tab keeps the browser entry point aligned with the Mac app handoff." />
-          <StatusRow label="Typing Context" value="Local first" tone="info" description="Sign-in does not change how writing context is handled in the desktop app." />
+          <StatusRow label="Tab for Mac" value="Connected securely" tone="success" description="Sign in to connect this Mac to your Tab account." />
+          <StatusRow label="Recent typing" value="Used for suggestions" tone="info" description="Sign-in does not save recent typing as a memory." />
           {handoff ? (
-            <StatusRow label="Desktop handoff" value="Preserved" tone="warning" description="Device id, callback, and next fields stay attached to this form." />
+            <StatusRow label="Mac sign-in" value="Ready to return" tone="warning" description="After sign-in, you will return to Tab on this Mac." />
           ) : null}
         </div>
       </SectionBlock>
@@ -267,9 +267,9 @@ export function HomePage() {
     <>
       <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,4rem)] shadow-[var(--tab-shadow-soft)] md:grid-cols-[minmax(0,1.08fr)_minmax(280px,0.92fr)]">
         <div className="grid content-center gap-5">
-          <PageKicker>Private Utility Grid</PageKicker>
-          <h1 className="font-[var(--font-display)] text-[clamp(2.6rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Native Autocomplete App for macOS.</h1>
-          <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Tab suggests the next few words inside the Active Application, then lets you accept a Suggestion with Option+Tab or a click without changing where you write.</p>
+          <PageKicker>Autocomplete for your Mac</PageKicker>
+          <h1 className="font-[var(--font-display)] text-[clamp(2.6rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Autocomplete that works anywhere you write on your Mac.</h1>
+          <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Tab suggests the next few words in the app you are already using. Add a suggestion with Option+Tab or a click, without switching windows.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <a className={buttonVariants()} href="/download">Download for macOS</a>
             <a className={buttonVariants({ variant: "secondary" })} href="/pricing">See pricing</a>
@@ -277,8 +277,8 @@ export function HomePage() {
         </div>
         <Card className="pug-dot-grid">
           <CardHeader>
-            <CardTitle>Proof-oriented by default</CardTitle>
-            <CardDescription>Clear boundaries for context, memory, and Acceptance.</CardDescription>
+            <CardTitle>Clear by default</CardTitle>
+            <CardDescription>Simple controls for suggestions, saved memories, and your account.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-muted-foreground">
             {homeProofRows.map((row) => (
@@ -307,9 +307,9 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
   return (
     <SectionBlock className="pug-grid-surface grid gap-6">
       <SurfaceHeader
-        eyebrow="Private Utility Grid pricing"
+        eyebrow="Simple pricing"
         title="Pricing"
-        description="Choose the plan that fits how much you write. Upgrade or downgrade at any time without changing entitlement behavior."
+        description="Choose the plan that fits how much you write. Upgrade or downgrade whenever you need."
       />
       <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         {plans.map((plan) => (
@@ -317,22 +317,22 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             <CardHeader>
               <div className="flex items-start justify-between gap-3">
                 <CardTitle>{plan.name}</CardTitle>
-                <Badge variant="outline">Plan tier</Badge>
+                <Badge variant="outline">Plan</Badge>
               </div>
               <div className="font-[var(--font-display)] text-4xl font-black tracking-[-0.07em]">{formatMonthlyPrice(plan.monthlyPriceUsd)}</div>
             </CardHeader>
             <CardContent className="grid flex-1 gap-3 text-muted-foreground">
               <StatusRow
-                label="Quota included"
+                label="Monthly suggestions"
                 value={`${plan.monthlyAutocompleteSuggestions.toLocaleString()} / month`}
                 tone="info"
-                description="Autocomplete suggestions included in this plan."
+                description="Suggestions included in this plan."
               />
               <StatusRow
-                label="Personal Memory"
-                value="Muted: Personal Memory included"
+                label="Saved memories"
+                value="Included"
                 tone="neutral"
-                description="Account-controlled memory remains available from the dashboard."
+                description="Review and delete saved details from the dashboard."
               />
               <p className="text-sm font-bold text-foreground">{planCheckoutLabel(authenticated)}</p>
             </CardContent>
@@ -352,7 +352,7 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
   const signupHref = `/signup${preserveAuthSearchParams(search)}`;
 
   return (
-    <AuthShell eyebrow="Account access" title="Sign in" description="Open the Tab web control plane or complete a trusted desktop handoff." handoff={hasDesktopHandoff(search)}>
+    <AuthShell eyebrow="Account access" title="Sign in" description="Open your Tab account or finish connecting this Mac." handoff={hasDesktopHandoff(search)}>
       <AuthPageTitle>Sign in</AuthPageTitle>
       <form className="flex flex-col gap-4" method="post" action="/login">
         <ErrorMessage message={error} />
@@ -369,7 +369,7 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
 
 export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boolean }) {
   return (
-    <AuthShell eyebrow="Account recovery" title="Reset password" description="Request a secure reset link while keeping your desktop app connection unchanged.">
+    <AuthShell eyebrow="Account recovery" title="Reset password" description="Request a secure reset link for your Tab account.">
       <AuthPageTitle>Reset password</AuthPageTitle>
       {sent ? (
         <p className="text-muted-foreground">If an account exists for that email, a password reset link is on the way.</p>
@@ -387,7 +387,7 @@ export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boo
 
 export function ResetPasswordPage({ error, token }: { error?: string; token?: string }) {
   return (
-    <AuthShell eyebrow="Account recovery" title="Choose a new password" description="Set a new password for your Tab account and return to the same web routes.">
+    <AuthShell eyebrow="Account recovery" title="Choose a new password" description="Set a new password for your Tab account.">
       <AuthPageTitle>Choose a new password</AuthPageTitle>
       {token ? (
         <form className="flex flex-col gap-4" method="post" action="/reset-password">
@@ -408,7 +408,7 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
   const loginHref = `/login${preserveAuthSearchParams(search)}`;
 
   return (
-    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tab with a web account for quota, billing, linked devices, and Personal Memory." handoff={hasDesktopHandoff(search)}>
+    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tab with an account for billing, connected Macs, monthly suggestions, and saved memories." handoff={hasDesktopHandoff(search)}>
       <AuthPageTitle>Create your account</AuthPageTitle>
       <form className="flex flex-col gap-4" method="post" action="/signup">
         <ErrorMessage message={error} />
@@ -427,26 +427,26 @@ const dashboardSections = [
   {
     id: "account",
     href: "/dashboard/account",
-    title: "Account config",
-    description: "Identity, email status, and sign-out controls.",
+    title: "Account",
+    description: "Profile, email status, and sign out.",
   },
   {
     id: "usage",
     href: "/dashboard/usage",
     title: "Usage and billing",
-    description: "Monthly quota, current plan, checkout, and billing portal.",
+    description: "Monthly suggestions, current plan, checkout, and billing settings.",
   },
   {
     id: "devices",
     href: "/dashboard/devices",
     title: "Devices",
-    description: "Native Mac sessions linked to this account.",
+    description: "Macs connected to this account.",
   },
   {
     id: "memories",
     href: "/dashboard/memories",
     title: "Memories",
-    description: "Saved Personal Memory review, edit, and delete controls.",
+    description: "Review, edit, and delete saved details.",
   },
 ] as const;
 
@@ -473,7 +473,7 @@ function DashboardHeader({ section }: { section: DashboardSection }) {
       <SurfaceHeader
         eyebrow="Account dashboard"
         title={title}
-        description="Manage account configuration, usage, billing, devices, permissions, and Personal Memory."
+        description="Manage your account, monthly suggestions, billing, connected Macs, and saved memories."
       />
       <DashboardTabs active={section} />
     </div>
@@ -527,8 +527,8 @@ function DashboardOverview({ data }: { data: DashboardData }) {
           </CardHeader>
           <CardContent className="grid gap-3 text-muted-foreground">
             {item.id === "account" ? <p>{data.user.email ?? data.user.name ?? data.user.id}</p> : null}
-            {item.id === "usage" ? <p>{data.quota.usage.toLocaleString()} / {data.quota.quota.toLocaleString()} autocompletes used</p> : null}
-            {item.id === "devices" ? <p>{data.devices.length.toLocaleString()} linked devices</p> : null}
+            {item.id === "usage" ? <p>{data.quota.usage.toLocaleString()} / {data.quota.quota.toLocaleString()} suggestions used</p> : null}
+            {item.id === "devices" ? <p>{data.devices.length.toLocaleString()} connected Macs</p> : null}
             {item.id === "memories" ? <p>{data.memories.length.toLocaleString()} saved memories</p> : null}
             <p><a className={buttonVariants({ variant: "secondary" })} href={item.href}>Open {item.title}</a></p>
           </CardContent>
@@ -546,14 +546,14 @@ function AccountConfigCard({ user }: { user: User }) {
     <SectionBlock>
       <SurfaceHeader
         eyebrow="Account status"
-        title="Account configuration"
-        description="Identity is managed by Tab auth. Additional account settings appear here when supported by the API."
+        title="Account"
+        description="You are signed in to Tab. Use this page to check your email status or sign out."
         action={<form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>}
       />
       <div className="mt-4 grid gap-3">
         <StatusRow
           label="Signed-in account"
-          value="Success: signed in"
+          value="Signed in"
           tone="success"
           description={accountName}
         />
@@ -561,7 +561,7 @@ function AccountConfigCard({ user }: { user: User }) {
           label="Email status"
           value={accountEmailStatus.value}
           tone={accountEmailStatus.tone}
-          description="Checkout remains gated by the existing email-verification rules."
+          description="You may need to verify your email before choosing a paid plan."
         />
       </div>
     </SectionBlock>
@@ -582,15 +582,15 @@ function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
       />
       <div className="mt-4 grid gap-3">
         <StatusRow
-          label="Quota status"
+          label="Monthly suggestions"
           value={accountQuotaStatus.value}
           tone={accountQuotaStatus.tone}
-          description={`${quota.usage.toLocaleString()} / ${quota.quota.toLocaleString()} autocompletes used this month`}
+          description={`${quota.usage.toLocaleString()} / ${quota.quota.toLocaleString()} suggestions used this month`}
           meta={`Resets ${formatDate(quota.resetAt)}`}
         />
         {quotaExhausted ? (
           <div className={quotaExhaustedClassName}>
-            <strong>Quota exhausted.</strong> You have used {quota.usage.toLocaleString()} of {quota.quota.toLocaleString()} autocompletes this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
+            <strong>Monthly suggestions used.</strong> You have used {quota.usage.toLocaleString()} of {quota.quota.toLocaleString()} suggestions this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
           </div>
         ) : null}
         <Separator />
@@ -616,13 +616,13 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
       <SurfaceHeader
         eyebrow="Linked devices"
         title="Devices"
-        description="Native Mac sessions linked to this account, with visible active and revoked states."
+        description="Macs connected to this account. Remove access anytime."
       />
       <div className="mt-4">
         {devices.length === 0 ? (
           <EmptyState
             title="No linked devices"
-            description="Muted: no linked devices. Sign in from the Mac app to link a native device."
+            description="No Macs are connected yet. Sign in from the Mac app to connect one."
           />
         ) : (
           <Table>
@@ -649,7 +649,7 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                   <TableCell>
                     {device.revoked ? null : (
                       <form method="post" action={`/dashboard/devices/${encodeURIComponent(device.deviceId)}/revoke`}>
-                        <Button type="submit" size="sm" variant="secondary">Warning: revoke access</Button>
+                        <Button type="submit" size="sm" variant="secondary">Remove access</Button>
                       </form>
                     )}
                   </TableCell>
@@ -667,24 +667,24 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
   return (
     <SectionBlock id="memories">
       <SurfaceHeader
-        eyebrow="Personal Memory controls"
-        title="Personal Memory"
-        description="Teach, edit, and delete saved facts. Turn memory usage on or off from the Mac app settings."
+        eyebrow="Saved memories"
+        title="Saved memories"
+        description="Add, edit, and delete saved details. Turn memory use on or off from the Mac app settings."
       />
       <div className="mt-4">
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle>Use saved memories in Suggestions</CardTitle>
+            <CardTitle>Use saved memories in suggestions</CardTitle>
           </CardHeader>
           <CardContent className="flex flex-col gap-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
             <p>
-              Saved memories can personalize desktop Suggestions when Personal Memory is enabled in the Mac app.
+              Saved memories can personalize suggestions when memory is enabled in the Mac app.
             </p>
             <Badge variant="secondary">Controlled on each Mac</Badge>
           </CardContent>
         </Card>
         <form method="post" action="/dashboard/memories/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
-          <Label htmlFor="memory-content">Teach Tab a memory</Label>
+          <Label htmlFor="memory-content">Add a saved memory</Label>
           <textarea
             id="memory-content"
             name="content"
@@ -698,8 +698,8 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
         </form>
         {memories.length === 0 ? (
           <EmptyState
-            title="No Personal Memory stored"
-            description="Muted: no Personal Memory stored. Add a memory when you want Tab to personalize Suggestions."
+            title="No saved memories yet"
+            description="Add a saved memory when you want Tab to personalize suggestions."
           />
         ) : (
           <Table>
@@ -731,7 +731,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                   <TableCell>{formatDate(memory.updatedAt)}</TableCell>
                   <TableCell>
                     <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`}>
-                      <Button type="submit" size="sm" variant="destructive">Destructive: delete memory</Button>
+                      <Button type="submit" size="sm" variant="destructive">Delete memory</Button>
                     </form>
                   </TableCell>
                 </TableRow>
@@ -748,9 +748,9 @@ export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
   return (
     <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,3.5rem)] shadow-[var(--tab-shadow-soft)] md:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
       <div className="grid content-center gap-5">
-        <PageKicker>Desktop entry point</PageKicker>
+        <PageKicker>Tab for Mac</PageKicker>
         <h1 className="font-[var(--font-display)] text-[clamp(2.5rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Download Tab for macOS</h1>
-        <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Install the private Native Autocomplete App directly on your Mac and keep Suggestions in the apps where you write.</p>
+        <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Install Tab on your Mac and get suggestions in the apps where you already write.</p>
         <p className="mt-6"><a className={buttonVariants()} href="/download/tab.dmg">Download Tab.dmg</a></p>
         {latestVersion ? <p className="mt-4 text-sm text-muted-foreground">Version {latestVersion}</p> : null}
       </div>
@@ -760,7 +760,7 @@ export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
           {downloadPermissionRows.map((row) => (
             <StatusRow key={row.label} {...row} />
           ))}
-          <p>macOS 14+. Notarization and code signing are handled during release packaging.</p>
+          <p>Requires macOS 14 or newer.</p>
         </CardContent>
       </Card>
     </section>

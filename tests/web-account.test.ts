@@ -202,12 +202,12 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(200);
     const body = await response.text();
-    expect(body).toInclude("Private Utility Grid");
-    expect(body).toInclude("Native Autocomplete App for macOS");
+    expect(body).toInclude("Autocomplete for your Mac");
+    expect(body).toInclude("Autocomplete that works anywhere you write on your Mac");
     expect(body).toInclude("Download for macOS");
     expect(body).toInclude("data-theme-choice=\"system\"");
-    expect(body).toInclude("Personal Memory");
-    expect(body).toInclude("Typing Context");
+    expect(body).toInclude("Saved memories");
+    expect(body).toInclude("Recent typing");
   });
 
   it("renders redesigned auth handoff forms without dropping desktop fields", async () => {
@@ -219,7 +219,7 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(200);
     const body = await response.text();
-    expect(body).toInclude("Desktop handoff");
+    expect(body).toInclude("Mac sign-in");
     expect(body).toInclude("name=\"device_id\" value=\"desktop-device-1\"");
     expect(body).toInclude("name=\"callback\" value=\"tab://auth/callback\"");
     expect(body).toInclude("name=\"next\" value=\"/dashboard\"");
@@ -242,10 +242,10 @@ describe("Web account surface", () => {
     expect(body).toInclude("1,000,000");
     expect(body).toInclude("$10/mo");
     expect(body).toInclude("$100/mo");
-    expect(body).toInclude("Private Utility Grid pricing");
-    expect(body).toInclude("Quota included");
-    expect(body).toInclude("Muted: Personal Memory included");
-    expect(body).toInclude("Billing path: Sign in required");
+    expect(body).toInclude("Simple pricing");
+    expect(body).toInclude("Monthly suggestions");
+    expect(body).toInclude("Saved memories");
+    expect(body).toInclude("Sign in to choose this plan");
     expect(body).toInclude("Start free");
     expect(body).toInclude(
       'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro"',
@@ -279,7 +279,7 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(200);
     const body = await response.text();
-    expect(body).toInclude("Private Utility Grid components");
+    expect(body).toInclude("Tab components");
     expect(body).toInclude('data-theme="light"');
     expect(body).toInclude('data-theme="dark"');
     expect(body).toInclude("Status rows");
@@ -319,7 +319,7 @@ describe("Web account surface", () => {
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toInclude("Check your email");
-    expect(body).toInclude("Verify your email address before choosing a plan in Polar.");
+    expect(body).toInclude("Verify your email address before choosing a plan.");
     expect(response.headers.get("set-cookie")).toBeTruthy();
   });
 
@@ -385,8 +385,8 @@ describe("Web account surface", () => {
     const usageBody = await usageResponse.text();
     expect(usageBody).toInclude("Monthly usage");
     expect(usageBody).toInclude("Free plan");
-    expect(usageBody).toInclude("Quota status");
-    expect(usageBody).toInclude("Active: quota available");
+    expect(usageBody).toInclude("Monthly suggestions");
+    expect(usageBody).toInclude("Suggestions available");
     expect(usageBody).toInclude("Billing actions");
     expect(usageBody).toInclude("Upgrade to Pro");
     expect(usageBody).toInclude("Upgrade to Max");
@@ -396,17 +396,17 @@ describe("Web account surface", () => {
     expect(configResponse.status).toBe(200);
     const configBody = await configResponse.text();
     expect(configBody).toInclude("Account status");
-    expect(configBody).toInclude("Success: signed in");
+    expect(configBody).toInclude("Signed in");
     expect(configBody).toInclude('action="/logout"');
     expect(configBody).toInclude("Sign out");
 
     const devicesResponse = await webRequest(webApp, "/dashboard/devices", {}, setCookie!);
     expect(devicesResponse.status).toBe(200);
-    await textIncludes(devicesResponse, "Muted: no linked devices");
+    await textIncludes(devicesResponse, "No Macs are connected yet");
 
     const memoriesResponse = await webRequest(webApp, "/dashboard/memories", {}, setCookie!);
     expect(memoriesResponse.status).toBe(200);
-    await textIncludes(memoriesResponse, "Muted: no Personal Memory stored");
+    await textIncludes(memoriesResponse, "No saved memories yet");
   });
 
   it("redirects to a checkout URL for a paid plan", async () => {
@@ -626,7 +626,7 @@ describe("Web account surface", () => {
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toInclude("Check your email");
-    expect(body).toInclude("Verify your email address before choosing a plan in Polar.");
+    expect(body).toInclude("Verify your email address before choosing a plan.");
   });
 
   it("redirects unauthenticated checkout requests to login before checkout", async () => {
@@ -803,7 +803,7 @@ describe("Web account surface", () => {
     const body = await accountPage.text();
     expect(body).toInclude("Prefers concise summaries");
     expect(body).toInclude("Works at Acme Robotics");
-    expect(body).toInclude("Teach Tab a memory");
+    expect(body).toInclude("Add a saved memory");
   });
 
   it("lists and revokes native devices from the account surface", async () => {
@@ -823,9 +823,8 @@ describe("Web account surface", () => {
     expect(accountBefore.status).toBe(200);
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("macbook-pro-1");
-    expect(bodyBefore).toInclude("Active");
-    expect(bodyBefore).toInclude("Active: linked device");
-    expect(bodyBefore).toInclude("Warning: revoke access");
+    expect(bodyBefore).toInclude("Connected");
+    expect(bodyBefore).toInclude("Remove access");
 
     const revokeResponse = await webRequest(
       webApp,
@@ -841,7 +840,6 @@ describe("Web account surface", () => {
     const accountAfter = await webRequest(webApp, "/dashboard/devices", {}, cookie);
     expect(accountAfter.status).toBe(200);
     const bodyAfter = await accountAfter.text();
-    expect(bodyAfter).toInclude("Revoked");
-    expect(bodyAfter).toInclude("Muted: device revoked");
+    expect(bodyAfter).toInclude("Access removed");
   });
 });

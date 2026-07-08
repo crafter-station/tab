@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { DebugContextCard, type DebugContext } from "../components/DebugContextCard";
 
 type OverlayMode = "hidden" | "suggestion" | "debug";
+const showDeveloperDiagnostics = import.meta.env.DEV;
 
 export function OverlaySurface() {
   const [mode, setMode] = useState<OverlayMode>("hidden");
@@ -18,11 +19,13 @@ export function OverlaySurface() {
       setMode("suggestion");
     });
 
-    const unsubscribeDebugContext = window.tab.onDebugContext((debug) => {
-      setDebugContext(debug);
-      setSuggestion(null);
-      setMode("debug");
-    });
+    const unsubscribeDebugContext = showDeveloperDiagnostics
+      ? window.tab.onDebugContext((debug) => {
+          setDebugContext(debug);
+          setSuggestion(null);
+          setMode("debug");
+        })
+      : () => {};
 
     const unsubscribeHide = window.tab.onHide(() => {
       setSuggestion(null);
@@ -45,7 +48,7 @@ export function OverlaySurface() {
         suggestion={mode === "suggestion" ? suggestion : null}
         onAccept={() => window.tab?.acceptSuggestion()}
       />
-      <DebugContextCard debug={mode === "debug" ? debugContext : null} />
+      {showDeveloperDiagnostics ? <DebugContextCard debug={mode === "debug" ? debugContext : null} /> : null}
     </main>
   );
 }

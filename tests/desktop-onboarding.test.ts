@@ -59,7 +59,7 @@ describe("desktop onboarding", () => {
   it("defines the first-run onboarding steps in order", () => {
     expect(ONBOARDING_STEPS).toEqual(["sign-in", "permissions", "how-it-works", "practice", "done"]);
     expect(ONBOARDING_STEP_COPY["sign-in"].title.toLowerCase()).toContain("sign in");
-    expect(ONBOARDING_STEP_COPY.practice.subtitle.toLowerCase()).toContain("mock");
+    expect(ONBOARDING_STEP_COPY.practice.subtitle.toLowerCase()).toContain("sample");
   });
 
   it("explains Accessibility and Input Monitoring permissions in product language", () => {
@@ -99,20 +99,19 @@ describe("desktop onboarding", () => {
     const copy = JSON.stringify(ONBOARDING_PERMISSIONS_COPY).toLowerCase();
     expect(copy).not.toContain("keystroke log");
     expect(copy).not.toContain("keylogger");
-    expect(copy).toContain("typing context");
-    expect(copy).toContain("active application");
+    expect(copy).toContain("recent typing");
+    expect(copy).toContain("app you are writing in");
   });
 
   it("explains the accessibility-aware permission and privacy model", () => {
     const copy = JSON.stringify(ONBOARDING_PERMISSIONS_COPY).toLowerCase();
     const requiredPrivacyModelPhrases = [
-      "text session",
-      "accepted suggestion insertion",
-      "typing timing",
-      "acceptance shortcuts",
-      "fallback typing context signals",
-      "typing context",
-      "personal memory",
+      "text field",
+      "add suggestions you accept",
+      "notice typing",
+      "option+tab",
+      "recent typing",
+      "saved memories",
       "metadata-only telemetry",
       "raw logs",
     ];

@@ -2,17 +2,17 @@ import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
 
 describe("desktop renderer setup surfaces", () => {
-  it("renders sign-in and onboarding around the shared Private Utility Grid setup story", () => {
+  it("renders sign-in and onboarding around the shared Tab setup story", () => {
     const signInSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SignInSurface.tsx", "utf8");
     const onboardingSource = readFileSync("apps/desktop/src/renderer/src/surfaces/OnboardingSurface.tsx", "utf8");
 
-    expect(signInSource).toInclude("Browser handoff");
+    expect(signInSource).toInclude("Connect this Mac");
     expect(signInSource).toInclude("Accessibility");
     expect(signInSource).toInclude("Input Monitoring");
     expect(signInSource).toInclude("Privacy scope");
-    expect(signInSource).toInclude("Practice Suggestion");
+    expect(signInSource).toInclude("Practice suggestion");
     expect(signInSource).toInclude("pug-dot-grid");
-    expect(onboardingSource).toInclude("Browser sign-in required");
+    expect(onboardingSource).toInclude("Sign in from your browser");
   });
 
   it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {

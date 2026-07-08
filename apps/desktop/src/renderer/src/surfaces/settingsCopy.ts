@@ -10,14 +10,14 @@ export function describePauseState(paused: boolean): PauseStateDescription {
   if (paused) {
     return {
       label: "Paused",
-      description: "Typing Context observation and Suggestions are disabled.",
+      description: "Suggestions and recent typing checks are paused.",
       action: "Resume Tab",
     };
   }
 
   return {
     label: "Active",
-    description: "Typing Context observation and Suggestions are running.",
+    description: "Suggestions and recent typing checks are running.",
     action: "Pause Tab",
   };
 }
@@ -27,6 +27,6 @@ export function describePersonalMemorySource(createdBy: PersonalMemoryCreatedBy)
     case "user":
       return "Saved by you";
     case "system":
-      return "Learned from accepted writing";
+      return "Saved from accepted writing";
   }
 }

@@ -196,16 +196,16 @@ describe("desktop native suggestion loop", () => {
       const trustCopy = JSON.stringify(APP_CONTEXT_TRUST_COPY).toLowerCase();
       for (const phrase of [
         "temporary",
-        "suggestion-only",
-        "typing context",
-        "app context",
-        "personal memory",
+        "used only to make suggestions",
+        "recent typing",
+        "nearby app text",
+        "saved memories",
         "metadata-only",
         "screen recording",
         "full disk access",
         "raw logs",
-        "pause tabb",
-        "clear both typing context and app context",
+        "pause tab",
+        "clear recent typing and nearby app text",
       ]) {
         expect(trustCopy).toContain(phrase);
       }

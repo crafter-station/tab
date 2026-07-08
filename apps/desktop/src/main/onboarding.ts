@@ -18,15 +18,15 @@ export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subti
   },
   permissions: {
     title: "Enable two macOS permissions",
-    subtitle: "Accessibility and Input Monitoring let Tab understand text sessions and detect typing activity safely.",
+    subtitle: "Accessibility and Input Monitoring let Tab read the text field you use, add suggestions you accept, and notice typing activity.",
   },
   "how-it-works": {
     title: "Learn the flow",
-    subtitle: "Tab keeps Typing Context in memory, asks for a suggestion when safe, then shows a small overlay.",
+    subtitle: "Tab uses recent typing to ask for a helpful suggestion, then shows it in a small bar.",
   },
   practice: {
     title: "Practice suggestions",
-    subtitle: "Try accepting and dismissing a mock completion before Tab appears in other apps.",
+    subtitle: "Try accepting and dismissing a sample suggestion before Tab appears in other apps.",
   },
   done: {
     title: "You are ready",
@@ -38,15 +38,15 @@ export const ONBOARDING_PERMISSIONS_COPY = {
   title: "Welcome to Tab — Permissions",
   subtitle: "Tab suggests continuations while you type in other macOS applications.",
   requiredPermissions:
-    "Tab needs Accessibility and Input Monitoring permissions to understand the focused Text Session, detect typing activity, know the Active Application, and insert only suggestions you accept.",
+    "Tab needs Accessibility and Input Monitoring permissions to read the text field you are using, detect typing activity, know the app you are writing in, and insert only suggestions you accept.",
   whyAccessibility:
-    "Accessibility supports Text Session understanding, sensitive-field checks, and accepted Suggestion insertion in the app you were using.",
+    "Accessibility lets Tab read the text field you are using, avoid sensitive fields, and add suggestions you accept.",
   whyInputMonitoring:
-    "Input Monitoring supports typing timing, acceptance shortcuts, and fallback Typing Context signals when Accessibility text details are unavailable.",
+    "Input Monitoring helps Tab notice typing, support Option+Tab, and keep working when text details are unavailable.",
   notRequested:
     "Tab does not ask to see your screen or access your files. Screen Recording and Full Disk Access stay outside Tab's permission scope.",
   privacyNote:
-    "Typing Context stays in memory only. App Context is temporary suggestion-only background from supported apps and is not Personal Memory eligible by default. Personal Memory remains visible and controlled by you. Metadata-only telemetry can improve reliability, but raw logs, raw Typing Context, raw App Context, accepted Suggestion text, and final inserted text are not stored by default.",
+    "Recent typing is used to make suggestions. Nearby app text from supported apps is temporary and is not saved as memory by default. Saved memories remain visible and controlled by you. Metadata-only telemetry can improve reliability, but raw logs, raw recent typing, raw nearby app text, accepted suggestion text, and final inserted text are not stored by default.",
   cta: "Continue to Permissions",
 } as const;
 

@@ -39,7 +39,7 @@ function RootComponent() {
             </main>
             <footer className="flex items-center justify-between gap-4 border-t py-6 text-muted-foreground max-md:flex-col max-md:items-start">
               <span>Tab, native autocomplete for macOS.</span>
-              <span>Private context. Account-controlled memory.</span>
+              <span>You choose when to add suggestions, and you control saved memories.</span>
             </footer>
           </div>
         </div>

@@ -97,7 +97,7 @@ async function parseApiErrorMessage(response: Response): Promise<string | undefi
 function verifyEmailPage(): Response {
   return htmlErrorPage(
     "Check your email",
-    "We sent you a verification link. Verify your email address before choosing a plan in Polar.",
+    "We sent you a verification link. Verify your email address before choosing a plan.",
   );
 }
 
@@ -194,7 +194,7 @@ export function createWebApp(config: WebAppConfig) {
 
   async function homePage(cookieHeader: string | undefined): Promise<Response> {
     const user = await getOptionalUser(cookieHeader);
-    return html(createElement(HomePage), `${appName} - Native autocomplete for macOS`, 200, user);
+    return html(createElement(HomePage), `${appName} - Autocomplete for your Mac`, 200, user);
   }
 
   async function pricingPage(cookieHeader: string | undefined): Promise<Response> {

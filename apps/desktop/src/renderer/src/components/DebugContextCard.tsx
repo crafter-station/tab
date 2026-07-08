@@ -30,8 +30,8 @@ type DebugContextCardProps = {
 };
 
 function getApiText(api: DebugApiState | undefined): string {
-  if (!api || api.status === "idle") return "Waiting for debounce...";
-  if (api.status === "loading") return "Requesting next tokens...";
+  if (!api || api.status === "idle") return "Waiting before the next request...";
+  if (api.status === "loading") return "Requesting a suggestion...";
   if (api.status === "empty") return "No suggestion returned yet.";
   return api.text;
 }
@@ -51,24 +51,24 @@ export function DebugContextCard({ debug }: DebugContextCardProps) {
         `${appContext.fragmentCount} fragments`,
         `${appContext.messageCount} messages`,
       ].filter(Boolean).join(" · ")
-    : "No suggestion-only App Context";
+    : "No nearby app text diagnostics";
 
   return (
     <section className={cn("debug-card", debug && "debug-card--visible")} aria-hidden={!debug}>
-      <div className="debug-card__label">Dev typing context</div>
+      <div className="debug-card__label">Developer diagnostics</div>
       <div className="debug-card__grid">
         <div>
-          <div className="debug-card__section-label">Captured input</div>
-          <div className="debug-card__body">{debug?.context || "No captured typing context"}</div>
+          <div className="debug-card__section-label">Recent typing sample</div>
+          <div className="debug-card__body">{debug?.context || "No recent typing sample"}</div>
         </div>
         <div>
-          <div className="debug-card__section-label">API response</div>
+          <div className="debug-card__section-label">Suggestion response</div>
           <div className={cn("debug-card__api", api?.status !== "suggestion" && "debug-card__api--muted")}>
             {getApiText(api)}
           </div>
         </div>
         <div>
-          <div className="debug-card__section-label">App Context</div>
+          <div className="debug-card__section-label">Nearby app text</div>
           <div className="debug-card__api debug-card__api--muted">{appContextText}</div>
         </div>
       </div>

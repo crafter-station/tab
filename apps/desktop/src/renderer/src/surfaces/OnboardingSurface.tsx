@@ -6,7 +6,7 @@ import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 type OnboardingStep = "sign-in" | "permissions" | "how-it-works" | "practice" | "done";
 
 const STEPS: OnboardingStep[] = ["sign-in", "permissions", "how-it-works", "practice", "done"];
-const MOCK_SUGGESTIONS = [
+const SAMPLE_SUGGESTIONS = [
   "Thanks for the update - I can take a look this afternoon and follow up with next steps.",
   "That works for me. I will send the details once I confirm the timing.",
   "I appreciate the context. Let me review this and get back to you shortly.",
@@ -35,15 +35,15 @@ function getPrimaryLabel(
 ) {
   switch (step) {
     case "sign-in":
-      return signedIn ? "Continue" : "Sign In";
+      return signedIn ? "Continue" : "Sign in";
     case "permissions":
       if (!accessibilityGranted) return "Open Accessibility Settings";
       if (!inputMonitoringOpened) return "Open Input Monitoring Settings";
       return "Continue";
     case "how-it-works":
-      return "Practice Suggestions";
+      return "Practice suggestions";
     case "practice":
-      return "Finish Practice";
+      return "Finish practice";
     case "done":
       return "Open Tab";
   }
@@ -59,13 +59,13 @@ export function OnboardingSurface() {
   const [practiceText, setPracticeText] = useState("Hi Jordan, quick update on the launch plan:");
   const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [suggestionVisible, setSuggestionVisible] = useState(true);
-  const [approvedPractice, setApprovedPractice] = useState(false);
-  const [rejectedPractice, setRejectedPractice] = useState(false);
+  const [acceptedPractice, setAcceptedPractice] = useState(false);
+  const [dismissedPractice, setDismissedPractice] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const currentStepIndex = STEPS.indexOf(step);
   const signedIn = status.auth === "signed_in";
-  const practiceComplete = approvedPractice && rejectedPractice;
+  const practiceComplete = acceptedPractice && dismissedPractice;
 
   const stopAccessibilityPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -198,7 +198,7 @@ export function OnboardingSurface() {
         if (practiceComplete) {
           goNext();
         } else {
-          setStatusMessage("Accept and reject the mock suggestion once, or use Finish anyway.");
+          setStatusMessage("Accept and dismiss the sample suggestion once, or use Finish anyway.");
         }
         return;
 
@@ -209,21 +209,21 @@ export function OnboardingSurface() {
 
   function approveSuggestion() {
     if (!suggestionVisible) return;
-    setPracticeText((value) => `${value} ${MOCK_SUGGESTIONS[suggestionIndex]}`);
-    setApprovedPractice(true);
+    setPracticeText((value) => `${value} ${SAMPLE_SUGGESTIONS[suggestionIndex]}`);
+    setAcceptedPractice(true);
     setSuggestionVisible(false);
     setStatusMessage("Accepted. This is what Option+Tab or clicking a suggestion does in the real overlay.");
   }
 
   function rejectSuggestion() {
-    setRejectedPractice(true);
+    setDismissedPractice(true);
     setSuggestionVisible(false);
-    setSuggestionIndex((index) => (index + 1) % MOCK_SUGGESTIONS.length);
+    setSuggestionIndex((index) => (index + 1) % SAMPLE_SUGGESTIONS.length);
     setStatusMessage("Dismissed. In normal use, you can ignore stale suggestions or keep typing.");
   }
 
   function tryAgain() {
-    setSuggestionIndex((index) => (index + 1) % MOCK_SUGGESTIONS.length);
+    setSuggestionIndex((index) => (index + 1) % SAMPLE_SUGGESTIONS.length);
     setSuggestionVisible(true);
     setStatusMessage(null);
   }
@@ -237,7 +237,7 @@ export function OnboardingSurface() {
         <header className="onboarding-header drag-region">
           <div>
             <p className="eyebrow">Welcome to Tab</p>
-            <h1>Set up your private typing assistant.</h1>
+             <h1>Set up autocomplete for your Mac.</h1>
           </div>
           <Button className="no-drag" onClick={() => window.tab?.skipOnboarding?.()} variant="ghost">
             Skip setup
@@ -254,16 +254,16 @@ export function OnboardingSurface() {
           {step === "sign-in" ? (
             <>
               <div className="onboarding-hero">
-                <h2>Sign in is required before setup continues.</h2>
+                <h2>Sign in to connect this Mac.</h2>
                 <p className="lede">
-                  Tab links this Mac to your account before it requests autocomplete suggestions. You can configure permissions
-                  after sign-in returns here.
+                  Tab connects this Mac to your account before requesting suggestions. After sign-in, you will return here
+                  to review permissions.
                 </p>
               </div>
               <div className="status-card">
                 <div>
                   <strong>Account status</strong>
-                  <span>{signedIn ? "Ready to continue" : "Browser sign-in required"}</span>
+                  <span>{signedIn ? "Ready to continue" : "Sign in from your browser"}</span>
                 </div>
                 <StatusBadge tone={signedIn ? "ok" : "warning"}>{formatAuth(status.auth)}</StatusBadge>
               </div>
@@ -275,20 +275,20 @@ export function OnboardingSurface() {
               <div className="onboarding-hero">
                 <h2>Two permissions, no screen or file access.</h2>
                 <p className="lede">
-                  Tab uses Accessibility for focused Text Session understanding and accepted Suggestion insertion, while
-                  Input Monitoring supports typing timing, acceptance shortcuts, and fallback Typing Context signals.
+                  Accessibility lets Tab read the text field you are using and add suggestions you accept. Input Monitoring
+                  helps Tab notice typing and make Option+Tab work.
                 </p>
               </div>
               <div className="onboarding-permissions">
                 <PermissionCard
                   title="Accessibility"
-                  description="Supports Text Session understanding, sensitive-field checks, and accepted Suggestion insertion in the app you were using."
+                  description="Lets Tab read the text field you are using, avoid sensitive fields, and add suggestions you accept."
                   status={accessibilityGranted ? "Enabled" : "Needs access"}
                   state={accessibilityGranted ? "granted" : "pending"}
                 />
                 <PermissionCard
                   title="Input Monitoring"
-                  description="Supports typing activity, Option+Tab acceptance, and fallback Typing Context signals when text details are unavailable."
+                  description="Lets Tab notice typing activity and make Option+Tab work when you accept a suggestion."
                   status={inputMonitoringOpened ? "Confirm in System Settings" : "Relaunch may be required"}
                   state={inputMonitoringOpened ? "pending" : "manual"}
                 />
@@ -296,8 +296,8 @@ export function OnboardingSurface() {
               <div className="privacy-card">
                 <strong>Privacy scope</strong>
                 <span>
-                  Typing Context stays in memory only. Personal Memory remains visible and controlled by you, telemetry is
-                  metadata-only, raw logs are not stored, and Tab does not request Screen Recording or Full Disk Access.
+                  Recent typing is used to make suggestions. Saved memories stay visible and controlled by you. Tab does
+                  not request Screen Recording or Full Disk Access.
                 </span>
                 <span>{APP_CONTEXT_TRUST_COPY.summary}</span>
               </div>
@@ -309,14 +309,13 @@ export function OnboardingSurface() {
               <div className="onboarding-hero">
                 <h2>How Tab suggestions work.</h2>
                 <p className="lede">
-                  Tab watches recent typing context in memory, requests a continuation, and shows a floating overlay near the
-                  bottom of the active display.
+                  Tab looks at your recent typing, asks for a helpful continuation, and shows it near the bottom of your screen.
                 </p>
               </div>
               <div className="tutorial-grid">
                 <div className="tutorial-panel">
                   <strong>Accept</strong>
-                  <span>Press Option+Tab or click the suggestion to paste it into the app you were using.</span>
+                  <span>Press Option+Tab or click the suggestion to add it to the app you were using.</span>
                 </div>
                 <div className="tutorial-panel">
                   <strong>Dismiss</strong>
@@ -337,8 +336,8 @@ export function OnboardingSurface() {
           {step === "practice" ? (
             <>
               <div className="onboarding-hero">
-                <h2>Practice with a mock suggestion.</h2>
-                <p className="lede">This sandbox does not call the API or paste into another app.</p>
+                <h2>Practice with a sample suggestion.</h2>
+                <p className="lede">This practice step does not contact the suggestion service or type into another app.</p>
               </div>
               <textarea
                 className="practice-input"
@@ -350,12 +349,12 @@ export function OnboardingSurface() {
                 <div className="practice-suggestion">
                   <div>
                     <span>Suggested completion</span>
-                    <strong>{MOCK_SUGGESTIONS[suggestionIndex]}</strong>
+                    <strong>{SAMPLE_SUGGESTIONS[suggestionIndex]}</strong>
                   </div>
                   <div className="practice-suggestion__actions">
-                    <Button onClick={approveSuggestion}>Approve</Button>
+                    <Button onClick={approveSuggestion}>Accept</Button>
                     <Button onClick={rejectSuggestion} variant="secondary">
-                      Reject
+                      Dismiss
                     </Button>
                   </div>
                 </div>
@@ -365,8 +364,8 @@ export function OnboardingSurface() {
                 </Button>
               )}
               <div className="practice-checks">
-                <StatusBadge tone={approvedPractice ? "ok" : "muted"}>Approve practiced</StatusBadge>
-                <StatusBadge tone={rejectedPractice ? "ok" : "muted"}>Reject practiced</StatusBadge>
+                <StatusBadge tone={acceptedPractice ? "ok" : "muted"}>Accept practiced</StatusBadge>
+                <StatusBadge tone={dismissedPractice ? "ok" : "muted"}>Dismiss practiced</StatusBadge>
               </div>
             </>
           ) : null}
@@ -376,7 +375,7 @@ export function OnboardingSurface() {
               <div className="onboarding-hero">
                 <h2>Tab is ready.</h2>
                 <p className="lede">
-                  Finish setup to open the Tab app. You can revisit account, permissions, pause, and memory controls in Settings.
+                  Finish setup to open Tab. You can revisit account, permissions, pause, and memory controls in Settings.
                 </p>
               </div>
               <div className="privacy-card">
@@ -391,7 +390,7 @@ export function OnboardingSurface() {
 
         {step === "permissions" ? (
           <details className="dev-note no-drag">
-            <summary>Development mode note</summary>
+            <summary>Developer note</summary>
             <p>
               macOS permission entries are tied to the exact app bundle. If Tab is not listed while running from source,
               use <code>bun run desktop:permissions</code> and enable the packaged Tab app.

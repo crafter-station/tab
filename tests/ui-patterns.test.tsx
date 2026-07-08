@@ -14,7 +14,7 @@ import {
 import { DebugContextCard } from "../apps/desktop/src/renderer/src/components/DebugContextCard.tsx";
 
 describe("shared app patterns", () => {
-  it("renders reviewable Private Utility Grid patterns in light and dark modes", () => {
+  it("renders reviewable Tab patterns in light and dark modes", () => {
     const markup = renderToStaticMarkup(<ComponentReviewSurface />);
 
     expect(markup).toInclude("Shared primitive review");
@@ -26,8 +26,8 @@ describe("shared app patterns", () => {
     expect(markup).toInclude("Email input");
     expect(markup).toInclude("Plan table");
     expect(markup).toInclude("Tooltip guidance");
-    expect(markup).toInclude("No Personal Memory yet");
-    expect(markup).toInclude("debug:typing-context");
+    expect(markup).toInclude("No saved memories yet");
+    expect(markup).toInclude("Developer diagnostics");
   });
 
   it("renders app-level patterns with semantic labels and actions", () => {
@@ -36,7 +36,7 @@ describe("shared app patterns", () => {
         <SurfaceHeader eyebrow="Account" title="Control plane" description="Manage Tab." />
         <StatusRow label="Native app" value="Connected" tone="success" />
         <SettingsNav items={[{ label: "General", href: "#general", active: true }]} />
-        <SettingsRow label="Personal Memory" description="Keep suggestions personal.">
+        <SettingsRow label="Saved memories" description="Keep suggestions personal.">
           Enabled
         </SettingsRow>
         <CommandBlock command="tab://debug" label="Debug command" />
@@ -61,7 +61,7 @@ describe("shared app patterns", () => {
 
     expect(suggestionMarkup).toInclude('class="overlay-shell"');
     expect(suggestionMarkup).toInclude("pointer-events-auto");
-    expect(suggestionMarkup).toInclude("Option Tab");
+    expect(suggestionMarkup).toInclude("Option+Tab");
     expect(suggestionMarkup).toInclude("type=\"button\"");
     expect(suggestionMarkup).toInclude("aria-hidden=\"true\"");
   });
