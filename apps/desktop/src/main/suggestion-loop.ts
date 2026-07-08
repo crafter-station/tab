@@ -13,6 +13,7 @@ export type SuggestionLoopState =
 
 export type SuggestionLoopDependencies = {
   getContext(): SafeTypingContextSnapshot;
+  getLocalSuggestion?(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null> | Suggestion | null;
   requestSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null>;
   onShowSuggestion(suggestion: Suggestion): void;
   onHideSuggestion(): void;
@@ -27,6 +28,45 @@ export type SuggestionLoopDependencies = {
 
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   let state: SuggestionLoopState = { status: "idle" };
+
+  function isCurrentDebouncedContext(hash: string): boolean {
+    return state.status === "debouncing" && state.contextHash === hash;
+  }
+
+  function tryShowSuggestion(
+    snapshot: RequestableTypingContextSnapshot,
+    suggestion: Suggestion,
+    hash: string,
+  ): void {
+    const showDecision = deps.triggerPolicy?.onSuggestionCandidate(snapshot, suggestion);
+    if (showDecision && !showDecision.allow) {
+      state = { status: "idle" };
+      return;
+    }
+
+    const expiryTimer = setTimeout(() => {
+      if (state.status !== "showing" || state.contextHash !== hash) {
+        return;
+      }
+      deps.triggerPolicy?.recordStale(deps.getContext());
+      deps.onSuggestionStale?.(state.suggestion);
+      deps.onHideSuggestion();
+      state = { status: "idle" };
+    }, deps.maxVisibleMs ?? 4_000);
+
+    state = { status: "showing", suggestion, contextHash: hash, expiryTimer };
+    deps.onShowSuggestion(suggestion);
+  }
+
+  async function getLocalSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null> {
+    if (!deps.getLocalSuggestion) return null;
+
+    try {
+      return await deps.getLocalSuggestion(snapshot);
+    } catch {
+      return null;
+    }
+  }
 
   function hideIfShowing(): void {
     if (state.status === "showing") {
@@ -73,7 +113,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
       status: "debouncing",
       contextHash: hash,
       timer: setTimeout(async () => {
-        if (state.status !== "debouncing" || state.contextHash !== hash) {
+        if (!isCurrentDebouncedContext(hash)) {
           return;
         }
 
@@ -88,10 +128,20 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
+        const localSuggestion = await getLocalSuggestion(latest);
+        if (!isCurrentDebouncedContext(hash)) {
+          return;
+        }
+
+        if (localSuggestion) {
+          tryShowSuggestion(latest, localSuggestion, hash);
+          return;
+        }
+
         deps.onRequestStarted?.(latest.sanitizedContext);
         const suggestion = await deps.requestSuggestion(latest);
 
-        if (state.status !== "debouncing" || state.contextHash !== hash) {
+        if (!isCurrentDebouncedContext(hash)) {
           return;
         }
 
@@ -102,24 +152,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
-        const showDecision = deps.triggerPolicy?.onSuggestionCandidate(latest, suggestion);
-        if (showDecision && !showDecision.allow) {
-          state = { status: "idle" };
-          return;
-        }
-
-        const expiryTimer = setTimeout(() => {
-          if (state.status !== "showing" || state.contextHash !== hash) {
-            return;
-          }
-          deps.triggerPolicy?.recordStale(deps.getContext());
-          deps.onSuggestionStale?.(state.suggestion);
-          deps.onHideSuggestion();
-          state = { status: "idle" };
-        }, deps.maxVisibleMs ?? 4_000);
-
-        state = { status: "showing", suggestion, contextHash: hash, expiryTimer };
-        deps.onShowSuggestion(suggestion);
+        tryShowSuggestion(latest, suggestion, hash);
       }, deps.debounceMs),
     };
   }
