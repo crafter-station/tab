@@ -1,36 +1,44 @@
 import { useState } from "react";
 import { Button, StatusBadge } from "@tabb/ui";
+import type { StatusBadgeTone } from "@tabb/ui";
 
-const setupSteps = [
+type SetupStep = {
+  title: string;
+  description: string;
+  status: string;
+  tone: StatusBadgeTone;
+};
+
+const setupSteps: SetupStep[] = [
   {
     title: "Browser handoff",
     description: "Sign in opens your browser and returns this Mac to Tabb without changing the device-token contract.",
     status: "Required",
-    tone: "warning" as const,
+    tone: "warning",
   },
   {
     title: "Accessibility",
     description: "Enables focused Text Session understanding and accepted Suggestion insertion.",
     status: "Setup step",
-    tone: "muted" as const,
+    tone: "muted",
   },
   {
     title: "Input Monitoring",
     description: "Supports typing timing, acceptance shortcuts, and fallback Typing Context signals.",
     status: "Setup step",
-    tone: "muted" as const,
+    tone: "muted",
   },
   {
     title: "Privacy scope",
     description: "Typing Context stays in memory; no Screen Recording or Full Disk Access is requested.",
     status: "Visible",
-    tone: "ok" as const,
+    tone: "ok",
   },
   {
     title: "Practice Suggestion",
     description: "New users can accept, reject, and try mock Suggestions before Tabb runs in another app.",
     status: "Sandboxed",
-    tone: "ok" as const,
+    tone: "ok",
   },
 ];
 
