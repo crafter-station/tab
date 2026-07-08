@@ -47,7 +47,13 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   const { outputs } = deps;
 
   const suggestionLoop = createSuggestionLoop({
-    getContext: () => textSessionSnapshot ? createSafeTextSessionSnapshot(textSessionSnapshot) : deps.typingContext.getSnapshot(),
+    getContext: () => {
+      if (textSessionSnapshot) {
+        return createSafeTextSessionSnapshot(textSessionSnapshot);
+      }
+
+      return deps.typingContext.getSnapshot();
+    },
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
@@ -82,8 +88,12 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     }
   }
 
-  function clearContext(): void {
+  function clearTextSessionSnapshot(): void {
     textSessionSnapshot = null;
+  }
+
+  function clearContext(): void {
+    clearTextSessionSnapshot();
     deps.typingContext.clear();
     outputs.resetDebugApiState();
     currentSuggestion = null;
@@ -93,25 +103,25 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   return {
     appendText(text: string): void {
       if (observationPaused) return;
-      textSessionSnapshot = null;
+      clearTextSessionSnapshot();
       deps.typingContext.appendText(text, deps.getContextSource());
       contextChanged();
     },
     appendPastedText(text: string): void {
       if (observationPaused) return;
-      textSessionSnapshot = null;
+      clearTextSessionSnapshot();
       deps.typingContext.appendPastedText(text);
       contextChanged();
     },
     deleteBackward(unit: TypingDeletionUnit = "character"): void {
       if (observationPaused) return;
-      textSessionSnapshot = null;
+      clearTextSessionSnapshot();
       deps.typingContext.deleteBackward(unit);
       contextChanged();
     },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
       if (observationPaused) return;
-      textSessionSnapshot = null;
+      clearTextSessionSnapshot();
 
       const activeApplication = bundleId ? { bundleId, ...(windowId ? { windowId } : {}) } : null;
       const previousActiveKey = activeApplicationKey(deps.typingContext.getState().activeApplication);
@@ -127,7 +137,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       contextChanged();
     },
     setSecureInput(active: boolean): void {
-      textSessionSnapshot = null;
+      clearTextSessionSnapshot();
       deps.typingContext.setSecureInput(active);
       contextChanged();
     },

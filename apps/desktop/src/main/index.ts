@@ -14,7 +14,15 @@ import { fileURLToPath } from "node:url";
 import { exec, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { promisify } from "node:util";
-import { createTypingContextBuffer, getLastWords, type TextSessionSnapshot, type TypingDeletionUnit } from "./typing-context.ts";
+import {
+  createTypingContextBuffer,
+  getLastWords,
+  type TextSessionCaretBounds,
+  type TextSessionRange,
+  type TextSessionReliability,
+  type TextSessionSnapshot,
+  type TypingDeletionUnit,
+} from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
 import { createDesktopAuthClient } from "./auth.ts";
@@ -724,16 +732,63 @@ function handleInputTapMessage(message: unknown): void {
 function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<TextSessionSnapshot>;
+
   return (
-    (snapshot.activeApplication === null || typeof snapshot.activeApplication === "object") &&
-    (snapshot.focusedElementId === null || typeof snapshot.focusedElementId === "string") &&
-    (snapshot.textElementId === null || typeof snapshot.textElementId === "string") &&
-    (snapshot.selectedRange === null || typeof snapshot.selectedRange === "object") &&
-    (snapshot.caretIdentity === null || typeof snapshot.caretIdentity === "string") &&
+    isActiveApplicationOrNull(snapshot.activeApplication) &&
+    isStringOrNull(snapshot.focusedElementId) &&
+    isStringOrNull(snapshot.textElementId) &&
+    isTextSessionRangeOrNull(snapshot.selectedRange) &&
+    isStringOrNull(snapshot.caretIdentity) &&
     typeof snapshot.secureLike === "boolean" &&
-    (snapshot.accessibilityReliability === "reliable" ||
-      snapshot.accessibilityReliability === "unreliable" ||
-      snapshot.accessibilityReliability === "unavailable")
+    isTextSessionReliability(snapshot.accessibilityReliability) &&
+    (snapshot.surroundingContext === undefined || isTextSessionSurroundingContext(snapshot.surroundingContext)) &&
+    (snapshot.caretBounds === undefined || isTextSessionCaretBounds(snapshot.caretBounds))
+  );
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isActiveApplicationOrNull(value: unknown): value is ActiveApplication | null {
+  if (value === null) return true;
+  if (!value || typeof value !== "object") return false;
+
+  const app = value as Partial<ActiveApplication>;
+  return typeof app.bundleId === "string" && (app.windowId === undefined || typeof app.windowId === "string");
+}
+
+function isTextSessionReliability(value: unknown): value is TextSessionReliability {
+  return value === "reliable" || value === "unreliable" || value === "unavailable";
+}
+
+function isTextSessionRangeOrNull(value: unknown): value is TextSessionRange | null {
+  if (value === null) return true;
+  if (!value || typeof value !== "object") return false;
+
+  const range = value as Partial<TextSessionRange>;
+  return Number.isFinite(range.location) && Number.isFinite(range.length);
+}
+
+function isTextSessionSurroundingContext(value: unknown): value is NonNullable<TextSessionSnapshot["surroundingContext"]> {
+  if (!value || typeof value !== "object") return false;
+
+  const context = value as NonNullable<TextSessionSnapshot["surroundingContext"]>;
+  return (
+    (context.beforeCaret === undefined || typeof context.beforeCaret === "string") &&
+    (context.afterCaret === undefined || typeof context.afterCaret === "string")
+  );
+}
+
+function isTextSessionCaretBounds(value: unknown): value is TextSessionCaretBounds {
+  if (!value || typeof value !== "object") return false;
+
+  const bounds = value as Partial<TextSessionCaretBounds>;
+  return (
+    Number.isFinite(bounds.x) &&
+    Number.isFinite(bounds.y) &&
+    Number.isFinite(bounds.width) &&
+    Number.isFinite(bounds.height)
   );
 }
 
