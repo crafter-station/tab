@@ -6,6 +6,13 @@ import { Separator } from "../ui/separator";
 import { cn } from "../../lib/utils";
 
 export type PatternTone = "neutral" | "success" | "warning" | "info" | "destructive";
+export type SettingsNavItem = {
+  label: string;
+  href: string;
+  active?: boolean;
+};
+
+type ThemeMode = "light" | "dark";
 
 const toneClasses: Record<PatternTone, string> = {
   neutral: "border-border bg-muted text-muted-foreground",
@@ -14,6 +21,19 @@ const toneClasses: Record<PatternTone, string> = {
   info: "border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--tabb-info-tint)] text-[var(--info)]",
   destructive: "border-[color-mix(in_srgb,var(--destructive)_28%,transparent)] bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] text-[var(--destructive)]",
 };
+
+const reviewThemeClasses: Record<ThemeMode, string> = {
+  light: "pug-theme-light",
+  dark: "pug-theme-dark",
+};
+
+const reviewModes: readonly ThemeMode[] = ["light", "dark"];
+
+const reviewSettingsNavItems: readonly SettingsNavItem[] = [
+  { label: "General", href: "#general", active: true },
+  { label: "Memory", href: "#memory" },
+  { label: "Debug", href: "#debug" },
+];
 
 type SectionBlockProps = PropsWithChildren<{
   className?: string;
@@ -117,12 +137,6 @@ export function CommandBlock({ command, label = "Command", description, classNam
   );
 }
 
-export type SettingsNavItem = {
-  label: string;
-  href: string;
-  active?: boolean;
-};
-
 type SettingsNavProps = {
   items: readonly SettingsNavItem[];
   className?: string;
@@ -166,9 +180,9 @@ export function SettingsRow({ label, description, className, children }: Setting
   );
 }
 
-function ReviewPanel({ mode }: { mode: "light" | "dark" }) {
+function ReviewPanel({ mode }: { mode: ThemeMode }) {
   return (
-    <Card data-theme={mode} className={cn(mode === "dark" ? "pug-theme-dark" : "pug-theme-light")}>
+    <Card data-theme={mode} className={reviewThemeClasses[mode]}>
       <CardContent className="grid gap-4 pt-5 sm:pt-6">
         <SurfaceHeader
           eyebrow={`${mode} mode`}
@@ -184,7 +198,7 @@ function ReviewPanel({ mode }: { mode: "light" | "dark" }) {
         </div>
         <div className="grid gap-3">
           <h3 className="text-sm font-bold">Settings navigation</h3>
-          <SettingsNav items={[{ label: "General", href: "#general", active: true }, { label: "Memory", href: "#memory" }, { label: "Debug", href: "#debug" }]} />
+          <SettingsNav items={reviewSettingsNavItems} />
           <SettingsRow label="Personal Memory" description="Review and delete memories from account surfaces.">
             Local controls
           </SettingsRow>
@@ -205,8 +219,9 @@ export function ComponentReviewSurface({ className }: { className?: string }) {
         description="A lightweight review surface for shared primitives and app-level Tabb patterns in both supported theme modes."
       />
       <div className="grid gap-4 lg:grid-cols-2">
-        <ReviewPanel mode="light" />
-        <ReviewPanel mode="dark" />
+        {reviewModes.map((mode) => (
+          <ReviewPanel key={mode} mode={mode} />
+        ))}
       </div>
     </SectionBlock>
   );
