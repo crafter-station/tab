@@ -88,6 +88,13 @@
     "packages/billing": {
       "name": "@tabb/billing",
     },
+    "packages/context-policy": {
+      "name": "@tabb/context-policy",
+      "dependencies": {
+        "@tabb/memory-policy": "workspace:*",
+        "@tabb/redaction": "workspace:*",
+      },
+    },
     "packages/contracts": {
       "name": "@tabb/contracts",
       "dependencies": {
@@ -623,6 +630,8 @@
     "@tabb/api": ["@tabb/api@workspace:apps/api"],
 
     "@tabb/billing": ["@tabb/billing@workspace:packages/billing"],
+
+    "@tabb/context-policy": ["@tabb/context-policy@workspace:packages/context-policy"],
 
     "@tabb/contracts": ["@tabb/contracts@workspace:packages/contracts"],
 
