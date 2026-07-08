@@ -1,4 +1,5 @@
 import { planQuotas, type PlanId } from "@tabb/billing";
+import type { ReactNode } from "react";
 import type {
   BillingQuotaResponse,
   DeviceListItem,
@@ -15,6 +16,9 @@ import {
   CardTitle,
   Input,
   Label,
+  SectionBlock,
+  StatusRow,
+  SurfaceHeader,
   Table,
   TableBody,
   TableCell,
@@ -90,31 +94,75 @@ function HandoffFields({ search }: { search: AuthSearch }) {
   );
 }
 
+function hasHandoff(search: AuthSearch): boolean {
+  return Boolean(search.device_id || search.callback);
+}
+
+function PageKicker({ children }: { children: ReactNode }) {
+  return <p className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground">{children}</p>;
+}
+
+function AuthShell({
+  eyebrow,
+  title,
+  description,
+  handoff,
+  children,
+}: {
+  eyebrow: string;
+  title: string;
+  description: string;
+  handoff?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(320px,0.72fr)] lg:items-start">
+      <SectionBlock className="pug-dot-grid min-h-full">
+        <SurfaceHeader eyebrow={eyebrow} title={title} description={description} />
+        <div className="mt-6 grid gap-3">
+          <StatusRow label="Native Autocomplete App" value="Private" tone="success" description="Tabb keeps the browser entry point aligned with the Mac app handoff." />
+          <StatusRow label="Typing Context" value="Local first" tone="info" description="Sign-in does not change how writing context is handled in the desktop app." />
+          {handoff ? (
+            <StatusRow label="Desktop handoff" value="Preserved" tone="warning" description="Device id, callback, and next fields stay attached to this form." />
+          ) : null}
+        </div>
+      </SectionBlock>
+      <Card className="w-full">
+        <CardContent className="grid gap-5 pt-5 sm:pt-6">{children}</CardContent>
+      </Card>
+    </section>
+  );
+}
+
 export function HomePage() {
   return (
     <>
-      <section className="grid gap-8 overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_85%_20%,#e4ff80_0,transparent_30%),linear-gradient(135deg,#f7f7f2,#e7ded0)] p-[clamp(1.25rem,4vw,4rem)] md:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
-        <div>
-          <p className="text-muted-foreground">Native autocomplete for macOS</p>
-          <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Write faster without changing where you write.</h1>
-          <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Tabb suggests the next few words while you type in Mail, Slack, Notes, Ghostty, and everywhere else you write.</p>
+      <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,4rem)] shadow-[var(--tabb-shadow-soft)] md:grid-cols-[minmax(0,1.08fr)_minmax(280px,0.92fr)]">
+        <div className="grid content-center gap-5">
+          <PageKicker>Private Utility Grid</PageKicker>
+          <h1 className="font-[var(--font-display)] text-[clamp(2.6rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Native Autocomplete App for macOS.</h1>
+          <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Tabb suggests the next few words inside the Active Application, then lets you accept a Suggestion with Option+Tab or a click without changing where you write.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <a className={buttonVariants()} href="/download">Download for macOS</a>
             <a className={buttonVariants({ variant: "secondary" })} href="/pricing">See pricing</a>
           </div>
         </div>
-        <Card>
-          <CardHeader><CardTitle>Built for trust</CardTitle></CardHeader>
-          <CardContent className="flex flex-col gap-3 text-muted-foreground">
-            <p>Your typing context stays on your Mac. Personal Memory is stored in your account and visible only to you.</p>
-            <p>Accept suggestions with Option+Tab or a click when the lightweight overlay appears.</p>
+        <Card className="pug-dot-grid">
+          <CardHeader>
+            <CardTitle>Proof-oriented by default</CardTitle>
+            <CardDescription>Clear boundaries for context, memory, and Acceptance.</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-muted-foreground">
+            <StatusRow label="Typing Context" value="Private" tone="success" description="Writing context is handled by the Mac app and only used to prepare the next Suggestion." />
+            <StatusRow label="Personal Memory" value="Account controlled" tone="info" description="Review and delete memories from your dashboard." />
+            <StatusRow label="Floating Suggestion Overlay" value="Lightweight" tone="neutral" description="The overlay stays out of the way until there is something useful to accept." />
           </CardContent>
         </Card>
       </section>
       <section className="mt-6 grid gap-4 md:grid-cols-3">
-        <Card><CardHeader><CardTitle>Works everywhere</CardTitle><CardDescription>Use one native assistant across the apps where you already write.</CardDescription></CardHeader></Card>
-        <Card><CardHeader><CardTitle>Personal Memory</CardTitle><CardDescription>Review and delete stored memories from your account dashboard.</CardDescription></CardHeader></Card>
-        <Card><CardHeader><CardTitle>Usage controls</CardTitle><CardDescription>Track quota, billing, linked devices, and account status in one place.</CardDescription></CardHeader></Card>
+        <SectionBlock><SurfaceHeader eyebrow="01" title="Active Application aware" description="Use one native assistant across Mail, Slack, Notes, Ghostty, and the apps where you already write." /></SectionBlock>
+        <SectionBlock><SurfaceHeader eyebrow="02" title="Personal Memory" description="Keep personalization inspectable with account-level review and delete controls." /></SectionBlock>
+        <SectionBlock><SurfaceHeader eyebrow="03" title="Usage controls" description="Track quota, billing, linked devices, and account status without leaving the web control plane." /></SectionBlock>
       </section>
     </>
   );
@@ -155,9 +203,8 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
   const signupHref = `/signup${preserveAuthSearchParams(search)}`;
 
   return (
-    <Card className="max-w-[34rem]">
-      <CardContent className="pt-6">
-        <h1 className="mb-6 text-4xl font-black tracking-[-0.06em]">Sign in</h1>
+    <AuthShell eyebrow="Account access" title="Sign in" description="Open the Tabb web control plane or complete a trusted desktop handoff." handoff={hasHandoff(search)}>
+        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Sign in</h1>
         <form className="flex flex-col gap-4" method="post" action="/login">
           <ErrorMessage message={error} />
           <HandoffFields search={search} />
@@ -167,16 +214,14 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
         </form>
         <p className="mt-4 text-muted-foreground"><a className="underline" href="/forgot-password">Forgot your password?</a></p>
         <p className="mt-2 text-muted-foreground">Need an account? <a className="underline" href={signupHref}>Create one</a>.</p>
-      </CardContent>
-    </Card>
+    </AuthShell>
   );
 }
 
 export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boolean }) {
   return (
-    <Card className="max-w-[34rem]">
-      <CardContent className="pt-6">
-        <h1 className="mb-6 text-4xl font-black tracking-[-0.06em]">Reset password</h1>
+    <AuthShell eyebrow="Account recovery" title="Reset password" description="Request a secure reset link while keeping your desktop app connection unchanged.">
+        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Reset password</h1>
         {sent ? (
           <p className="text-muted-foreground">If an account exists for that email, a password reset link is on the way.</p>
         ) : (
@@ -187,16 +232,14 @@ export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boo
           </form>
         )}
         <p className="mt-4 text-muted-foreground"><a className="underline" href="/login">Back to sign in</a>.</p>
-      </CardContent>
-    </Card>
+    </AuthShell>
   );
 }
 
 export function ResetPasswordPage({ error, token }: { error?: string; token?: string }) {
   return (
-    <Card className="max-w-[34rem]">
-      <CardContent className="pt-6">
-        <h1 className="mb-6 text-4xl font-black tracking-[-0.06em]">Choose a new password</h1>
+    <AuthShell eyebrow="Account recovery" title="Choose a new password" description="Set a new password for your Tabb account and return to the same web routes.">
+        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Choose a new password</h1>
         {token ? (
           <form className="flex flex-col gap-4" method="post" action="/reset-password">
             <ErrorMessage message={error} />
@@ -208,8 +251,7 @@ export function ResetPasswordPage({ error, token }: { error?: string; token?: st
           <p className="text-muted-foreground">This reset link is invalid or expired. Request a new password reset link.</p>
         )}
         <p className="mt-4 text-muted-foreground"><a className="underline" href="/forgot-password">Request another link</a>.</p>
-      </CardContent>
-    </Card>
+    </AuthShell>
   );
 }
 
@@ -217,9 +259,8 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
   const loginHref = `/login${preserveAuthSearchParams(search)}`;
 
   return (
-    <Card className="max-w-[34rem]">
-      <CardContent className="pt-6">
-        <h1 className="mb-6 text-4xl font-black tracking-[-0.06em]">Create your account</h1>
+    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tabb with a web account for quota, billing, linked devices, and Personal Memory." handoff={hasHandoff(search)}>
+        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Create your account</h1>
         <form className="flex flex-col gap-4" method="post" action="/signup">
           <ErrorMessage message={error} />
           <HandoffFields search={search} />
@@ -229,8 +270,7 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
           <p><Button type="submit">Sign up</Button></p>
         </form>
         <p className="mt-4 text-muted-foreground">Already have an account? <a className="underline" href={loginHref}>Sign in</a>.</p>
-      </CardContent>
-    </Card>
+    </AuthShell>
   );
 }
 
@@ -382,17 +422,19 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
 
 export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
   return (
-    <section className="grid gap-8 overflow-hidden rounded-[2rem] border bg-[radial-gradient(circle_at_85%_20%,#ffcf70_0,transparent_28%),linear-gradient(135deg,#fff6df,#efe0c4)] p-[clamp(1.25rem,4vw,3.5rem)] md:grid-cols-[minmax(0,1.1fr)_minmax(260px,0.9fr)]">
-      <div>
-        <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Download Tabb for macOS</h1>
-        <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Install the native autocomplete app directly on your Mac.</p>
+    <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,3.5rem)] shadow-[var(--tabb-shadow-soft)] md:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+      <div className="grid content-center gap-5">
+        <PageKicker>Desktop entry point</PageKicker>
+        <h1 className="font-[var(--font-display)] text-[clamp(2.5rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Download Tabb for macOS</h1>
+        <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Install the private Native Autocomplete App directly on your Mac and keep Suggestions in the apps where you write.</p>
         <p className="mt-6"><a className={buttonVariants()} href="/download/tabb.dmg">Download Tabb.dmg</a></p>
         {latestVersion ? <p className="mt-4 text-sm text-muted-foreground">Version {latestVersion}</p> : null}
       </div>
-      <Card>
+      <Card className="pug-dot-grid">
         <CardHeader><CardTitle>Before you start</CardTitle></CardHeader>
-        <CardContent className="flex flex-col gap-3 text-muted-foreground">
-          <p>Tabb requires macOS Accessibility permission to show and accept inline suggestions.</p>
+        <CardContent className="grid gap-3 text-muted-foreground">
+          <StatusRow label="Accessibility permission" value="Required" tone="warning" description="Tabb needs macOS Accessibility permission to show and accept inline Suggestions." />
+          <StatusRow label="Input Monitoring" value="Guided" tone="info" description="The desktop onboarding explains each permission before you grant it." />
           <p>macOS 14+. Notarization and code signing are handled during release packaging.</p>
         </CardContent>
       </Card>

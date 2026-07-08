@@ -204,8 +204,30 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(200);
     const body = await response.text();
-    expect(body).toInclude("Native autocomplete for macOS");
+    expect(body).toInclude("Private Utility Grid");
+    expect(body).toInclude("Native Autocomplete App for macOS");
     expect(body).toInclude("Download for macOS");
+    expect(body).toInclude("data-theme-choice=\"system\"");
+    expect(body).toInclude("Personal Memory");
+    expect(body).toInclude("Typing Context");
+  });
+
+  it("renders redesigned auth handoff forms without dropping desktop fields", async () => {
+    const { webApp } = await createWebTestEnv();
+    const response = await webRequest(
+      webApp,
+      "/login?device_id=desktop-device-1&callback=tabb%3A%2F%2Fauth%2Fcallback&next=%2Fdashboard",
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude("Desktop handoff");
+    expect(body).toInclude("name=\"device_id\" value=\"desktop-device-1\"");
+    expect(body).toInclude("name=\"callback\" value=\"tabb://auth/callback\"");
+    expect(body).toInclude("name=\"next\" value=\"/dashboard\"");
+    expect(body).toInclude(
+      'href="/signup?device_id=desktop-device-1&amp;callback=tabb%3A%2F%2Fauth%2Fcallback&amp;next=%2Fdashboard"',
+    );
   });
 
   it("displays pricing with accurate Free, Pro, and Max quotas and prices", async () => {
