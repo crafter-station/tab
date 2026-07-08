@@ -12,6 +12,7 @@ import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engi
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
+import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
@@ -597,6 +598,30 @@ describe("desktop native suggestion loop", () => {
       expect(calls.map((call) => call.type)).toEqual(["insertSemantically", "setClipboard", "sendPaste", "restoreClipboard"]);
     });
 
+    it("uses clipboard fallback without semantic insertion when app compatibility says semantic insertion is unreliable", async () => {
+      const calls: Array<{ type: string; value?: unknown }> = [];
+      const result = await acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit", windowId: "window:1" }),
+        getVisibleTextSessionTarget: () => semanticTarget,
+        getCurrentTextSessionTarget: () => semanticTarget,
+        shouldPreferClipboardFallback: () => true,
+        insertSemantically: async () => {
+          calls.push({ type: "insertSemantically" });
+          return true;
+        },
+        setClipboard: async (text) => {
+          calls.push({ type: "setClipboard", value: text });
+          return "previous-clipboard";
+        },
+        sendPaste: async () => calls.push({ type: "sendPaste" }),
+        restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
+      });
+
+      expect(result).toBe("inserted");
+      expect(calls.map((call) => call.type)).toEqual(["setClipboard", "sendPaste", "restoreClipboard"]);
+    });
+
     it("uses clipboard fallback without attempting semantic insertion when the target is stale", async () => {
       const calls: Array<{ type: string; value?: unknown }> = [];
       const result = await acceptAndInsertSuggestion({
@@ -652,6 +677,7 @@ describe("desktop native suggestion loop", () => {
       recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
       insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
+      compatibilityStore?: ReturnType<typeof createApplicationCompatibilityStore>;
     } = {}) {
       const buffer = createTypingContextBuffer();
       const calls: Array<{ type: string; value?: unknown }> = [];
@@ -689,6 +715,7 @@ describe("desktop native suggestion loop", () => {
         maxVisibleMs: overrides.maxVisibleMs,
         recordInteractionTelemetry: overrides.recordInteractionTelemetry,
         triggerPolicy: overrides.triggerPolicy,
+        compatibilityStore: overrides.compatibilityStore,
       });
       return { buffer, calls, session };
     }
@@ -941,6 +968,76 @@ describe("desktop native suggestion loop", () => {
       session.appendText("friend ");
       await wait(10);
       expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(2);
+    });
+
+    it("tracks metadata-only compatibility per Active Application for stricter triggers and safer insertion", async () => {
+      const compatibilityStore = createApplicationCompatibilityStore({
+        strictDismissalThreshold: 1,
+        preferClipboardSemanticFailureThreshold: 1,
+      });
+      const { calls, session } = makeSession({
+        compatibilityStore,
+        insertSemantically: async () => false,
+      });
+      const textSession = (bundleId: string, beforeCaret: string): TextSessionSnapshot => ({
+        activeApplication: { bundleId, windowId: "window:1" },
+        focusedElementId: `focus:${bundleId}`,
+        textElementId: `text:${bundleId}`,
+        selectedRange: { location: beforeCaret.length, length: 0 },
+        caretIdentity: `caret:${beforeCaret.length}`,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        supportsSemanticInsertion: true,
+        surroundingContext: { beforeCaret, afterCaret: "" },
+      });
+
+      session.applyTextSessionSnapshot(textSession("com.example.Unreliable", "Hello "));
+      await wait(10);
+      await session.acceptCurrentSuggestion();
+
+      expect(calls.map((call) => call.type)).toContain("insertSemantically");
+      expect(calls.map((call) => call.type)).toContain("setClipboard");
+
+      session.applyTextSessionSnapshot(textSession("com.example.Unreliable", "Hello again "));
+      await wait(10);
+      session.applyTextSessionSnapshot(textSession("com.example.Unreliable", "Hello again friend"));
+      await wait(10);
+
+      const unreliableRequests = calls.filter(
+        (call) => call.type === "requestSuggestion" && call.value === "Hello again friend",
+      );
+      expect(unreliableRequests).toHaveLength(0);
+
+      const callTypesBeforeSecondAcceptance = calls.map((call) => call.type);
+      session.applyTextSessionSnapshot(textSession("com.example.Unreliable", "Hello again friend "));
+      await wait(10);
+      await session.acceptCurrentSuggestion();
+      const secondAcceptanceCallTypes = calls.map((call) => call.type).slice(callTypesBeforeSecondAcceptance.length);
+
+      expect(secondAcceptanceCallTypes).not.toContain("insertSemantically");
+      expect(secondAcceptanceCallTypes).toContain("setClipboard");
+
+      const reliableCallsBefore = calls.filter((call) => call.type === "requestSuggestion").length;
+      session.applyTextSessionSnapshot(textSession("com.example.Reliable", "Hello friend"));
+      await wait(10);
+
+      expect(calls.filter((call) => call.type === "requestSuggestion").length).toBe(reliableCallsBefore + 1);
+
+      const unreliableProfile = compatibilityStore.getProfile({ bundleId: "com.example.Unreliable" });
+      expect(unreliableProfile).toMatchObject({
+        dismissalCount: 1,
+        acceptanceCount: 2,
+        textSessionReliableCount: 4,
+        semanticInsertionFailureCount: 1,
+        clipboardInsertionSuccessCount: 2,
+      });
+
+      const compatibilityJson = JSON.stringify(unreliableProfile);
+      expect(compatibilityJson).not.toContain("Hello");
+      expect(compatibilityJson).not.toContain("world");
+      expect(compatibilityJson).not.toContain("rawTypingContext");
+      expect(compatibilityJson).not.toContain("suggestionText");
+      expect(compatibilityJson).not.toContain("finalInsertedText");
     });
   });
 
