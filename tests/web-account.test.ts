@@ -372,23 +372,41 @@ describe("Web account surface", () => {
     const accountResponse = await webRequest(webApp, "/dashboard", {}, setCookie!);
     expect(accountResponse.status).toBe(200);
     const body = await accountResponse.text();
-    expect(body).toInclude("Monthly usage");
-    expect(body).toInclude("Free plan");
-    expect(body).toInclude("Account status");
-    expect(body).toInclude("Success: signed in");
-    expect(body).toInclude("Quota status");
-    expect(body).toInclude("Active: quota available");
-    expect(body).toInclude("Billing actions");
-    expect(body).toInclude("Muted: no linked devices");
-    expect(body).toInclude("Muted: no Personal Memory stored");
-    expect(body).toInclude("Upgrade to Pro");
-    expect(body).toInclude("Upgrade to Max");
-    expect(body).toInclude("Manage billing");
-    expect(body).toInclude('action="/logout"');
-    expect(body).toInclude("Sign out");
+    expect(body).toInclude('href="/dashboard/account"');
+    expect(body).toInclude('href="/dashboard/usage"');
+    expect(body).toInclude('href="/dashboard/devices"');
+    expect(body).toInclude('href="/dashboard/memories"');
     expect(body).toInclude('href="/dashboard"');
     expect(body).toInclude("Dashboard");
     expect(body).not.toInclude('href="/login">Sign in</a>');
+
+    const usageResponse = await webRequest(webApp, "/dashboard/usage", {}, setCookie!);
+    expect(usageResponse.status).toBe(200);
+    const usageBody = await usageResponse.text();
+    expect(usageBody).toInclude("Monthly usage");
+    expect(usageBody).toInclude("Free plan");
+    expect(usageBody).toInclude("Quota status");
+    expect(usageBody).toInclude("Active: quota available");
+    expect(usageBody).toInclude("Billing actions");
+    expect(usageBody).toInclude("Upgrade to Pro");
+    expect(usageBody).toInclude("Upgrade to Max");
+    expect(usageBody).toInclude("Manage billing");
+
+    const configResponse = await webRequest(webApp, "/dashboard/account", {}, setCookie!);
+    expect(configResponse.status).toBe(200);
+    const configBody = await configResponse.text();
+    expect(configBody).toInclude("Account status");
+    expect(configBody).toInclude("Success: signed in");
+    expect(configBody).toInclude('action="/logout"');
+    expect(configBody).toInclude("Sign out");
+
+    const devicesResponse = await webRequest(webApp, "/dashboard/devices", {}, setCookie!);
+    expect(devicesResponse.status).toBe(200);
+    await textIncludes(devicesResponse, "Muted: no linked devices");
+
+    const memoriesResponse = await webRequest(webApp, "/dashboard/memories", {}, setCookie!);
+    expect(memoriesResponse.status).toBe(200);
+    await textIncludes(memoriesResponse, "Muted: no Personal Memory stored");
   });
 
   it("redirects to a checkout URL for a paid plan", async () => {
@@ -709,22 +727,22 @@ describe("Web account surface", () => {
       createdBy: "system",
     });
 
-    const accountBefore = await webRequest(webApp, "/dashboard", {}, cookie);
+    const accountBefore = await webRequest(webApp, "/dashboard/memories", {}, cookie);
     expect(accountBefore.status).toBe(200);
     await textIncludes(accountBefore, "Lives in Portland");
 
     const deleteResponse = await webRequest(
       webApp,
-      `/account/memory/${memory.id}/delete`,
+      `/dashboard/memories/${memory.id}/delete`,
       { method: "POST" },
       cookie,
     );
     expect(deleteResponse.status).toBe(302);
     expect(deleteResponse.headers.get("location")).toBe(
-      "/dashboard?tab=memories",
+      "/dashboard/memories",
     );
 
-    const accountAfter = await webRequest(webApp, "/dashboard", {}, cookie);
+    const accountAfter = await webRequest(webApp, "/dashboard/memories", {}, cookie);
     expect(accountAfter.status).toBe(200);
     const bodyAfter = await accountAfter.text();
     expect(bodyAfter).not.toInclude("Lives in Portland");
@@ -741,14 +759,14 @@ describe("Web account surface", () => {
     createForm.set("content", "Prefers concise summaries");
     const createResponse = await webRequest(
       webApp,
-      "/account/memory/create",
+      "/dashboard/memories/create",
       { method: "POST", body: createForm },
       cookie,
     );
 
     expect(createResponse.status).toBe(302);
     expect(createResponse.headers.get("location")).toBe(
-      "/dashboard?tab=memories",
+      "/dashboard/memories",
     );
 
     const memoriesAfterCreate = await personalMemoryStorage.listMemoriesByUser(userId);
@@ -766,21 +784,21 @@ describe("Web account surface", () => {
 
     const editResponse = await webRequest(
       webApp,
-      `/account/memory/${systemMemory.id}/edit`,
+      `/dashboard/memories/${systemMemory.id}/edit`,
       { method: "POST", body: editForm },
       cookie,
     );
 
     expect(editResponse.status).toBe(302);
     expect(editResponse.headers.get("location")).toBe(
-      "/dashboard?tab=memories",
+      "/dashboard/memories",
     );
 
     const editedMemory = await personalMemoryStorage.findMemoryById(systemMemory.id);
     expect(editedMemory?.content).toBe("Works at Acme Robotics");
     expect(editedMemory?.createdBy).toBe("user");
 
-    const accountPage = await webRequest(webApp, "/dashboard", {}, cookie);
+    const accountPage = await webRequest(webApp, "/dashboard/memories", {}, cookie);
     expect(accountPage.status).toBe(200);
     const body = await accountPage.text();
     expect(body).toInclude("Prefers concise summaries");
@@ -801,7 +819,7 @@ describe("Web account surface", () => {
       appVersion: "0.0.1",
     });
 
-    const accountBefore = await webRequest(webApp, "/dashboard", {}, cookie);
+    const accountBefore = await webRequest(webApp, "/dashboard/devices", {}, cookie);
     expect(accountBefore.status).toBe(200);
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("macbook-pro-1");
@@ -811,16 +829,16 @@ describe("Web account surface", () => {
 
     const revokeResponse = await webRequest(
       webApp,
-      "/account/devices/macbook-pro-1/revoke",
+      "/dashboard/devices/macbook-pro-1/revoke",
       { method: "POST" },
       cookie,
     );
     expect(revokeResponse.status).toBe(302);
     expect(revokeResponse.headers.get("location")).toBe(
-      "/dashboard?tab=devices",
+      "/dashboard/devices",
     );
 
-    const accountAfter = await webRequest(webApp, "/dashboard", {}, cookie);
+    const accountAfter = await webRequest(webApp, "/dashboard/devices", {}, cookie);
     expect(accountAfter.status).toBe(200);
     const bodyAfter = await accountAfter.text();
     expect(bodyAfter).toInclude("Revoked");

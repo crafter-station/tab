@@ -51,6 +51,8 @@ export type DashboardData = {
   memories: readonly PersonalMemory[];
 };
 
+export type DashboardSection = "overview" | "account" | "usage" | "devices" | "memories";
+
 const authTitleClassName = "font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]";
 const quotaExhaustedClassName = "rounded-lg border border-warning/30 bg-[var(--tab-warning-tint)] p-3 text-warning";
 
@@ -421,127 +423,190 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
   );
 }
 
-export function DashboardPage({ data }: { data?: DashboardData }) {
-  if (!data) {
-    return <DashboardPlaceholder />;
-  }
+const dashboardSections = [
+  {
+    id: "account",
+    href: "/dashboard/account",
+    title: "Account config",
+    description: "Identity, email status, and sign-out controls.",
+  },
+  {
+    id: "usage",
+    href: "/dashboard/usage",
+    title: "Usage and billing",
+    description: "Monthly quota, current plan, checkout, and billing portal.",
+  },
+  {
+    id: "devices",
+    href: "/dashboard/devices",
+    title: "Devices",
+    description: "Native Mac sessions linked to this account.",
+  },
+  {
+    id: "memories",
+    href: "/dashboard/memories",
+    title: "Memories",
+    description: "Saved Personal Memory review, edit, and delete controls.",
+  },
+] as const;
 
-  const upgradePlans = getPlanEntries().filter(([planId]) => planId !== data.quota.planId);
-  const quotaExhausted = data.quota.usage >= data.quota.quota;
-  const accountName = data.user.email ?? data.user.name ?? data.user.id;
-  const accountEmailStatus = emailStatus(data.user.emailVerified);
-  const accountQuotaStatus = quotaStatus(quotaExhausted);
+function DashboardTabs({ active }: { active: DashboardSection }) {
+  return (
+    <nav className="flex flex-wrap gap-2" aria-label="Dashboard sections">
+      <a className={buttonVariants({ variant: active === "overview" ? "default" : "secondary" })} href="/dashboard">Overview</a>
+      {dashboardSections.map((section) => (
+        <a key={section.id} className={buttonVariants({ variant: active === section.id ? "default" : "secondary" })} href={section.href}>
+          {section.title}
+        </a>
+      ))}
+    </nav>
+  );
+}
+
+function DashboardHeader({ section }: { section: DashboardSection }) {
+  const title = section === "overview"
+    ? "Dashboard"
+    : dashboardSections.find((item) => item.id === section)?.title ?? "Dashboard";
+
+  return (
+    <div className="grid gap-4">
+      <SurfaceHeader
+        eyebrow="Account dashboard"
+        title={title}
+        description="Manage account configuration, usage, billing, devices, permissions, and Personal Memory."
+      />
+      <DashboardTabs active={section} />
+    </div>
+  );
+}
+
+export function DashboardPage({ data, section = "overview" }: { data?: DashboardData; section?: DashboardSection }) {
+  if (!data) {
+    return <DashboardPlaceholder section={section} />;
+  }
 
   return (
     <div className="grid gap-6">
-            <SurfaceHeader
-        eyebrow="Account dashboard"
-        title="Dashboard"
-        description="Manage account configuration, usage, billing, devices, permissions, and Personal Memory."
-      />
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-        <SectionBlock>
-          <SurfaceHeader
-            eyebrow="Account status"
-            title="Account configuration"
-            description="Identity is managed by Tab auth. Additional account settings appear here when supported by the API."
-            action={<form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>}
-          />
-          <div className="mt-4 grid gap-3">
-            <StatusRow
-              label="Signed-in account"
-              value="Success: signed in"
-              tone="success"
-              description={accountName}
-            />
-            <StatusRow
-              label="Email status"
-              value={accountEmailStatus.value}
-              tone={accountEmailStatus.tone}
-              description="Checkout remains gated by the existing email-verification rules."
-            />
-          </div>
-        </SectionBlock>
-        <SectionBlock>
-          <SurfaceHeader
-            eyebrow="Monthly usage"
-            title="Monthly usage"
-            description={`${formatPlanName(data.quota.planId)} plan`}
-          />
-          <div className="mt-4 grid gap-3">
-            <StatusRow
-              label="Quota status"
-              value={accountQuotaStatus.value}
-              tone={accountQuotaStatus.tone}
-              description={`${data.quota.usage.toLocaleString()} / ${data.quota.quota.toLocaleString()} autocompletes used this month`}
-              meta={`Resets ${formatDate(data.quota.resetAt)}`}
-            />
-            {quotaExhausted ? (
-              <div className={quotaExhaustedClassName}>
-                <strong>Quota exhausted.</strong> You have used {data.quota.usage.toLocaleString()} of {data.quota.quota.toLocaleString()} autocompletes this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
-              </div>
-            ) : null}
-            <Separator />
-            <div className="grid gap-2">
-              <p className="text-sm font-bold text-foreground">Billing actions</p>
-              <p className="flex flex-wrap gap-2">
-                {upgradePlans.map(([planId, plan]) => (
-                  <a key={planId} className={buttonVariants()} href={checkoutPlanHref(planId)}>
-                    {planActionLabel(plan.name, plan.monthlyPriceUsd)}
-                  </a>
-                ))}
-                <a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a>
-              </p>
-            </div>
-          </div>
-        </SectionBlock>
-      </div>
-      <div className="grid gap-4">
-        <DevicesCard devices={data.devices} />
-        <MemoriesCard memories={data.memories} />
+      <DashboardHeader section={section} />
+      {section === "overview" ? <DashboardOverview data={data} /> : null}
+      {section === "account" ? <AccountConfigCard user={data.user} /> : null}
+      {section === "usage" ? <UsageBillingCard quota={data.quota} /> : null}
+      {section === "devices" ? <DevicesCard devices={data.devices} /> : null}
+      {section === "memories" ? <MemoriesCard memories={data.memories} /> : null}
+    </div>
+  );
+}
+
+function DashboardPlaceholder({ section = "overview" }: { section?: DashboardSection }) {
+  return (
+    <div className="grid gap-6">
+      <DashboardHeader section={section} />
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+        {dashboardSections.map((item) => (
+          <Card key={item.id}>
+            <CardHeader><CardTitle>{item.title}</CardTitle></CardHeader>
+            <CardContent className="grid gap-4 text-muted-foreground">
+              <p>{item.description}</p>
+              <p><a className={buttonVariants({ variant: "secondary" })} href={item.href}>Open {item.title}</a></p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
     </div>
   );
 }
 
-function DashboardPlaceholder() {
+function DashboardOverview({ data }: { data: DashboardData }) {
   return (
-    <>
-      <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Dashboard</h1>
-      <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Manage account configuration, usage, billing, devices, permissions, and Personal Memory.</p>
-      <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-        <Card>
-          <CardHeader><CardTitle>Monthly usage</CardTitle></CardHeader>
-          <CardContent className="flex flex-col gap-4 text-muted-foreground">
-            <p>Plan, quota, and reset dates load from the Tab API when you are signed in.</p>
-            <p className="font-bold text-foreground">Billing actions</p>
-            <p className="flex flex-wrap gap-2">
-              <a className={buttonVariants()} href="/billing/checkout?plan=pro">Upgrade to Pro</a>
-              <a className={buttonVariants()} href="/billing/checkout?plan=max">Upgrade to Max</a>
-              <a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a>
-            </p>
+    <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+      {dashboardSections.map((item) => (
+        <Card key={item.id}>
+          <CardHeader>
+            <CardTitle>{item.title}</CardTitle>
+            <CardDescription>{item.description}</CardDescription>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-muted-foreground">
+            {item.id === "account" ? <p>{data.user.email ?? data.user.name ?? data.user.id}</p> : null}
+            {item.id === "usage" ? <p>{data.quota.usage.toLocaleString()} / {data.quota.quota.toLocaleString()} autocompletes used</p> : null}
+            {item.id === "devices" ? <p>{data.devices.length.toLocaleString()} linked devices</p> : null}
+            {item.id === "memories" ? <p>{data.memories.length.toLocaleString()} saved memories</p> : null}
+            <p><a className={buttonVariants({ variant: "secondary" })} href={item.href}>Open {item.title}</a></p>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader><CardTitle>Account</CardTitle></CardHeader>
-          <CardContent className="text-muted-foreground">
-            <p>Identity and safe account settings appear here without inventing unsupported settings APIs.</p>
-          </CardContent>
-        </Card>
-        <Card id="devices">
-          <CardHeader><CardTitle>Devices</CardTitle></CardHeader>
-          <CardContent className="text-muted-foreground">
-            <p>Linked native devices, versions, status, and revoke controls are powered by the existing device APIs.</p>
-          </CardContent>
-        </Card>
-        <Card id="memories">
-          <CardHeader><CardTitle>Personal Memory</CardTitle></CardHeader>
-          <CardContent className="text-muted-foreground">
-            <p>Review and delete memories collected for autocomplete personalization.</p>
-          </CardContent>
-        </Card>
+      ))}
+    </div>
+  );
+}
+
+function AccountConfigCard({ user }: { user: User }) {
+  const accountName = user.email ?? user.name ?? user.id;
+  const accountEmailStatus = emailStatus(user.emailVerified);
+
+  return (
+    <SectionBlock>
+      <SurfaceHeader
+        eyebrow="Account status"
+        title="Account configuration"
+        description="Identity is managed by Tab auth. Additional account settings appear here when supported by the API."
+        action={<form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>}
+      />
+      <div className="mt-4 grid gap-3">
+        <StatusRow
+          label="Signed-in account"
+          value="Success: signed in"
+          tone="success"
+          description={accountName}
+        />
+        <StatusRow
+          label="Email status"
+          value={accountEmailStatus.value}
+          tone={accountEmailStatus.tone}
+          description="Checkout remains gated by the existing email-verification rules."
+        />
       </div>
-    </>
+    </SectionBlock>
+  );
+}
+
+function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
+  const upgradePlans = getPlanEntries().filter(([planId]) => planId !== quota.planId);
+  const quotaExhausted = quota.usage >= quota.quota;
+  const accountQuotaStatus = quotaStatus(quotaExhausted);
+
+  return (
+    <SectionBlock>
+      <SurfaceHeader
+        eyebrow="Monthly usage"
+        title="Monthly usage"
+        description={`${formatPlanName(quota.planId)} plan`}
+      />
+      <div className="mt-4 grid gap-3">
+        <StatusRow
+          label="Quota status"
+          value={accountQuotaStatus.value}
+          tone={accountQuotaStatus.tone}
+          description={`${quota.usage.toLocaleString()} / ${quota.quota.toLocaleString()} autocompletes used this month`}
+          meta={`Resets ${formatDate(quota.resetAt)}`}
+        />
+        {quotaExhausted ? (
+          <div className={quotaExhaustedClassName}>
+            <strong>Quota exhausted.</strong> You have used {quota.usage.toLocaleString()} of {quota.quota.toLocaleString()} autocompletes this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
+          </div>
+        ) : null}
+        <Separator />
+        <div className="grid gap-2">
+          <p className="text-sm font-bold text-foreground">Billing actions</p>
+          <p className="flex flex-wrap gap-2">
+            {upgradePlans.map(([planId, plan]) => (
+              <a key={planId} className={buttonVariants()} href={checkoutPlanHref(planId)}>
+                {planActionLabel(plan.name, plan.monthlyPriceUsd)}
+              </a>
+            ))}
+            <a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a>
+          </p>
+        </div>
+      </div>
+    </SectionBlock>
   );
 }
 
@@ -583,7 +648,7 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                   </TableCell>
                   <TableCell>
                     {device.revoked ? null : (
-                      <form method="post" action={`/account/devices/${encodeURIComponent(device.deviceId)}/revoke`}>
+                      <form method="post" action={`/dashboard/devices/${encodeURIComponent(device.deviceId)}/revoke`}>
                         <Button type="submit" size="sm" variant="secondary">Warning: revoke access</Button>
                       </form>
                     )}
@@ -618,7 +683,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
             <Badge variant="secondary">Controlled on each Mac</Badge>
           </CardContent>
         </Card>
-        <form method="post" action="/account/memory/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
+        <form method="post" action="/dashboard/memories/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
           <Label htmlFor="memory-content">Teach Tab a memory</Label>
           <textarea
             id="memory-content"
@@ -650,7 +715,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
               {memories.map((memory) => (
                 <TableRow key={memory.id}>
                   <TableCell>
-                    <form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/edit`} className="grid gap-2">
+                    <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/edit`} className="grid gap-2">
                       <textarea
                         name="content"
                         maxLength={500}
@@ -665,7 +730,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                   <TableCell><Badge variant="outline">{memorySourceLabel(memory.createdBy)}</Badge></TableCell>
                   <TableCell>{formatDate(memory.updatedAt)}</TableCell>
                   <TableCell>
-                    <form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/delete`}>
+                    <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`}>
                       <Button type="submit" size="sm" variant="destructive">Destructive: delete memory</Button>
                     </form>
                   </TableCell>

@@ -19,6 +19,10 @@ import { Route as DownloadRouteImport } from './routes/download'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardUsageRouteImport } from './routes/dashboard.usage'
+import { Route as DashboardMemoriesRouteImport } from './routes/dashboard.memories'
+import { Route as DashboardDevicesRouteImport } from './routes/dashboard.devices'
+import { Route as DashboardAccountRouteImport } from './routes/dashboard.account'
 import { Route as BillingPortalRouteImport } from './routes/billing.portal'
 import { Route as BillingCheckoutRouteImport } from './routes/billing.checkout'
 import { Route as DownloadTabDmgRouteImport } from './routes/download.tab.dmg'
@@ -74,6 +78,26 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DashboardUsageRoute = DashboardUsageRouteImport.update({
+  id: '/usage',
+  path: '/usage',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardMemoriesRoute = DashboardMemoriesRouteImport.update({
+  id: '/memories',
+  path: '/memories',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardDevicesRoute = DashboardDevicesRouteImport.update({
+  id: '/devices',
+  path: '/devices',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DashboardAccountRoute = DashboardAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => DashboardRoute,
+} as any)
 const BillingPortalRoute = BillingPortalRouteImport.update({
   id: '/billing/portal',
   path: '/billing/portal',
@@ -98,7 +122,7 @@ const DownloadLatestJsonRoute = DownloadLatestJsonRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -108,13 +132,17 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/portal': typeof BillingPortalRoute
+  '/dashboard/account': typeof DashboardAccountRoute
+  '/dashboard/devices': typeof DashboardDevicesRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/usage': typeof DashboardUsageRoute
   '/download/latest/json': typeof DownloadLatestJsonRoute
   '/download/tab/dmg': typeof DownloadTabDmgRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -124,6 +152,10 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/portal': typeof BillingPortalRoute
+  '/dashboard/account': typeof DashboardAccountRoute
+  '/dashboard/devices': typeof DashboardDevicesRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/usage': typeof DashboardUsageRoute
   '/download/latest/json': typeof DownloadLatestJsonRoute
   '/download/tab/dmg': typeof DownloadTabDmgRoute
 }
@@ -131,7 +163,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/account': typeof AccountRoute
-  '/dashboard': typeof DashboardRoute
+  '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -141,6 +173,10 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/portal': typeof BillingPortalRoute
+  '/dashboard/account': typeof DashboardAccountRoute
+  '/dashboard/devices': typeof DashboardDevicesRoute
+  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/usage': typeof DashboardUsageRoute
   '/download/latest/json': typeof DownloadLatestJsonRoute
   '/download/tab/dmg': typeof DownloadTabDmgRoute
 }
@@ -159,6 +195,10 @@ export interface FileRouteTypes {
     | '/signup'
     | '/billing/checkout'
     | '/billing/portal'
+    | '/dashboard/account'
+    | '/dashboard/devices'
+    | '/dashboard/memories'
+    | '/dashboard/usage'
     | '/download/latest/json'
     | '/download/tab/dmg'
   fileRoutesByTo: FileRoutesByTo
@@ -175,6 +215,10 @@ export interface FileRouteTypes {
     | '/signup'
     | '/billing/checkout'
     | '/billing/portal'
+    | '/dashboard/account'
+    | '/dashboard/devices'
+    | '/dashboard/memories'
+    | '/dashboard/usage'
     | '/download/latest/json'
     | '/download/tab/dmg'
   id:
@@ -191,6 +235,10 @@ export interface FileRouteTypes {
     | '/signup'
     | '/billing/checkout'
     | '/billing/portal'
+    | '/dashboard/account'
+    | '/dashboard/devices'
+    | '/dashboard/memories'
+    | '/dashboard/usage'
     | '/download/latest/json'
     | '/download/tab/dmg'
   fileRoutesById: FileRoutesById
@@ -198,7 +246,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AccountRoute: typeof AccountRoute
-  DashboardRoute: typeof DashboardRoute
+  DashboardRoute: typeof DashboardRouteWithChildren
   DownloadRoute: typeof DownloadRouteWithChildren
   ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
@@ -282,6 +330,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/dashboard/usage': {
+      id: '/dashboard/usage'
+      path: '/usage'
+      fullPath: '/dashboard/usage'
+      preLoaderRoute: typeof DashboardUsageRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/memories': {
+      id: '/dashboard/memories'
+      path: '/memories'
+      fullPath: '/dashboard/memories'
+      preLoaderRoute: typeof DashboardMemoriesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/devices': {
+      id: '/dashboard/devices'
+      path: '/devices'
+      fullPath: '/dashboard/devices'
+      preLoaderRoute: typeof DashboardDevicesRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/dashboard/account': {
+      id: '/dashboard/account'
+      path: '/account'
+      fullPath: '/dashboard/account'
+      preLoaderRoute: typeof DashboardAccountRouteImport
+      parentRoute: typeof DashboardRoute
+    }
     '/billing/portal': {
       id: '/billing/portal'
       path: '/billing/portal'
@@ -313,6 +389,24 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface DashboardRouteChildren {
+  DashboardAccountRoute: typeof DashboardAccountRoute
+  DashboardDevicesRoute: typeof DashboardDevicesRoute
+  DashboardMemoriesRoute: typeof DashboardMemoriesRoute
+  DashboardUsageRoute: typeof DashboardUsageRoute
+}
+
+const DashboardRouteChildren: DashboardRouteChildren = {
+  DashboardAccountRoute: DashboardAccountRoute,
+  DashboardDevicesRoute: DashboardDevicesRoute,
+  DashboardMemoriesRoute: DashboardMemoriesRoute,
+  DashboardUsageRoute: DashboardUsageRoute,
+}
+
+const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
+  DashboardRouteChildren,
+)
+
 interface DownloadRouteChildren {
   DownloadLatestJsonRoute: typeof DownloadLatestJsonRoute
   DownloadTabDmgRoute: typeof DownloadTabDmgRoute
@@ -330,7 +424,7 @@ const DownloadRouteWithChildren = DownloadRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
-  DashboardRoute: DashboardRoute,
+  DashboardRoute: DashboardRouteWithChildren,
   DownloadRoute: DownloadRouteWithChildren,
   ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,

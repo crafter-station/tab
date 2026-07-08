@@ -13,6 +13,7 @@ import {
   ResetPasswordPage,
   SignupPage,
   type AuthSearch,
+  type DashboardSection,
   type User,
 } from "./components/web-pages.tsx";
 import { env } from "./env.ts";
@@ -502,6 +503,7 @@ export function createWebApp(config: WebAppConfig) {
     cookieHeader: string | undefined,
     _path: string,
     _searchParams: URLSearchParams,
+    section: DashboardSection = "overview",
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
@@ -525,6 +527,7 @@ export function createWebApp(config: WebAppConfig) {
     const memoryList = await parseMemories(memoriesResponse);
     return html(
       createElement(DashboardPage, {
+        section,
         data: {
           user: sessionCheck.user,
           quota: quota.data,
@@ -532,7 +535,7 @@ export function createWebApp(config: WebAppConfig) {
           memories: memoryList.data.memories,
         },
       }),
-      `Dashboard - ${appName}`,
+      `${section === "overview" ? "Dashboard" : `Dashboard ${section}`} - ${appName}`,
       200,
       sessionCheck.user,
     );
@@ -613,7 +616,7 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (response.status === 401) return redirect("/login");
-    return redirect("/dashboard?tab=devices");
+    return redirect("/dashboard/devices");
   }
 
   async function deleteMemoryHandler(
@@ -630,7 +633,7 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (response.status === 401) return redirect("/login");
-    return redirect("/dashboard?tab=memories");
+    return redirect("/dashboard/memories");
   }
 
   async function submitMemoryForm(
@@ -655,7 +658,7 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (response.status === 401) return redirect("/login");
-    return redirect("/dashboard?tab=memories");
+    return redirect("/dashboard/memories");
   }
 
   async function createMemoryHandler(
@@ -748,14 +751,30 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/account" && request.method === "GET") {
-        return redirect("/dashboard");
+        return redirect("/dashboard/account");
       }
 
       if (path === "/dashboard" && request.method === "GET") {
         return accountPage(cookieHeader, path, url.searchParams);
       }
 
-      if (path === "/account/memory/create" && request.method === "POST") {
+      if (path === "/dashboard/account" && request.method === "GET") {
+        return accountPage(cookieHeader, path, url.searchParams, "account");
+      }
+
+      if (path === "/dashboard/usage" && request.method === "GET") {
+        return accountPage(cookieHeader, path, url.searchParams, "usage");
+      }
+
+      if (path === "/dashboard/devices" && request.method === "GET") {
+        return accountPage(cookieHeader, path, url.searchParams, "devices");
+      }
+
+      if (path === "/dashboard/memories" && request.method === "GET") {
+        return accountPage(cookieHeader, path, url.searchParams, "memories");
+      }
+
+      if ((path === "/account/memory/create" || path === "/dashboard/memories/create") && request.method === "POST") {
         return createMemoryHandler(request, cookieHeader);
       }
 
@@ -779,7 +798,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (
-        (path.startsWith("/account/memory/") || path.startsWith("/dashboard/memory/")) &&
+        (path.startsWith("/account/memory/") || path.startsWith("/dashboard/memories/")) &&
         path.endsWith("/edit") &&
         request.method === "POST"
       ) {
@@ -790,7 +809,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (
-        (path.startsWith("/account/memory/") || path.startsWith("/dashboard/memory/")) &&
+        (path.startsWith("/account/memory/") || path.startsWith("/dashboard/memories/")) &&
         path.endsWith("/delete") &&
         request.method === "POST"
       ) {

@@ -5,6 +5,6 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: "account",
   beforeLoad: () => {
-    throw redirect({ href: "/dashboard" });
+    throw redirect({ href: "/dashboard/account" });
   },
 });
