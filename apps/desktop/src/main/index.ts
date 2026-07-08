@@ -36,6 +36,7 @@ import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createUpdateChecker } from "./release.ts";
+import { createGhosttyAppContextSnapshot, sanitizeAppContextSnapshot } from "./app-context.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tabb/contracts";
 import { classifyTypingContextSource } from "@tabb/memory-policy";
 import { env } from "./env.ts";
@@ -282,6 +283,7 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   debounceMs: 300,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
+  getAppContext: (snapshot) => sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot)),
 });
 
 function delay(ms: number): Promise<void> {

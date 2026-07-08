@@ -1,9 +1,15 @@
 import type { AppContext, AppContextFragment } from "@tabb/contracts";
 import { redactSensitiveText } from "@tabb/redaction";
+import type { SafeTypingContextSnapshot } from "./typing-context.ts";
 
 const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
+const GHOSTTY_BUNDLE_ID = "com.mitchellh.ghostty";
+const GHOSTTY_PROVIDER = "ghostty-terminal";
+const MIN_GHOSTTY_CONTEXT_LENGTH = 20;
+const MAX_GHOSTTY_CONTEXT_LINES = 16;
+const MAX_CONTROL_CHARACTER_RATIO = 0.08;
 
 export type AppContextSnapshot = AppContext;
 
@@ -24,6 +30,80 @@ function createSafeRedactionSummary(): AppContextFragment["redaction"] {
     applied: false,
     redactionCount: 0,
     kinds: [],
+  };
+}
+
+function ghosttySnapshot(status: AppContextSnapshot["metadata"]["status"], confidence?: number): AppContextSnapshot {
+  return {
+    fragments: [],
+    metadata: { provider: GHOSTTY_PROVIDER, status, confidence },
+  };
+}
+
+function stripAnsiControlSequences(text: string): string {
+  return text
+    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
+    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+}
+
+function controlCharacterRatio(text: string): number {
+  if (text.length === 0) return 0;
+  const controls = text.match(/[\u0000-\u001f\u007f]/g)?.length ?? 0;
+  return controls / text.length;
+}
+
+function normalizeTerminalContext(text: string): string {
+  return stripAnsiControlSequences(text)
+    .split(/\r?\n/)
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0)
+    .slice(-MAX_GHOSTTY_CONTEXT_LINES)
+    .join("\n")
+    .trim()
+    .slice(-MAX_FRAGMENT_LENGTH);
+}
+
+export function createGhosttyAppContextSnapshot(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
+  if (snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID) {
+    return ghosttySnapshot("unsupported");
+  }
+
+  const textSession = snapshot.textSession;
+  if (!textSession || textSession.accessibilityReliability !== "reliable" || textSession.secureLike) {
+    return ghosttySnapshot("empty", 0);
+  }
+
+  const rawContext = [
+    textSession.surroundingContext?.beforeCaret ?? "",
+    textSession.selectedText ?? "",
+    textSession.surroundingContext?.afterCaret ?? "",
+  ].filter(Boolean).join("\n");
+
+  if (rawContext.trim().length === 0 || controlCharacterRatio(rawContext) > MAX_CONTROL_CHARACTER_RATIO) {
+    return ghosttySnapshot("empty", 0);
+  }
+
+  const text = normalizeTerminalContext(rawContext);
+  if (text.length < MIN_GHOSTTY_CONTEXT_LENGTH) {
+    return ghosttySnapshot("empty", 0.4);
+  }
+
+  const confidence = 0.86;
+  return {
+    fragments: [
+      {
+        id: `ghostty:${snapshot.contextHash}`,
+        provider: GHOSTTY_PROVIDER,
+        kind: "terminal_visible_context",
+        text,
+        confidence,
+        redaction: createSafeRedactionSummary(),
+        requestable: true,
+        memoryEligible: false,
+      },
+    ],
+    metadata: { provider: GHOSTTY_PROVIDER, status: "available", confidence },
   };
 }
 
