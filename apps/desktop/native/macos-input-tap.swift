@@ -401,10 +401,21 @@ func normalizedText(from event: CGEvent) -> String? {
 }
 
 let callback: CGEventTapCallBack = { _, type, event, _ in
-  guard type == .keyDown else { return Unmanaged.passUnretained(event) }
-
   let flags = event.flags
   let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+
+  if type == .flagsChanged {
+    if keyCode == 58 || keyCode == 61 {
+      emitActiveWindowIfChanged()
+      emitTextSessionSnapshotIfChanged()
+      emitAppContextTreeSnapshotIfChanged()
+      emit(["type": "modifier-key", "key": "option", "phase": flags.contains(.maskAlternate) ? "down" : "up"])
+    }
+    return Unmanaged.passUnretained(event)
+  }
+
+  guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+
   let isDeleteKey = keyCode == 51 || keyCode == 117
 
   if isDeleteKey {
@@ -442,7 +453,7 @@ guard let eventTap = CGEvent.tapCreate(
   tap: .cgSessionEventTap,
   place: .headInsertEventTap,
   options: .listenOnly,
-  eventsOfInterest: CGEventMask(1 << CGEventType.keyDown.rawValue),
+  eventsOfInterest: CGEventMask((1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)),
   callback: callback,
   userInfo: nil
 ) else {

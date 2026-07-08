@@ -20,3 +20,12 @@ test("macOS helper emits Accessibility Text Session snapshots accepted by deskto
   assert.match(typingContext, /readonly selectedText\?: string/);
   assert.match(mainProcess, /snapshot\.selectedText === undefined \|\| typeof snapshot\.selectedText === "string"/);
 });
+
+test("macOS helper refreshes context before Option modifier shortcut events", () => {
+  assert.match(nativeHelper, /CGEventType\.flagsChanged/);
+  assert.match(nativeHelper, /"type": "modifier-key", "key": "option"/);
+  assert.match(
+    nativeHelper,
+    /if type == \.flagsChanged \{[\s\S]*emitActiveWindowIfChanged\(\)[\s\S]*emitTextSessionSnapshotIfChanged\(\)[\s\S]*emitAppContextTreeSnapshotIfChanged\(\)[\s\S]*"type": "modifier-key", "key": "option"/,
+  );
+});

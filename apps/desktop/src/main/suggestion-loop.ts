@@ -32,6 +32,7 @@ export type SuggestionLoopDependencies = {
 
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   let state: SuggestionLoopState = { status: "idle" };
+  let requestVersion = 0;
 
   function isCurrentDebouncedContext(hash: string): boolean {
     return state.status === "debouncing" && state.contextHash === hash;
@@ -80,6 +81,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   }
 
   function invalidate(): void {
+    requestVersion += 1;
     if (state.status === "debouncing") {
       clearTimeout(state.timer);
     }
@@ -87,7 +89,46 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     state = { status: "idle" };
   }
 
+  async function requestCloudSuggestionNow(): Promise<void> {
+    const snapshot = deps.getContext();
+    if (!isRequestableTypingContextSnapshot(snapshot)) {
+      if (snapshot.suppressionReason === "secret_like_context") {
+        deps.onSecretLikeContextDetected?.();
+      }
+      invalidate();
+      return;
+    }
+
+    const hash = snapshot.contextHash;
+    const version = requestVersion + 1;
+    invalidate();
+    requestVersion = version;
+
+    deps.onRequestStarted?.(snapshot.sanitizedContext);
+    const suggestion = await deps.requestSuggestion(snapshot);
+
+    if (requestVersion !== version) {
+      return;
+    }
+
+    const latest = deps.getContext();
+    if (latest.contextHash !== hash || !isRequestableTypingContextSnapshot(latest)) {
+      state = { status: "idle" };
+      return;
+    }
+
+    deps.onRequestFinished?.(suggestion);
+
+    if (!suggestion) {
+      state = { status: "idle" };
+      return;
+    }
+
+    tryShowSuggestion(latest, suggestion, hash);
+  }
+
   function onContextChanged(): void {
+    requestVersion += 1;
     const snapshot = deps.getContext();
     const hash = snapshot.contextHash;
 
@@ -163,6 +204,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
 
   return {
     onContextChanged,
+    requestCloudSuggestionNow,
     invalidate,
     getState: () => state,
   };

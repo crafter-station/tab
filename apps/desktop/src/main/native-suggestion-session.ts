@@ -328,6 +328,17 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
         clearContext(false);
       }
     },
+    async requestSuggestionNow(): Promise<void> {
+      if (observationPaused) return;
+      if (currentSuggestion) {
+        recordDismissal(currentSafeSnapshot());
+      }
+      outputs.resetDebugApiState();
+      clearVisibleSuggestion();
+      outputs.clearSuggestion();
+      await suggestionLoop.requestCloudSuggestionNow();
+      outputs.showDebugContext();
+    },
     clearContext,
     getCurrentSuggestion: () => currentSuggestion,
     getCurrentSnapshot: () => currentSafeSnapshot(),

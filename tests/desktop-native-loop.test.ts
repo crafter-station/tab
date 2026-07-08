@@ -362,6 +362,30 @@ describe("desktop native suggestion loop", () => {
       expect(events[1].payload).toBeNull();
     });
 
+    it("requests a cloud suggestion immediately for explicit triggers", async () => {
+      const localCalls: string[] = [];
+      const cloudCalls: string[] = [];
+      const { events, deps } = makeDeps({
+        getContext: () => makeSnapshot({ context: "thank" }),
+        getLocalSuggestion: (snapshot) => {
+          localCalls.push(snapshot.sanitizedContext);
+          return { id: "local-thank", text: " you" };
+        },
+        requestSuggestion: async (snapshot) => {
+          cloudCalls.push(snapshot.sanitizedContext);
+          return { id: "cloud-thank", text: " you very much" };
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      await loop.requestCloudSuggestionNow();
+
+      expect(localCalls).toHaveLength(0);
+      expect(cloudCalls).toEqual(["thank"]);
+      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show"]);
+      expect(events[2].payload).toEqual({ id: "cloud-thank", text: " you very much" });
+    });
+
     it("cancels stale debounced requests when context changes", async () => {
       const { events, deps } = makeDeps();
       let context = "hello";
@@ -895,6 +919,23 @@ describe("desktop native suggestion loop", () => {
       expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(0);
       expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "local-thank", text: " you" } });
       expect(session.getCurrentSuggestion()).toEqual({ id: "local-thank", text: " you" });
+    });
+
+    it("can explicitly request a cloud suggestion for the current context", async () => {
+      const { calls, session } = makeSession({
+        requestSuggestion: async () => ({ id: "cloud-thank", text: " you very much" }),
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("thank");
+      await wait(10);
+      calls.length = 0;
+
+      await session.requestSuggestionNow();
+
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: "thank" });
+      expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "cloud-thank", text: " you very much" } });
+      expect(session.getCurrentSuggestion()).toEqual({ id: "cloud-thank", text: " you very much" });
     });
 
     it("accepts the visible suggestion into the previously active application", async () => {

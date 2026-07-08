@@ -133,6 +133,7 @@ const OVERLAY_BOTTOM_MARGIN = 8;
 const OVERLAY_POSITION_CHECK_MS = 400;
 const OVERLAY_HIT_TEST_MS = 50;
 const SUGGESTION_VISIBLE_MS = 4_000;
+const DOUBLE_OPTION_PRESS_MS = 500;
 
 const authClient = createDesktopAuthClient({
   apiBaseUrl: API_BASE_URL,
@@ -272,6 +273,7 @@ type DebugAppContextState = {
   messageCount: number;
 };
 let debugApiState: DebugApiState = { status: "idle" };
+let lastOptionKeyUpAt = 0;
 
 function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
   const surroundingContext = snapshot.textSession?.surroundingContext;
@@ -787,6 +789,27 @@ async function acceptCurrentSuggestion(): Promise<void> {
   await nativeSuggestionSession.acceptCurrentSuggestion();
 }
 
+async function requestSuggestionNow(): Promise<void> {
+  await nativeSuggestionSession.requestSuggestionNow();
+}
+
+function handleOptionKeyUp(): void {
+  const now = Date.now();
+  if (now - lastOptionKeyUpAt <= DOUBLE_OPTION_PRESS_MS) {
+    lastOptionKeyUpAt = 0;
+    requestSuggestionNow().catch((error) => {
+      console.error("Failed to request suggestion from Option double press:", error);
+    });
+    return;
+  }
+
+  lastOptionKeyUpAt = now;
+}
+
+function resetOptionDoublePressState(): void {
+  lastOptionKeyUpAt = 0;
+}
+
 function clearContextAndHide(): void {
   nativeSuggestionSession.clearContext();
   debugApiState = { status: "idle" };
@@ -814,6 +837,8 @@ function handleInputTapMessage(message: unknown): void {
     unit?: unknown;
     bundleId?: unknown;
     windowId?: unknown;
+    key?: unknown;
+    phase?: unknown;
     message?: unknown;
     snapshot?: unknown;
     tree?: unknown;
@@ -835,11 +860,19 @@ function handleInputTapMessage(message: unknown): void {
     return;
   }
   if (payload.type === "text" && typeof payload.text === "string") {
+    resetOptionDoublePressState();
     handleTextInput(payload.text);
     return;
   }
   if (payload.type === "delete") {
+    resetOptionDoublePressState();
     handleDeleteBackward(payload.unit === "token" ? "token" : "character");
+    return;
+  }
+  if (payload.type === "modifier-key" && payload.key === "option") {
+    if (payload.phase === "up") {
+      handleOptionKeyUp();
+    }
     return;
   }
   if (payload.type === "text-session" && isTextSessionSnapshot(payload.snapshot)) {
@@ -1203,6 +1236,7 @@ app.on("activate", () => {
 
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
+  resetOptionDoublePressState();
   const activeApplication = typingContextBuffer.getState().activeApplication;
   if (activeApplication) {
     memoryExtractionDispatcher.append({
@@ -1215,14 +1249,17 @@ export function handleTextInput(text: string): void {
 }
 
 export function handlePastedText(text: string): void {
+  resetOptionDoublePressState();
   nativeSuggestionSession.appendPastedText(text);
 }
 
 export function handleDeleteBackward(unit: TypingDeletionUnit = "character"): void {
+  resetOptionDoublePressState();
   nativeSuggestionSession.deleteBackward(unit);
 }
 
 export function handleShortcutOrNavigation(): void {
+  resetOptionDoublePressState();
   // Shortcuts and navigation keys do not become typing context.
 }
 
