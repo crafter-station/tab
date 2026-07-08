@@ -20,15 +20,19 @@ function WebDocument({
   user?: User;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" style={{ colorScheme: "light dark" }}>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
         <title>{title}</title>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link rel="stylesheet" href="/styles.css" />
       </head>
       <body>
+        <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[var(--radius-control)] focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-bold focus:text-foreground focus:shadow-[var(--tab-shadow-soft)]" href="#main-content">Skip to main content</a>
         <div className="pug-grid-surface min-h-dvh px-3 sm:px-5">
           <div className="mx-auto min-h-dvh max-w-6xl border-x border-border/70 bg-background/82 p-4 backdrop-blur-sm sm:p-5">
             <header className="flex items-center justify-between gap-4 border-b border-border/70 pb-4 max-md:flex-col max-md:items-start">
@@ -38,7 +42,7 @@ function WebDocument({
                 <a className="no-underline text-muted-foreground hover:text-foreground" href="/download">Download</a>
                 <div className="flex rounded-full border bg-card p-1 text-xs text-muted-foreground" aria-label="Theme selection">
                   {THEME_MODES.map((mode) => (
-                    <button className="rounded-full px-2 py-1 font-bold" data-theme-choice={mode} key={mode} type="button">
+                    <button className="rounded-full px-2 py-1 font-bold" data-theme-choice={mode} key={mode} type="button" aria-pressed="false">
                       {formatThemeModeLabel(mode)}
                     </button>
                   ))}
@@ -50,7 +54,7 @@ function WebDocument({
                 )}
               </nav>
             </header>
-            <main className="py-10 sm:py-12">{children}</main>
+            <main id="main-content" className="py-10 sm:py-12">{children}</main>
             <footer className="flex items-center justify-between gap-4 border-t border-border/70 py-6 text-sm text-muted-foreground max-md:flex-col max-md:items-start">
               <span>Tab, autocomplete for your Mac.</span>
               <span>You choose when to add suggestions, and you control saved memories.</span>

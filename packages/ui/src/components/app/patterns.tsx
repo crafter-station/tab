@@ -151,11 +151,12 @@ export function CommandBlock({ command, label = "Command", description, classNam
 type SettingsNavProps = {
   items: readonly SettingsNavItem[];
   className?: string;
+  "aria-label"?: string;
 };
 
-export function SettingsNav({ items, className }: SettingsNavProps) {
+export function SettingsNav({ items, className, "aria-label": ariaLabel = "Settings navigation" }: SettingsNavProps) {
   return (
-    <nav className={cn("flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-border bg-muted/45 p-2", className)} aria-label="Settings navigation">
+    <nav className={cn("flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-border bg-muted/45 p-2", className)} aria-label={ariaLabel}>
       {items.map((item) => (
         <a
           key={item.href}

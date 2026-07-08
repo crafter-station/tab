@@ -599,11 +599,17 @@ export function createWebApp(config: WebAppConfig) {
   }
 
   async function revokeDeviceHandler(
+    request: Request,
     cookieHeader: string | undefined,
     deviceId: string,
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
+
+    const form = await request.formData();
+    if (String(form.get("confirm") ?? "") !== deviceId) {
+      return redirect("/dashboard/devices");
+    }
 
     const response = await apiRequest(
       "/api/auth/device/revoke",
@@ -620,11 +626,17 @@ export function createWebApp(config: WebAppConfig) {
   }
 
   async function deleteMemoryHandler(
+    request: Request,
     cookieHeader: string | undefined,
     memoryId: string,
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
+
+    const form = await request.formData();
+    if (String(form.get("confirm") ?? "") !== memoryId) {
+      return redirect("/dashboard/memories");
+    }
 
     const response = await apiRequest(
       `/api/account/memory/${encodeURIComponent(memoryId)}`,
@@ -793,7 +805,7 @@ export function createWebApp(config: WebAppConfig) {
       ) {
         const deviceId = routeSegment(path, 3);
         if (deviceId) {
-          return revokeDeviceHandler(cookieHeader, deviceId);
+          return revokeDeviceHandler(request, cookieHeader, deviceId);
         }
       }
 
@@ -815,7 +827,7 @@ export function createWebApp(config: WebAppConfig) {
       ) {
         const memoryId = routeSegment(path, 3);
         if (memoryId) {
-          return deleteMemoryHandler(cookieHeader, memoryId);
+          return deleteMemoryHandler(request, cookieHeader, memoryId);
         }
       }
 

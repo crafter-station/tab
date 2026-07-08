@@ -19,6 +19,7 @@ import {
   Label,
   SectionBlock,
   Separator,
+  SettingsNav,
   StatusRow,
   SurfaceHeader,
   Table,
@@ -118,16 +119,24 @@ function getPlanEntries(): PlanEntry[] {
 }
 
 export function formatDate(iso: string): string {
-  const date = new Date(iso);
-  return date.toLocaleDateString("en-US", {
+  return new Intl.DateTimeFormat(undefined, {
     year: "numeric",
     month: "short",
     day: "numeric",
-  });
+  }).format(new Date(iso));
 }
 
 export function formatMonthlyPrice(monthlyPriceUsd: number): string {
-  return monthlyPriceUsd === 0 ? "Free" : `$${monthlyPriceUsd}/mo`;
+  if (monthlyPriceUsd === 0) return "Free";
+  return `${new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(monthlyPriceUsd)}/mo`;
+}
+
+function formatCount(count: number): string {
+  return new Intl.NumberFormat(undefined).format(count);
 }
 
 function isPlanId(planId: string): planId is PlanId {
@@ -324,7 +333,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             <CardContent className="grid flex-1 gap-3 text-muted-foreground">
               <StatusRow
                 label="Monthly suggestions"
-                value={`${plan.monthlyAutocompleteSuggestions.toLocaleString()} / month`}
+                value={`${formatCount(plan.monthlyAutocompleteSuggestions)} / month`}
                 tone="info"
                 description="Suggestions included in this plan."
               />
@@ -451,15 +460,17 @@ const dashboardSections = [
 ] as const;
 
 function DashboardTabs({ active }: { active: DashboardSection }) {
+  const items = [
+    { label: "Overview", href: "/dashboard", active: active === "overview" },
+    ...dashboardSections.map((section) => ({
+      label: section.title,
+      href: section.href,
+      active: active === section.id,
+    })),
+  ];
+
   return (
-    <nav className="flex flex-wrap gap-2" aria-label="Dashboard sections">
-      <a className={buttonVariants({ variant: active === "overview" ? "default" : "secondary" })} href="/dashboard">Overview</a>
-      {dashboardSections.map((section) => (
-        <a key={section.id} className={buttonVariants({ variant: active === section.id ? "default" : "secondary" })} href={section.href}>
-          {section.title}
-        </a>
-      ))}
-    </nav>
+    <SettingsNav items={items} className="max-w-max" aria-label="Dashboard sections" />
   );
 }
 
@@ -474,6 +485,7 @@ function DashboardHeader({ section }: { section: DashboardSection }) {
         eyebrow="Account dashboard"
         title={title}
         description="Manage your account, monthly suggestions, billing, connected Macs, and saved memories."
+        headingLevel={1}
       />
       <DashboardTabs active={section} />
     </div>
@@ -517,23 +529,46 @@ function DashboardPlaceholder({ section = "overview" }: { section?: DashboardSec
 }
 
 function DashboardOverview({ data }: { data: DashboardData }) {
+  const connectedDevices = data.devices.filter((device) => !device.revoked).length;
+  const quotaUsed = Math.min(data.quota.usage, data.quota.quota);
+  const quotaPercent = data.quota.quota > 0 ? Math.round((quotaUsed / data.quota.quota) * 100) : 0;
+
   return (
-    <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-      {dashboardSections.map((item) => (
-        <Card key={item.id}>
-          <CardHeader>
-            <CardTitle>{item.title}</CardTitle>
-            <CardDescription>{item.description}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 text-muted-foreground">
-            {item.id === "account" ? <p>{data.user.email ?? data.user.name ?? data.user.id}</p> : null}
-            {item.id === "usage" ? <p>{data.quota.usage.toLocaleString()} / {data.quota.quota.toLocaleString()} suggestions used</p> : null}
-            {item.id === "devices" ? <p>{data.devices.length.toLocaleString()} connected Macs</p> : null}
-            {item.id === "memories" ? <p>{data.memories.length.toLocaleString()} saved memories</p> : null}
-            <p><a className={buttonVariants({ variant: "secondary" })} href={item.href}>Open {item.title}</a></p>
-          </CardContent>
-        </Card>
-      ))}
+    <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
+      <Card className="pug-dot-grid">
+        <CardHeader>
+          <CardTitle>Account at a Glance</CardTitle>
+          <CardDescription>Your plan, monthly usage, connected Macs, and saved memories in one place.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <StatusRow label="Plan" value={formatPlanName(data.quota.planId)} tone="info" description="Current billing entitlement." />
+            <StatusRow label="Connected Macs" value={formatCount(connectedDevices)} tone="success" description={`${formatCount(data.devices.length)} total device records.`} />
+            <StatusRow label="Saved memories" value={formatCount(data.memories.length)} tone="neutral" description="Details available for personalized suggestions." />
+            <StatusRow label="Account" value={emailStatus(data.user.emailVerified).value} tone={emailStatus(data.user.emailVerified).tone} description={data.user.email ?? data.user.name ?? data.user.id} />
+          </div>
+          <div className="grid gap-2 rounded-[var(--radius-media)] border border-border bg-muted/45 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-bold text-foreground">Monthly Suggestions</p>
+              <p className="font-[var(--font-code)] text-sm tabular-nums text-muted-foreground">{formatCount(data.quota.usage)} / {formatCount(data.quota.quota)}</p>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-border" role="meter" aria-label="Monthly suggestions used" aria-valuemin={0} aria-valuemax={data.quota.quota} aria-valuenow={quotaUsed}>
+              <div className="h-full rounded-full bg-foreground" style={{ width: `${quotaPercent}%` }} />
+            </div>
+            <p className="text-xs font-medium text-muted-foreground">Resets {formatDate(data.quota.resetAt)}</p>
+          </div>
+        </CardContent>
+      </Card>
+      <Card>
+        <CardHeader>
+          <CardTitle>Next Best Action</CardTitle>
+          <CardDescription>Keep the account ready before your monthly suggestions run out.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-3 text-muted-foreground">
+          <p>{data.quota.usage >= data.quota.quota ? "Upgrade to continue using suggestions this month." : "Review usage and billing before changing plans."}</p>
+          <p><a className={buttonVariants()} href="/dashboard/usage">Review Usage & Billing</a></p>
+        </CardContent>
+      </Card>
     </div>
   );
 }
@@ -572,6 +607,8 @@ function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
   const upgradePlans = getPlanEntries().filter(([planId]) => planId !== quota.planId);
   const quotaExhausted = quota.usage >= quota.quota;
   const accountQuotaStatus = quotaStatus(quotaExhausted);
+  const quotaUsed = Math.min(quota.usage, quota.quota);
+  const quotaPercent = quota.quota > 0 ? Math.round((quotaUsed / quota.quota) * 100) : 0;
 
   return (
     <SectionBlock>
@@ -581,16 +618,26 @@ function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
         description={`${formatPlanName(quota.planId)} plan`}
       />
       <div className="mt-4 grid gap-3">
+        <div className="grid gap-2 rounded-[var(--radius-media)] border border-border bg-muted/45 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm font-bold text-foreground">Quota Progress</p>
+            <p className="font-[var(--font-code)] text-sm tabular-nums text-muted-foreground">{formatCount(quota.usage)} / {formatCount(quota.quota)}</p>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-border" role="meter" aria-label="Monthly suggestions used" aria-valuemin={0} aria-valuemax={quota.quota} aria-valuenow={quotaUsed}>
+            <div className="h-full rounded-full bg-foreground" style={{ width: `${quotaPercent}%` }} />
+          </div>
+          <p className="text-xs font-medium text-muted-foreground">Resets {formatDate(quota.resetAt)}</p>
+        </div>
         <StatusRow
           label="Monthly suggestions"
           value={accountQuotaStatus.value}
           tone={accountQuotaStatus.tone}
-          description={`${quota.usage.toLocaleString()} / ${quota.quota.toLocaleString()} suggestions used this month`}
+          description={`${formatCount(quota.usage)} / ${formatCount(quota.quota)} suggestions used this month`}
           meta={`Resets ${formatDate(quota.resetAt)}`}
         />
         {quotaExhausted ? (
           <div className={quotaExhaustedClassName}>
-            <strong>Monthly suggestions used.</strong> You have used {quota.usage.toLocaleString()} of {quota.quota.toLocaleString()} suggestions this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
+            <strong>Monthly suggestions used.</strong> You have used {formatCount(quota.usage)} of {formatCount(quota.quota)} suggestions this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
           </div>
         ) : null}
         <Separator />
@@ -611,6 +658,9 @@ function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
 }
 
 function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
+  const activeDeviceCount = devices.filter((device) => !device.revoked).length;
+  const revokedDeviceCount = devices.length - activeDeviceCount;
+
   return (
     <SectionBlock id="devices">
       <SurfaceHeader
@@ -618,14 +668,20 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
         title="Devices"
         description="Macs connected to this account. Remove access anytime."
       />
-      <div className="mt-4">
+      <div className="mt-4 grid gap-4">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <StatusRow label="Connected" value={formatCount(activeDeviceCount)} tone="success" description="Macs that can use this account." />
+          <StatusRow label="Removed" value={formatCount(revokedDeviceCount)} tone="neutral" description="Devices with access revoked." />
+          <StatusRow label="Removal" value="Confirm first" tone="warning" description="Remove access if you no longer recognize a Mac." />
+        </div>
         {devices.length === 0 ? (
           <EmptyState
             title="No linked devices"
             description="No Macs are connected yet. Sign in from the Mac app to connect one."
           />
         ) : (
-          <Table>
+          <Table aria-label="Connected Macs">
+            <caption className="sr-only">Connected Macs and access status</caption>
             <TableHeader>
               <TableRow>
                 <TableHead>Device</TableHead>
@@ -633,13 +689,13 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                 <TableHead>Version</TableHead>
                 <TableHead>Added</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead />
+                <TableHead><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {devices.map((device) => (
                 <TableRow key={device.id}>
-                  <TableCell>{device.deviceId}</TableCell>
+                  <TableCell className="break-all font-[var(--font-code)] text-xs">{device.deviceId}</TableCell>
                   <TableCell>{device.platform}</TableCell>
                   <TableCell>{device.appVersion}</TableCell>
                   <TableCell>{formatDate(device.createdAt)}</TableCell>
@@ -648,7 +704,11 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                   </TableCell>
                   <TableCell>
                     {device.revoked ? null : (
-                      <form method="post" action={`/dashboard/devices/${encodeURIComponent(device.deviceId)}/revoke`}>
+                      <form method="post" action={`/dashboard/devices/${encodeURIComponent(device.deviceId)}/revoke`} className="grid gap-2">
+                        <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                          <input type="checkbox" name="confirm" value={device.deviceId} required />
+                          Confirm removal
+                        </Label>
                         <Button type="submit" size="sm" variant="secondary">Remove access</Button>
                       </form>
                     )}
@@ -691,8 +751,9 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
             maxLength={500}
             required
             rows={3}
-            className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder="Example: I prefer concise morning status summaries."
+            autoComplete="off"
+            className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Example: I prefer concise morning status summaries…"
           />
           <p><Button type="submit">Save memory</Button></p>
         </form>
@@ -702,13 +763,14 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
             description="Add a saved memory when you want Tab to personalize suggestions."
           />
         ) : (
-          <Table>
+          <Table aria-label="Saved memories">
+            <caption className="sr-only">Saved memories, source, updated date, and actions</caption>
             <TableHeader>
               <TableRow>
                 <TableHead>Content</TableHead>
                 <TableHead>Created by</TableHead>
                 <TableHead>Updated</TableHead>
-                <TableHead />
+                <TableHead><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -721,7 +783,8 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                         maxLength={500}
                         required
                         rows={2}
-                        className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        autoComplete="off"
+                        className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
                         defaultValue={memory.content}
                       />
                       <p><Button type="submit" size="sm" variant="secondary">Save edit</Button></p>
@@ -730,7 +793,11 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                   <TableCell><Badge variant="outline">{memorySourceLabel(memory.createdBy)}</Badge></TableCell>
                   <TableCell>{formatDate(memory.updatedAt)}</TableCell>
                   <TableCell>
-                    <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`}>
+                    <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`} className="grid gap-2">
+                      <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                        <input type="checkbox" name="confirm" value={memory.id} required />
+                        Confirm delete
+                      </Label>
                       <Button type="submit" size="sm" variant="destructive">Delete memory</Button>
                     </form>
                   </TableCell>

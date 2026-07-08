@@ -731,10 +731,12 @@ describe("Web account surface", () => {
     expect(accountBefore.status).toBe(200);
     await textIncludes(accountBefore, "Lives in Portland");
 
+    const deleteForm = new FormData();
+    deleteForm.set("confirm", memory.id);
     const deleteResponse = await webRequest(
       webApp,
       `/dashboard/memories/${memory.id}/delete`,
-      { method: "POST" },
+      { method: "POST", body: deleteForm },
       cookie,
     );
     expect(deleteResponse.status).toBe(302);
@@ -826,10 +828,12 @@ describe("Web account surface", () => {
     expect(bodyBefore).toInclude("Connected");
     expect(bodyBefore).toInclude("Remove access");
 
+    const revokeForm = new FormData();
+    revokeForm.set("confirm", "macbook-pro-1");
     const revokeResponse = await webRequest(
       webApp,
       "/dashboard/devices/macbook-pro-1/revoke",
-      { method: "POST" },
+      { method: "POST", body: revokeForm },
       cookie,
     );
     expect(revokeResponse.status).toBe(302);
