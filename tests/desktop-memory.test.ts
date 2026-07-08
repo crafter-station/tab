@@ -492,6 +492,48 @@ describe("desktop memory extraction window", () => {
     expect(window.getEntries()).toEqual([]);
   });
 
+  it("drops failed extraction batches after the failed-batch TTL expires", async () => {
+    let currentTimeMs = Date.parse("2026-07-08T14:30:00.000Z");
+    const scheduler = createManualScheduler();
+    const window = createMemoryExtractionWindow({
+      memoryEnabled: true,
+      now: () => new Date(currentTimeMs),
+      createId: () => "entry-ttl",
+    });
+    let attempts = 0;
+    const dispatcher = createMemoryExtractionDispatcher({
+      window,
+      client: {
+        extractMemory: async () => {
+          attempts += 1;
+          throw new Error("backend unavailable");
+        },
+      },
+      now: () => new Date(currentTimeMs),
+      setTimeout: scheduler.setTimeout,
+      clearTimeout: scheduler.clearTimeout,
+      createBatchId: () => "batch-ttl",
+      maxRetries: 10,
+      failedBatchTtlMs: 500,
+    });
+
+    dispatcher.append({
+      text: "remember this temporary fact ".repeat(25),
+      source: "typed_text",
+      activeApplication: { bundleId: "com.example.editor" },
+    });
+
+    await scheduler.run(60_000);
+    expect(attempts).toBe(1);
+    expect(window.getEntries()).toHaveLength(1);
+
+    currentTimeMs += 1_000;
+    await scheduler.run(1_000);
+
+    expect(attempts).toBe(2);
+    expect(window.getEntries()).toEqual([]);
+  });
+
   it("flushes a small batch when the thirty-minute extraction window limit is reached", async () => {
     let currentTimeMs = Date.parse("2026-07-08T15:00:00.000Z");
     const scheduler = createManualScheduler();
