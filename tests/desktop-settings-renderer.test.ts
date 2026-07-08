@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { describePauseState, describePersonalMemorySource } from "../apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx";
+import { describePauseState, describePersonalMemorySource } from "../apps/desktop/src/renderer/src/surfaces/settingsCopy";
 
 describe("desktop settings renderer", () => {
   it("uses domain-specific pause copy for observation and suggestions", () => {

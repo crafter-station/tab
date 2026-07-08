@@ -18,8 +18,9 @@ import {
   setThemePreference,
   type ThemeMode,
 } from "@tabb/ui";
-import type { PersonalMemory, PersonalMemoryCreatedBy } from "@tabb/contracts";
+import type { PersonalMemory } from "@tabb/contracts";
 import type { DesktopStatus } from "../../../main/status";
+import { describePauseState, describePersonalMemorySource } from "./settingsCopy";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tabb>["getInitialState"]>>;
 type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
@@ -31,24 +32,6 @@ const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[
   { value: "permissions", label: "Permissions", description: "macOS access required by Tabb" },
   { value: "memory", label: "Memory", description: "Personalization snippets" },
 ];
-
-export function describePauseState(paused: boolean) {
-  return paused
-    ? {
-        label: "Paused",
-        description: "Typing Context observation and Suggestions are disabled.",
-        action: "Resume Tabb",
-      }
-    : {
-        label: "Active",
-        description: "Typing Context observation and Suggestions are running.",
-        action: "Pause Tabb",
-      };
-}
-
-export function describePersonalMemorySource(createdBy: PersonalMemoryCreatedBy) {
-  return createdBy === "user" ? "Saved by you" : "Learned from accepted writing";
-}
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
   if (auth === "signed_in") return "success";
@@ -62,6 +45,24 @@ function formatAuth(auth: DesktopStatus["auth"]) {
 
 function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
+}
+
+function formatQuota(status: DesktopStatus) {
+  if (!status.quota) return "Not available";
+  return `${status.quota.usage.toLocaleString()} / ${status.quota.quota.toLocaleString()}`;
+}
+
+function describeQuota(status: DesktopStatus) {
+  if (!status.quota) return "Quota appears after sign-in.";
+  return `Suggestion quota resets ${formatDate(status.quota.resetAt)}.`;
+}
+
+function getQuotaStatusRowTone(status: DesktopStatus) {
+  return status.quota?.exhausted ? "warning" : "neutral";
+}
+
+function formatThemeMode(mode: ThemeMode) {
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
 function createFallbackStatus(): DesktopStatus {
@@ -177,13 +178,9 @@ export function SettingsSurface() {
               />
               <StatusRow
                 label="Quota"
-                value={
-                  status.quota
-                    ? `${status.quota.usage.toLocaleString()} / ${status.quota.quota.toLocaleString()}`
-                    : "Not available"
-                }
-                tone={status.quota?.exhausted ? "warning" : "neutral"}
-                description={status.quota ? `Suggestion quota resets ${formatDate(status.quota.resetAt)}.` : "Quota appears after sign-in."}
+                value={formatQuota(status)}
+                tone={getQuotaStatusRowTone(status)}
+                description={describeQuota(status)}
               />
               <StatusRow
                 label="Connectivity"
@@ -244,7 +241,7 @@ export function SettingsSurface() {
                       type="button"
                       variant={themeMode === mode ? "default" : "secondary"}
                     >
-                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      {formatThemeMode(mode)}
                     </Button>
                   ))}
                 </div>
@@ -390,7 +387,12 @@ export function SettingsSurface() {
 
           <div className="settings-tabs__content">
             {paused ? (
-              <StatusRow label="Tabb is paused" value={pauseState.label} tone="warning" description={pauseState.description} />
+              <StatusRow
+                label="Tabb is paused"
+                value={pauseState.label}
+                tone="warning"
+                description={pauseState.description}
+              />
             ) : null}
             {renderActiveTab()}
           </div>
