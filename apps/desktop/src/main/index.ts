@@ -299,13 +299,17 @@ function updateTrayFromStatus(status: DesktopStatus): void {
 }
 
 function setUsePersonalMemoryForSuggestions(enabled: boolean): void {
-  preferencesManager.update({
+  const preferences = preferencesManager.get();
+  const nextPreferences = {
+    ...preferences,
     suggestions: {
-      ...preferencesManager.get().suggestions,
+      ...preferences.suggestions,
       usePersonalMemory: enabled,
     },
-  });
-  settingsWindowManager.sendPreferences(preferencesManager.get());
+  };
+
+  preferencesManager.update(nextPreferences);
+  settingsWindowManager.sendPreferences(nextPreferences);
 }
 
 function updateTray(): void {

@@ -9,6 +9,10 @@ export type DesktopPreferences = {
   deviceId?: string;
 };
 
+type StoredDesktopPreferences = Omit<DesktopPreferences, "suggestions"> & {
+  suggestions?: DesktopPreferences["suggestions"];
+};
+
 export type PreferencesStorage = {
   load(): DesktopPreferences;
   save(prefs: DesktopPreferences): void;
@@ -19,7 +23,7 @@ const DEFAULT_PREFERENCES: DesktopPreferences = {
   suggestions: { usePersonalMemory: false },
 };
 
-function normalizeDesktopPreferences(value: DesktopPreferences): DesktopPreferences {
+function normalizeDesktopPreferences(value: StoredDesktopPreferences): DesktopPreferences {
   return {
     ...DEFAULT_PREFERENCES,
     ...value,
@@ -28,7 +32,7 @@ function normalizeDesktopPreferences(value: DesktopPreferences): DesktopPreferen
   };
 }
 
-function isDesktopPreferences(value: unknown): value is DesktopPreferences {
+function isStoredDesktopPreferences(value: unknown): value is StoredDesktopPreferences {
   if (!value || typeof value !== "object") return false;
   if (!("onboarding" in value)) return false;
 
@@ -75,7 +79,7 @@ export function createFilePreferencesStorage(filePath: string): PreferencesStora
       try {
         const raw = readFileSync(filePath, "utf-8");
         const parsed = JSON.parse(raw) as unknown;
-        if (isDesktopPreferences(parsed)) {
+        if (isStoredDesktopPreferences(parsed)) {
           return normalizeDesktopPreferences(parsed);
         }
       } catch {
