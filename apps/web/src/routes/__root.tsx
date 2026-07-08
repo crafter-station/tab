@@ -1,49 +1,46 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import "@tab/ui/styles.css";
-import { Button, THEME_MODES, getThemeControlScript, getThemeInitScript } from "@tab/ui";
-
-const themeInitScript = getThemeInitScript();
-const themeControlScript = getThemeControlScript();
+import { Button } from "@tab/ui";
+import { ThemeModeToggle } from "../components/theme-mode-toggle.tsx";
+import { ThemeProvider } from "../components/theme-provider.tsx";
 
 function RootComponent() {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
+        <meta name="color-scheme" content="light dark" />
+        <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
         <HeadContent />
-        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
-        <div className="pug-grid-surface min-h-dvh">
-          <div className="mx-auto max-w-6xl border-x border-border/70 bg-background/82 p-5 backdrop-blur-sm">
-            <header className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-start">
-              <a className="text-xl font-black tracking-[-0.04em] no-underline" href="/">
-                Tab
-              </a>
-              <nav className="flex flex-wrap items-center gap-3 font-bold">
-                <a className="no-underline" href="/pricing">Pricing</a>
-                <a className="no-underline" href="/download">Download</a>
-                <div className="flex rounded-full border bg-card p-1 text-xs text-muted-foreground" aria-label="Theme selection">
-                  {THEME_MODES.map((mode) => (
-                    <button className="rounded-full px-2 py-1" data-theme-choice={mode} key={mode} type="button">
-                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                    </button>
-                  ))}
-                </div>
-                <Button asChild variant="secondary">
-                  <a href="/login">Sign in</a>
-                </Button>
-              </nav>
-            </header>
-            <main className="py-12">
-              <Outlet />
-            </main>
-            <footer className="flex items-center justify-between gap-4 border-t py-6 text-muted-foreground max-md:flex-col max-md:items-start">
-              <span>Tab, native autocomplete for macOS.</span>
-              <span>You choose when to add suggestions, and you control saved memories.</span>
-            </footer>
+        <ThemeProvider defaultTheme="system">
+          <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[var(--radius-control)] focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-bold focus:text-foreground focus:shadow-[var(--tab-shadow-soft)]" href="#main-content">Skip to main content</a>
+          <div className="pug-grid-surface min-h-dvh">
+            <div className="mx-auto max-w-6xl border-x border-border/70 bg-background/82 p-5 backdrop-blur-sm">
+              <header className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-start">
+                <a className="text-xl font-black tracking-[-0.04em] no-underline" href="/">
+                  Tab
+                </a>
+                <nav className="flex flex-wrap items-center gap-3 font-bold">
+                  <a className="no-underline" href="/pricing">Pricing</a>
+                  <a className="no-underline" href="/download">Download</a>
+                  <ThemeModeToggle />
+                  <Button asChild variant="secondary">
+                    <a href="/login">Sign in</a>
+                  </Button>
+                </nav>
+              </header>
+              <main id="main-content" className="py-12">
+                <Outlet />
+              </main>
+              <footer className="flex items-center justify-between gap-4 border-t py-6 text-muted-foreground max-md:flex-col max-md:items-start">
+                <span>Tab, native autocomplete for macOS.</span>
+                <span>You choose when to add suggestions, and you control saved memories.</span>
+              </footer>
+            </div>
           </div>
-        </div>
-        <script dangerouslySetInnerHTML={{ __html: themeControlScript }} />
+        </ThemeProvider>
         <Scripts />
       </body>
     </html>
