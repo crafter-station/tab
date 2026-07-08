@@ -3,8 +3,9 @@ import { getMemoryEligibility, type MemorySource } from "@tabb/memory-policy";
 import { redactSensitiveText } from "@tabb/redaction";
 
 export type MemoryExtractionEntry = {
+  readonly id: string;
   readonly timestamp: string;
-  readonly activeApplicationBundleId: string;
+  readonly activeApplication: ActiveApplication;
   readonly contextSource: Extract<MemorySource, "typed_text" | "terminal_input">;
   readonly text: string;
   readonly redaction: RedactionSummary;
@@ -27,6 +28,7 @@ export type MemoryExtractionWindowDependencies = {
   readonly maxAgeMs?: number;
   readonly maxTotalTextBytes?: number;
   readonly maxEntryTextBytes?: number;
+  readonly createId?: () => string;
 };
 
 const DEFAULT_MAX_AGE_MS = 30 * 60 * 1_000;
@@ -78,6 +80,7 @@ export function createMemoryExtractionWindow(deps: MemoryExtractionWindowDepende
   const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
   const maxTotalTextBytes = deps.maxTotalTextBytes ?? DEFAULT_MAX_TOTAL_TEXT_BYTES;
   const maxEntryTextBytes = deps.maxEntryTextBytes ?? DEFAULT_MAX_ENTRY_TEXT_BYTES;
+  const createId = deps.createId ?? (() => crypto.randomUUID());
   let entries: MemoryExtractionEntry[] = [];
 
   function pruneExpired(currentTime: Date): void {
@@ -111,8 +114,9 @@ export function createMemoryExtractionWindow(deps: MemoryExtractionWindowDepende
     pruneExpired(currentTime);
 
     entries.push({
+      id: createId(),
       timestamp: currentTime.toISOString(),
-      activeApplicationBundleId: input.activeApplication.bundleId,
+      activeApplication: { bundleId: input.activeApplication.bundleId },
       contextSource: input.source,
       text,
       redaction: toRedactionSummary(redacted),
@@ -136,10 +140,16 @@ export function createMemoryExtractionWindow(deps: MemoryExtractionWindowDepende
     entries = [];
   }
 
+  function clearEntries(entryIds: readonly string[]): void {
+    const ids = new Set(entryIds);
+    entries = entries.filter((entry) => !ids.has(entry.id));
+  }
+
   return {
     append,
     getEntries,
     clear,
+    clearEntries,
   };
 }
 
