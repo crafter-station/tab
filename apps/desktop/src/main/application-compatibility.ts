@@ -67,6 +67,20 @@ const DEFAULT_STRICT_STALE_THRESHOLD = 6;
 const DEFAULT_STRICT_UNRELIABLE_TEXT_SESSION_THRESHOLD = 6;
 const DEFAULT_PREFER_CLIPBOARD_SEMANTIC_FAILURE_THRESHOLD = 2;
 
+const INSERTION_OUTCOME_COUNTS: Record<
+  InsertionStrategy,
+  Record<InsertionOutcome, keyof MutableApplicationCompatibilityProfile>
+> = {
+  semantic: {
+    success: "semanticInsertionSuccessCount",
+    failure: "semanticInsertionFailureCount",
+  },
+  clipboard: {
+    success: "clipboardInsertionSuccessCount",
+    failure: "clipboardInsertionFailureCount",
+  },
+};
+
 function applicationKey(activeApplication: ActiveApplication | null): string | null {
   return activeApplication?.bundleId ?? null;
 }
@@ -102,50 +116,49 @@ export function createApplicationCompatibilityStore(
     return created;
   }
 
+  function incrementProfileCount(
+    activeApplication: ActiveApplication | null,
+    count: keyof MutableApplicationCompatibilityProfile,
+  ): void {
+    const profile = profileFor(activeApplication);
+    if (!profile) return;
+
+    profile[count] += 1;
+  }
+
+  function getProfile(activeApplication: ActiveApplication | null): ApplicationCompatibilityProfile {
+    const key = applicationKey(activeApplication);
+    return readonlyProfile(key ? profiles.get(key) : undefined);
+  }
+
   return {
     recordStale(snapshot) {
-      const profile = profileFor(snapshot.activeApplication);
-      if (profile) profile.staleCount += 1;
+      incrementProfileCount(snapshot.activeApplication, "staleCount");
     },
     recordDismissal(snapshot) {
-      const profile = profileFor(snapshot.activeApplication);
-      if (profile) profile.dismissalCount += 1;
+      incrementProfileCount(snapshot.activeApplication, "dismissalCount");
     },
     recordAcceptance(snapshot) {
-      const profile = profileFor(snapshot.activeApplication);
-      if (profile) profile.acceptanceCount += 1;
+      incrementProfileCount(snapshot.activeApplication, "acceptanceCount");
     },
     recordTextSessionSnapshot(snapshot) {
-      const profile = profileFor(snapshot.activeApplication);
-      if (!profile) return;
-
-      if (snapshot.accessibilityReliability === "reliable") {
-        profile.textSessionReliableCount += 1;
-      } else {
-        profile.textSessionUnreliableCount += 1;
-      }
+      const count = snapshot.accessibilityReliability === "reliable"
+        ? "textSessionReliableCount"
+        : "textSessionUnreliableCount";
+      incrementProfileCount(snapshot.activeApplication, count);
     },
     recordInsertionOutcome(activeApplication, strategy, outcome) {
-      const profile = profileFor(activeApplication);
-      if (!profile) return;
-
-      if (strategy === "semantic" && outcome === "success") profile.semanticInsertionSuccessCount += 1;
-      if (strategy === "semantic" && outcome === "failure") profile.semanticInsertionFailureCount += 1;
-      if (strategy === "clipboard" && outcome === "success") profile.clipboardInsertionSuccessCount += 1;
-      if (strategy === "clipboard" && outcome === "failure") profile.clipboardInsertionFailureCount += 1;
+      incrementProfileCount(activeApplication, INSERTION_OUTCOME_COUNTS[strategy][outcome]);
     },
-    getProfile(activeApplication) {
-      const key = applicationKey(activeApplication);
-      return readonlyProfile(key ? profiles.get(key) : undefined);
-    },
+    getProfile,
     hasStrictTriggerBehavior(activeApplication) {
-      const profile = this.getProfile(activeApplication);
+      const profile = getProfile(activeApplication);
       return profile.dismissalCount >= strictDismissalThreshold
         || profile.staleCount >= strictStaleThreshold
         || profile.textSessionUnreliableCount >= strictUnreliableTextSessionThreshold;
     },
     shouldPreferClipboardInsertion(activeApplication) {
-      const profile = this.getProfile(activeApplication);
+      const profile = getProfile(activeApplication);
       return profile.semanticInsertionFailureCount >= preferClipboardSemanticFailureThreshold
         && profile.semanticInsertionFailureCount >= profile.semanticInsertionSuccessCount;
     },
