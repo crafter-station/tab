@@ -89,13 +89,40 @@ export function registerBillingRoutes(
     const requestedPaidPlan = planId !== "free";
 
     if (hasActivePaidSubscription && requestedPaidPlan && planId !== entitlement.planId) {
-      return c.json(
-        createErrorResponse(
-          "plan_change_required",
-          "Plan Change is required for active paid subscriptions.",
-        ),
-        409,
-      );
+      if (entitlement.planId !== "pro" || planId !== "max") {
+        return c.json(
+          createErrorResponse(
+            "plan_change_required",
+            "Plan Change is required for active paid subscriptions.",
+          ),
+          409,
+        );
+      }
+
+      const subscriptionId = entitlement.polarSubscriptionId;
+      if (!subscriptionId) {
+        return c.json(createErrorResponse("invalid_request", "Missing subscription ID."), 400);
+      }
+
+      try {
+        await deps.billingCheckoutClient.changePlan({
+          subscriptionId,
+          targetPlanId: planId,
+          prorationBehavior: "prorate",
+        });
+        await deps.billingService.applyEntitlement({
+          ...entitlement,
+          planId,
+          cachedAt: new Date(),
+        });
+        return c.json(
+          BillingCheckoutResponseSchema.parse({ status: "ok", data: { url: "/dashboard" } }),
+          200,
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "Plan Change failed.";
+        return c.json(createErrorResponse("provider_failure", message), 503);
+      }
     }
 
     try {

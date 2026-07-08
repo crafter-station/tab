@@ -209,6 +209,11 @@ export interface BillingCheckoutClient {
     user: { id: string; email?: string; name?: string },
   ): Promise<string>;
   createPortalUrl(userId: string, customerId?: string): Promise<string>;
+  changePlan(options: {
+    subscriptionId: string;
+    targetPlanId: Exclude<PlanId, "free">;
+    prorationBehavior: "prorate" | "next_period";
+  }): Promise<void>;
 }
 
 export type CreatePolarBillingCheckoutClientOptions = {
@@ -232,6 +237,15 @@ export class StubBillingCheckoutClient implements BillingCheckoutClient {
     void userId;
     void customerId;
     throw new Error("Polar customer portal is not configured");
+  }
+
+  async changePlan(options: {
+    subscriptionId: string;
+    targetPlanId: Exclude<PlanId, "free">;
+    prorationBehavior: "prorate" | "next_period";
+  }): Promise<void> {
+    void options;
+    throw new Error("Polar plan changes are not configured");
   }
 }
 
@@ -317,6 +331,20 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
     });
 
     return session.customerPortalUrl;
+  }
+
+  async changePlan(options: {
+    subscriptionId: string;
+    targetPlanId: Exclude<PlanId, "free">;
+    prorationBehavior: "prorate" | "next_period";
+  }): Promise<void> {
+    await this.polar.subscriptions.update({
+      id: options.subscriptionId,
+      subscriptionUpdate: {
+        productId: this.productIds[options.targetPlanId],
+        prorationBehavior: options.prorationBehavior,
+      },
+    });
   }
 }
 

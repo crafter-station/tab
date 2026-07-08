@@ -22,6 +22,11 @@ const WEB_ORIGIN = "http://localhost:3000";
 
 class TestBillingCheckoutClient implements BillingCheckoutClient {
   readonly checkoutRequests: PlanId[] = [];
+  readonly planChangeRequests: Array<{
+    subscriptionId: string;
+    targetPlanId: Exclude<PlanId, "free">;
+    prorationBehavior: "prorate" | "next_period";
+  }> = [];
 
   async createCheckoutUrl(
     planId: PlanId,
@@ -36,6 +41,14 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
 
   async createPortalUrl(userId: string, customerId?: string): Promise<string> {
     return `https://portal.test/${encodeURIComponent(customerId ?? userId)}`;
+  }
+
+  async changePlan(options: {
+    subscriptionId: string;
+    targetPlanId: Exclude<PlanId, "free">;
+    prorationBehavior: "prorate" | "next_period";
+  }): Promise<void> {
+    this.planChangeRequests.push(options);
   }
 }
 
@@ -326,22 +339,44 @@ describe("Web account surface", () => {
     expect(location).toInclude("checkout.test/pro");
   });
 
-  it("routes active paid subscribers away from checkout for paid plan changes", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database } = await createWebTestEnv();
+  it("upgrades active Pro subscribers to Max without checkout and unlocks quota immediately", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
     await activatePaidPlan(billingService, userId, "pro");
 
-    const response = await apiApp.request("/api/billing/checkout?plan=max", {
-      headers: { cookie },
-    });
+    for (let i = 0; i < 1000; i++) {
+      await billingService.consumeSuggestion(userId);
+    }
 
-    expect(response.status).toBe(409);
-    const body = await response.json() as { status: string; error?: { code: string } };
-    expect(body.status).toBe("error");
-    expect(body.error?.code).toBe("plan_change_required");
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=max",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/dashboard");
     expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    expect(billingCheckoutClient.planChangeRequests).toEqual([
+      {
+        subscriptionId: "polar-sub-pro",
+        targetPlanId: "max",
+        prorationBehavior: "prorate",
+      },
+    ]);
+
+    const entitlement = await billingService.getEntitlement(userId);
+    expect(entitlement.planId).toBe("max");
+    expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
+
+    const quota = await billingService.checkQuota(userId);
+    expect(quota.ok).toBe(true);
+    expect(quota.quota).toBe(1_000_000);
+    expect(quota.usage).toBe(1000);
   });
 
   it("blocks checkout until the signed-in user verifies email", async () => {
