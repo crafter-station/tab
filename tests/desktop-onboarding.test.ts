@@ -102,4 +102,18 @@ describe("desktop onboarding", () => {
     expect(copy).toContain("typing context");
     expect(copy).toContain("active application");
   });
+
+  it("explains the accessibility-aware permission and privacy model", () => {
+    const copy = JSON.stringify(ONBOARDING_PERMISSIONS_COPY).toLowerCase();
+
+    expect(copy).toContain("text session");
+    expect(copy).toContain("accepted suggestion insertion");
+    expect(copy).toContain("typing timing");
+    expect(copy).toContain("acceptance shortcuts");
+    expect(copy).toContain("fallback typing context signals");
+    expect(copy).toContain("typing context");
+    expect(copy).toContain("personal memory");
+    expect(copy).toContain("metadata-only telemetry");
+    expect(copy).toContain("raw logs");
+  });
 });

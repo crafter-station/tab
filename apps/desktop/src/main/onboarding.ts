@@ -18,11 +18,11 @@ export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subti
   },
   permissions: {
     title: "Enable two macOS permissions",
-    subtitle: "Accessibility and Input Monitoring let Tabb observe context and insert accepted suggestions.",
+    subtitle: "Accessibility and Input Monitoring let Tabb understand text sessions and detect typing activity safely.",
   },
   "how-it-works": {
     title: "Learn the flow",
-    subtitle: "Tabb watches recent typing context in memory, asks for a suggestion, then shows a small overlay.",
+    subtitle: "Tabb keeps Typing Context in memory, asks for a suggestion when safe, then shows a small overlay.",
   },
   practice: {
     title: "Practice suggestions",
@@ -37,15 +37,16 @@ export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subti
 export const ONBOARDING_PERMISSIONS_COPY = {
   title: "Welcome to Tabb — Permissions",
   subtitle: "Tabb suggests continuations while you type in other macOS applications.",
-  requiredPermissions: "Tabb needs Accessibility and Input Monitoring permissions to observe your recent typing context, know the active application, and insert accepted suggestions.",
+  requiredPermissions:
+    "Tabb needs Accessibility and Input Monitoring permissions to understand the focused Text Session, detect typing activity, know the Active Application, and insert only suggestions you accept.",
   whyAccessibility:
-    "Accessibility lets Tabb paste accepted suggestions into the previously active application and guide you through setup.",
+    "Accessibility supports Text Session understanding, sensitive-field checks, and accepted Suggestion insertion in the app you were using.",
   whyInputMonitoring:
-    "Input Monitoring lets Tabb listen for text-bearing typing context and the Option+Tab acceptance shortcut across applications.",
+    "Input Monitoring supports typing timing, acceptance shortcuts, and fallback Typing Context signals when Accessibility text details are unavailable.",
   notRequested:
     "Tabb does not ask to see your screen or access your files. Screen Recording and Full Disk Access stay outside Tabb's permission scope.",
   privacyNote:
-    "Your recent typing context stays in memory only. It is not stored as a raw log or used to build hidden profiles.",
+    "Typing Context stays in memory only; Personal Memory remains visible and controlled by you. Metadata-only telemetry can improve reliability, but raw logs, raw Typing Context, accepted Suggestion text, and final inserted text are not stored by default.",
   cta: "Continue to Permissions",
 } as const;
 

@@ -223,7 +223,10 @@ export function SettingsSurface() {
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Permissions</CardTitle>
-              <CardDescription>macOS permissions required for suggestions and acceptance.</CardDescription>
+              <CardDescription>
+                Accessibility supports Text Session understanding and accepted Suggestion insertion. Input Monitoring
+                supports typing timing, acceptance shortcuts, and fallback Typing Context signals.
+              </CardDescription>
             </CardHeader>
             <CardContent>
               <SettingsRow label="Accessibility">
@@ -243,6 +246,10 @@ export function SettingsSurface() {
                   Relaunch Tabb
                 </Button>
               </SettingsRow>
+              <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+                Tabb does not request Screen Recording or Full Disk Access. Typing Context stays in memory only, Personal
+                Memory stays visible and controlled by you, telemetry is metadata-only, and raw logs are not stored.
+              </p>
               <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
                 If macOS shows Electron in dev mode, it granted the Electron host instead of the packaged Tabb app. Run
                 <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">

@@ -268,19 +268,20 @@ export function OnboardingSurface() {
               <div className="onboarding-hero">
                 <h2>Two permissions, no screen or file access.</h2>
                 <p className="lede">
-                  Tabb observes recent typing context in memory, knows the active app, and inserts only suggestions you accept.
+                  Tabb uses Accessibility for focused Text Session understanding and accepted Suggestion insertion, while
+                  Input Monitoring supports typing timing, acceptance shortcuts, and fallback Typing Context signals.
                 </p>
               </div>
               <div className="onboarding-permissions">
                 <PermissionCard
                   title="Accessibility"
-                  description="Lets Tabb paste accepted suggestions into the previously active application and guide setup."
+                  description="Supports Text Session understanding, sensitive-field checks, and accepted Suggestion insertion in the app you were using."
                   status={accessibilityGranted ? "Enabled" : "Needs access"}
                   state={accessibilityGranted ? "granted" : "pending"}
                 />
                 <PermissionCard
                   title="Input Monitoring"
-                  description="Lets Tabb listen for text-bearing typing context and the Option+Tab acceptance shortcut."
+                  description="Supports typing activity, Option+Tab acceptance, and fallback Typing Context signals when text details are unavailable."
                   status={inputMonitoringOpened ? "Confirm in System Settings" : "Relaunch may be required"}
                   state={inputMonitoringOpened ? "pending" : "manual"}
                 />
@@ -288,7 +289,8 @@ export function OnboardingSurface() {
               <div className="privacy-card">
                 <strong>Privacy scope</strong>
                 <span>
-                  Your recent typing context stays in memory only. Tabb does not request Screen Recording or Full Disk Access.
+                  Typing Context stays in memory only. Personal Memory remains visible and controlled by you, telemetry is
+                  metadata-only, raw logs are not stored, and Tabb does not request Screen Recording or Full Disk Access.
                 </span>
               </div>
             </>
