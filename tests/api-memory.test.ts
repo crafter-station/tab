@@ -94,11 +94,13 @@ const validSuggestionRequest = {
   memoryEnabled: true,
 };
 
-async function applyMigrationFile(db: Database, path: string) {
-  const sql = await Bun.file(path).text();
-  for (const statement of sql
+async function applyMigrationFile(db: Database, migrationPath: string) {
+  const sql = await Bun.file(migrationPath).text();
+  const statements = sql
     .split(";--> statement-breakpoint")
-    .flatMap((part) => part.split(";"))) {
+    .flatMap((part) => part.split(";"));
+
+  for (const statement of statements) {
     const trimmed = statement.trim();
     if (trimmed) db.exec(trimmed);
   }
@@ -246,6 +248,7 @@ describe("Personal Memory API", () => {
   });
 
   it("reindexes an existing memory by id from canonical storage and is safe to rerun", async () => {
+    const content = "Acme prefers Friday status updates";
     const embeddingService = new FakeEmbeddingService();
     const vectorIndex = new FakeVectorIndex();
     const personalMemoryService = new PersonalMemoryService({
@@ -255,7 +258,7 @@ describe("Personal Memory API", () => {
     });
     const memory = await personalMemoryService.createMemory({
       userId: "user-1",
-      content: "Acme prefers Friday status updates",
+      content,
       createdBy: "system",
     });
     vectorIndex.upserts.length = 0;
@@ -271,10 +274,7 @@ describe("Personal Memory API", () => {
       personalMemoryService.reindexMemoryForUser("user-2", memory.id),
     ).resolves.toBeNull();
 
-    expect(embeddingService.embeddedTexts).toEqual([
-      "Acme prefers Friday status updates",
-      "Acme prefers Friday status updates",
-    ]);
+    expect(embeddingService.embeddedTexts).toEqual([content, content]);
     expect(vectorIndex.upserts).toEqual([
       {
         id: memory.id,
