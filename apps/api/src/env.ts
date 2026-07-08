@@ -21,6 +21,10 @@ export const env = createEnv({
     POLAR_PRODUCT_ID_MAX: z.string().optional(),
     POLAR_PRODUCT_ID_PRO: z.string().optional(),
     POLAR_SERVER: z.enum(["production", "sandbox"]).default("production"),
+    POLAR_SEND_ORGANIZATION_ID: z
+      .enum(["true", "false"])
+      .default("false")
+      .transform((value) => value === "true"),
     POLAR_WEBHOOK_SECRET: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
   },

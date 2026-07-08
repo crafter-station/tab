@@ -249,6 +249,61 @@ describe("Better Auth browser handoff and device tokens", () => {
     expect(statusResponse.status).toBe(200);
   });
 
+  it("moves an existing device id to the newly signed-in user", async () => {
+    const { app, billingService, deviceTokenService } = await createAuthApp();
+    const firstUser = await signUpAndSignIn(app, billingService);
+    const secondUser = await signUpAndSignIn(app, billingService);
+
+    const signInDevice = async (cookie: string) => {
+      const authorizeResponse = await app.request("/api/auth/device/authorize", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Cookie: cookie,
+        },
+      });
+      const { code } = DeviceAuthorizeResponseSchema.parse(
+        await authorizeResponse.json(),
+      );
+
+      const exchangeResponse = await app.request("/api/auth/device/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          deviceId: "desktop-device-shared",
+          platform: "darwin",
+          appVersion: "0.0.1",
+        }),
+      });
+
+      expect(exchangeResponse.status).toBe(200);
+      return DeviceTokenExchangeResponseSchema.parse(await exchangeResponse.json()).token;
+    };
+
+    const firstToken = await signInDevice(firstUser.cookie);
+    const secondToken = await signInDevice(secondUser.cookie);
+
+    expect(secondToken).not.toBe(firstToken);
+    expect(await deviceTokenService.listDevices(firstUser.userId)).toHaveLength(0);
+
+    const secondUserDevices = await deviceTokenService.listDevices(secondUser.userId);
+    expect(secondUserDevices).toHaveLength(1);
+    expect(secondUserDevices[0].deviceId).toBe("desktop-device-shared");
+
+    const oldTokenStatus = await app.request("/api/status", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${firstToken}` },
+    });
+    expect(oldTokenStatus.status).toBe(401);
+
+    const newTokenStatus = await app.request("/api/status", {
+      method: "GET",
+      headers: { Authorization: `Bearer ${secondToken}` },
+    });
+    expect(newTokenStatus.status).toBe(200);
+  });
+
   it("revokes a device and rejects its token at the suggestion API", async () => {
     const { app, billingService, deviceTokenService } = await createAuthApp();
     const { cookie, userId } = await signUpAndSignIn(app, billingService);

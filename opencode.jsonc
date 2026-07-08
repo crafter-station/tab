@@ -12,5 +12,10 @@
       "branch": "main",
       "description": "Use for OpenCode implementation details",
     },
+    "local-background-remover": {
+      "repository": "https://github.com/cuevaio/local-background-remover",
+      "branch": "main",
+      "description": "Use for Web Design patters and design system best practices",
+    },
   },
 }

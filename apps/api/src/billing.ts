@@ -3,7 +3,7 @@ import { validateEvent } from "@polar-sh/sdk/webhooks";
 import { and, eq, sql } from "drizzle-orm";
 import { planQuotas, type PlanId } from "@tabb/billing";
 import type { AppDatabase } from "./db/index.ts";
-import { usageRecords, userEntitlements } from "./db/schema.ts";
+import { usageRecords, user, userEntitlements } from "./db/schema.ts";
 import { env } from "./env.ts";
 
 type PolarServer = "production" | "sandbox";
@@ -76,6 +76,7 @@ export type QuotaCheckResult =
     };
 
 export interface BillingStorage {
+  hasUser?(userId: string): Promise<boolean>;
   getEntitlement(userId: string): Promise<UserEntitlement | null>;
   setEntitlement(entitlement: UserEntitlement): Promise<void>;
   getUsage(userId: string, month: string): Promise<number>;
@@ -104,7 +105,7 @@ export type CreatePolarUsageMeterClientOptions = {
 export class PolarUsageMeterClient implements UsageMeterClient {
   private readonly polar: Polar;
   private readonly meterId: string;
-  private readonly organizationId: string;
+  private readonly organizationId: string | undefined;
 
   constructor(options: CreatePolarUsageMeterClientOptions = {}) {
     const meterId = options.meterId ?? env.POLAR_AUTOCOMPLETE_METER_ID;
@@ -112,8 +113,10 @@ export class PolarUsageMeterClient implements UsageMeterClient {
       throw new Error("POLAR_AUTOCOMPLETE_METER_ID is not configured");
     }
 
-    const organizationId = options.organizationId ?? env.POLAR_ORGANIZATION_ID;
-    if (!organizationId) {
+    const organizationId =
+      options.organizationId ??
+      (env.POLAR_SEND_ORGANIZATION_ID ? env.POLAR_ORGANIZATION_ID : undefined);
+    if (env.POLAR_SEND_ORGANIZATION_ID && !organizationId) {
       throw new Error("POLAR_ORGANIZATION_ID is not configured");
     }
 
@@ -531,6 +534,14 @@ export class D1BillingStorage implements BillingStorage {
     this.db = db;
   }
 
+  async hasUser(userId: string): Promise<boolean> {
+    const row = await this.db.query.user.findFirst({
+      columns: { id: true },
+      where: eq(user.id, userId),
+    });
+    return Boolean(row);
+  }
+
   async getEntitlement(userId: string): Promise<UserEntitlement | null> {
     const row = await this.db.query.userEntitlements.findFirst({
       where: eq(userEntitlements.userId, userId),
@@ -756,6 +767,10 @@ export class BillingWebhookHandler {
           return;
         }
 
+        if (this.storage.hasUser && !(await this.storage.hasUser(userId))) {
+          return;
+        }
+
         const existing = await this.storage.getEntitlement(userId);
         const planId =
           planIdFromMetadata(metadata) ??
@@ -782,6 +797,10 @@ export class BillingWebhookHandler {
         const customer = optionalRecord(data.customer);
         const userId = optionalString(customer?.external_id);
         if (!userId) return;
+
+        if (this.storage.hasUser && !(await this.storage.hasUser(userId))) {
+          return;
+        }
 
         const existing = await this.storage.getEntitlement(userId);
         const status =

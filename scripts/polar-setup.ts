@@ -1,4 +1,5 @@
 import { Polar } from "@polar-sh/sdk";
+import type { ProductCreateRecurringPrices } from "@polar-sh/sdk/models/components/productcreaterecurring.js";
 import { planQuotas, type PlanId } from "@tabb/billing";
 import { env } from "./env.ts";
 
@@ -9,11 +10,26 @@ if (!accessToken) {
 
 const server = env.POLAR_SERVER;
 const organizationId = env.POLAR_ORGANIZATION_ID;
+const autocompleteMeterId = env.POLAR_AUTOCOMPLETE_METER_ID;
 
 const polar = new Polar({ accessToken, server });
 
-function organizationScope(): { organizationId: string } {
-  return { organizationId };
+const autocompleteMeterConfig = {
+  name: "Autocomplete credits spent",
+  unit: "custom" as const,
+  customLabel: "credit",
+  filter: {
+    conjunction: "and" as const,
+    clauses: [
+      { property: "name", operator: "eq" as const, value: "autocomplete.used" },
+    ],
+  },
+  aggregation: { func: "sum" as const, property: "creditsSpent" },
+  metadata: { slug: "autocomplete.used" },
+};
+
+function organizationScope(): { organizationId?: string } {
+  return env.POLAR_SEND_ORGANIZATION_ID ? { organizationId } : {};
 }
 
 type CreatedResource = {
@@ -22,22 +38,40 @@ type CreatedResource = {
   readonly secret?: string;
 };
 
+function existingBenefitId(planId: PlanId): string | undefined {
+  switch (planId) {
+    case "free":
+      return env.POLAR_CREDITS_BENEFIT_ID_FREE;
+    case "pro":
+      return env.POLAR_CREDITS_BENEFIT_ID_PRO;
+    case "max":
+      return env.POLAR_CREDITS_BENEFIT_ID_MAX;
+  }
+}
+
+function existingProductId(planId: PlanId): string | undefined {
+  switch (planId) {
+    case "free":
+      return env.POLAR_PRODUCT_ID_FREE;
+    case "pro":
+      return env.POLAR_PRODUCT_ID_PRO;
+    case "max":
+      return env.POLAR_PRODUCT_ID_MAX;
+  }
+}
+
 function unwrapResource<T extends CreatedResource>(result: unknown, key: string): T {
   const record = result as Record<string, unknown>;
   return (record[key] ?? result) as T;
 }
 
 async function createAutocompleteMeter(): Promise<CreatedResource> {
+  if (autocompleteMeterId) {
+    return await polar.meters.get({ id: autocompleteMeterId });
+  }
+
   const result = await polar.meters.create({
-    name: "Autocomplete credits spent",
-    unit: "custom",
-    customLabel: "credit",
-    filter: {
-      conjunction: "and",
-      clauses: [{ property: "name", operator: "eq", value: "autocomplete.used" }],
-    },
-    aggregation: { func: "sum", property: "creditsSpent" },
-    metadata: { slug: "autocomplete.used" },
+    ...autocompleteMeterConfig,
     ...organizationScope(),
   });
 
@@ -48,6 +82,11 @@ async function createPlanCreditsBenefit(
   planId: PlanId,
   meterId: string,
 ): Promise<CreatedResource> {
+  const benefitId = existingBenefitId(planId);
+  if (benefitId) {
+    return await polar.benefits.get({ id: benefitId });
+  }
+
   const plan = planQuotas[planId];
   const result = await polar.benefits.create({
     type: "meter_credit",
@@ -67,23 +106,43 @@ async function createPlanCreditsBenefit(
   return unwrapResource<CreatedResource>(result, "benefit");
 }
 
-async function createPlanProduct(planId: PlanId): Promise<CreatedResource> {
+function createPlanPrices(
+  planId: PlanId,
+  meterId: string,
+): ProductCreateRecurringPrices[] {
   const plan = planQuotas[planId];
-  const prices =
-    plan.monthlyPriceUsd === 0
-      ? [{ amountType: "free" }]
-      : [
-          {
-            amountType: "fixed",
-            priceCurrency: "usd",
-            priceAmount: plan.monthlyPriceUsd * 100,
-          },
-        ];
+
+  return [
+    {
+      amountType: "fixed",
+      priceCurrency: "usd",
+      priceAmount: plan.monthlyPriceUsd * 100,
+    },
+    {
+      amountType: "metered_unit",
+      priceCurrency: "usd",
+      meterId,
+      unitAmount: "0.000001",
+      capAmount: 0,
+    },
+  ];
+}
+
+async function createPlanProduct(
+  planId: PlanId,
+  meterId: string,
+): Promise<CreatedResource> {
+  const productId = existingProductId(planId);
+  if (productId) {
+    return await polar.products.get({ id: productId });
+  }
+
+  const plan = planQuotas[planId];
 
   const result = await polar.products.create({
     name: `Tabb ${plan.name}`,
     description: `${plan.monthlyAutocompleteSuggestions.toLocaleString()} autocomplete suggestions per month.`,
-    prices,
+    prices: createPlanPrices(planId, meterId),
     recurringInterval: "month",
     metadata: {
       planId,
@@ -131,7 +190,7 @@ if (!meter.id) {
 
 for (const planId of Object.keys(planQuotas) as PlanId[]) {
   const benefit = await createPlanCreditsBenefit(planId, meter.id);
-  const product = await createPlanProduct(planId);
+  const product = await createPlanProduct(planId, meter.id);
   if (!benefit.id) {
     throw new Error(`Polar ${planId} credits benefit creation did not return an id`);
   }

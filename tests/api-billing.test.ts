@@ -361,6 +361,7 @@ describe("Billing and quota enforcement", () => {
   it("stores entitlements and usage in D1-compatible storage", async () => {
     const db = new Database(":memory:");
     bootstrapBillingTestSchema(db);
+    insertBillingTestUser(db, "user-d1");
     const storage = new D1BillingStorage(createTestDatabase(db));
 
     await storage.setEntitlement({
@@ -380,6 +381,33 @@ describe("Billing and quota enforcement", () => {
 
     const usage = await storage.getUsage("user-d1", currentMonth());
     expect(usage).toBe(2);
+  });
+
+  it("ignores Polar webhook entitlement updates for unknown D1 users", async () => {
+    const db = new Database(":memory:");
+    bootstrapBillingTestSchema(db);
+    const storage = new D1BillingStorage(createTestDatabase(db));
+    const webhookHandler = new BillingWebhookHandler({ storage });
+
+    await webhookHandler.handle({
+      type: "subscription.created",
+      data: {
+        customer: { external_id: "missing-user" },
+        customer_id: "polar-customer-1",
+        id: "polar-sub-1",
+        status: "active",
+        product: { name: "Tabb Pro" },
+      },
+    });
+
+    await webhookHandler.handle({
+      type: "subscription.canceled",
+      data: {
+        customer: { external_id: "missing-user" },
+      },
+    });
+
+    expect(await storage.getEntitlement("missing-user")).toBeNull();
   });
 });
 
@@ -428,6 +456,18 @@ describe("PolarUsageMeterClient", () => {
 
 function bootstrapBillingTestSchema(db: Database): void {
   db.exec(`
+    PRAGMA foreign_keys = ON;
+
+    CREATE TABLE user (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL UNIQUE,
+      email_verified INTEGER NOT NULL DEFAULT 0,
+      image TEXT,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
     CREATE TABLE user_entitlements (
       user_id TEXT PRIMARY KEY,
       plan_id TEXT NOT NULL,
@@ -435,7 +475,8 @@ function bootstrapBillingTestSchema(db: Database): void {
       polar_subscription_id TEXT,
       status TEXT NOT NULL,
       current_period_end TEXT,
-      cached_at TEXT NOT NULL
+      cached_at TEXT NOT NULL,
+      FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
     );
 
     CREATE TABLE usage_records (
@@ -443,9 +484,17 @@ function bootstrapBillingTestSchema(db: Database): void {
       month TEXT NOT NULL,
       count INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
-      PRIMARY KEY (user_id, month)
+      PRIMARY KEY (user_id, month),
+      FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
     );
   `);
+}
+
+function insertBillingTestUser(db: Database, userId: string): void {
+  const now = Date.now();
+  db.query(
+    "INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+  ).run(userId, "Test User", `${userId}@example.com`, 1, now, now);
 }
 
 function currentMonth(): string {

@@ -47,7 +47,8 @@ export type SuggestionUseCaseResult =
   | {
       readonly ok: false;
       readonly status: 402 | 503;
-      readonly code: "billing_required" | "quota_exhausted" | "provider_failure";
+      readonly code:
+        "billing_required" | "quota_exhausted" | "provider_failure";
       readonly message: string;
       readonly details?: EntitlementErrorDetails;
     };
@@ -111,7 +112,10 @@ Context: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
       temperature: 0.3,
     });
 
-    const suggestionText = normalizeGeneratedSuggestion(input.typingContext, text);
+    const suggestionText = normalizeGeneratedSuggestion(
+      input.typingContext,
+      text,
+    );
     console.log("[suggestions] groq generated suggestion", {
       requestId: input.requestId,
       modelId,
@@ -188,12 +192,13 @@ export class SuggestionUseCase {
     };
 
     try {
-      const memories = await this.deps.personalMemoryService.selectRelevantMemories({
-        userId: device.userId,
-        typingContext: request.typingContext,
-        activeApplication: request.activeApplication,
-        memoryEnabled: request.memoryEnabled,
-      });
+      const memories =
+        await this.deps.personalMemoryService.selectRelevantMemories({
+          userId: device.userId,
+          typingContext: request.typingContext,
+          activeApplication: request.activeApplication,
+          memoryEnabled: request.memoryEnabled,
+        });
 
       const generated = await this.deps.generateSuggestion({
         requestId: request.requestId,
@@ -276,7 +281,10 @@ export class SuggestionUseCase {
       return { ok: true, suggestions };
     } catch (error) {
       const latencyMs = Math.round(performance.now() - suggestionStart);
-      const message = error instanceof Error ? error.message : "Suggestion generation failed.";
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Suggestion generation failed.";
 
       await recordSuggestionEvent({
         eventType: "suggestion_error",

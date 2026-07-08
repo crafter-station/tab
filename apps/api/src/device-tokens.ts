@@ -81,6 +81,11 @@ export class InMemoryDeviceTokenStorage implements DeviceTokenStorage {
   }
 
   async updateDevice(device: Device): Promise<Device> {
+    const previous = this.devices.get(device.id);
+    if (previous) {
+      this.devicesByHash.delete(previous.tokenHash);
+      this.devicesByDeviceId.delete(previous.deviceId);
+    }
     this.devices.set(device.id, device);
     this.devicesByHash.set(device.tokenHash, device);
     this.devicesByDeviceId.set(device.deviceId, device);
@@ -174,6 +179,11 @@ export class D1DeviceTokenStorage implements DeviceTokenStorage {
     await this.db
       .update(deviceTokens)
       .set({
+        userId: device.userId,
+        deviceId: device.deviceId,
+        tokenHash: device.tokenHash,
+        platform: device.platform,
+        appVersion: device.appVersion,
         lastSeenAt: device.lastSeenAt.toISOString(),
         revoked: device.revoked,
       })
@@ -253,10 +263,12 @@ export class DeviceTokenService {
     const now = new Date();
 
     const existing = await this.storage.findDeviceByDeviceId(deviceInfo.deviceId);
-    if (existing && existing.userId === userId) {
+    if (existing) {
       const updated: Device = {
         ...existing,
+        userId,
         tokenHash,
+        platform: deviceInfo.platform,
         appVersion: deviceInfo.appVersion,
         lastSeenAt: now,
         revoked: false,
