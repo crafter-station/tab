@@ -636,6 +636,7 @@ function sendDebugContext(): void {
     wordCount: context.length === 0 ? 0 : context.split(/\s+/).length,
     source: snapshot.contextSource,
     app: snapshot.activeApplication?.bundleId ?? null,
+    appContext: snapshot.appContext?.metadata,
     paused: snapshot.paused,
     secureInput: snapshot.secureInput,
     api: debugApiState,

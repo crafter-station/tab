@@ -96,6 +96,35 @@ const SUPPORTED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[]
   },
 ];
 
+export const APP_CONTEXT_TRUST_COPY = {
+  title: "App Context",
+  summary:
+    "App Context is temporary, suggestion-only background from supported writing apps. It is separate from Typing Context and Personal Memory.",
+  permissionScope:
+    "Default App Context extraction uses Accessibility metadata and semantic text only. Tabb does not request Screen Recording, Full Disk Access, raw logs, browser history, hidden DOM, screenshots, or file reads for it.",
+  memoryScope:
+    "Passive app, conversation, document, web, and terminal context is not eligible for Personal Memory by default. Personal Memory remains based on eligible user-authored Typing Context and explicit user control.",
+  clearingScope:
+    "Pause Tabb or clear context to immediately clear both Typing Context and App Context. App Context is also cleared on app/window changes, secure input, secret-like detection, sleep, lock, and quit.",
+  debugScope:
+    "Debug and settings surfaces show App Context status, provider, confidence, suppression reason, and supported-app allowlist state as metadata-only diagnostics.",
+} as const;
+
+export const APP_CONTEXT_SUPPORTED_APP_MATRIX = [
+  { app: "WhatsApp", provider: "whatsapp-accessibility", allowlisted: true, expectedKind: "conversation" },
+  { app: "Ghostty", provider: "ghostty-accessibility", allowlisted: true, expectedKind: "terminal_session" },
+  { app: "Obsidian", provider: "obsidian-accessibility", allowlisted: true, expectedKind: "document" },
+  { app: "Zed", provider: "zed-accessibility", allowlisted: true, expectedKind: "editor" },
+  { app: "Chrome", provider: "chrome-accessibility", allowlisted: true, expectedKind: "browser_writing_surface" },
+  { app: "Apple Notes", provider: "notes-accessibility", allowlisted: true, expectedKind: "document" },
+  { app: "Apple Mail", provider: "mail-accessibility", allowlisted: true, expectedKind: "conversation" },
+  { app: "Messages", provider: "messages-accessibility", allowlisted: true, expectedKind: "conversation" },
+  { app: "Slack", provider: "slack-accessibility", allowlisted: true, expectedKind: "conversation" },
+  { app: "Discord", provider: "discord-accessibility", allowlisted: true, expectedKind: "conversation" },
+  { app: "VS Code", provider: "vscode-accessibility", allowlisted: true, expectedKind: "editor" },
+  { app: "TextEdit", provider: "textedit-accessibility", allowlisted: true, expectedKind: "document" },
+] as const;
+
 const NORMALIZED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[] =
   SUPPORTED_ACCESSIBILITY_ADAPTERS.map((entry) => ({
     ...entry,

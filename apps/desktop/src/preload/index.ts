@@ -15,6 +15,12 @@ type DebugContext = {
   wordCount: number;
   source: string;
   app: string | null;
+  appContext?: {
+    provider?: string;
+    status: "available" | "empty" | "suppressed" | "cleared" | "unsupported";
+    confidence?: number;
+    suppressionReason?: string;
+  };
   paused: boolean;
   secureInput: boolean;
   api?: DebugApiState;

@@ -15,6 +15,7 @@ import {
 } from "@tabb/ui";
 import type { PersonalMemory } from "@tabb/contracts";
 import type { DesktopStatus } from "../../../main/status";
+import { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tabb>["getInitialState"]>>;
 type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
@@ -227,6 +228,9 @@ export function SettingsSurface() {
                 <Button variant={paused ? "default" : "secondary"} onClick={() => window.tabb?.togglePause?.()}>
                   {paused ? "Resume" : "Pause"}
                 </Button>
+                <span className="text-xs leading-relaxed text-muted-foreground">
+                  Pause clears both Typing Context and App Context immediately.
+                </span>
               </SettingsRow>
             </CardContent>
           </Card>
@@ -288,6 +292,11 @@ export function SettingsSurface() {
                 Tabb does not request Screen Recording or Full Disk Access. Typing Context stays in memory only, Personal
                 Memory stays visible and controlled by you, telemetry is metadata-only, and raw logs are not stored.
               </p>
+              <div className="mt-4 rounded-2xl border bg-muted/60 p-4 text-xs leading-relaxed text-muted-foreground">
+                <strong className="block text-foreground">{APP_CONTEXT_TRUST_COPY.title}</strong>
+                <span>{APP_CONTEXT_TRUST_COPY.summary}</span>
+                <span className="mt-2 block">{APP_CONTEXT_TRUST_COPY.permissionScope}</span>
+              </div>
               <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
                 If macOS shows Electron in dev mode, it granted the Electron host instead of the packaged Tabb app. Run
                 <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
@@ -317,6 +326,18 @@ export function SettingsSurface() {
                   Pasted text can still inform the current suggestion, but it is not saved to Personal Memory by default.
                 </span>
               </SettingsRow>
+              <SettingsRow label="App Context">
+                <span className="text-xs leading-relaxed text-muted-foreground">
+                  {APP_CONTEXT_TRUST_COPY.memoryScope}
+                </span>
+              </SettingsRow>
+              <div className="rounded-2xl border bg-muted/60 p-4 text-xs leading-relaxed text-muted-foreground">
+                <strong className="block text-foreground">Supported App Context providers</strong>
+                <span>
+                  {APP_CONTEXT_SUPPORTED_APP_MATRIX.map((entry) => `${entry.app}: ${entry.provider}`).join("; ")}
+                </span>
+                <span className="mt-2 block">{APP_CONTEXT_TRUST_COPY.debugScope}</span>
+              </div>
               {memories.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/70 p-4 text-sm text-muted-foreground">
                   No Personal Memory stored yet.
