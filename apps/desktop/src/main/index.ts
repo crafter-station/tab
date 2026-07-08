@@ -26,6 +26,7 @@ import {
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
+import { createObsidianDocumentAppContext } from "./app-context.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -240,6 +241,9 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   typingContext: typingContextBuffer,
   requestSuggestion,
   getContextSource: getTypedContextSource,
+  getAppContext: (snapshot) => snapshot.textSession
+    ? createObsidianDocumentAppContext(snapshot.textSession)
+    : { fragments: [], metadata: { status: "unsupported" } },
   outputs: {
     showSuggestion: showOverlay,
     clearSuggestion: clearSuggestionOverlay,

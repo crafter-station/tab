@@ -12,7 +12,11 @@ import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engi
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
-import { createAppContextManager, type AppContextSnapshot } from "../apps/desktop/src/main/app-context.ts";
+import {
+  createAppContextManager,
+  createObsidianDocumentAppContext,
+  type AppContextSnapshot,
+} from "../apps/desktop/src/main/app-context.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
@@ -1402,6 +1406,96 @@ describe("desktop native suggestion loop", () => {
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
       });
+    });
+  });
+
+  describe("Obsidian App Context provider", () => {
+    function makeObsidianTextSession(overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot {
+      return {
+        activeApplication: { bundleId: "md.obsidian", windowId: "vault-window" },
+        focusedElementId: "focus-editor",
+        textElementId: "markdown-editor",
+        selectedRange: { location: 72, length: 0 },
+        caretIdentity: "range:72:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: {
+          beforeCaret: "# Launch Notes\n\n- Confirm beta scope\n- Draft rollout email\n\nNext we should",
+          afterCaret: " include support timings and owner handoffs.\n\n## Open Questions\n- Who signs off?",
+        },
+        ...overrides,
+      };
+    }
+
+    it("extracts nearby Obsidian markdown context from the focused editor", () => {
+      const snapshot = createObsidianDocumentAppContext(makeObsidianTextSession());
+
+      expect(snapshot.metadata).toMatchObject({
+        provider: "obsidian-accessibility-editor",
+        status: "available",
+      });
+      expect(snapshot.fragments).toHaveLength(1);
+      expect(snapshot.fragments[0]).toMatchObject({
+        provider: "obsidian-accessibility-editor",
+        kind: "markdown_document",
+        requestable: true,
+        memoryEligible: false,
+      });
+      expect(snapshot.fragments[0].text).toContain("# Launch Notes");
+      expect(snapshot.fragments[0].text).toContain("- Draft rollout email");
+      expect(snapshot.fragments[0].text).toContain("Next we should include support timings");
+    });
+
+    it("bounds long notes to nearby editor context", () => {
+      const beforeCaret = `${"old paragraph\n".repeat(260)}# Current Heading\nRelevant paragraph before caret`;
+      const afterCaret = ` continues after caret\n${"later paragraph\n".repeat(260)}`;
+      const snapshot = createObsidianDocumentAppContext(
+        makeObsidianTextSession({ surroundingContext: { beforeCaret, afterCaret } }),
+      );
+
+      expect(snapshot.metadata.status).toBe("available");
+      expect(snapshot.fragments[0].text.length).toBeLessThanOrEqual(1_600);
+      expect(snapshot.fragments[0].text).toContain("# Current Heading");
+      expect(snapshot.fragments[0].text).toContain("Relevant paragraph before caret continues after caret");
+      expect(snapshot.fragments[0].text).not.toContain("old paragraph\nold paragraph\nold paragraph");
+      expect(snapshot.fragments[0].text).not.toContain("later paragraph\nlater paragraph\nlater paragraph");
+    });
+
+    it("falls back safely when focused editor semantics are missing", () => {
+      const snapshot = createObsidianDocumentAppContext(
+        makeObsidianTextSession({ focusedElementId: null, textElementId: null }),
+      );
+
+      expect(snapshot.fragments).toHaveLength(0);
+      expect(snapshot.metadata).toMatchObject({
+        provider: "obsidian-accessibility-editor",
+        status: "empty",
+        suppressionReason: "missing_focused_editor_semantics",
+      });
+    });
+
+    it("drops noisy extraction instead of sending unreliable context", () => {
+      const snapshot = createObsidianDocumentAppContext(
+        makeObsidianTextSession({
+          surroundingContext: {
+            beforeCaret: "\u0000\u0000\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd",
+            afterCaret: "\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd",
+          },
+        }),
+      );
+
+      expect(snapshot.fragments).toHaveLength(0);
+      expect(snapshot.metadata.status).toBe("empty");
+      expect(snapshot.metadata.suppressionReason).toBe("noisy_extraction");
+    });
+
+    it("does not activate outside Obsidian", () => {
+      const snapshot = createObsidianDocumentAppContext(
+        makeObsidianTextSession({ activeApplication: { bundleId: "com.apple.TextEdit" } }),
+      );
+
+      expect(snapshot.fragments).toHaveLength(0);
+      expect(snapshot.metadata.status).toBe("unsupported");
     });
   });
 });
