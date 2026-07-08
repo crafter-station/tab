@@ -61,6 +61,7 @@ export function SettingsSurface() {
   const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
+  const [usePersonalMemory, setUsePersonalMemory] = useState(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
 
@@ -77,6 +78,9 @@ export function SettingsSurface() {
     window.tabb.onStatusChanged((nextStatus) => setStatus(nextStatus));
     window.tabb.onMemoriesChanged((nextMemories) => setMemories(nextMemories));
     window.tabb.onPauseChanged((nextPaused) => setPaused(nextPaused));
+    window.tabb.onPreferencesChanged((nextPreferences) => {
+      setUsePersonalMemory(nextPreferences.suggestions.usePersonalMemory);
+    });
 
     window.tabb
       .getInitialState()
@@ -84,6 +88,7 @@ export function SettingsSurface() {
         setStatus(initialState.status);
         setMemories(initialState.memories);
         setPaused(initialState.paused);
+        setUsePersonalMemory(initialState.preferences.suggestions.usePersonalMemory);
       })
       .catch(() => {});
 
@@ -113,6 +118,11 @@ export function SettingsSurface() {
     } finally {
       setPermissionBusy(null);
     }
+  }
+
+  function handleUsePersonalMemory(nextEnabled: boolean) {
+    setUsePersonalMemory(nextEnabled);
+    window.tabb?.setUsePersonalMemoryForSuggestions?.(nextEnabled);
   }
 
   return (
@@ -247,10 +257,21 @@ export function SettingsSurface() {
           {activeTab === "memory" ? (
           <Card className="settings-pane shadow-none">
             <CardHeader>
-              <CardTitle>Quick Memory</CardTitle>
-              <CardDescription>Review memory snippets stored for autocomplete personalization.</CardDescription>
+              <CardTitle>Personal Memory</CardTitle>
+              <CardDescription>Control whether stored memories can personalize desktop suggestions.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
+              <SettingsRow label="Use in suggestions">
+                <Button
+                  variant={usePersonalMemory ? "default" : "secondary"}
+                  onClick={() => handleUsePersonalMemory(!usePersonalMemory)}
+                >
+                  {usePersonalMemory ? "Using Personal Memory" : "Do Not Use"}
+                </Button>
+                <span className="text-xs leading-relaxed text-muted-foreground">
+                  Pasted text can still inform the current suggestion, but it is not saved to Personal Memory by default.
+                </span>
+              </SettingsRow>
               {memories.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-border bg-muted/70 p-4 text-sm text-muted-foreground">
                   No Personal Memory stored yet.

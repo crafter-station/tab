@@ -11,10 +11,14 @@ export type ApiSuggestionClientDependencies = {
   deviceId: string;
   appVersion: string;
   platform: string;
-  memoryEnabled?: boolean;
+  memoryEnabled?: boolean | (() => boolean);
   fetch?: typeof globalThis.fetch;
   getAuthorizationHeader?: () => Promise<string | null>;
 };
+
+function isPersonalMemoryEnabled(deps: ApiSuggestionClientDependencies): boolean {
+  return typeof deps.memoryEnabled === "function" ? deps.memoryEnabled() : (deps.memoryEnabled ?? true);
+}
 
 function buildSuggestionRequest(
   deps: ApiSuggestionClientDependencies,
@@ -27,7 +31,7 @@ function buildSuggestionRequest(
     contextSource: snapshot.contextSource,
     redaction: snapshot.redaction,
     activeApplication: snapshot.activeApplication,
-    memoryEnabled: deps.memoryEnabled ?? true,
+    memoryEnabled: isPersonalMemoryEnabled(deps) && snapshot.memoryEligible,
     contextHash: snapshot.contextHash,
     clientMetadata: {
       appVersion: deps.appVersion,

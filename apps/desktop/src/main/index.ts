@@ -136,7 +136,7 @@ const requestSuggestion = createApiSuggestionClient({
   deviceId: DEVICE_ID,
   appVersion: APP_VERSION,
   platform: process.platform,
-  memoryEnabled: false,
+  memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
 
@@ -296,6 +296,16 @@ async function refreshMemories(): Promise<void> {
 
 function updateTrayFromStatus(status: DesktopStatus): void {
   tray?.update(createTrayState(status));
+}
+
+function setUsePersonalMemoryForSuggestions(enabled: boolean): void {
+  preferencesManager.update({
+    suggestions: {
+      ...preferencesManager.get().suggestions,
+      usePersonalMemory: enabled,
+    },
+  });
+  settingsWindowManager.sendPreferences(preferencesManager.get());
 }
 
 function updateTray(): void {
@@ -935,10 +945,15 @@ async function bootstrap(): Promise<void> {
       .catch((error) => console.error("Failed to delete memory:", error));
   });
 
+  ipcMain.on("set-use-personal-memory-for-suggestions", (_event, enabled: boolean) => {
+    setUsePersonalMemoryForSuggestions(Boolean(enabled));
+  });
+
   ipcMain.handle("get-initial-state", () => ({
     status: statusService.getCurrentStatus(),
     memories: currentMemories,
     paused: nativeSuggestionSession.isPaused(),
+    preferences: preferencesManager.get(),
   }));
 
   // Register the custom URL scheme so the browser handoff can land back in the

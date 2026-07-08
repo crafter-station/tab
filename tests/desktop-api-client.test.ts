@@ -84,6 +84,85 @@ describe("desktop API suggestion client", () => {
     expect(request.memoryEnabled).toBe(false);
   });
 
+  it("can enable memories in the suggestion request", async () => {
+    const captured: { body?: unknown } = {};
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      return new Response(
+        JSON.stringify({ status: "ok", data: { suggestions: [{ id: "s-1", text: " world" }] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      memoryEnabled: true,
+      fetch,
+    });
+
+    await requestSuggestion(makeSnapshot());
+
+    const request = SuggestionRequestSchema.parse(captured.body);
+    expect(request.memoryEnabled).toBe(true);
+  });
+
+  it("excludes memories for pasted text even when memory usage is enabled", async () => {
+    const captured: { body?: unknown } = {};
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      return new Response(
+        JSON.stringify({ status: "ok", data: { suggestions: [{ id: "s-1", text: " world" }] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      memoryEnabled: true,
+      fetch,
+    });
+
+    await requestSuggestion(makeSnapshot({ contextSource: "pasted_text", memoryEligible: false }));
+
+    const request = SuggestionRequestSchema.parse(captured.body);
+    expect(request.contextSource).toBe("pasted_text");
+    expect(request.memoryEnabled).toBe(false);
+  });
+
+  it("reads the latest memory setting for each suggestion request", async () => {
+    const captured: unknown[] = [];
+    let memoryEnabled = false;
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.push(init?.body ? JSON.parse(String(init.body)) : undefined);
+      return new Response(
+        JSON.stringify({ status: "ok", data: { suggestions: [{ id: "s-1", text: " world" }] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      memoryEnabled: () => memoryEnabled,
+      fetch,
+    });
+
+    await requestSuggestion(makeSnapshot());
+    memoryEnabled = true;
+    await requestSuggestion(makeSnapshot());
+
+    expect(SuggestionRequestSchema.parse(captured[0]).memoryEnabled).toBe(false);
+    expect(SuggestionRequestSchema.parse(captured[1]).memoryEnabled).toBe(true);
+  });
+
   it("returns null when the API returns an empty suggestions array", async () => {
     const fetch = async () =>
       new Response(JSON.stringify({ status: "ok", data: { suggestions: [] } }), {

@@ -3,6 +3,9 @@ import type { OnboardingPreferences } from "./onboarding.ts";
 
 export type DesktopPreferences = {
   onboarding: OnboardingPreferences;
+  suggestions: {
+    usePersonalMemory: boolean;
+  };
   deviceId?: string;
 };
 
@@ -13,7 +16,17 @@ export type PreferencesStorage = {
 
 const DEFAULT_PREFERENCES: DesktopPreferences = {
   onboarding: { completed: false },
+  suggestions: { usePersonalMemory: false },
 };
+
+function normalizeDesktopPreferences(value: DesktopPreferences): DesktopPreferences {
+  return {
+    ...DEFAULT_PREFERENCES,
+    ...value,
+    onboarding: { ...DEFAULT_PREFERENCES.onboarding, ...value.onboarding },
+    suggestions: { ...DEFAULT_PREFERENCES.suggestions, ...value.suggestions },
+  };
+}
 
 function isDesktopPreferences(value: unknown): value is DesktopPreferences {
   if (!value || typeof value !== "object") return false;
@@ -31,13 +44,23 @@ function isDesktopPreferences(value: unknown): value is DesktopPreferences {
     return false;
   }
 
+  if ("suggestions" in value) {
+    const suggestions = value.suggestions;
+    const hasValidSuggestions =
+      !!suggestions &&
+      typeof suggestions === "object" &&
+      "usePersonalMemory" in suggestions &&
+      typeof suggestions.usePersonalMemory === "boolean";
+    if (!hasValidSuggestions) return false;
+  }
+
   return true;
 }
 
 export function createMemoryPreferencesStorage(
   initial: DesktopPreferences = DEFAULT_PREFERENCES,
 ): PreferencesStorage {
-  let prefs = structuredClone(initial);
+  let prefs = normalizeDesktopPreferences(initial);
   return {
     load: () => structuredClone(prefs),
     save: (next) => {
@@ -53,7 +76,7 @@ export function createFilePreferencesStorage(filePath: string): PreferencesStora
         const raw = readFileSync(filePath, "utf-8");
         const parsed = JSON.parse(raw) as unknown;
         if (isDesktopPreferences(parsed)) {
-          return structuredClone(parsed);
+          return normalizeDesktopPreferences(parsed);
         }
       } catch {
         // File missing or corrupt: fall back to defaults.
@@ -71,7 +94,7 @@ export type PreferencesManagerDependencies = {
 };
 
 export function createPreferencesManager(deps: PreferencesManagerDependencies) {
-  let prefs = deps.storage.load();
+  let prefs = normalizeDesktopPreferences(deps.storage.load());
 
   function get(): DesktopPreferences {
     return structuredClone(prefs);

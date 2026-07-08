@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopStatus } from "../main/status.ts";
+import type { DesktopPreferences } from "../main/preferences.ts";
 import type { PersonalMemory } from "@tabb/contracts";
 
 type DebugApiState =
@@ -39,10 +40,12 @@ export type TabbPreloadApi = {
   onStatusChanged: (callback: (status: DesktopStatus) => void) => void;
   onMemoriesChanged: (callback: (memories: PersonalMemory[]) => void) => void;
   onPauseChanged: (callback: (paused: boolean) => void) => void;
-  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean }>;
+  onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => void;
+  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences }>;
   signIn: () => void;
   signOut: () => void;
   togglePause: () => void;
+  setUsePersonalMemoryForSuggestions: (enabled: boolean) => void;
   deleteMemory: (id: string) => void;
 };
 
@@ -90,6 +93,9 @@ contextBridge.exposeInMainWorld("tabb", {
   onPauseChanged: (callback: (paused: boolean) => void) => {
     ipcRenderer.on("pause-changed", (_event, paused) => callback(paused));
   },
+  onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => {
+    ipcRenderer.on("preferences-changed", (_event, preferences) => callback(preferences));
+  },
   getInitialState: () => ipcRenderer.invoke("get-initial-state"),
   signIn: () => {
     ipcRenderer.send("sign-in");
@@ -99,6 +105,9 @@ contextBridge.exposeInMainWorld("tabb", {
   },
   togglePause: () => {
     ipcRenderer.send("toggle-pause");
+  },
+  setUsePersonalMemoryForSuggestions: (enabled: boolean) => {
+    ipcRenderer.send("set-use-personal-memory-for-suggestions", enabled);
   },
   deleteMemory: (id: string) => {
     ipcRenderer.send("delete-memory", id);

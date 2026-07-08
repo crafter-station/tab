@@ -14,6 +14,7 @@ describe("desktop preferences", () => {
     });
 
     expect(manager.get().onboarding.completed).toBe(false);
+    expect(manager.get().suggestions.usePersonalMemory).toBe(false);
   });
 
   it("persists onboarding completion", () => {
@@ -49,6 +50,18 @@ describe("desktop preferences", () => {
 
     const reloaded = createPreferencesManager({ storage });
     expect(reloaded.get().deviceId).toBe("persistent-device-1");
+  });
+
+  it("persists Personal Memory usage for suggestions", () => {
+    const storage = createMemoryPreferencesStorage();
+    const manager = createPreferencesManager({ storage });
+
+    manager.update({ suggestions: { usePersonalMemory: true } });
+
+    expect(manager.get().suggestions.usePersonalMemory).toBe(true);
+
+    const reloaded = createPreferencesManager({ storage });
+    expect(reloaded.get().suggestions.usePersonalMemory).toBe(true);
   });
 
   describe("file-backed storage", () => {

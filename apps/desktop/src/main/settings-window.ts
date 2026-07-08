@@ -1,6 +1,7 @@
 import { BrowserWindow } from "electron";
 import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tabb/contracts";
+import type { DesktopPreferences } from "./preferences.ts";
 
 export type ControlWindowRoute = "settings" | "onboarding" | "sign-in";
 
@@ -103,6 +104,12 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     }
   }
 
+  function sendPreferences(preferences: DesktopPreferences): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("preferences-changed", preferences);
+    }
+  }
+
   return {
     show,
     close,
@@ -110,5 +117,6 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     sendStatus,
     sendMemories,
     sendPaused,
+    sendPreferences,
   };
 }
