@@ -1,5 +1,6 @@
 import type { Suggestion } from "@tabb/contracts";
 import { isTerminalActiveApplication } from "@tabb/memory-policy";
+import type { ApplicationCompatibilityStore } from "./application-compatibility.ts";
 import type { SafeTypingContextSnapshot } from "./typing-context.ts";
 
 export type TriggerPolicySuppressionReason =
@@ -7,6 +8,7 @@ export type TriggerPolicySuppressionReason =
   | "terminal_strictness"
   | "dismissal_cooldown"
   | "stale_cooldown"
+  | "application_compatibility"
   | "unreliable_text_session"
   | "candidate_too_long";
 
@@ -32,6 +34,7 @@ export type PoliteTriggerPolicyOptions = {
   readonly staleCooldownThreshold?: number;
   readonly staleCooldownMs?: number;
   readonly maxSuggestionCharacters?: number;
+  readonly compatibilityStore?: ApplicationCompatibilityStore;
 };
 
 type InteractionStats = {
@@ -110,6 +113,7 @@ export function createPoliteTriggerPolicy(options: PoliteTriggerPolicyOptions = 
   const staleCooldownThreshold = options.staleCooldownThreshold ?? DEFAULT_STALE_COOLDOWN_THRESHOLD;
   const staleCooldownMs = options.staleCooldownMs ?? DEFAULT_STALE_COOLDOWN_MS;
   const maxSuggestionCharacters = options.maxSuggestionCharacters ?? DEFAULT_MAX_SUGGESTION_CHARACTERS;
+  const compatibilityStore = options.compatibilityStore;
   const statsByKey = new Map<string, InteractionStats>();
   let lastFallbackContextChangedAt: number | null = null;
 
@@ -165,6 +169,13 @@ export function createPoliteTriggerPolicy(options: PoliteTriggerPolicyOptions = 
 
       const isTerminalContext = isTerminalActiveApplication(snapshot.activeApplication)
         || snapshot.contextSource === "terminal_input";
+
+      if (
+        compatibilityStore?.hasStrictTriggerBehavior(snapshot.activeApplication) &&
+        !hasNaturalBoundary(snapshot.sanitizedContext)
+      ) {
+        return suppress("application_compatibility");
+      }
 
       if (isTerminalContext) {
         if (hasNaturalBoundary(snapshot.sanitizedContext)) {

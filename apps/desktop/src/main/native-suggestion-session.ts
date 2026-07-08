@@ -5,6 +5,10 @@ import type {
   SuggestionContextSource,
 } from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
+import {
+  createApplicationCompatibilityStore,
+  type ApplicationCompatibilityStore,
+} from "./application-compatibility.ts";
 import { generateLocalSuggestion } from "./suggestion-engine.ts";
 import { createSuggestionLoop, type SuggestionSource } from "./suggestion-loop.ts";
 import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
@@ -46,6 +50,7 @@ export type NativeSuggestionSessionDependencies = {
   readonly maxVisibleMs?: number;
   readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
   readonly triggerPolicy?: TriggerPolicy;
+  readonly compatibilityStore?: ApplicationCompatibilityStore;
 };
 
 type VisibleSuggestionTelemetry = {
@@ -71,7 +76,8 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let textSessionSnapshot: TextSessionSnapshot | null = null;
   let visibleTextSessionTarget: TextSessionSnapshot | null = null;
   const { outputs } = deps;
-  const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy();
+  const compatibilityStore = deps.compatibilityStore ?? createApplicationCompatibilityStore();
+  const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy({ compatibilityStore });
 
   function requestIdFromSuggestion(suggestion: Suggestion): string {
     if (suggestion.id.startsWith(SUGGESTION_ID_PREFIX)) {
@@ -126,6 +132,12 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     });
   }
 
+  function recordDismissal(snapshot: SafeTypingContextSnapshot): void {
+    compatibilityStore.recordDismissal(snapshot);
+    triggerPolicy.recordDismissal(snapshot);
+    recordInteractionTelemetry("suggestion_dismissed");
+  }
+
   const suggestionLoop = createSuggestionLoop({
     getContext: () => currentSafeSnapshot(),
     getLocalSuggestion: deps.getLocalSuggestion ?? ((snapshot) => generateLocalSuggestion(snapshot.sanitizedContext)),
@@ -143,6 +155,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     onRequestStarted: outputs.onRequestStarted,
     onRequestFinished: outputs.onRequestFinished,
     onSuggestionStale: () => {
+      compatibilityStore.recordStale(currentSafeSnapshot());
       recordInteractionTelemetry("suggestion_stale");
       clearVisibleSuggestion();
     },
@@ -157,8 +170,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   function contextChanged(): void {
     if (currentSuggestion) {
-      triggerPolicy.recordDismissal(currentSafeSnapshot());
-      recordInteractionTelemetry("suggestion_dismissed");
+      recordDismissal(currentSafeSnapshot());
     }
     outputs.resetDebugApiState();
     clearVisibleSuggestion();
@@ -188,8 +200,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   function clearContext(recordDismissed = true): void {
     if (recordDismissed && currentSuggestion) {
-      triggerPolicy.recordDismissal(currentSafeSnapshot());
-      recordInteractionTelemetry("suggestion_dismissed");
+      recordDismissal(currentSafeSnapshot());
     }
     clearTextSessionSnapshot();
     deps.typingContext.clear();
@@ -241,6 +252,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     },
     applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
       if (observationPaused) return;
+      compatibilityStore.recordTextSessionSnapshot(snapshot);
       textSessionSnapshot = isReliableTextSessionSnapshot(snapshot) ? snapshot : null;
       if (textSessionSnapshot) {
         setPreviouslyActiveApplication(textSessionSnapshot.activeApplication);
@@ -268,9 +280,14 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
         ...insertionDeps,
         getVisibleTextSessionTarget: () => visibleTextSessionTarget,
         getCurrentTextSessionTarget: () => textSessionSnapshot,
+        shouldPreferClipboardFallback: (targetApp) => compatibilityStore.shouldPreferClipboardInsertion(targetApp),
+        recordInsertionOutcome: (strategy, outcome, targetApp) => {
+          compatibilityStore.recordInsertionOutcome(targetApp, strategy, outcome);
+        },
       });
 
       if (result === "inserted") {
+        compatibilityStore.recordAcceptance(currentSafeSnapshot());
         recordInteractionTelemetry("suggestion_accepted");
         outputs.hideOverlay();
         clearContext(false);

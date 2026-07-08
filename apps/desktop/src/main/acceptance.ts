@@ -1,4 +1,5 @@
 import type { Suggestion, ActiveApplication } from "@tabb/contracts";
+import type { InsertionOutcome, InsertionStrategy } from "./application-compatibility.ts";
 import type { TextSessionSnapshot } from "./typing-context.ts";
 
 export type InsertionDependencies = {
@@ -7,6 +8,8 @@ export type InsertionDependencies = {
   getVisibleTextSessionTarget?(): TextSessionSnapshot | null;
   getCurrentTextSessionTarget?(): TextSessionSnapshot | null;
   insertSemantically?(text: string, target: TextSessionSnapshot): Promise<boolean>;
+  shouldPreferClipboardFallback?(targetApp: ActiveApplication): boolean;
+  recordInsertionOutcome?(strategy: InsertionStrategy, outcome: InsertionOutcome, targetApp: ActiveApplication): void;
   setClipboard(text: string): Promise<string>;
   sendPaste(): Promise<void>;
   waitForPaste?(): Promise<void>;
@@ -61,6 +64,15 @@ async function insertWithClipboardFallback(deps: InsertionDependencies, text: st
   await deps.restoreClipboard(previousClipboard);
 }
 
+function recordInsertionOutcome(
+  deps: InsertionDependencies,
+  strategy: InsertionStrategy,
+  outcome: InsertionOutcome,
+  targetApp: ActiveApplication,
+): void {
+  deps.recordInsertionOutcome?.(strategy, outcome, targetApp);
+}
+
 export async function acceptAndInsertSuggestion(deps: InsertionDependencies): Promise<InsertionResult> {
   const suggestion = deps.getCurrentSuggestion();
   if (!suggestion) {
@@ -74,14 +86,26 @@ export async function acceptAndInsertSuggestion(deps: InsertionDependencies): Pr
 
   const visibleTarget = deps.getVisibleTextSessionTarget?.() ?? null;
   const currentTarget = deps.getCurrentTextSessionTarget?.() ?? null;
-  if (deps.insertSemantically && canUseSemanticInsertion(targetApp, visibleTarget, currentTarget)) {
+  if (
+    deps.insertSemantically &&
+    !deps.shouldPreferClipboardFallback?.(targetApp) &&
+    canUseSemanticInsertion(targetApp, visibleTarget, currentTarget)
+  ) {
     const inserted = await deps.insertSemantically(suggestion.text, currentTarget).catch(() => false);
     if (inserted) {
+      recordInsertionOutcome(deps, "semantic", "success", targetApp);
       return "inserted";
     }
+    recordInsertionOutcome(deps, "semantic", "failure", targetApp);
   }
 
-  await insertWithClipboardFallback(deps, suggestion.text);
+  try {
+    await insertWithClipboardFallback(deps, suggestion.text);
+    recordInsertionOutcome(deps, "clipboard", "success", targetApp);
+  } catch (error) {
+    recordInsertionOutcome(deps, "clipboard", "failure", targetApp);
+    throw error;
+  }
 
   return "inserted";
 }
