@@ -27,6 +27,7 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
   readonly portalRequests: Array<{ userId: string; customerId?: string }> = [];
   failPortalRequests = false;
   failPlanChangeRequests = false;
+  planChangeError: Error | undefined;
 
   async createCheckoutUrl(
     planId: PlanId,
@@ -51,6 +52,9 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
     this.planChangeRequests.push(options);
     if (this.failPlanChangeRequests) {
       throw new Error("plan change unavailable");
+    }
+    if (this.planChangeError) {
+      throw this.planChangeError;
     }
   }
 }
@@ -381,6 +385,52 @@ describe("Web account surface", () => {
     expect(quota.ok).toBe(true);
     expect(quota.quota).toBe(1_000_000);
     expect(quota.usage).toBe(1000);
+  });
+
+  it("surfaces failed Plan Change as a billing error with management fallback", async () => {
+    for (const providerMessage of [
+      "payment method declined",
+      "subscription is canceled",
+      "subscription not found",
+      "pending update already exists",
+      "validation failed",
+    ]) {
+      const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+        await createWebTestEnv();
+      const email = `user-${crypto.randomUUID()}@example.com`;
+      const password = "password123456";
+      const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+      await activatePaidPlan(billingService, userId, "pro");
+      billingCheckoutClient.planChangeError = new Error(providerMessage);
+
+      const response = await webRequest(
+        webApp,
+        "/billing/checkout?plan=max",
+        {},
+        cookie,
+      );
+
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).toInclude("Billing error");
+      expect(body).toInclude(providerMessage);
+      expect(body).toInclude("Manage billing");
+      expect(body).toInclude('href="/billing/portal"');
+      expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+      expect(billingCheckoutClient.planChangeRequests).toEqual([
+        {
+          subscriptionId: "polar-sub-pro",
+          targetPlanId: "max",
+          prorationBehavior: "prorate",
+        },
+      ]);
+
+      const entitlement = await billingService.getEntitlement(userId);
+      expect(entitlement.planId).toBe("pro");
+      expect(entitlement.status).toBe("active");
+      expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
+      expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
+    }
   });
 
   it("treats active paid subscribers choosing their current plan as a no-op", async () => {

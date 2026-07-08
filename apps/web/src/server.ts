@@ -1,5 +1,6 @@
 import { createElement } from "react";
 import type { ReactNode } from "react";
+import { ApiErrorResponseSchema } from "@tabb/contracts";
 import {
   DashboardPage,
   DownloadPage,
@@ -81,6 +82,14 @@ function htmlErrorPage(
     }),
     title,
   );
+}
+
+async function parseApiErrorMessage(response: Response): Promise<string | undefined> {
+  try {
+    return ApiErrorResponseSchema.parse(await response.json()).error.message;
+  } catch {
+    return undefined;
+  }
 }
 
 function verifyEmailPage(): Response {
@@ -546,6 +555,15 @@ export function createWebApp(config: WebAppConfig) {
     if (response.status === 401) return loginRedirect(checkoutPath);
     if (response.status === 403) return verifyEmailPage();
     if (response.status !== 200) {
+      const errorMessage = await parseApiErrorMessage(response);
+      if (errorMessage?.startsWith("Plan Change failed:")) {
+        return htmlErrorPage(
+          "Billing error",
+          errorMessage,
+          { href: "/billing/portal", label: "Manage billing" },
+        );
+      }
+
       return htmlErrorPage(
         "Billing error",
         "Could not update billing. Manage billing or try again later.",

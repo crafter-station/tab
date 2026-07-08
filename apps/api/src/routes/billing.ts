@@ -161,8 +161,8 @@ export function registerBillingRoutes(
           200,
         );
       } catch (error) {
-        const message = error instanceof Error ? error.message : "Plan Change failed.";
-        return c.json(createErrorResponse("provider_failure", message), 503);
+        const message = error instanceof Error ? error.message : "Unknown provider error.";
+        return c.json(createErrorResponse("provider_failure", `Plan Change failed: ${message}`), 503);
       }
     }
 
