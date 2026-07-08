@@ -62,9 +62,7 @@ export type SuggestionUseCaseOptions = {
 function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
   if (memories.length === 0) return "";
 
-  const lines = memories.map(
-    (memory) => `- [${memory.category}] ${memory.content}`,
-  );
+  const lines = memories.map((memory) => `- ${memory.content}`);
   return `\nRelevant personal memory:\n${lines.join("\n")}`;
 }
 

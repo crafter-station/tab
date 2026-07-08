@@ -334,13 +334,12 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
       <CardContent>
         {memories.length === 0 ? <p className="text-muted-foreground">No memories stored yet.</p> : (
           <Table>
-            <TableHeader><TableRow><TableHead>Category</TableHead><TableHead>Content</TableHead><TableHead>Source</TableHead><TableHead>Added</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Content</TableHead><TableHead>Created by</TableHead><TableHead>Added</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
               {memories.map((memory) => (
                 <TableRow key={memory.id}>
-                  <TableCell>{memory.category}</TableCell>
                   <TableCell>{memory.content}</TableCell>
-                  <TableCell>{memory.source}</TableCell>
+                  <TableCell>{memory.createdBy}</TableCell>
                   <TableCell>{formatDate(memory.createdAt)}</TableCell>
                   <TableCell><form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/delete`}><Button type="submit" size="sm" variant="secondary">Delete</Button></form></TableCell>
                 </TableRow>

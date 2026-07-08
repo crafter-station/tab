@@ -1,7 +1,4 @@
-import {
-  PERSONAL_MEMORY_SOURCES,
-  SUGGESTION_CONTEXT_SOURCES,
-} from "@tabb/memory-policy";
+import { SUGGESTION_CONTEXT_SOURCES } from "@tabb/memory-policy";
 import { z } from "zod";
 
 const errorCodes = [
@@ -81,22 +78,13 @@ export const DeviceMetadataSchema = z.object({
   revoked: z.boolean(),
 });
 
-export const PersonalMemorySourceSchema = z.enum(PERSONAL_MEMORY_SOURCES);
-
-export const PersonalMemorySensitivitySchema = z.enum([
-  "normal",
-  "sensitive",
-  "private",
-]);
+export const PersonalMemoryCreatedBySchema = z.enum(["user", "system"]);
 
 export const PersonalMemorySchema = z.object({
   id: z.string().min(1),
   userId: z.string().min(1),
   content: z.string().min(1),
-  category: z.string().min(1),
-  source: PersonalMemorySourceSchema,
-  sensitivity: PersonalMemorySensitivitySchema,
-  active: z.boolean(),
+  createdBy: PersonalMemoryCreatedBySchema,
   createdAt: z.string().datetime(),
   updatedAt: z.string().datetime(),
 });
@@ -316,9 +304,8 @@ export type DeviceAuthorizeResponse = z.infer<
   typeof DeviceAuthorizeResponseSchema
 >;
 export type DeviceMetadata = z.infer<typeof DeviceMetadataSchema>;
-export type PersonalMemorySource = z.infer<typeof PersonalMemorySourceSchema>;
-export type PersonalMemorySensitivity = z.infer<
-  typeof PersonalMemorySensitivitySchema
+export type PersonalMemoryCreatedBy = z.infer<
+  typeof PersonalMemoryCreatedBySchema
 >;
 export type PersonalMemory = z.infer<typeof PersonalMemorySchema>;
 export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;

@@ -85,23 +85,17 @@ describe("Personal Memory API", () => {
     await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Uses Tabb for work",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
     await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Lives in Portland",
-      category: "personal",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "user",
     });
     await personalMemoryStorage.createMemory({
       userId: "user-2",
       content: "User two memory",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const response = await app.request("/api/memory", {
@@ -114,6 +108,44 @@ describe("Personal Memory API", () => {
     expect(
       body.data.memories.every((memory) => memory.userId === "user-1"),
     ).toBe(true);
+    expect(body.data.memories.every((memory) => "createdBy" in memory)).toBe(
+      true,
+    );
+    expect(body.data.memories[0]).not.toHaveProperty("category");
+    expect(body.data.memories[0]).not.toHaveProperty("source");
+    expect(body.data.memories[0]).not.toHaveProperty("sensitivity");
+    expect(body.data.memories[0]).not.toHaveProperty("active");
+  });
+
+  it("lists current memories ordered by newest updated first", async () => {
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp();
+
+    const older = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Older memory",
+      createdBy: "system",
+    });
+    const newer = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Newer memory",
+      createdBy: "system",
+    });
+    await new Promise((resolve) => setTimeout(resolve, 1));
+    await personalMemoryStorage.updateMemory(older.id, {
+      content: "Updated older memory",
+    });
+
+    const response = await app.request("/api/memory", {
+      headers: authHeaders(token),
+    });
+
+    expect(response.status).toBe(200);
+    const body = MemoryListResponseSchema.parse(await response.json());
+    expect(body.data.memories.map((memory) => memory.id)).toEqual([
+      older.id,
+      newer.id,
+    ]);
   });
 
   it("deletes the user's own memory", async () => {
@@ -123,9 +155,7 @@ describe("Personal Memory API", () => {
     const memory = await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Temporary note",
-      category: "notes",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "user",
     });
 
     const response = await app.request(`/api/memory/${memory.id}`, {
@@ -152,9 +182,7 @@ describe("Personal Memory API", () => {
     const otherMemory = await personalMemoryStorage.createMemory({
       userId: "user-2",
       content: "Private user two note",
-      category: "personal",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "user",
     });
 
     const response = await app.request(`/api/memory/${otherMemory.id}`, {
@@ -200,9 +228,7 @@ describe("Personal Memory API", () => {
     await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Acme Corp is a customer",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const response = await app.request("/suggestions", {
@@ -228,9 +254,7 @@ describe("Personal Memory API", () => {
     await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Jos\u00e9 prefers caf\u00e9 meetings",
-      category: "personal",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const response = await app.request("/suggestions", {
@@ -261,9 +285,7 @@ describe("Personal Memory API", () => {
     await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Zephyr internals",
-      category: "engineering",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const response = await app.request("/suggestions", {
@@ -280,7 +302,7 @@ describe("Personal Memory API", () => {
     expect(capturedInput?.memories).toHaveLength(0);
   });
 
-  it("does not include inactive memories even when relevant", async () => {
+  it("does not include deleted memories even when relevant", async () => {
     let capturedInput: SuggestionInput | null = null;
     const { app, token, personalMemoryStorage } =
       await createAuthenticatedTestApp(async (input) => {
@@ -288,14 +310,12 @@ describe("Personal Memory API", () => {
         return { text: " suggestion" };
       });
 
-    await personalMemoryStorage.createMemory({
+    const memory = await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Acme Corp is a customer",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
-      active: false,
+      createdBy: "system",
     });
+    await personalMemoryStorage.deleteMemory(memory.id);
 
     const response = await app.request("/suggestions", {
       method: "POST",
@@ -319,9 +339,7 @@ describe("Personal Memory API", () => {
     await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Acme Corp is a customer",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const response = await app.request("/suggestions", {

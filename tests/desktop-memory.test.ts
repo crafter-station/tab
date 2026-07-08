@@ -96,9 +96,7 @@ describe("desktop memory client", () => {
     await personalMemoryService.createMemory({
       userId,
       content: "I prefer concise emails",
-      category: "preferences",
-      source: "manual",
-      sensitivity: "normal",
+      createdBy: "user",
     });
 
     const client = createDesktopMemoryClient({
@@ -125,9 +123,7 @@ describe("desktop memory client", () => {
     const memory = await personalMemoryService.createMemory({
       userId,
       content: "My team uses Slack",
-      category: "work",
-      source: "manual",
-      sensitivity: "normal",
+      createdBy: "user",
     });
 
     const client = createDesktopMemoryClient({

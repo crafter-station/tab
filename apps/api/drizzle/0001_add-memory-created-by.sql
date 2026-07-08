@@ -1,0 +1,1 @@
+ALTER TABLE `personal_memories` ADD `created_by` text DEFAULT 'system' NOT NULL;

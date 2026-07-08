@@ -288,7 +288,7 @@ export function SettingsSurface() {
                   <div className="flex items-start justify-between gap-4 rounded-2xl border bg-background/40 p-4" key={memory.id}>
                     <div className="min-w-0">
                       <p className="text-sm leading-relaxed">{memory.content}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">{memory.category}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">Created by {memory.createdBy}</p>
                     </div>
                     <Button variant="secondary" size="sm" onClick={() => window.tabb?.deleteMemory?.(memory.id)}>
                       Delete

@@ -235,9 +235,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "Working on Tabb launch plan",
-            category: "work",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -258,7 +255,7 @@ describe("Background Memory Agent", () => {
     const memories = await personalMemoryService.listMemories("user-1");
     expect(memories).toHaveLength(1);
     expect(memories[0].content).toBe("Working on Tabb launch plan");
-    expect(memories[0].category).toBe("work");
+    expect(memories[0].createdBy).toBe("system");
   });
 
   it("rejects a create operation that contains a secret", async () => {
@@ -268,9 +265,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "Stripe API key is sk_live_1234567890abcdef",
-            category: "work",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -301,9 +295,6 @@ describe("Background Memory Agent", () => {
             type: "update",
             id: memory.id,
             content: "Auth header Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
-            category: "work",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -315,9 +306,7 @@ describe("Background Memory Agent", () => {
     const existingMemory = await personalMemoryService.createMemory({
       userId: "user-1",
       content: "Old work note",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const response = await app.request("/suggestions", {
@@ -342,9 +331,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "-----BEGIN OPENSSH PRIVATE KEY-----\nabc123\n-----END OPENSSH PRIVATE KEY-----",
-            category: "work",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -373,9 +359,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "DATABASE_URL=postgres://user:secret@localhost:5432/db",
-            category: "work",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -404,9 +387,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "Production secret dGhpcyBpcyBhIHNlY3JldA==",
-            category: "work",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -435,9 +415,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "My SSN is 123-45-6789",
-            category: "personal",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -466,9 +443,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "Card number 4111 1111 1111 1111 expires 12/25",
-            category: "personal",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -497,9 +471,6 @@ describe("Background Memory Agent", () => {
           {
             type: "create",
             content: "session_cookie=eyJ1c2VyX2lkIjoiMTIzIn0=; Path=/; HttpOnly",
-            category: "work",
-            source: "typed_text",
-            sensitivity: "normal",
           },
         ];
       },
@@ -521,161 +492,13 @@ describe("Background Memory Agent", () => {
     expect(memories).toHaveLength(0);
   });
 
-  it("rejects a create operation with a sensitive category", async () => {
-    const unsafeModel: MemoryAgentModel = {
-      async proposeOperations() {
-        return [
-          {
-            type: "create",
-            content: "Launch plan notes",
-            category: "sk_live_1234567890abcdef",
-            source: "typed_text",
-            sensitivity: "normal",
-          },
-        ];
-      },
-    };
-
-    const { app, token, memoryJobQueue, personalMemoryService } =
-      await createMemoryAgentTestApp(returningGenerator, unsafeModel);
-
-    const response = await app.request("/suggestions", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify(baseSuggestionRequest),
-    });
-
-    expect(response.status).toBe(200);
-    await memoryJobQueue.drain();
-
-    const memories = await personalMemoryService.listMemories("user-1");
-    expect(memories).toHaveLength(0);
-  });
-
-  it("rejects an update operation with a sensitive category", async () => {
-    const unsafeModel: MemoryAgentModel = {
-      async proposeOperations(_job, memories) {
-        const memory = memories[0];
-        return [
-          {
-            type: "update",
-            id: memory.id,
-            content: "Updated work note",
-            category: "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
-            source: "typed_text",
-            sensitivity: "normal",
-          },
-        ];
-      },
-    };
-
-    const { app, token, memoryJobQueue, personalMemoryService } =
-      await createMemoryAgentTestApp(returningGenerator, unsafeModel);
-
-    const existingMemory = await personalMemoryService.createMemory({
-      userId: "user-1",
-      content: "Old work note",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
-    });
-
-    const response = await app.request("/suggestions", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify(baseSuggestionRequest),
-    });
-
-    expect(response.status).toBe(200);
-    await memoryJobQueue.drain();
-
-    const memories = await personalMemoryService.listMemories("user-1");
-    const updated = memories.find((m) => m.id === existingMemory.id);
-    expect(updated?.category).toBe("work");
-    expect(updated?.content).toBe("Old work note");
-  });
-
-  it("rejects a create operation with an ineligible source", async () => {
-    const unsafeModel: MemoryAgentModel = {
-      async proposeOperations() {
-        return [
-          {
-            type: "create",
-            content: "Ineligible source note",
-            category: "work",
-            source: "pasted_text",
-            sensitivity: "normal",
-          },
-        ];
-      },
-    };
-
-    const { app, token, memoryJobQueue, personalMemoryService } =
-      await createMemoryAgentTestApp(returningGenerator, unsafeModel);
-
-    const response = await app.request("/suggestions", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify(baseSuggestionRequest),
-    });
-
-    expect(response.status).toBe(200);
-    await memoryJobQueue.drain();
-
-    const memories = await personalMemoryService.listMemories("user-1");
-    expect(memories).toHaveLength(0);
-  });
-
-  it("rejects an update operation that changes to an ineligible source", async () => {
-    const unsafeModel: MemoryAgentModel = {
-      async proposeOperations(_job, memories) {
-        const memory = memories[0];
-        return [
-          {
-            type: "update",
-            id: memory.id,
-            content: "Updated work note",
-            category: "work",
-            source: "pasted_text",
-            sensitivity: "normal",
-          },
-        ];
-      },
-    };
-
-    const { app, token, memoryJobQueue, personalMemoryService } =
-      await createMemoryAgentTestApp(returningGenerator, unsafeModel);
-
-    const existingMemory = await personalMemoryService.createMemory({
-      userId: "user-1",
-      content: "Old work note",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
-    });
-
-    const response = await app.request("/suggestions", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify(baseSuggestionRequest),
-    });
-
-    expect(response.status).toBe(200);
-    await memoryJobQueue.drain();
-
-    const memories = await personalMemoryService.listMemories("user-1");
-    const updated = memories.find((m) => m.id === existingMemory.id);
-    expect(updated?.source).toBe("typed_text");
-    expect(updated?.content).toBe("Old work note");
-  });
-
-  it("allows an archive operation for an existing memory", async () => {
+  it("allows a delete operation for an existing memory", async () => {
     const { app, token, memoryJobQueue, personalMemoryService } =
       await createMemoryAgentTestApp(returningGenerator, {
         async proposeOperations(_job, memories) {
           return memories.map(
             (memory): ProposedMemoryOperation => ({
-              type: "archive",
+              type: "delete",
               id: memory.id,
             }),
           );
@@ -685,9 +508,7 @@ describe("Background Memory Agent", () => {
     const memory = await personalMemoryService.createMemory({
       userId: "user-1",
       content: "Outdated note",
-      category: "work",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const response = await app.request("/suggestions", {
@@ -699,8 +520,8 @@ describe("Background Memory Agent", () => {
     expect(response.status).toBe(200);
     await memoryJobQueue.drain();
 
-    const archived = await personalMemoryService.findMemoryById(memory.id);
-    expect(archived?.active).toBe(false);
+    const deleted = await personalMemoryService.findMemoryById(memory.id);
+    expect(deleted).toBeNull();
   });
 
   it("does not store the raw typing context or accepted suggestion text", async () => {
