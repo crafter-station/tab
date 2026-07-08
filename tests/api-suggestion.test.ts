@@ -282,9 +282,7 @@ describe("SuggestionUseCase", () => {
     await personalMemoryService.createMemory({
       userId: "user-1",
       content: "Hello messages should stay concise",
-      category: "writing preference",
-      source: "manual",
-      sensitivity: "normal",
+      createdBy: "user",
     });
     await activateFreePlan(billingService);
 

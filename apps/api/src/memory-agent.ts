@@ -2,15 +2,9 @@ import {
   MemoryJobSchema,
   type MemoryJob,
   type PersonalMemory,
-  type PersonalMemorySensitivity,
 } from "@tabb/contracts";
 import { generateText, Output } from "ai";
-import {
-  MODEL_PROPOSED_MEMORY_SOURCES,
-  isEligiblePersonalMemorySource,
-  validateMemoryContent,
-  type ModelProposedMemorySource,
-} from "@tabb/memory-policy";
+import { validateMemoryContent } from "@tabb/memory-policy";
 import type { PersonalMemoryService } from "./personal-memory.ts";
 import { env } from "./env.ts";
 import { z } from "zod";
@@ -64,29 +58,23 @@ export class InMemoryMemoryJobQueue implements MemoryJobQueue {
 export type ProposedCreateMemory = {
   readonly type: "create";
   readonly content: string;
-  readonly category: string;
-  readonly source: ModelProposedMemorySource;
-  readonly sensitivity: PersonalMemorySensitivity;
 };
 
 export type ProposedUpdateMemory = {
   readonly type: "update";
   readonly id: string;
   readonly content: string;
-  readonly category: string;
-  readonly source: ModelProposedMemorySource;
-  readonly sensitivity: PersonalMemorySensitivity;
 };
 
-export type ProposedArchiveMemory = {
-  readonly type: "archive";
+export type ProposedDeleteMemory = {
+  readonly type: "delete";
   readonly id: string;
 };
 
 export type ProposedMemoryOperation =
   | ProposedCreateMemory
   | ProposedUpdateMemory
-  | ProposedArchiveMemory;
+  | ProposedDeleteMemory;
 
 const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
 
@@ -96,30 +84,22 @@ const MemoryOperationOutputSchema = z.object({
       z.object({
         type: z.literal("create"),
         content: z.string().min(1),
-        category: z.string().min(1),
-        source: z.enum(MODEL_PROPOSED_MEMORY_SOURCES),
-        sensitivity: z.enum(["normal", "sensitive", "private"]),
       }),
       z.object({
         type: z.literal("update"),
         id: z.string().min(1),
         content: z.string().min(1),
-        category: z.string().min(1),
-        source: z.enum(MODEL_PROPOSED_MEMORY_SOURCES),
-        sensitivity: z.enum(["normal", "sensitive", "private"]),
       }),
       z.object({
-        type: z.literal("archive"),
+        type: z.literal("delete"),
         id: z.string().min(1),
       }),
     ]),
   ),
 });
 
-function isSafeMemoryText(content: string, category: string): boolean {
-  return (
-    validateMemoryContent(content).safe && validateMemoryContent(category).safe
-  );
+function isSafeMemoryText(content: string): boolean {
+  return validateMemoryContent(content).safe;
 }
 
 export interface MemoryAgentModel {
@@ -153,7 +133,7 @@ class AiGatewayMemoryAgentModel implements MemoryAgentModel {
       model: MEMORY_EXTRACTION_MODEL_ID,
       output: Output.object({ schema: MemoryOperationOutputSchema }),
       system:
-        "Extract durable personal memory from first-party user typing. Return only operations that are useful for future autocomplete. Do not store secrets, credentials, payment data, medical data, or third-party pasted content. Prefer no operation over speculative memory.",
+        "Extract durable personal memory from first-party user typing. Return only generic create, update, or delete operations that are useful for future autocomplete. Do not store secrets, credentials, payment data, medical data, or third-party pasted content. Prefer no operation over speculative memory.",
       prompt: `Active application: ${job.activeApplication.bundleId}
 Source: ${job.contextSource}
 Redaction applied: ${job.redaction.applied}
@@ -165,7 +145,7 @@ ${formatMemoriesForPrompt(memories)}
 Recent user typing:
 """${job.typingContext}"""
 
-Create a memory for stable preferences, projects, recurring facts, names, or work context. Update an existing memory only when the new text clearly refines it. Archive only when the text clearly contradicts an existing memory. Use category values like app bundle IDs, project names, or short topics.`,
+Create a memory for stable preferences, projects, recurring facts, names, or work context. Update an existing memory only when the new text clearly refines it. Delete only when the text clearly contradicts an existing memory. Do not output category, sensitivity, source, or authorship.`,
       maxOutputTokens: 1200,
       temperature: 0,
     });
@@ -180,7 +160,7 @@ function formatMemoriesForPrompt(memories: readonly PersonalMemory[]): string {
   return memories
     .map(
       (memory) =>
-        `- id=${memory.id}; category=${memory.category}; sensitivity=${memory.sensitivity}; content=${memory.content}`,
+        `- id=${memory.id}; createdBy=${memory.createdBy}; content=${memory.content}`,
     )
     .join("\n");
 }
@@ -222,20 +202,14 @@ export class BackgroundMemoryAgent {
   ): Promise<void> {
     switch (operation.type) {
       case "create": {
-        if (!isEligiblePersonalMemorySource(operation.source)) {
-          return;
-        }
-
-        if (!isSafeMemoryText(operation.content, operation.category)) {
+        if (!isSafeMemoryText(operation.content)) {
           return;
         }
 
         await this.personalMemoryService.createMemory({
           userId,
           content: operation.content,
-          category: operation.category,
-          source: operation.source,
-          sensitivity: operation.sensitivity,
+          createdBy: "system",
         });
         return;
       }
@@ -246,30 +220,23 @@ export class BackgroundMemoryAgent {
           return;
         }
 
-        if (!isEligiblePersonalMemorySource(operation.source)) {
-          return;
-        }
-
-        if (!isSafeMemoryText(operation.content, operation.category)) {
+        if (!isSafeMemoryText(operation.content)) {
           return;
         }
 
         await this.personalMemoryService.updateMemory(operation.id, {
           content: operation.content,
-          category: operation.category,
-          source: operation.source,
-          sensitivity: operation.sensitivity,
         });
         return;
       }
 
-      case "archive": {
+      case "delete": {
         const existing = await this.findMemoryForUser(userId, operation.id);
         if (!existing) {
           return;
         }
 
-        await this.personalMemoryService.archiveMemory(operation.id);
+        await this.personalMemoryService.deleteMemory(userId, operation.id);
         return;
       }
     }

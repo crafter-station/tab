@@ -2,10 +2,9 @@ import {
   PersonalMemorySchema,
   type ActiveApplication,
   type PersonalMemory,
-  type PersonalMemorySensitivity,
-  type PersonalMemorySource,
+  type PersonalMemoryCreatedBy,
 } from "@tabb/contracts";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";
 import { personalMemories } from "./db/schema.ts";
@@ -13,18 +12,12 @@ import { personalMemories } from "./db/schema.ts";
 export type CreatePersonalMemoryInput = {
   readonly userId: string;
   readonly content: string;
-  readonly category: string;
-  readonly source: PersonalMemorySource;
-  readonly sensitivity: PersonalMemorySensitivity;
-  readonly active?: boolean;
+  readonly createdBy: PersonalMemoryCreatedBy;
 };
 
 export type UpdatePersonalMemoryInput = {
   readonly content?: string;
-  readonly category?: string;
-  readonly source?: PersonalMemorySource;
-  readonly sensitivity?: PersonalMemorySensitivity;
-  readonly active?: boolean;
+  readonly createdBy?: PersonalMemoryCreatedBy;
 };
 
 export interface PersonalMemoryStorage {
@@ -48,10 +41,7 @@ function createMemoryRecord(input: CreatePersonalMemoryInput): PersonalMemory {
     id: crypto.randomUUID(),
     userId: input.userId,
     content: input.content,
-    category: input.category,
-    source: input.source,
-    sensitivity: input.sensitivity,
-    active: input.active ?? true,
+    createdBy: input.createdBy,
     createdAt: now,
     updatedAt: now,
   };
@@ -67,9 +57,12 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   }
 
   async listMemoriesByUser(userId: string): Promise<PersonalMemory[]> {
-    return Array.from(this.memories.values()).filter(
-      (memory) => memory.userId === userId,
-    );
+    return Array.from(this.memories.values())
+      .filter((memory) => memory.userId === userId)
+      .sort(
+        (a, b) =>
+          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
+      );
   }
 
   async findMemoryById(id: string): Promise<PersonalMemory | null> {
@@ -86,12 +79,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     const updated: PersonalMemory = {
       ...existing,
       ...(input.content !== undefined && { content: input.content }),
-      ...(input.category !== undefined && { category: input.category }),
-      ...(input.source !== undefined && { source: input.source }),
-      ...(input.sensitivity !== undefined && {
-        sensitivity: input.sensitivity,
-      }),
-      ...(input.active !== undefined && { active: input.active }),
+      ...(input.createdBy !== undefined && { createdBy: input.createdBy }),
       updatedAt: toISOTimestamp(new Date()),
     };
     this.memories.set(id, updated);
@@ -108,10 +96,7 @@ function rowToMemory(row: typeof personalMemories.$inferSelect): PersonalMemory 
     id: row.id,
     userId: row.userId,
     content: row.content,
-    category: row.category,
-    source: row.source,
-    sensitivity: row.sensitivity,
-    active: row.active,
+    createdBy: row.createdBy,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   });
@@ -119,8 +104,7 @@ function rowToMemory(row: typeof personalMemories.$inferSelect): PersonalMemory 
 
 /**
  * D1-backed storage for Personal Memory records. The schema stores records
- * associated with users and includes metadata for category, source,
- * sensitivity, active state, and timestamps.
+ * associated with users and includes authorship and timestamps.
  */
 export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
   private db: AppDatabase;
@@ -136,10 +120,7 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
       id: memory.id,
       userId: memory.userId,
       content: memory.content,
-      category: memory.category,
-      source: memory.source,
-      sensitivity: memory.sensitivity,
-      active: memory.active,
+      createdBy: memory.createdBy,
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt,
     });
@@ -151,7 +132,8 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     const rows = await this.db
       .select()
       .from(personalMemories)
-      .where(eq(personalMemories.userId, userId));
+      .where(eq(personalMemories.userId, userId))
+      .orderBy(desc(personalMemories.updatedAt));
     return rows.map(rowToMemory);
   }
 
@@ -170,20 +152,14 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     if (!existing) return null;
 
     const content = input.content ?? existing.content;
-    const category = input.category ?? existing.category;
-    const source = input.source ?? existing.source;
-    const sensitivity = input.sensitivity ?? existing.sensitivity;
-    const active = input.active ?? existing.active;
+    const createdBy = input.createdBy ?? existing.createdBy;
     const updatedAt = toISOTimestamp(new Date());
 
     await this.db
       .update(personalMemories)
       .set({
         content,
-        category,
-        source,
-        sensitivity,
-        active,
+        createdBy,
         updatedAt,
       })
       .where(eq(personalMemories.id, id));
@@ -191,10 +167,7 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     return {
       ...existing,
       content,
-      category,
-      source,
-      sensitivity,
-      active,
+      createdBy,
       updatedAt,
     };
   }
@@ -223,10 +196,7 @@ export type RelevanceInput = {
 const createMemoryInputSchema = z.object({
   userId: z.string().min(1),
   content: z.string().min(1),
-  category: z.string().min(1),
-  source: PersonalMemorySchema.shape.source,
-  sensitivity: PersonalMemorySchema.shape.sensitivity,
-  active: z.boolean().optional(),
+  createdBy: PersonalMemorySchema.shape.createdBy,
 });
 
 function normalizeTokens(text: string): Set<string> {
@@ -258,22 +228,16 @@ function isMemoryRelevant(
   typingContext: string,
   activeApplication: ActiveApplication,
 ): boolean {
-  if (!memory.active) return false;
-
-  const categoryMatchesApplication =
-    memory.category.toLowerCase() === activeApplication.bundleId.toLowerCase();
-
   return (
-    categoryMatchesApplication ||
     hasSharedSignificantToken(memory.content, typingContext) ||
-    hasSharedSignificantToken(memory.category, typingContext)
+    hasSharedSignificantToken(memory.content, activeApplication.bundleId)
   );
 }
 
 /**
  * Service for reading and selecting Personal Memory in the hot suggestion path.
  * The service keeps the storage backend swappable and applies a small,
- * deterministic relevance filter so only selected active memories reach the
+ * deterministic relevance filter so only selected current memories reach the
  * prompt.
  */
 export class PersonalMemoryService {
@@ -314,10 +278,6 @@ export class PersonalMemoryService {
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
     return this.storage.updateMemory(id, input);
-  }
-
-  async archiveMemory(id: string): Promise<PersonalMemory | null> {
-    return this.storage.updateMemory(id, { active: false });
   }
 
   async selectRelevantMemories(input: RelevanceInput): Promise<PersonalMemory[]> {

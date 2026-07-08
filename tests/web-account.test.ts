@@ -422,9 +422,7 @@ describe("Web account surface", () => {
     const memory = await personalMemoryStorage.createMemory({
       userId,
       content: "Lives in Portland",
-      category: "personal",
-      source: "typed_text",
-      sensitivity: "normal",
+      createdBy: "system",
     });
 
     const accountBefore = await webRequest(webApp, "/dashboard", {}, cookie);

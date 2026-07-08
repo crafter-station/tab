@@ -99,10 +99,7 @@ export const personalMemories = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
-    category: text("category").notNull(),
-    source: text("source").notNull(),
-    sensitivity: text("sensitivity").notNull(),
-    active: integer("active", { mode: "boolean" }).notNull().default(true),
+    createdBy: text("created_by").notNull().default("system"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
