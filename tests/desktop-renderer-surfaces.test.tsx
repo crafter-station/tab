@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
 import { OnboardingSurface } from "../apps/desktop/src/renderer/src/surfaces/OnboardingSurface.tsx";
 import { SignInSurface } from "../apps/desktop/src/renderer/src/surfaces/SignInSurface.tsx";
@@ -16,5 +17,17 @@ describe("desktop renderer setup surfaces", () => {
     expect(combinedMarkup).toInclude("Practice Suggestion");
     expect(combinedMarkup).toInclude("pug-dot-grid");
     expect(combinedMarkup).toInclude("Browser sign-in required");
+  });
+
+  it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {
+    const setupCss = [
+      readFileSync("apps/desktop/src/renderer/src/styles/sign-in.css", "utf8"),
+      readFileSync("apps/desktop/src/renderer/src/styles/onboarding.css", "utf8"),
+    ].join("\n");
+
+    expect(setupCss).not.toContain("tabb-glass");
+    expect(setupCss).not.toContain("glass-bg");
+    expect(setupCss).not.toContain("glass-border");
+    expect(setupCss).not.toContain("glass-shadow");
   });
 });

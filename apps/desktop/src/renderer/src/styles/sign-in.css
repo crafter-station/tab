@@ -27,11 +27,10 @@
   width: min(100%, 560px);
   gap: 18px;
   padding: 24px;
-  background-color: color-mix(in srgb, var(--card) 86%, transparent);
-  border: 1px solid var(--tabb-glass-border);
+  background-color: color-mix(in srgb, var(--card) 92%, transparent);
+  border: 1px solid var(--border);
   border-radius: var(--radius-surface);
-  box-shadow: var(--tabb-glass-shadow);
-  backdrop-filter: blur(18px);
+  box-shadow: var(--tabb-shadow-soft);
 }
 
 .sign-in-proof h2 {
