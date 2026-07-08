@@ -211,9 +211,16 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
+    const prompt = createSuggestionPrompt(input);
+    console.log("[suggestions] groq prompt", {
+      requestId: input.requestId,
+      modelId,
+      prompt,
+    });
+
     const { text } = await generateText({
       model: groq(modelId),
-      prompt: createSuggestionPrompt(input),
+      prompt,
       maxOutputTokens: 128,
       providerOptions: {
         groq: { reasoningEffort: "low" },
