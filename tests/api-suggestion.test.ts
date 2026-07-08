@@ -101,8 +101,31 @@ describe("Hono suggestion API", () => {
       " recommendations",
     );
     expect(normalizeGeneratedSuggestion("Hello ", "world")).toBe("world");
+    expect(normalizeGeneratedSuggestion("Hello ", " world")).toBe("world");
     expect(normalizeGeneratedSuggestion("Hello", "\nworld\n")).toBe(" world");
     expect(normalizeGeneratedSuggestion("Hello", "   ")).toBe("");
+  });
+
+  it("removes duplicated draft text from generated suggestions", () => {
+    expect(normalizeGeneratedSuggestion("Hello", "Hello world")).toBe(" world");
+    expect(normalizeGeneratedSuggestion("Hello ", "Hello world")).toBe("world");
+    expect(normalizeGeneratedSuggestion("Let's meet at", "at 3pm")).toBe(" 3pm");
+    expect(normalizeGeneratedSuggestion("i want to see ", "see you soon")).toBe("you soon");
+    expect(normalizeGeneratedSuggestion("Hello", "Hello")).toBe("");
+  });
+
+  it("continues partial words without inserting spaces", () => {
+    expect(normalizeGeneratedSuggestion("The quick br", "brown fox")).toBe("own fox");
+    expect(normalizeGeneratedSuggestion("recomm", "recommendations for dinner")).toBe(
+      "endations for dinner",
+    );
+  });
+
+  it("does not strip valid next words with short matching prefixes", () => {
+    expect(normalizeGeneratedSuggestion("I bought a", "apple")).toBe(" apple");
+    expect(normalizeGeneratedSuggestion("I want to", "today")).toBe(" today");
+    expect(normalizeGeneratedSuggestion("Vi el", "elefante")).toBe(" elefante");
+    expect(normalizeGeneratedSuggestion("Voy de", "desayuno")).toBe(" desayuno");
   });
 
   it("returns one suggestion when the provider generates text", async () => {
@@ -375,6 +398,9 @@ describe("SuggestionUseCase", () => {
     });
 
     expect(prompt).toContain("Continue the user's exact text");
+    expect(prompt).toContain("Do not repeat any part of the user draft");
+    expect(prompt).toContain("If the draft ends mid-word");
+    expect(prompt).toContain("never start with whitespace when the draft already ends with whitespace");
     expect(prompt).toContain('User draft to continue exactly: """Hello"""');
     expect(prompt).toContain("App Context background (suggestion-only, do not continue this text directly):");
     expect(prompt).toContain("Alex: Can you confirm the launch date?");

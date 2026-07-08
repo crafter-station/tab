@@ -19,6 +19,52 @@ import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
 
 const SUGGESTION_MODEL_ID = "openai/gpt-oss-20b";
+const COMMON_SHORT_WORDS = new Set([
+  "am",
+  "an",
+  "as",
+  "at",
+  "ay",
+  "be",
+  "by",
+  "da",
+  "de",
+  "di",
+  "do",
+  "el",
+  "en",
+  "es",
+  "go",
+  "ha",
+  "he",
+  "if",
+  "in",
+  "is",
+  "it",
+  "la",
+  "le",
+  "lo",
+  "me",
+  "mi",
+  "my",
+  "no",
+  "of",
+  "on",
+  "or",
+  "os",
+  "se",
+  "si",
+  "so",
+  "to",
+  "tu",
+  "up",
+  "us",
+  "va",
+  "ve",
+  "we",
+  "ya",
+  "yo",
+]);
 
 export type SuggestionInput = {
   readonly requestId: string;
@@ -74,7 +120,7 @@ function formatAppContext(appContext: AppContext | undefined): string {
 }
 
 export function createSuggestionPrompt(input: SuggestionInput): string {
-  return `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
+  return `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. Do not repeat any part of the user draft. If the draft ends mid-word, output only the remaining characters and following words, not the whole word. Preserve the natural boundary: do not add a leading space when completing a partial word, do add one when starting the next word, and never start with whitespace when the draft already ends with whitespace. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
 
 Active application: ${input.activeApplication.bundleId}
 Source: ${input.contextSource}${formatAppContext(input.appContext)}
@@ -85,12 +131,18 @@ export function normalizeGeneratedSuggestion(
   typingContext: string,
   generatedText: string,
 ): string {
-  const text = generatedText.replace(/[\r\n]+/g, " ").trim();
+  const cleanedText = generatedText.replace(/[\r\n]+/g, " ").trim();
+  const overlapLength = findContextPrefixOverlap(typingContext, cleanedText);
+  const text = normalizeSuggestionBoundary(
+    typingContext,
+    cleanedText.slice(overlapLength),
+  );
   if (text.length === 0) return "";
 
   const lastContextChar = typingContext.at(-1) ?? "";
   const firstSuggestionChar = text.at(0) ?? "";
   if (
+    overlapLength === 0 &&
     isLetterOrNumber(lastContextChar) &&
     isLetterOrNumber(firstSuggestionChar)
   ) {
@@ -98,6 +150,52 @@ export function normalizeGeneratedSuggestion(
   }
 
   return text;
+}
+
+function normalizeSuggestionBoundary(
+  typingContext: string,
+  suggestionText: string,
+): string {
+  if (/\s$/u.test(typingContext)) {
+    return suggestionText.trimStart();
+  }
+
+  return suggestionText.replace(/^\s+/u, " ");
+}
+
+function findContextPrefixOverlap(
+  typingContext: string,
+  generatedText: string,
+): number {
+  const maxLength = Math.min(typingContext.length, generatedText.length);
+
+  for (let length = maxLength; length >= 2; length -= 1) {
+    const contextSuffix = typingContext.slice(-length);
+    const suggestionPrefix = generatedText.slice(0, length);
+
+    if (
+      contextSuffix.localeCompare(suggestionPrefix, undefined, {
+        sensitivity: "accent",
+      }) === 0 &&
+      isPlausibleRepeatedContextOverlap(typingContext, generatedText, length)
+    ) {
+      return length;
+    }
+  }
+
+  return 0;
+}
+
+function isPlausibleRepeatedContextOverlap(
+  typingContext: string,
+  generatedText: string,
+  overlapLength: number,
+): boolean {
+  const nextGeneratedChar = generatedText.at(overlapLength) ?? "";
+  if (overlapLength > 2 || !isLetterOrNumber(nextGeneratedChar)) return true;
+
+  const overlappingText = typingContext.slice(-overlapLength).toLowerCase();
+  return !COMMON_SHORT_WORDS.has(overlappingText);
 }
 
 function isLetterOrNumber(value: string): boolean {
