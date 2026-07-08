@@ -19,11 +19,13 @@ function isPlanId(planId: string | undefined): planId is PlanId {
   return Boolean(planId && planId in planQuotas);
 }
 
-function supportsImmediatePlanChange(
+function getPlanChangeProrationBehavior(
   currentPlanId: PlanId,
   targetPlanId: PlanId,
-): targetPlanId is Exclude<PlanId, "free"> {
-  return currentPlanId === "pro" && targetPlanId === "max";
+): "prorate" | "next_period" | undefined {
+  if (currentPlanId === "pro" && targetPlanId === "max") return "prorate";
+  if (currentPlanId === "max" && targetPlanId === "pro") return "next_period";
+  return undefined;
 }
 
 export function registerBillingRoutes(
@@ -121,7 +123,11 @@ export function registerBillingRoutes(
         }
       }
 
-      if (!supportsImmediatePlanChange(entitlement.planId, planId)) {
+      const prorationBehavior = getPlanChangeProrationBehavior(
+        entitlement.planId,
+        planId,
+      );
+      if (!prorationBehavior) {
         return c.json(
           createErrorResponse(
             "plan_change_required",
@@ -140,13 +146,15 @@ export function registerBillingRoutes(
         await deps.billingCheckoutClient.changePlan({
           subscriptionId,
           targetPlanId: planId,
-          prorationBehavior: "prorate",
+          prorationBehavior,
         });
-        await deps.billingService.applyEntitlement({
-          ...entitlement,
-          planId,
-          cachedAt: new Date(),
-        });
+        if (prorationBehavior === "prorate") {
+          await deps.billingService.applyEntitlement({
+            ...entitlement,
+            planId,
+            cachedAt: new Date(),
+          });
+        }
         return c.json(
           BillingCheckoutResponseSchema.parse({ status: "ok", data: { url: "/dashboard" } }),
           200,

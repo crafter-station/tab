@@ -71,8 +71,17 @@ function html(body: ReactNode, title: string, status = 200, user?: User): Respon
 function htmlErrorPage(
   title: string,
   message: string,
+  action?: { href: string; label: string },
 ): Response {
-  return html(createElement(MessagePage, { title, message }), title);
+  return html(
+    createElement(MessagePage, {
+      title,
+      message,
+      actionHref: action?.href,
+      actionLabel: action?.label,
+    }),
+    title,
+  );
 }
 
 function verifyEmailPage(): Response {
@@ -539,8 +548,9 @@ export function createWebApp(config: WebAppConfig) {
     if (response.status === 403) return verifyEmailPage();
     if (response.status !== 200) {
       return htmlErrorPage(
-        "Checkout error",
-        "Could not start checkout. Please try again.",
+        "Billing error",
+        "Could not update billing. Manage billing or try again later.",
+        { href: "/billing/portal", label: "Manage billing" },
       );
     }
 
