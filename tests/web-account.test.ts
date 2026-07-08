@@ -733,6 +733,7 @@ describe("Web account surface", () => {
     expect(bodyBefore).toInclude("Lives in Portland");
     expect(bodyBefore).toInclude("Memory Library");
     expect(bodyBefore).toInclude("Delete Selected");
+    expect(bodyBefore).toInclude("Actions for memory updated");
     expect(bodyBefore).toInclude("Update Memory");
     expect(bodyBefore).toInclude("Delete Memory");
 
@@ -887,6 +888,7 @@ describe("Web account surface", () => {
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("macbook-pro-1");
     expect(bodyBefore).toInclude("Connected");
+    expect(bodyBefore).toInclude("Actions for macbook-pro-1");
     expect(bodyBefore).toInclude("Remove access");
 
     const revokeForm = new FormData();
