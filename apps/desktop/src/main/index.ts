@@ -26,6 +26,8 @@ import {
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
+import { createAppContextManager } from "./app-context.ts";
+import { extractWhatsAppConversationContext, type AccessibilityNode } from "./whatsapp-app-context.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -65,6 +67,7 @@ type InputTapProcess = {
 let inputTapProcess: InputTapProcess | null = null;
 
 const typingContextBuffer = createTypingContextBuffer();
+const appContextManager = createAppContextManager();
 
 const userDataPath = app.getPath("userData");
 mkdirSync(userDataPath, { recursive: true });
@@ -282,6 +285,8 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   debounceMs: 300,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
+  getAppContext: () => appContextManager.getSnapshot(),
+  clearAppContext: () => appContextManager.clear(),
 });
 
 function delay(ms: number): Promise<void> {
@@ -630,6 +635,10 @@ function sendDebugContext(): void {
 
   const snapshot = nativeSuggestionSession.getCurrentSnapshot();
   const context = getLastWords(snapshot.sanitizedContext, DEBUG_TYPING_WORD_LIMIT);
+  const appContextMessageCount = snapshot.appContext?.fragments.reduce((count, fragment) => {
+    const messageCount = fragment.metadata?.messageCount;
+    return count + (typeof messageCount === "number" ? messageCount : 0);
+  }, 0);
   debugOverlayWindow.webContents.send("debug-context", {
     context,
     wordLimit: DEBUG_TYPING_WORD_LIMIT,
@@ -638,6 +647,15 @@ function sendDebugContext(): void {
     app: snapshot.activeApplication?.bundleId ?? null,
     paused: snapshot.paused,
     secureInput: snapshot.secureInput,
+    appContext: snapshot.appContext
+      ? {
+        status: snapshot.appContext.metadata.status,
+        provider: snapshot.appContext.metadata.provider ?? null,
+        confidence: snapshot.appContext.metadata.confidence ?? null,
+        fragmentCount: snapshot.appContext.fragments.length,
+        messageCount: appContextMessageCount ?? 0,
+      }
+      : undefined,
     api: debugApiState,
   });
 }
@@ -720,6 +738,7 @@ function handleInputTapMessage(message: unknown): void {
     windowId?: unknown;
     message?: unknown;
     snapshot?: unknown;
+    tree?: unknown;
   };
 
   if (payload.type === "ready") {
@@ -747,7 +766,29 @@ function handleInputTapMessage(message: unknown): void {
   }
   if (payload.type === "text-session" && isTextSessionSnapshot(payload.snapshot)) {
     handleTextSessionSnapshot(payload.snapshot);
+    return;
   }
+  if (payload.type === "app-context-tree" && isAccessibilityNode(payload.tree)) {
+    appContextManager.setSnapshot(extractWhatsAppConversationContext({
+      activeApplication: typingContextBuffer.getState().activeApplication,
+      accessibilityTree: payload.tree,
+    }));
+  }
+}
+
+function isAccessibilityNode(value: unknown): value is AccessibilityNode {
+  if (!value || typeof value !== "object") return false;
+  const node = value as Partial<AccessibilityNode>;
+  return (
+    (node.role === undefined || typeof node.role === "string") &&
+    (node.subrole === undefined || typeof node.subrole === "string") &&
+    (node.title === undefined || typeof node.title === "string") &&
+    (node.value === undefined || typeof node.value === "string") &&
+    (node.description === undefined || typeof node.description === "string") &&
+    (node.label === undefined || typeof node.label === "string") &&
+    (node.identifier === undefined || typeof node.identifier === "string") &&
+    (node.children === undefined || (Array.isArray(node.children) && node.children.every(isAccessibilityNode)))
+  );
 }
 
 function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
@@ -1103,6 +1144,12 @@ export function handleSecureInputChanged(active: boolean): void {
 }
 
 export function handleTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
+  if (snapshot.accessibilityReliability === "unavailable") {
+    appContextManager.setSnapshot(extractWhatsAppConversationContext({
+      activeApplication: snapshot.activeApplication,
+      accessibilityTree: null,
+    }));
+  }
   nativeSuggestionSession.applyTextSessionSnapshot(snapshot);
 }
 
