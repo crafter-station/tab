@@ -776,6 +776,32 @@ describe("Personal Memory API", () => {
     expect(capturedInput?.memories[0].content).toBe("Acme Corp is a customer");
   });
 
+  it("selects up to ten relevant memories for suggestions", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(async (input) => {
+        capturedInput = input;
+        return { text: " suggestion" };
+      });
+
+    for (let index = 1; index <= 12; index += 1) {
+      await personalMemoryStorage.createMemory({
+        userId: "user-1",
+        content: `Acme memory ${index}`,
+        createdBy: "system",
+      });
+    }
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validSuggestionRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(capturedInput?.memories).toHaveLength(10);
+  });
+
   it("retrieves suggestion memories through vector IDs resolved from canonical storage", async () => {
     let capturedInput: SuggestionInput | null = null;
     const embeddingService = new FakeEmbeddingService();
@@ -819,7 +845,7 @@ describe("Personal Memory API", () => {
       "This does not share lexical tokens",
     );
     expect(vectorIndex.queries).toHaveLength(1);
-    expect(vectorIndex.queries[0]).toMatchObject({ userId: "user-1", limit: 5 });
+    expect(vectorIndex.queries[0]).toMatchObject({ userId: "user-1", limit: 10 });
     expect(capturedInput?.memories.map((memory) => memory.id)).toEqual([
       selected.id,
     ]);

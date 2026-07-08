@@ -11,6 +11,7 @@ import { personalMemories } from "./db/schema.ts";
 import type { VectorizeBinding, WorkersAiBinding } from "./api-types.ts";
 
 const MEMORY_EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
+const DEFAULT_MAX_RELEVANT_MEMORIES = 10;
 
 export type CreatePersonalMemoryInput = {
   readonly userId: string;
@@ -422,7 +423,7 @@ export class PersonalMemoryService {
     this.storage = deps.storage;
     this.embeddingService = deps.embeddingService;
     this.vectorIndex = deps.vectorIndex;
-    this.maxRelevantMemories = deps.maxRelevantMemories ?? 5;
+    this.maxRelevantMemories = deps.maxRelevantMemories ?? DEFAULT_MAX_RELEVANT_MEMORIES;
   }
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
