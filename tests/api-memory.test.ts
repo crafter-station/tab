@@ -24,12 +24,10 @@ import {
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type {
   MemoryAgentModel,
-  MemoryJobQueue,
   ProposedMemoryOperation,
 } from "../apps/api/src/memory-agent.ts";
 import { createTestDatabase } from "./test-db.ts";
 import type {
-  ApiDependencies,
   SuggestionGenerator,
   SuggestionInput,
 } from "../apps/api/src/index.ts";
@@ -41,7 +39,6 @@ async function createAuthenticatedTestApp(
     vectorIndex: PersonalMemoryVectorIndex;
   },
   memoryExtractionModel?: MemoryAgentModel,
-  extraDeps: Pick<ApiDependencies, "memoryJobQueue"> = {},
 ) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
@@ -58,7 +55,6 @@ async function createAuthenticatedTestApp(
     deviceTokenService,
     personalMemoryStorage,
     memoryExtractionModel,
-    ...extraDeps,
     ...vectorDeps,
     telemetryStorage: new InMemoryTelemetryStorage(),
   });
@@ -854,20 +850,30 @@ describe("Personal Memory API", () => {
     expect(await personalMemoryStorage.listMemoriesByUser("user-1")).toEqual([]);
   });
 
-  it("does not enqueue memory jobs during suggestion generation", async () => {
-    let enqueueCalls = 0;
-    const memoryJobQueue: MemoryJobQueue = {
-      async enqueue() {
-        enqueueCalls += 1;
-        throw new Error("suggestions must not enqueue memory jobs");
+  it("only reads memory during suggestion generation", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    let extractionModelCalls = 0;
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const { app, token, personalMemoryStorage } = await createAuthenticatedTestApp(
+      async (input) => {
+        capturedInput = input;
+        return { text: " suggestion" };
       },
-    };
-    const { app, token } = await createAuthenticatedTestApp(
-      async () => ({ text: " suggestion" }),
-      undefined,
-      undefined,
-      { memoryJobQueue },
+      { embeddingService, vectorIndex },
+      {
+        async proposeOperations() {
+          extractionModelCalls += 1;
+          throw new Error("suggestions must not run memory extraction");
+        },
+      },
     );
+    const memory = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Acme Corp is a customer",
+      createdBy: "system",
+    });
+    vectorIndex.matches = [{ id: memory.id, score: 0.99 }];
 
     const response = await app.request("/suggestions", {
       method: "POST",
@@ -876,7 +882,9 @@ describe("Personal Memory API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(enqueueCalls).toBe(0);
+    expect(vectorIndex.queries).toHaveLength(1);
+    expect(capturedInput?.memories.map((item) => item.id)).toEqual([memory.id]);
+    expect(extractionModelCalls).toBe(0);
   });
 
   it("continues suggestions without memory when vector retrieval fails", async () => {
