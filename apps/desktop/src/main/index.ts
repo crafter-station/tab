@@ -24,6 +24,7 @@ import {
   type TypingDeletionUnit,
 } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
+import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
@@ -136,6 +137,11 @@ const requestSuggestion = createApiSuggestionClient({
   appVersion: APP_VERSION,
   platform: process.platform,
   memoryEnabled: false,
+  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+});
+
+const recordInteractionTelemetry = createDesktopTelemetryClient({
+  apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
 
@@ -275,6 +281,7 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   }),
   debounceMs: 300,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
+  recordInteractionTelemetry,
 });
 
 function delay(ms: number): Promise<void> {

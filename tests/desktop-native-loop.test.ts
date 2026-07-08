@@ -13,7 +13,7 @@ import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.t
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
-import type { Suggestion, ActiveApplication } from "@tabb/contracts";
+import type { Suggestion, ActiveApplication, RecordTelemetryEventRequest } from "@tabb/contracts";
 
 describe("desktop native suggestion loop", () => {
   function makeSnapshot(overrides: {
@@ -355,14 +355,18 @@ describe("desktop native suggestion loop", () => {
   describe("native suggestion session", () => {
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-    function makeSession() {
+    function makeSession(overrides: {
+      requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+      maxVisibleMs?: number;
+      recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
+    } = {}) {
       const buffer = createTypingContextBuffer();
       const calls: Array<{ type: string; value?: unknown }> = [];
       const session = createNativeSuggestionSession({
         typingContext: buffer,
         requestSuggestion: async (snapshot) => {
           calls.push({ type: "requestSuggestion", value: snapshot.sanitizedContext });
-          return { id: "s-1", text: " world" };
+          return overrides.requestSuggestion?.(snapshot) ?? { id: "s-1", text: " world" };
         },
         getContextSource: () => "typed_text",
         outputs: {
@@ -383,6 +387,8 @@ describe("desktop native suggestion loop", () => {
           restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
         }),
         debounceMs: 5,
+        maxVisibleMs: overrides.maxVisibleMs,
+        recordInteractionTelemetry: overrides.recordInteractionTelemetry,
       });
       return { buffer, calls, session };
     }
@@ -488,6 +494,58 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
 
       expect(calls).toContainEqual({ type: "requestSuggestion", value: "Fallback" });
+    });
+
+    it("records metadata-only accepted, dismissed, and stale interaction telemetry", async () => {
+      const telemetry: RecordTelemetryEventRequest[] = [];
+      const rawTypingContext = "Hello private typing context";
+      const rawSuggestionText = " secret suggestion text";
+
+      const createSession = (maxVisibleMs = 1_000) => makeSession({
+        maxVisibleMs,
+        requestSuggestion: async () => ({ id: `sg-req-${telemetry.length + 1}`, text: rawSuggestionText }),
+        recordInteractionTelemetry: async (event) => {
+          telemetry.push(event);
+        },
+      });
+
+      const accepted = createSession();
+      accepted.session.setActiveApplication("com.apple.TextEdit", "window:1");
+      accepted.session.appendText(rawTypingContext);
+      await wait(10);
+      await accepted.session.acceptCurrentSuggestion();
+
+      const dismissed = createSession();
+      dismissed.session.setActiveApplication("com.apple.Mail", "window:1");
+      dismissed.session.appendText(rawTypingContext);
+      await wait(10);
+      dismissed.session.appendText("!");
+
+      const stale = createSession(5);
+      stale.session.setActiveApplication("com.apple.Notes", "window:1");
+      stale.session.appendText(rawTypingContext);
+      await wait(20);
+
+      expect(telemetry.map((event) => event.eventType)).toEqual([
+        "suggestion_accepted",
+        "suggestion_dismissed",
+        "suggestion_stale",
+      ]);
+      expect(telemetry[0]).toMatchObject({
+        requestId: "req-1",
+        activeApplicationBundleId: "com.apple.TextEdit",
+        suggestionLength: rawSuggestionText.length,
+      });
+      expect(telemetry.every((event) => typeof event.timestamp === "string")).toBe(true);
+
+      const json = JSON.stringify(telemetry);
+      expect(json).not.toContain(rawTypingContext);
+      expect(json).not.toContain(rawSuggestionText);
+      expect(json).not.toContain("rawTypingContext");
+      expect(json).not.toContain("suggestionText");
+      expect(json).not.toContain("acceptedText");
+      expect(json).not.toContain("finalInsertedText");
+      expect(json).not.toContain("surroundingText");
     });
   });
 
