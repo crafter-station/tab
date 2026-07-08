@@ -8,16 +8,21 @@ import {
   CardTitle,
   SectionCard,
   StatusBadge,
+  THEME_MODES,
+  getStoredThemePreference,
+  setThemePreference,
+  type ThemeMode,
 } from "@tabb/ui";
 import type { PersonalMemory } from "@tabb/contracts";
 import type { DesktopStatus } from "../../../main/status";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tabb>["getInitialState"]>>;
-type SettingsTab = "account" | "controls" | "permissions" | "memory";
+type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
   { value: "account", label: "Account", description: "Sign-in, quota, and connectivity" },
   { value: "controls", label: "Controls", description: "Pause or resume observation" },
+  { value: "appearance", label: "Appearance", description: "Theme follows this Mac by default" },
   { value: "permissions", label: "Permissions", description: "macOS access required by Tabb" },
   { value: "memory", label: "Memory", description: "Personalization snippets" },
 ];
@@ -58,6 +63,9 @@ function SettingsRow({ label, children }: { label: string; children: React.React
 
 export function SettingsSurface() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("account");
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    () => getStoredThemePreference(window.localStorage) ?? "system",
+  );
   const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
@@ -123,6 +131,11 @@ export function SettingsSurface() {
   function handleUsePersonalMemory(nextEnabled: boolean) {
     setUsePersonalMemory(nextEnabled);
     window.tabb?.setUsePersonalMemoryForSuggestions?.(nextEnabled);
+  }
+
+  function handleThemeMode(nextMode: ThemeMode) {
+    setThemeMode(nextMode);
+    setThemePreference(nextMode);
   }
 
   return (
@@ -214,6 +227,31 @@ export function SettingsSurface() {
                 <Button variant={paused ? "default" : "secondary"} onClick={() => window.tabb?.togglePause?.()}>
                   {paused ? "Resume" : "Pause"}
                 </Button>
+              </SettingsRow>
+            </CardContent>
+          </Card>
+          ) : null}
+
+          {activeTab === "appearance" ? (
+          <Card className="settings-pane shadow-none">
+            <CardHeader>
+              <CardTitle>Appearance</CardTitle>
+              <CardDescription>Use your macOS theme by default, or keep Tabb pinned to light or dark.</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <SettingsRow label="Theme">
+                <div className="flex flex-wrap gap-2">
+                  {THEME_MODES.map((mode) => (
+                    <Button
+                      key={mode}
+                      onClick={() => handleThemeMode(mode)}
+                      type="button"
+                      variant={themeMode === mode ? "default" : "secondary"}
+                    >
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </Button>
+                  ))}
+                </div>
               </SettingsRow>
             </CardContent>
           </Card>

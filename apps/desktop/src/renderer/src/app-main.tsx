@@ -1,6 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "@tabb/ui/styles.css";
+import { initializeThemePreference } from "@tabb/ui";
 import { App } from "./App";
 import "./styles/base.css";
 import "./styles/layout.css";
@@ -12,6 +13,8 @@ const root = document.getElementById("root");
 if (!root) {
   throw new Error("Missing React root");
 }
+
+initializeThemePreference();
 
 createRoot(root).render(
   <React.StrictMode>
