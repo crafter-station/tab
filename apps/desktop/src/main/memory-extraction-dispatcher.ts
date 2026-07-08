@@ -29,6 +29,8 @@ type PendingBatch = {
   attempts: number;
 };
 
+type FlushReason = "idle" | "max_age" | "manual";
+
 const DEFAULT_IDLE_MS = 60_000;
 const DEFAULT_MIN_IDLE_CHARACTERS = 500;
 const DEFAULT_MIN_IDLE_ENTRIES = 5;
@@ -62,7 +64,7 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
   let inFlight = false;
 
   function clearTimer(timer: TTimer | null): null {
-    if (timer) cancelTimeout(timer);
+    if (timer !== null) cancelTimeout(timer);
     return null;
   }
 
@@ -72,6 +74,24 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
 
   function entryIds(entries: readonly MemoryExtractionEntry[]): string[] {
     return entries.map((entry) => entry.id);
+  }
+
+  function clearBatchEntries(batch: PendingBatch): void {
+    deps.window.clearEntries(entryIds(batch.entries));
+  }
+
+  function shouldDropFailedBatch(batch: PendingBatch): boolean {
+    const exhaustedRetries = batch.attempts >= maxRetries;
+    const expired = now().getTime() - batch.createdAtMs >= failedBatchTtlMs;
+    return exhaustedRetries || expired;
+  }
+
+  function scheduleRetry(batch: PendingBatch): void {
+    const retryDelayMs = initialRetryDelayMs * 2 ** (batch.attempts - 1);
+    retryTimer = scheduleTimeout(() => {
+      retryTimer = null;
+      void attemptPendingBatch();
+    }, retryDelayMs);
   }
 
   function buildRequest(batch: PendingBatch): MemoryExtractionRequest {
@@ -114,21 +134,14 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
 
     try {
       await deps.client.extractMemory(buildRequest(batch));
-      deps.window.clearEntries(entryIds(batch.entries));
+      clearBatchEntries(batch);
       pendingBatch = null;
     } catch {
-      const exhaustedRetries = batch.attempts >= maxRetries;
-      const expired = now().getTime() - batch.createdAtMs >= failedBatchTtlMs;
-
-      if (exhaustedRetries || expired) {
-        deps.window.clearEntries(entryIds(batch.entries));
+      if (shouldDropFailedBatch(batch)) {
+        clearBatchEntries(batch);
         pendingBatch = null;
       } else {
-        const retryDelayMs = initialRetryDelayMs * 2 ** (batch.attempts - 1);
-        retryTimer = scheduleTimeout(() => {
-          retryTimer = null;
-          void attemptPendingBatch();
-        }, retryDelayMs);
+        scheduleRetry(batch);
       }
     } finally {
       inFlight = false;
@@ -136,7 +149,7 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
     }
   }
 
-  async function flush(reason: "idle" | "max_age" | "manual"): Promise<void> {
+  async function flush(reason: FlushReason): Promise<void> {
     if (pendingBatch || inFlight) return;
 
     idleTimer = clearTimer(idleTimer);
