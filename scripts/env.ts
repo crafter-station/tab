@@ -3,7 +3,6 @@ import { z } from "zod";
 
 export const env = createEnv({
   server: {
-    API_PORT: z.coerce.number().int().positive().default(8787),
     POLAR_ACCESS_TOKEN: z.string(),
     POLAR_AUTOCOMPLETE_METER_ID: z.string().optional(),
     POLAR_CREDITS_BENEFIT_ID_FREE: z.string().optional(),

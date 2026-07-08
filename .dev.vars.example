@@ -1,6 +1,5 @@
 # Local development
 PORT=8787
-API_PORT=8787
 WEB_PORT=3000
 TAB_API_BASE_URL=http://localhost:8787
 TAB_WEB_BASE_URL=http://localhost:3000
@@ -16,16 +15,14 @@ TAB_SHOW_SETTINGS_ON_START=0
 BETTER_AUTH_URL=http://localhost:8787
 BETTER_AUTH_SECRET=replace-with-at-least-32-characters
 
-# Suggestion model
-OPENAI_API_KEY=
-TAB_SUGGESTION_MODEL=gpt-4o-mini
-AI_GATEWAY_API_KEY=
+# AI providers
 GROQ_API_KEY=
+AI_GATEWAY_API_KEY=
 
-# Optional: Cloudflare AI Gateway for OpenAI-compatible requests
+# Optional: remote D1 migrations
 CLOUDFLARE_ACCOUNT_ID=
-CLOUDFLARE_AI_GATEWAY_ID=tab
-CLOUDFLARE_API_TOKEN=
+CLOUDFLARE_DATABASE_ID=
+CLOUDFLARE_D1_TOKEN=
 
 # Optional: web download metadata
 TAB_MAC_DOWNLOAD_URL=https://downloads.tab.app/tab.dmg
