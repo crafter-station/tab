@@ -4,6 +4,7 @@ import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import {
+  D1PersonalMemoryStorage,
   InMemoryPersonalMemoryStorage,
   PersonalMemoryService,
   type QueryPersonalMemoryVectorsInput,
@@ -21,6 +22,7 @@ import {
   MemoryWriteResponseSchema,
 } from "../packages/contracts/src/index.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
+import { createTestDatabase } from "./test-db.ts";
 import type {
   SuggestionGenerator,
   SuggestionInput,
@@ -92,6 +94,16 @@ const validSuggestionRequest = {
   memoryEnabled: true,
 };
 
+async function applyMigrationFile(db: Database, path: string) {
+  const sql = await Bun.file(path).text();
+  for (const statement of sql
+    .split(";--> statement-breakpoint")
+    .flatMap((part) => part.split(";"))) {
+    const trimmed = statement.trim();
+    if (trimmed) db.exec(trimmed);
+  }
+}
+
 class FakeEmbeddingService implements PersonalMemoryEmbeddingService {
   readonly embeddedTexts: string[] = [];
 
@@ -141,6 +153,71 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
 }
 
 describe("Personal Memory API", () => {
+  it("migrates old memory rows into the simplified system-authored shape", async () => {
+    const sqlite = new Database(":memory:");
+    sqlite.exec(`
+      CREATE TABLE personal_memories (
+        id text PRIMARY KEY NOT NULL,
+        user_id text NOT NULL,
+        content text NOT NULL,
+        category text NOT NULL,
+        source text NOT NULL,
+        sensitivity text NOT NULL,
+        active integer NOT NULL,
+        created_at text NOT NULL,
+        updated_at text NOT NULL
+      );
+      CREATE INDEX idx_personal_memories_user ON personal_memories (user_id);
+      INSERT INTO personal_memories (
+        id,
+        user_id,
+        content,
+        category,
+        source,
+        sensitivity,
+        active,
+        created_at,
+        updated_at
+      ) VALUES (
+        'memory-1',
+        'user-1',
+        'Preserve this learned fact',
+        'preference',
+        'suggestion',
+        'low',
+        1,
+        '2026-07-01T00:00:00.000Z',
+        '2026-07-02T00:00:00.000Z'
+      );
+    `);
+    await applyMigrationFile(
+      sqlite,
+      "apps/api/drizzle/0001_add-memory-created-by.sql",
+    );
+    await applyMigrationFile(
+      sqlite,
+      "apps/api/drizzle/0002_drop-old-memory-fields.sql",
+    );
+    const storage = new D1PersonalMemoryStorage(createTestDatabase(sqlite));
+
+    const memories = await storage.listMemoriesByUser("user-1");
+    const columns = sqlite
+      .query("PRAGMA table_info(personal_memories)")
+      .all() as Array<{ name: string }>;
+
+    expect(memories).toEqual([
+      expect.objectContaining({
+        id: "memory-1",
+        userId: "user-1",
+        content: "Preserve this learned fact",
+        createdBy: "system",
+      }),
+    ]);
+    expect(columns.map((column) => column.name)).not.toEqual(
+      expect.arrayContaining(["category", "source", "sensitivity", "active"]),
+    );
+  });
+
   it("embeds and indexes memory content with generic vector metadata", async () => {
     const embeddingService = new FakeEmbeddingService();
     const vectorIndex = new FakeVectorIndex();
@@ -163,6 +240,50 @@ describe("Personal Memory API", () => {
       {
         id: memory.id,
         values: [34, 1],
+        metadata: { userId: "user-1", createdBy: "system" },
+      },
+    ]);
+  });
+
+  it("reindexes an existing memory by id from canonical storage and is safe to rerun", async () => {
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage: new InMemoryPersonalMemoryStorage(),
+      embeddingService,
+      vectorIndex,
+    });
+    const memory = await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Acme prefers Friday status updates",
+      createdBy: "system",
+    });
+    vectorIndex.upserts.length = 0;
+    embeddingService.embeddedTexts.length = 0;
+
+    await expect(
+      personalMemoryService.reindexMemoryForUser("user-1", memory.id),
+    ).resolves.toMatchObject({ id: memory.id });
+    await expect(
+      personalMemoryService.reindexMemoryForUser("user-1", memory.id),
+    ).resolves.toMatchObject({ id: memory.id });
+    await expect(
+      personalMemoryService.reindexMemoryForUser("user-2", memory.id),
+    ).resolves.toBeNull();
+
+    expect(embeddingService.embeddedTexts).toEqual([
+      "Acme prefers Friday status updates",
+      "Acme prefers Friday status updates",
+    ]);
+    expect(vectorIndex.upserts).toEqual([
+      {
+        id: memory.id,
+        values: [34, 1],
+        metadata: { userId: "user-1", createdBy: "system" },
+      },
+      {
+        id: memory.id,
+        values: [34, 2],
         metadata: { userId: "user-1", createdBy: "system" },
       },
     ]);
