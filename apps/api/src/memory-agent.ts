@@ -325,63 +325,83 @@ export class MemoryExtractionService {
     const counts = emptyExtractionCounts();
 
     for (const operation of operations) {
+      let applied = false;
+
       switch (operation.type) {
         case "create": {
-          const currentCount = (
-            await this.personalMemoryService.listMemories(userId)
-          ).length;
-          if (
-            currentCount >= MAX_MEMORIES_PER_USER ||
-            !isSafeMemoryText(operation.content)
-          ) {
-            counts.rejected += 1;
-            break;
-          }
-
-          await this.personalMemoryService.createMemory({
-            userId,
-            content: operation.content,
-            createdBy: "system",
-          });
-          counts.created += 1;
+          applied = await this.applyCreateOperation(userId, operation);
+          if (applied) counts.created += 1;
           break;
         }
 
         case "update": {
-          const existing = await this.findMutableSystemMemory(
-            userId,
-            operation.id,
-          );
-          if (!existing || !isSafeMemoryText(operation.content)) {
-            counts.rejected += 1;
-            break;
-          }
-
-          await this.personalMemoryService.updateMemory(operation.id, {
-            content: operation.content,
-          });
-          counts.updated += 1;
+          applied = await this.applyUpdateOperation(userId, operation);
+          if (applied) counts.updated += 1;
           break;
         }
 
         case "delete": {
-          const existing = await this.findMutableSystemMemory(
-            userId,
-            operation.id,
-          );
-          if (!existing || !operation.reason?.trim()) {
-            counts.rejected += 1;
-            break;
-          }
-
-          await this.personalMemoryService.deleteMemory(userId, operation.id);
-          counts.deleted += 1;
+          applied = await this.applyDeleteOperation(userId, operation);
+          if (applied) counts.deleted += 1;
           break;
         }
+      }
+
+      if (!applied) {
+        counts.rejected += 1;
       }
     }
 
     return counts;
+  }
+
+  private async applyCreateOperation(
+    userId: string,
+    operation: ProposedCreateMemory,
+  ): Promise<boolean> {
+    const currentCount = (await this.personalMemoryService.listMemories(userId))
+      .length;
+    if (
+      currentCount >= MAX_MEMORIES_PER_USER ||
+      !isSafeMemoryText(operation.content)
+    ) {
+      return false;
+    }
+
+    await this.personalMemoryService.createMemory({
+      userId,
+      content: operation.content,
+      createdBy: "system",
+    });
+    return true;
+  }
+
+  private async applyUpdateOperation(
+    userId: string,
+    operation: ProposedUpdateMemory,
+  ): Promise<boolean> {
+    const existing = await this.findMutableSystemMemory(userId, operation.id);
+    if (!existing || !isSafeMemoryText(operation.content)) {
+      return false;
+    }
+
+    await this.personalMemoryService.updateMemory(operation.id, {
+      content: operation.content,
+    });
+    return true;
+  }
+
+  private async applyDeleteOperation(
+    userId: string,
+    operation: ProposedDeleteMemory,
+  ): Promise<boolean> {
+    const existing = await this.findMutableSystemMemory(userId, operation.id);
+    if (!existing || !operation.reason?.trim()) {
+      return false;
+    }
+
+    await this.personalMemoryService.deleteMemory(userId, operation.id);
+    return true;
   }
 
   private async findMutableSystemMemory(
