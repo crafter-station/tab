@@ -18,7 +18,7 @@ import {
   setThemePreference,
   type ThemeMode,
 } from "@tabb/ui";
-import type { PersonalMemory } from "@tabb/contracts";
+import type { PersonalMemory, PersonalMemoryCreatedBy } from "@tabb/contracts";
 import type { DesktopStatus } from "../../../main/status";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tabb>["getInitialState"]>>;
@@ -44,6 +44,10 @@ export function describePauseState(paused: boolean) {
         description: "Typing Context observation and Suggestions are running.",
         action: "Pause Tabb",
       };
+}
+
+export function describePersonalMemorySource(createdBy: PersonalMemoryCreatedBy) {
+  return createdBy === "user" ? "Saved by you" : "Learned from accepted writing";
 }
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
@@ -331,7 +335,7 @@ export function SettingsSurface() {
                     <div className="min-w-0">
                       <p className="text-sm leading-relaxed">{memory.content}</p>
                       <p className="mt-1 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                        Personal Memory - Created by {memory.createdBy}
+                        Personal Memory - {describePersonalMemorySource(memory.createdBy)}
                       </p>
                     </div>
                     <Button variant="secondary" size="sm" onClick={() => window.tabb?.deleteMemory?.(memory.id)}>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { describePauseState } from "../apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx";
+import { describePauseState, describePersonalMemorySource } from "../apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx";
 
 describe("desktop settings renderer", () => {
   it("uses domain-specific pause copy for observation and suggestions", () => {
@@ -14,5 +14,10 @@ describe("desktop settings renderer", () => {
       description: "Typing Context observation and Suggestions are running.",
       action: "Pause Tabb",
     });
+  });
+
+  it("uses domain language for Personal Memory row sources", () => {
+    expect(describePersonalMemorySource("user")).toBe("Saved by you");
+    expect(describePersonalMemorySource("system")).toBe("Learned from accepted writing");
   });
 });
