@@ -134,6 +134,10 @@ summary {
 
 .settings-tabs {
   grid-template-columns: 236px minmax(0, 1fr);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 96%, transparent), color-mix(in srgb, var(--muted) 72%, transparent)),
+    var(--tabb-grid-bg);
+  background-size: auto, 32px 32px;
 }
 
 .settings-tabs__sidebar {
@@ -143,7 +147,7 @@ summary {
   gap: 24px;
   padding: 48px 14px 18px;
   border-right: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.032);
+  background: color-mix(in srgb, var(--muted) 62%, transparent);
 }
 
 .settings-tabs__brand {
@@ -157,6 +161,7 @@ summary {
   font-size: 17px;
   font-weight: 860;
   letter-spacing: -0.04em;
+  line-height: 1.05;
 }
 
 .settings-tabs__mark {
@@ -167,9 +172,9 @@ summary {
   color: var(--on-signal);
   font-size: 15px;
   font-weight: 900;
-  background: var(--signal);
-  border-radius: 14px;
-  box-shadow: 0 12px 30px rgba(218, 190, 77, 0.18);
+  background: var(--foreground);
+  border-radius: var(--radius-card);
+  box-shadow: var(--tabb-shadow-soft);
 }
 
 .settings-tabs__nav {
@@ -185,21 +190,23 @@ summary {
   color: var(--text-subtle);
   text-align: left;
   background: transparent;
-  border: 0;
-  border-radius: 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
   cursor: pointer;
   transition: background 160ms var(--ease-out), color 160ms var(--ease-out), transform 160ms var(--ease-out);
 }
 
 .settings-tabs__item:hover {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.055);
+  background: color-mix(in srgb, var(--card) 70%, transparent);
+  border-color: var(--border);
 }
 
 .settings-tabs__item[data-active="true"] {
   color: var(--text);
-  background: rgba(255, 255, 255, 0.088);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.13);
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow: var(--tabb-shadow-soft);
 }
 
 .settings-tabs__item-label {
@@ -222,63 +229,35 @@ summary {
   overflow: auto;
   padding: 24px;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent;
 }
 
 .settings-tabs__header {
   padding: 24px 28px 22px;
   border-bottom: 1px solid var(--border);
-}
-
-.settings-tabs__title {
-  margin-top: 6px;
-  max-width: 680px;
-  font-size: clamp(28px, 4vw, 36px);
-  font-weight: 880;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
+  background: color-mix(in srgb, var(--card) 78%, transparent);
 }
 
 .settings-pane {
   overflow: hidden;
   background:
-    radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.06), transparent 34%),
-    rgba(255, 255, 255, 0.045);
-  border-color: rgba(255, 255, 255, 0.13);
-  border-radius: 22px;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.045);
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--muted-foreground) 10%, transparent), transparent 34%),
+    color-mix(in srgb, var(--card) 94%, transparent);
+  border-color: var(--border);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--tabb-shadow-soft);
 }
 
-.settings-row {
+.memory-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
-  min-height: 52px;
-  padding: 14px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.115);
-}
-
-.settings-row:last-child {
-  border-bottom: 0;
-}
-
-.settings-row__label {
-  color: var(--text);
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
-
-.settings-row__value {
-  display: flex;
-  min-width: 0;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  color: var(--text-subtle);
-  font-size: 13px;
+  padding: 16px;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--muted) 42%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
 }
 
 @media (max-width: 839px) {
