@@ -313,18 +313,23 @@ export function SettingsSurface() {
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Personal Memory</CardTitle>
-              <CardDescription>Control whether stored Personal Memory can personalize desktop Suggestions.</CardDescription>
+              <CardDescription>Turn saved memories on or off for Suggestions on this Mac.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
               <SettingsRow
-                label="Use in Suggestions"
-                description="Pasted text can still inform the current Suggestion, but it is not saved to Personal Memory by default."
+                label="Use saved memories in Suggestions"
+                description={
+                  usePersonalMemory
+                    ? "Tab can include your saved Personal Memory when generating Suggestions."
+                    : "Tab will ignore saved Personal Memory when generating Suggestions. Your memories stay stored and editable."
+                }
               >
                 <Button
+                  aria-pressed={usePersonalMemory}
                   variant={usePersonalMemory ? "default" : "secondary"}
                   onClick={() => handleUsePersonalMemory(!usePersonalMemory)}
                 >
-                  {usePersonalMemory ? "Using Personal Memory" : "Do Not Use"}
+                  {usePersonalMemory ? "On" : "Off"}
                 </Button>
               </SettingsRow>
               <StatusRow label="App Context" value="Not saved" description={APP_CONTEXT_TRUST_COPY.memoryScope} />

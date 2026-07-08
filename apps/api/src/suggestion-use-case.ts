@@ -392,17 +392,32 @@ export class SuggestionUseCase {
     device: Device,
     request: SuggestionRequest,
   ): Promise<readonly PersonalMemory[]> {
-    if (!request.memoryEnabled) return [];
+    if (!request.memoryEnabled) {
+      console.log("[suggestions] memory skipped", {
+        requestId: request.requestId,
+        reason: "disabled",
+      });
+      return [];
+    }
 
     try {
-      return await this.deps.personalMemoryService.selectRelevantMemories({
+      const memories = await this.deps.personalMemoryService.selectRelevantMemories({
         userId: device.userId,
         typingContext: request.typingContext,
         activeApplication: request.activeApplication,
         memoryEnabled: true,
       });
+      console.log("[suggestions] memory selected", {
+        requestId: request.requestId,
+        count: memories.length,
+      });
+      return memories;
     } catch {
       // Memory retrieval is best-effort; suggestions continue without memory.
+      console.log("[suggestions] memory skipped", {
+        requestId: request.requestId,
+        reason: "retrieval_failed",
+      });
       return [];
     }
   }

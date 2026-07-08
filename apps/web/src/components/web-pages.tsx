@@ -604,9 +604,20 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
       <SurfaceHeader
         eyebrow="Personal Memory controls"
         title="Personal Memory"
-        description="Teach, edit, and delete the facts Tab can use for personalization."
+        description="Teach, edit, and delete saved facts. Turn memory usage on or off from the Mac app settings."
       />
       <div className="mt-4">
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Use saved memories in Suggestions</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+            <p>
+              Saved memories can personalize desktop Suggestions when Personal Memory is enabled in the Mac app.
+            </p>
+            <Badge variant="secondary">Controlled on each Mac</Badge>
+          </CardContent>
+        </Card>
         <form method="post" action="/account/memory/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
           <Label htmlFor="memory-content">Teach Tab a memory</Label>
           <textarea

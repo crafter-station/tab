@@ -47,24 +47,12 @@ export const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
 
 const MemoryOperationOutputSchema = z.object({
   operations: z.array(
-    z.discriminatedUnion("type", [
-      z.object({
-        type: z.literal("create"),
-        content: z.string().min(1),
-        reason: z.string().min(1).optional(),
-      }),
-      z.object({
-        type: z.literal("update"),
-        id: z.string().min(1),
-        content: z.string().min(1),
-        reason: z.string().min(1).optional(),
-      }),
-      z.object({
-        type: z.literal("delete"),
-        id: z.string().min(1),
-        reason: z.string().min(1),
-      }),
-    ]),
+    z.object({
+      type: z.enum(["create", "update", "delete"]),
+      id: z.string(),
+      content: z.string(),
+      reason: z.string(),
+    }),
   ),
 });
 
@@ -83,6 +71,46 @@ function hasDurableExtractionResult(counts: MemoryExtractionCounts): boolean {
     counts.deleted > 0 ||
     counts.rejected > 0
   );
+}
+
+function toProposedMemoryOperation(
+  operation: z.infer<typeof MemoryOperationOutputSchema>["operations"][number],
+): ProposedMemoryOperation | null {
+  switch (operation.type) {
+    case "create":
+      return operation.content?.trim()
+        ? {
+            type: "create",
+            content: operation.content,
+            ...(operation.reason?.trim() && { reason: operation.reason }),
+          }
+        : null;
+    case "update":
+      return operation.id?.trim() && operation.content?.trim()
+        ? {
+            type: "update",
+            id: operation.id,
+            content: operation.content,
+            ...(operation.reason?.trim() && { reason: operation.reason }),
+          }
+        : null;
+    case "delete":
+      return operation.id?.trim() && operation.reason?.trim()
+        ? {
+            type: "delete",
+            id: operation.id,
+            reason: operation.reason,
+          }
+        : null;
+  }
+}
+
+function toProposedMemoryOperations(
+  operations: z.infer<typeof MemoryOperationOutputSchema>["operations"],
+): ProposedMemoryOperation[] {
+  return operations
+    .map(toProposedMemoryOperation)
+    .filter((operation): operation is ProposedMemoryOperation => operation !== null);
 }
 
 async function hashExtractionBatchId(
@@ -385,7 +413,7 @@ class AiGatewayMemoryAgentModel implements MemoryAgentModel {
       model: MEMORY_EXTRACTION_MODEL_ID,
       output: Output.object({ schema: MemoryOperationOutputSchema }),
       system:
-        "Extract durable personal memory from first-party user typing. Return only generic create, update, or delete operations that are useful for future autocomplete. Do not store secrets, credentials, payment data, medical data, or third-party pasted content. Prefer no operation over speculative memory.",
+        "Extract durable personal memory from first-party user typing. Return only generic create, update, or delete operations that are useful for future autocomplete. Do not store secrets, credentials, payment data, medical data, or third-party pasted content. Prefer no operation over speculative memory. Each operation must include type, id, content, and reason; use an empty string for fields that do not apply.",
       prompt: `Active application: ${job.activeApplication.bundleId}
 Source: ${job.contextSource}
 Redaction applied: ${job.redaction.applied}
@@ -402,8 +430,12 @@ Create a memory for stable preferences, projects, recurring facts, names, or wor
       temperature: 0,
     });
 
-    return output.operations;
+    return toProposedMemoryOperations(output.operations);
   }
+}
+
+export function createAiGatewayMemoryAgentModel(): MemoryAgentModel {
+  return new AiGatewayMemoryAgentModel();
 }
 
 function formatMemoriesForPrompt(memories: readonly PersonalMemory[]): string {

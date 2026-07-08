@@ -27,6 +27,7 @@ import {
   D1MemoryExtractionIdempotencyStorage,
   InMemoryMemoryExtractionIdempotencyStorage,
   MemoryExtractionService,
+  createAiGatewayMemoryAgentModel,
   type MemoryAgentModel,
   type MemoryExtractionIdempotencyStorage,
 } from "./memory-agent.ts";
@@ -227,6 +228,7 @@ function getAppForEnv(env: ApiBindings | undefined) {
         env.MEMORY_VECTORIZE,
       ),
     }),
+    memoryExtractionModel: createAiGatewayMemoryAgentModel(),
   });
   appsByDatabase.set(env.DB, app);
   return app;

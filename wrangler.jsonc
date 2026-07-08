@@ -13,12 +13,14 @@
     }
   ],
   "ai": {
-    "binding": "AI"
+    "binding": "AI",
+    "remote": true
   },
   "vectorize": [
     {
       "binding": "MEMORY_VECTORIZE",
-      "index_name": "personal-memories"
+      "index_name": "personal-memories",
+      "remote": true
     }
   ],
   "observability": {

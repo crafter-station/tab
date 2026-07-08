@@ -368,6 +368,41 @@ function isMemoryRelevant(
   );
 }
 
+function selectTokenRelevantMemories(
+  memories: readonly PersonalMemory[],
+  input: RelevanceInput,
+  limit: number,
+): PersonalMemory[] {
+  return memories
+    .filter((memory) =>
+      isMemoryRelevant(
+        memory,
+        input.typingContext,
+        input.activeApplication,
+      ),
+    )
+    .sort(compareMemoriesByNewestUpdate)
+    .slice(0, limit);
+}
+
+function mergeMemoriesById(
+  primary: readonly PersonalMemory[],
+  secondary: readonly PersonalMemory[],
+  limit: number,
+): PersonalMemory[] {
+  const memories: PersonalMemory[] = [];
+  const seen = new Set<string>();
+
+  for (const memory of [...primary, ...secondary]) {
+    if (seen.has(memory.id)) continue;
+    seen.add(memory.id);
+    memories.push(memory);
+    if (memories.length >= limit) break;
+  }
+
+  return memories;
+}
+
 /**
  * Service for reading and selecting Personal Memory in the hot suggestion path.
  * The service keeps the storage backend swappable and applies a small,
@@ -472,16 +507,11 @@ export class PersonalMemoryService {
       );
     }
 
-    return (await this.storage.listMemoriesByUser(input.userId))
-      .filter((memory) =>
-        isMemoryRelevant(
-          memory,
-          input.typingContext,
-          input.activeApplication,
-        ),
-      )
-      .sort(compareMemoriesByNewestUpdate)
-      .slice(0, this.maxRelevantMemories);
+    return selectTokenRelevantMemories(
+      await this.storage.listMemoriesByUser(input.userId),
+      input,
+      this.maxRelevantMemories,
+    );
   }
 
   async selectCandidateMemoriesForExtraction(
@@ -508,7 +538,22 @@ export class PersonalMemoryService {
     vectorIndex: PersonalMemoryVectorIndex,
   ): Promise<PersonalMemory[]> {
     try {
-      return await this.selectVectorMemories(input, embeddingService, vectorIndex);
+      const vectorMemories = await this.selectVectorMemories(
+        input,
+        embeddingService,
+        vectorIndex,
+      );
+      const tokenMemories = selectTokenRelevantMemories(
+        await this.storage.listMemoriesByUser(input.userId),
+        input,
+        this.maxRelevantMemories,
+      );
+
+      return mergeMemoriesById(
+        vectorMemories,
+        tokenMemories,
+        this.maxRelevantMemories,
+      );
     } catch {
       // Memory retrieval is best-effort on the hot suggestion path.
       return [];
