@@ -18,7 +18,7 @@ import type { PersonalMemoryService } from "./personal-memory.ts";
 import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
 
-const SUGGESTION_MODEL_ID = "llama-3.1-8b-instant";
+const SUGGESTION_MODEL_ID = "openai/gpt-oss-20b";
 
 export type SuggestionInput = {
   readonly requestId: string;
@@ -51,6 +51,10 @@ export type SuggestionUseCaseResult =
       readonly message: string;
       readonly details?: EntitlementErrorDetails;
     };
+
+export type SuggestionUseCaseOptions = {
+  readonly waitUntil?: (promise: Promise<unknown>) => void;
+};
 
 function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
   if (memories.length === 0) return "";
@@ -88,15 +92,27 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
 
     const { text } = await generateText({
       model: groq(modelId),
-      system:
-        "You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.",
-      prompt: `Active application: ${input.activeApplication.bundleId}\nSource: ${input.contextSource}\nContext: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
-      maxOutputTokens: 32,
+      prompt: `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
+
+Active application: ${input.activeApplication.bundleId}
+Source: ${input.contextSource}
+Context: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`,
+      maxOutputTokens: 128,
+      providerOptions: {
+        groq: { reasoningEffort: "low" },
+      },
       temperature: 0.3,
     });
 
+    const suggestionText = normalizeGeneratedSuggestion(input.typingContext, text);
+    console.log("[suggestions] groq generated suggestion", {
+      requestId: input.requestId,
+      modelId,
+      text: suggestionText,
+    });
+
     return {
-      text: normalizeGeneratedSuggestion(input.typingContext, text),
+      text: suggestionText,
       modelId,
     };
   };
@@ -118,7 +134,11 @@ function createQuotaExhaustedDetails(quotaCheck: {
 export class SuggestionUseCase {
   constructor(private readonly deps: SuggestionUseCaseDependencies) {}
 
-  async handle(device: Device, request: SuggestionRequest): Promise<SuggestionUseCaseResult> {
+  async handle(
+    device: Device,
+    request: SuggestionRequest,
+    options: SuggestionUseCaseOptions = {},
+  ): Promise<SuggestionUseCaseResult> {
     const quotaCheck = await this.deps.billingService.checkQuota(device.userId);
     if (!quotaCheck.ok) {
       if (quotaCheck.reason === "billing_required") {
@@ -199,7 +219,7 @@ export class SuggestionUseCase {
 
       if (shouldCountSuggestionResponse(suggestions.length)) {
         await this.deps.billingService.consumeSuggestion(device.userId);
-        this.deps.usageMeterService
+        const usageMeterPromise = this.deps.usageMeterService
           .recordUsage({
             userId: device.userId,
             requestId: request.requestId,
@@ -210,6 +230,8 @@ export class SuggestionUseCase {
             // Ingestion failures are retried by the meter service; do not fail
             // the hot suggestion response when Polar ingestion is unavailable.
           });
+
+        options.waitUntil?.(usageMeterPromise);
       }
 
       const memoryEligibility = getMemoryEligibility(request.contextSource);
