@@ -4,12 +4,14 @@ import {
   CommandBlock,
   ComponentReviewSurface,
   EmptyState,
+  FloatingSuggestionBar,
   SectionBlock,
   SettingsNav,
   SettingsRow,
   StatusRow,
   SurfaceHeader,
 } from "../packages/ui/src/index.ts";
+import { DebugContextCard } from "../apps/desktop/src/renderer/src/components/DebugContextCard.tsx";
 
 describe("shared app patterns", () => {
   it("renders reviewable Private Utility Grid patterns in light and dark modes", () => {
@@ -43,5 +45,20 @@ describe("shared app patterns", () => {
     expect(markup).toInclude("aria-current=\"page\"");
     expect(markup).toInclude("Debug command");
     expect(markup).toInclude("Download for macOS");
+  });
+
+  it("keeps the floating suggestion overlay inert except for acceptance controls", () => {
+    const suggestionMarkup = renderToStaticMarkup(
+      <main className="overlay-shell">
+        <FloatingSuggestionBar suggestion={{ id: "s-1", text: " world" }} onAccept={() => {}} />
+        <DebugContextCard debug={null} />
+      </main>,
+    );
+
+    expect(suggestionMarkup).toInclude('class="overlay-shell"');
+    expect(suggestionMarkup).toInclude("pointer-events-auto");
+    expect(suggestionMarkup).toInclude("Option Tab");
+    expect(suggestionMarkup).toInclude("type=\"button\"");
+    expect(suggestionMarkup).toInclude("aria-hidden=\"true\"");
   });
 });
