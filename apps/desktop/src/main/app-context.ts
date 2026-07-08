@@ -40,10 +40,12 @@ type AppContextAdapter = {
   readonly confidence: number;
 };
 
-const SUPPORTED_ACCESSIBILITY_ADAPTERS: ReadonlyArray<{
+type SupportedAccessibilityAdapter = {
   readonly bundleIds: readonly string[];
   readonly adapter: AppContextAdapter;
-}> = [
+};
+
+const SUPPORTED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[] = [
   {
     bundleIds: ["net.whatsapp.WhatsApp", "com.whatsapp.WhatsApp"],
     adapter: { provider: "whatsapp-accessibility", kind: "conversation", confidence: 0.86 },
@@ -94,31 +96,40 @@ const SUPPORTED_ACCESSIBILITY_ADAPTERS: ReadonlyArray<{
   },
 ];
 
+const NORMALIZED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[] =
+  SUPPORTED_ACCESSIBILITY_ADAPTERS.map((entry) => ({
+    ...entry,
+    bundleIds: entry.bundleIds.map((bundleId) => bundleId.toLowerCase()),
+  }));
+
 function findAdapter(activeApplication: ActiveApplication | null): AppContextAdapter | null {
   if (!activeApplication) return null;
   const bundleId = activeApplication.bundleId.toLowerCase();
+  const matchingEntry = NORMALIZED_ACCESSIBILITY_ADAPTERS.find((entry) =>
+    entry.bundleIds.includes(bundleId),
+  );
 
-  return SUPPORTED_ACCESSIBILITY_ADAPTERS.find((entry) =>
-    entry.bundleIds.some((candidate) => candidate.toLowerCase() === bundleId),
-  )?.adapter ?? null;
+  return matchingEntry?.adapter ?? null;
 }
 
-function collectAccessibilityText(
-  node: AccessibilityContextNode | null | undefined,
-  output: string[] = [],
-): string[] {
-  if (!node) return output;
+function collectAccessibilityText(node: AccessibilityContextNode | null | undefined): string[] {
+  const textValues: string[] = [];
 
-  for (const value of [node.value, node.description, node.title]) {
-    const text = value?.replace(/\s+/g, " ").trim();
-    if (text) output.push(text);
+  function visit(currentNode: AccessibilityContextNode | null | undefined): void {
+    if (!currentNode) return;
+
+    for (const value of [currentNode.value, currentNode.description, currentNode.title]) {
+      const text = value?.replace(/\s+/g, " ").trim();
+      if (text) textValues.push(text);
+    }
+
+    for (const child of currentNode.children ?? []) {
+      visit(child);
+    }
   }
 
-  for (const child of node.children ?? []) {
-    collectAccessibilityText(child, output);
-  }
-
-  return output;
+  visit(node);
+  return textValues;
 }
 
 function uniqueBoundedLines(lines: readonly string[]): string {
