@@ -218,6 +218,7 @@ export const RecordTelemetryEventRequestSchema = z
     timestamp: z.string().datetime(),
     activeApplicationBundleId: z.string().min(1).optional(),
     suggestionLength: z.number().int().nonnegative().optional(),
+    latencyMs: z.number().int().nonnegative().optional(),
   })
   .strict();
 
