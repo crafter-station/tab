@@ -71,6 +71,41 @@ describe("desktop App Context common writing app providers", () => {
     }
   });
 
+  it("covers common writing app bundle variants without falling back to unsupported", () => {
+    const cases = [
+      {
+        bundleId: "com.tinyspeck.slackmacgap.debug",
+        provider: "slack-accessibility",
+        kind: "conversation",
+      },
+      {
+        bundleId: "com.hnc.DiscordCanary",
+        provider: "discord-accessibility",
+        kind: "conversation",
+      },
+      {
+        bundleId: "com.microsoft.VSCodeInsiders",
+        provider: "generic-accessibility-text",
+        kind: "visible_text",
+      },
+      {
+        bundleId: "com.visualstudio.code.oss",
+        provider: "generic-accessibility-text",
+        kind: "visible_text",
+      },
+    ];
+
+    for (const item of cases) {
+      const snapshot = extractAppContextFromAccessibility(
+        { bundleId: item.bundleId },
+        tree(["A reliable common writing surface exposes surrounding draft text."]),
+      );
+
+      expect(snapshot.metadata).toMatchObject({ provider: item.provider, status: "available" });
+      expect(snapshot.fragments[0]).toMatchObject({ provider: item.provider, kind: item.kind });
+    }
+  });
+
   it("falls back safely for unsupported apps and low-confidence Accessibility text", () => {
     const unsupported = extractAppContextFromAccessibility(
       { bundleId: "com.example.UnsupportedWriter" },

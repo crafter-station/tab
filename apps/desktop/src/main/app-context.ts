@@ -44,22 +44,28 @@ type ProviderDefinition = {
   readonly confidence: number;
 };
 
+const APPLE_NOTES_PROVIDER: ProviderDefinition = {
+  provider: "apple-notes-accessibility",
+  kind: "focused_note",
+  confidence: 0.88,
+};
+
+const SLACK_PROVIDER: ProviderDefinition = {
+  provider: "slack-accessibility",
+  kind: "conversation",
+  confidence: 0.82,
+};
+
+const DISCORD_PROVIDER: ProviderDefinition = {
+  provider: "discord-accessibility",
+  kind: "conversation",
+  confidence: 0.8,
+};
+
 const APP_SPECIFIC_PROVIDERS: Record<string, ProviderDefinition> = {
-  "com.apple.Notes": {
-    provider: "apple-notes-accessibility",
-    kind: "focused_note",
-    confidence: 0.88,
-  },
-  "com.tinyspeck.slackmacgap": {
-    provider: "slack-accessibility",
-    kind: "conversation",
-    confidence: 0.82,
-  },
-  "com.hnc.Discord": {
-    provider: "discord-accessibility",
-    kind: "conversation",
-    confidence: 0.8,
-  },
+  "com.apple.Notes": APPLE_NOTES_PROVIDER,
+  "com.tinyspeck.slackmacgap": SLACK_PROVIDER,
+  "com.hnc.Discord": DISCORD_PROVIDER,
 };
 
 const GENERIC_ACCESSIBILITY_APPS = new Set([
@@ -68,6 +74,13 @@ const GENERIC_ACCESSIBILITY_APPS = new Set([
   "com.microsoft.VSCode",
   "com.apple.TextEdit",
 ]);
+
+const APP_SPECIFIC_PROVIDER_PREFIXES: readonly [string, ProviderDefinition][] = [
+  ["com.tinyspeck.slackmacgap", SLACK_PROVIDER],
+  ["com.hnc.Discord", DISCORD_PROVIDER],
+];
+
+const GENERIC_ACCESSIBILITY_APP_PREFIXES = ["com.microsoft.VSCode", "com.visualstudio.code"] as const;
 
 function collectAccessibilityText(node: AccessibilityTextNode, values: string[]): void {
   for (const field of ACCESSIBILITY_TEXT_FIELDS) {
@@ -89,12 +102,21 @@ function extractBoundedAccessibilityText(root: AccessibilityTextNode): string {
 }
 
 function genericProviderFor(activeApplication: ActiveApplication): ProviderDefinition | null {
-  if (!GENERIC_ACCESSIBILITY_APPS.has(activeApplication.bundleId)) return null;
+  const bundleId = activeApplication.bundleId;
+  if (!GENERIC_ACCESSIBILITY_APPS.has(bundleId)
+    && !GENERIC_ACCESSIBILITY_APP_PREFIXES.some((prefix) => bundleId.startsWith(prefix))) {
+    return null;
+  }
+
   return { provider: "generic-accessibility-text", kind: "visible_text", confidence: 0.76 };
 }
 
 function providerDefinitionFor(activeApplication: ActiveApplication): ProviderDefinition | null {
-  return APP_SPECIFIC_PROVIDERS[activeApplication.bundleId] ?? genericProviderFor(activeApplication);
+  const exactProvider = APP_SPECIFIC_PROVIDERS[activeApplication.bundleId];
+  if (exactProvider) return exactProvider;
+
+  const prefixedProvider = APP_SPECIFIC_PROVIDER_PREFIXES.find(([prefix]) => activeApplication.bundleId.startsWith(prefix));
+  return prefixedProvider?.[1] ?? genericProviderFor(activeApplication);
 }
 
 export function extractAppContextFromAccessibility(
