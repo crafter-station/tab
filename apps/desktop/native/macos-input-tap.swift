@@ -59,18 +59,27 @@ func copyAXAttribute(_ element: AXUIElement, _ attribute: String) -> Any? {
   return value
 }
 
+func axUIElement(_ value: Any?) -> AXUIElement? {
+  guard let value = value, CFGetTypeID(value as CFTypeRef) == AXUIElementGetTypeID() else { return nil }
+  return (value as! AXUIElement)
+}
+
+func axValue(_ value: Any?) -> AXValue? {
+  guard let value = value, CFGetTypeID(value as CFTypeRef) == AXValueGetTypeID() else { return nil }
+  return (value as! AXValue)
+}
+
 func stringAXAttribute(_ element: AXUIElement, _ attribute: String) -> String? {
   return copyAXAttribute(element, attribute) as? String
 }
 
 func focusedAXElement(for app: NSRunningApplication) -> AXUIElement? {
   let appElement = AXUIElementCreateApplication(app.processIdentifier)
-  return copyAXAttribute(appElement, kAXFocusedUIElementAttribute as String) as? AXUIElement
+  return axUIElement(copyAXAttribute(appElement, kAXFocusedUIElementAttribute as String))
 }
 
 func selectedTextRange(from element: AXUIElement) -> CFRange? {
-  guard let value = copyAXAttribute(element, kAXSelectedTextRangeAttribute as String) else { return nil }
-  guard let axValue = value as? AXValue else { return nil }
+  guard let axValue = axValue(copyAXAttribute(element, kAXSelectedTextRangeAttribute as String)) else { return nil }
   guard AXValueGetType(axValue) == .cfRange else { return nil }
 
   var range = CFRange(location: 0, length: 0)
@@ -110,7 +119,7 @@ func caretBounds(from element: AXUIElement, selectedRange: CFRange?) -> [String:
     return nil
   }
 
-  guard let axValue = boundsValue as? AXValue else { return nil }
+  guard let axValue = axValue(boundsValue) else { return nil }
   guard AXValueGetType(axValue) == .cgRect else { return nil }
 
   var bounds = CGRect.zero
