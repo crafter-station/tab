@@ -5,40 +5,40 @@ import type { StatusBadgeTone } from "@tabb/ui";
 type SetupStep = {
   title: string;
   description: string;
-  status: string;
-  tone: StatusBadgeTone;
+  badgeLabel: string;
+  badgeTone: StatusBadgeTone;
 };
 
 const setupSteps: SetupStep[] = [
   {
     title: "Browser handoff",
     description: "Sign in opens your browser and returns this Mac to Tabb without changing the device-token contract.",
-    status: "Required",
-    tone: "warning",
+    badgeLabel: "Required",
+    badgeTone: "warning",
   },
   {
     title: "Accessibility",
     description: "Enables focused Text Session understanding and accepted Suggestion insertion.",
-    status: "Setup step",
-    tone: "muted",
+    badgeLabel: "Setup step",
+    badgeTone: "muted",
   },
   {
     title: "Input Monitoring",
     description: "Supports typing timing, acceptance shortcuts, and fallback Typing Context signals.",
-    status: "Setup step",
-    tone: "muted",
+    badgeLabel: "Setup step",
+    badgeTone: "muted",
   },
   {
     title: "Privacy scope",
     description: "Typing Context stays in memory; no Screen Recording or Full Disk Access is requested.",
-    status: "Visible",
-    tone: "ok",
+    badgeLabel: "Visible",
+    badgeTone: "ok",
   },
   {
     title: "Practice Suggestion",
     description: "New users can accept, reject, and try mock Suggestions before Tabb runs in another app.",
-    status: "Sandboxed",
-    tone: "ok",
+    badgeLabel: "Sandboxed",
+    badgeTone: "ok",
   },
 ];
 
@@ -57,13 +57,13 @@ export function SignInSurface() {
           <p className="eyebrow">Private Utility Grid</p>
           <h2>Connect this Mac, then review setup step by step.</h2>
           <div className="sign-in-proof__steps">
-            {setupSteps.map((item) => (
-              <article className="sign-in-proof__step" key={item.title}>
+            {setupSteps.map((setupStep) => (
+              <article className="sign-in-proof__step" key={setupStep.title}>
                 <div>
-                  <strong>{item.title}</strong>
-                  <span>{item.description}</span>
+                  <strong>{setupStep.title}</strong>
+                  <span>{setupStep.description}</span>
                 </div>
-                <StatusBadge tone={item.tone}>{item.status}</StatusBadge>
+                <StatusBadge tone={setupStep.badgeTone}>{setupStep.badgeLabel}</StatusBadge>
               </article>
             ))}
           </div>

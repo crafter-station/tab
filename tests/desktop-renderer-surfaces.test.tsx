@@ -8,15 +8,14 @@ describe("desktop renderer setup surfaces", () => {
   it("renders sign-in and onboarding around the shared Private Utility Grid setup story", () => {
     const signInMarkup = renderToStaticMarkup(<SignInSurface />);
     const onboardingMarkup = renderToStaticMarkup(<OnboardingSurface />);
-    const combinedMarkup = `${signInMarkup}${onboardingMarkup}`;
 
-    expect(combinedMarkup).toInclude("Browser handoff");
-    expect(combinedMarkup).toInclude("Accessibility");
-    expect(combinedMarkup).toInclude("Input Monitoring");
-    expect(combinedMarkup).toInclude("Privacy scope");
-    expect(combinedMarkup).toInclude("Practice Suggestion");
-    expect(combinedMarkup).toInclude("pug-dot-grid");
-    expect(combinedMarkup).toInclude("Browser sign-in required");
+    expect(signInMarkup).toInclude("Browser handoff");
+    expect(signInMarkup).toInclude("Accessibility");
+    expect(signInMarkup).toInclude("Input Monitoring");
+    expect(signInMarkup).toInclude("Privacy scope");
+    expect(signInMarkup).toInclude("Practice Suggestion");
+    expect(signInMarkup).toInclude("pug-dot-grid");
+    expect(onboardingMarkup).toInclude("Browser sign-in required");
   });
 
   it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {

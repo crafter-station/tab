@@ -167,44 +167,43 @@ export function OnboardingSurface() {
   }
 
   async function handlePrimaryAction() {
-    if (step === "sign-in") {
-      if (!signedIn) {
-        window.tabb?.signIn?.();
-        setStatusMessage("Complete sign-in in your browser, then return here.");
-        return;
-      }
-      goNext();
-      return;
-    }
-
-    if (step === "permissions") {
-      if (!accessibilityGranted) {
-        await openAccessibility();
-        return;
-      }
-      if (!inputMonitoringOpened) {
-        await openInputMonitoring();
-        return;
-      }
-      goNext();
-      return;
-    }
-
-    if (step === "how-it-works") {
-      goNext();
-      return;
-    }
-
-    if (step === "practice") {
-      if (practiceComplete) {
+    switch (step) {
+      case "sign-in":
+        if (!signedIn) {
+          window.tabb?.signIn?.();
+          setStatusMessage("Complete sign-in in your browser, then return here.");
+          return;
+        }
         goNext();
-      } else {
-        setStatusMessage("Accept and reject the mock suggestion once, or use Finish anyway.");
-      }
-      return;
-    }
+        return;
 
-    window.tabb?.completeOnboarding?.();
+      case "permissions":
+        if (!accessibilityGranted) {
+          await openAccessibility();
+          return;
+        }
+        if (!inputMonitoringOpened) {
+          await openInputMonitoring();
+          return;
+        }
+        goNext();
+        return;
+
+      case "how-it-works":
+        goNext();
+        return;
+
+      case "practice":
+        if (practiceComplete) {
+          goNext();
+        } else {
+          setStatusMessage("Accept and reject the mock suggestion once, or use Finish anyway.");
+        }
+        return;
+
+      case "done":
+        window.tabb?.completeOnboarding?.();
+    }
   }
 
   function approveSuggestion() {
