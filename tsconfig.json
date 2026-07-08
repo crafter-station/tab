@@ -17,6 +17,7 @@
     "baseUrl": ".",
     "paths": {
       "@tabb/billing": ["packages/billing/src/index.ts"],
+      "@tabb/context-policy": ["packages/context-policy/src/index.ts"],
       "@tabb/contracts": ["packages/contracts/src/index.ts"],
       "@tabb/effect-services": ["packages/effect-services/src/index.ts"],
       "@tabb/memory-policy": ["packages/memory-policy/src/index.ts"],

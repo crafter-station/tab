@@ -1,0 +1,13 @@
+{
+  "name": "@tabb/context-policy",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tabb/memory-policy": "workspace:*",
+    "@tabb/redaction": "workspace:*"
+  }
+}

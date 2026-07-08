@@ -1,6 +1,13 @@
 import type { ActiveApplication, RedactionSummary, SuggestionContextSource } from "@tabb/contracts";
-import { redactSensitiveText } from "@tabb/redaction";
-import { getMemoryEligibility } from "@tabb/memory-policy";
+import {
+  activeApplicationKey,
+  buildSuggestionContextHash,
+  createSafeSuggestionContext,
+  decideMemoryEligibility,
+  isPrivateActiveApplication,
+  redactPastedSuggestionContext,
+  type ContextSuppressionReason,
+} from "@tabb/context-policy";
 
 export type TypingContextState = {
   context: string;
@@ -27,12 +34,7 @@ export type TypingContextBuffer = {
 export type TypingDeletionUnit = "character" | "token";
 
 export type TypingContextSuppressionReason =
-  | "empty"
-  | "paused"
-  | "secure_input"
-  | "private_context"
-  | "secret_like_context"
-  | "no_active_application";
+  ContextSuppressionReason;
 
 export type SafeTypingContextSnapshot = TypingContextState & {
   sanitizedContext: string;
@@ -54,72 +56,12 @@ export function isRequestableTypingContextSnapshot(
   return snapshot.requestable && snapshot.activeApplication !== null;
 }
 
-const PASSWORD_MANAGER_BUNDLE_IDS = new Set([
-  "com.apple.passwords",
-  "com.1password.1password",
-  "com.1password.1password7",
-  "com.1password.1password8",
-  "com.agilebits.onepassword",
-  "com.agilebits.onepassword7",
-  "com.lastpass.lastpass",
-  "com.lastpass.lastpassmacdesktop",
-  "com.dashlane.dashlane",
-  "com.dashlane.Dashlane",
-  "com.bitwarden.desktop",
-]);
-
-const PASSWORD_MANAGER_BUNDLE_ID_PATTERNS = [...PASSWORD_MANAGER_BUNDLE_IDS].map((id) =>
-  id.toLowerCase(),
-);
-
-function isPasswordManager(bundleId: string | null | undefined): boolean {
-  if (!bundleId) return false;
-  const normalizedBundleId = bundleId.toLowerCase();
-  return PASSWORD_MANAGER_BUNDLE_ID_PATTERNS.some((id) => normalizedBundleId.includes(id));
-}
-
-export function activeApplicationKey(app: ActiveApplication | null): string | null {
-  if (!app) return null;
-  return `${app.bundleId}:${app.windowId ?? "window-unknown"}`;
-}
-
 export function buildTypingContextHash(state: Pick<TypingContextState, "activeApplication" | "secureInput">, context: string): string {
-  return `${state.activeApplication?.bundleId ?? "none"}:${state.activeApplication?.windowId ?? "window-unknown"}:${context}:${state.secureInput}`;
-}
-
-function toRedactionSummary(redaction: ReturnType<typeof redactSensitiveText>): RedactionSummary {
-  return {
-    applied: redaction.redactions.length > 0,
-    redactionCount: redaction.redactions.length,
-    kinds: [...new Set(redaction.redactions.map((item) => item.kind))],
-  };
+  return buildSuggestionContextHash(state, context);
 }
 
 export function createSafeTypingContextSnapshot(state: TypingContextState): SafeTypingContextSnapshot {
-  const redaction = redactSensitiveText(state.context);
-  const redactionSummary = toRedactionSummary(redaction);
-  const suppressionReason: TypingContextSuppressionReason | null = state.paused
-    ? "paused"
-    : state.secureInput
-      ? "secure_input"
-      : state.privateContext
-        ? "private_context"
-        : state.activeApplication === null
-          ? "no_active_application"
-          : state.context.trim().length === 0
-            ? "empty"
-            : redactionSummary.applied
-              ? "secret_like_context"
-              : null;
-
-  return {
-    ...state,
-    sanitizedContext: redaction.text,
-    redaction: redactionSummary,
-    contextHash: buildTypingContextHash(state, redaction.text),
-    requestable: suppressionReason === null,
-    suppressionReason,
-  };
+  return createSafeSuggestionContext(state);
 }
 
 export function getLastWords(text: string, maxWords: number): string {
@@ -144,11 +86,11 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
   let lastSource: SuggestionContextSource = "typed_text";
 
   function isPrivateContext(): boolean {
-    return secureInput || isPasswordManager(activeApplication?.bundleId);
+    return secureInput || isPrivateActiveApplication(activeApplication);
   }
 
   function isPasswordManagerContext(): boolean {
-    return isPasswordManager(activeApplication?.bundleId);
+    return isPrivateActiveApplication(activeApplication);
   }
 
   function append(text: string, source: SuggestionContextSource): void {
@@ -175,7 +117,7 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
       paused,
       privateContext: isPrivateContext(),
       contextSource: lastSource,
-      memoryEligible: getMemoryEligibility(lastSource).eligible,
+      memoryEligible: decideMemoryEligibility(lastSource),
     };
   }
 
@@ -188,9 +130,9 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
       if (isPasswordManagerContext()) return;
       // Pasted text may inform immediate suggestions after local redaction, but
       // it is not eligible for Personal Memory by default (ADR-0017).
-      const redacted = redactSensitiveText(text);
-      if (redacted.text.length === 0) return;
-      append(redacted.text, "pasted_text");
+      const redactedText = redactPastedSuggestionContext(text);
+      if (redactedText.length === 0) return;
+      append(redactedText, "pasted_text");
     },
     deleteBackward(unit = "character") {
       if (paused) return;

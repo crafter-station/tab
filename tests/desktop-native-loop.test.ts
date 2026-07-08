@@ -364,11 +364,13 @@ describe("desktop native suggestion loop", () => {
           return { id: "s-1", text: " world" };
         },
         getContextSource: () => "typed_text",
-        showSuggestion: (suggestion) => calls.push({ type: "showSuggestion", value: suggestion }),
-        clearSuggestion: () => calls.push({ type: "clearSuggestion" }),
-        hideOverlay: () => calls.push({ type: "hideOverlay" }),
-        showDebugContext: () => calls.push({ type: "showDebugContext" }),
-        resetDebugApiState: () => calls.push({ type: "resetDebugApiState" }),
+        outputs: {
+          showSuggestion: (suggestion) => calls.push({ type: "showSuggestion", value: suggestion }),
+          clearSuggestion: () => calls.push({ type: "clearSuggestion" }),
+          hideOverlay: () => calls.push({ type: "hideOverlay" }),
+          showDebugContext: () => calls.push({ type: "showDebugContext" }),
+          resetDebugApiState: () => calls.push({ type: "resetDebugApiState" }),
+        },
         createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
           getCurrentSuggestion,
           getPreviouslyActiveApplication,

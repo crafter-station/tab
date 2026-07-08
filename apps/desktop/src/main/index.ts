@@ -226,16 +226,18 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   typingContext: typingContextBuffer,
   requestSuggestion,
   getContextSource: getTypedContextSource,
-  showSuggestion: showOverlay,
-  clearSuggestion: clearSuggestionOverlay,
-  hideOverlay,
-  showDebugContext: showDebugTypingOverlay,
-  resetDebugApiState: () => {
-    debugApiState = { status: "idle" };
-  },
-  onRequestStarted: () => updateDebugApiState({ status: "loading" }),
-  onRequestFinished: (suggestion) => {
-    updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
+  outputs: {
+    showSuggestion: showOverlay,
+    clearSuggestion: clearSuggestionOverlay,
+    hideOverlay,
+    showDebugContext: showDebugTypingOverlay,
+    resetDebugApiState: () => {
+      debugApiState = { status: "idle" };
+    },
+    onRequestStarted: () => updateDebugApiState({ status: "loading" }),
+    onRequestFinished: (suggestion) => {
+      updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
+    },
   },
   createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
     getCurrentSuggestion,

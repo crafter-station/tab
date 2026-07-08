@@ -3,10 +3,7 @@ import { acceptAndInsertSuggestion, type InsertionDependencies } from "./accepta
 import { createSuggestionLoop } from "./suggestion-loop.ts";
 import type { RequestableTypingContextSnapshot, TypingContextBuffer, TypingDeletionUnit } from "./typing-context.ts";
 
-export type NativeSuggestionSessionDependencies = {
-  readonly typingContext: TypingContextBuffer;
-  readonly requestSuggestion: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
-  readonly getContextSource: () => SuggestionContextSource;
+export type NativeSuggestionSessionOutputs = {
   readonly showSuggestion: (suggestion: Suggestion) => void;
   readonly clearSuggestion: () => void;
   readonly hideOverlay: () => void;
@@ -15,6 +12,13 @@ export type NativeSuggestionSessionDependencies = {
   readonly onRequestStarted?: (context: string) => void;
   readonly onRequestFinished?: (suggestion: Suggestion | null) => void;
   readonly onSecretLikeContextDetected?: () => void;
+};
+
+export type NativeSuggestionSessionDependencies = {
+  readonly typingContext: TypingContextBuffer;
+  readonly requestSuggestion: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+  readonly getContextSource: () => SuggestionContextSource;
+  readonly outputs: NativeSuggestionSessionOutputs;
   readonly createAcceptanceDependencies: (
     getCurrentSuggestion: () => Suggestion | null,
     getPreviouslyActiveApplication: () => ActiveApplication | null,
@@ -32,39 +36,40 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let currentSuggestion: Suggestion | null = null;
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
+  const { outputs } = deps;
 
   const suggestionLoop = createSuggestionLoop({
     getContext: () => deps.typingContext.getSnapshot(),
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
-      deps.showSuggestion(suggestion);
+      outputs.showSuggestion(suggestion);
     },
     onHideSuggestion: () => {
       currentSuggestion = null;
-      deps.hideOverlay();
+      outputs.hideOverlay();
     },
-    onRequestStarted: deps.onRequestStarted,
-    onRequestFinished: deps.onRequestFinished,
+    onRequestStarted: outputs.onRequestStarted,
+    onRequestFinished: outputs.onRequestFinished,
     onSecretLikeContextDetected: () => {
       deps.typingContext.clear();
-      deps.onSecretLikeContextDetected?.();
+      outputs.onSecretLikeContextDetected?.();
     },
     debounceMs: deps.debounceMs,
     maxVisibleMs: deps.maxVisibleMs,
   });
 
   function contextChanged(): void {
-    deps.resetDebugApiState();
+    outputs.resetDebugApiState();
     currentSuggestion = null;
-    deps.clearSuggestion();
+    outputs.clearSuggestion();
     suggestionLoop.onContextChanged();
-    deps.showDebugContext();
+    outputs.showDebugContext();
   }
 
   function clearContext(): void {
     deps.typingContext.clear();
-    deps.resetDebugApiState();
+    outputs.resetDebugApiState();
     currentSuggestion = null;
     suggestionLoop.invalidate();
   }
@@ -111,11 +116,11 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     setPaused(active: boolean): void {
       observationPaused = active;
       deps.typingContext.setPaused(active);
-      deps.resetDebugApiState();
+      outputs.resetDebugApiState();
       if (active) {
         clearContext();
       }
-      deps.showDebugContext();
+      outputs.showDebugContext();
     },
     async acceptCurrentSuggestion(): Promise<void> {
       const result = await acceptAndInsertSuggestion(
@@ -126,7 +131,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       );
 
       if (result === "inserted") {
-        deps.hideOverlay();
+        outputs.hideOverlay();
         clearContext();
       }
     },
