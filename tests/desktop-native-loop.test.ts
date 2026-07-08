@@ -9,6 +9,7 @@ import {
 } from "../apps/desktop/src/main/typing-context.ts";
 import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engine.ts";
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
+import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
@@ -22,16 +23,20 @@ describe("desktop native suggestion loop", () => {
     secureInput?: boolean;
     paused?: boolean;
     privateContext?: boolean;
+    contextSource?: SafeTypingContextSnapshot["contextSource"];
+    textSession?: TextSessionSnapshot;
   } = {}): SafeTypingContextSnapshot {
-    return createSafeTypingContextSnapshot({
+    const snapshot = createSafeTypingContextSnapshot({
       context: overrides.context ?? "hello",
       activeApplication: overrides.activeApplication ?? { bundleId: "com.apple.TextEdit" },
       secureInput: overrides.secureInput ?? false,
       paused: overrides.paused ?? false,
       privateContext: overrides.privateContext ?? false,
-      contextSource: "typed_text",
+      contextSource: overrides.contextSource ?? "typed_text",
       memoryEligible: true,
     });
+
+    return overrides.textSession ? { ...snapshot, textSession: overrides.textSession } : snapshot;
   }
 
   describe("typing context buffer", () => {
@@ -307,6 +312,108 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
       expect(events.some((e) => e.type === "hide")).toBe(true);
     });
+
+    it("suppresses cloud requests while prose typing cadence is still rapid", async () => {
+      let now = 1_000;
+      let context = "Hello";
+      const policy = createPoliteTriggerPolicy({ now: () => now, rapidTypingMs: 250 });
+      const requestSuggestionCalls: string[] = [];
+      const { deps } = makeDeps({
+        getContext: () => makeSnapshot({ context }),
+        requestSuggestion: async (snapshot) => {
+          requestSuggestionCalls.push(snapshot.sanitizedContext);
+          return { id: "s-1", text: " world" };
+        },
+      });
+      const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy });
+
+      loop.onContextChanged();
+      now += 40;
+      context = "Hello t";
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(requestSuggestionCalls).toHaveLength(0);
+    });
+
+    it("hides candidates that the trigger policy decides are too interruptive to show", async () => {
+      const policy = createPoliteTriggerPolicy({ maxSuggestionCharacters: 8 });
+      const { events, deps } = makeDeps({
+        requestSuggestion: async () => ({ id: "s-long", text: " this candidate is too long" }),
+      });
+      const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy });
+
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished"]);
+    });
+
+    it("uses stricter trigger behavior in terminal contexts than prose contexts", async () => {
+      const policy = createPoliteTriggerPolicy({ now: () => 10_000 });
+      const terminalRequestSuggestionCalls: string[] = [];
+      const proseRequestSuggestionCalls: string[] = [];
+      const terminal = makeDeps({
+        getContext: () => makeSnapshot({
+          context: "git status",
+          activeApplication: { bundleId: "com.apple.Terminal" },
+          contextSource: "terminal_input",
+        }),
+        requestSuggestion: async (snapshot) => {
+          terminalRequestSuggestionCalls.push(snapshot.sanitizedContext);
+          return { id: "s-terminal", text: " --short" };
+        },
+      });
+      const prose = makeDeps({
+        getContext: () => makeSnapshot({ context: "git status" }),
+        requestSuggestion: async (snapshot) => {
+          proseRequestSuggestionCalls.push(snapshot.sanitizedContext);
+          return { id: "s-prose", text: " update" };
+        },
+      });
+
+      createSuggestionLoop({ ...terminal.deps, triggerPolicy: policy }).onContextChanged();
+      createSuggestionLoop({ ...prose.deps, triggerPolicy: createPoliteTriggerPolicy({ now: () => 10_000 }) }).onContextChanged();
+      await wait(10);
+
+      expect(terminalRequestSuggestionCalls).toHaveLength(0);
+      expect(proseRequestSuggestionCalls).toEqual(["git status"]);
+    });
+
+    it("activates bounded cooldowns after repeated stale suggestions", async () => {
+      let now = 1_000;
+      let context = "Hello ";
+      const policy = createPoliteTriggerPolicy({
+        now: () => now,
+        staleCooldownThreshold: 1,
+        staleCooldownMs: 500,
+      });
+      const requestSuggestionCalls: string[] = [];
+      const { deps } = makeDeps({
+        getContext: () => makeSnapshot({ context }),
+        requestSuggestion: async (snapshot) => {
+          requestSuggestionCalls.push(snapshot.sanitizedContext);
+          return { id: `s-${requestSuggestionCalls.length}`, text: " world" };
+        },
+      });
+      const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy, maxVisibleMs: 5 });
+
+      loop.onContextChanged();
+      await wait(15);
+      context = "Hello again ";
+      now += 100;
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(requestSuggestionCalls).toHaveLength(1);
+
+      now += 600;
+      context = "Hello again friend ";
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(requestSuggestionCalls).toHaveLength(2);
+    });
   });
 
   describe("acceptance and insertion", () => {
@@ -359,6 +466,7 @@ describe("desktop native suggestion loop", () => {
       requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
       maxVisibleMs?: number;
       recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
+      triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
     } = {}) {
       const buffer = createTypingContextBuffer();
       const calls: Array<{ type: string; value?: unknown }> = [];
@@ -389,6 +497,7 @@ describe("desktop native suggestion loop", () => {
         debounceMs: 5,
         maxVisibleMs: overrides.maxVisibleMs,
         recordInteractionTelemetry: overrides.recordInteractionTelemetry,
+        triggerPolicy: overrides.triggerPolicy,
       });
       return { buffer, calls, session };
     }
@@ -546,6 +655,31 @@ describe("desktop native suggestion loop", () => {
       expect(json).not.toContain("acceptedText");
       expect(json).not.toContain("finalInsertedText");
       expect(json).not.toContain("surroundingText");
+    });
+
+    it("suppresses further suggestions for a bounded cooldown after repeated dismissals", async () => {
+      let now = 1_000;
+      const triggerPolicy = createPoliteTriggerPolicy({
+        now: () => now,
+        dismissalCooldownThreshold: 1,
+        dismissalCooldownMs: 500,
+      });
+      const { calls, session } = makeSession({ triggerPolicy });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Hello ");
+      await wait(10);
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(1);
+
+      now += 100;
+      session.appendText("again ");
+      await wait(10);
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(1);
+
+      now += 600;
+      session.appendText("friend ");
+      await wait(10);
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(2);
     });
   });
 

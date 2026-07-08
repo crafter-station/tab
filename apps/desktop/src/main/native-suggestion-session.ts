@@ -6,6 +6,7 @@ import type {
 } from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
+import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
 import {
   createSafeTextSessionSnapshot,
   isReliableTextSessionSnapshot,
@@ -40,6 +41,7 @@ export type NativeSuggestionSessionDependencies = {
   readonly debounceMs: number;
   readonly maxVisibleMs?: number;
   readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
+  readonly triggerPolicy?: TriggerPolicy;
 };
 
 type VisibleSuggestionTelemetry = {
@@ -64,6 +66,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let observationPaused = false;
   let textSessionSnapshot: TextSessionSnapshot | null = null;
   const { outputs } = deps;
+  const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy();
 
   function requestIdFromSuggestion(suggestion: Suggestion): string {
     if (suggestion.id.startsWith(SUGGESTION_ID_PREFIX)) {
@@ -147,10 +150,12 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     },
     debounceMs: deps.debounceMs,
     maxVisibleMs: deps.maxVisibleMs,
+    triggerPolicy,
   });
 
   function contextChanged(): void {
     if (currentSuggestion) {
+      triggerPolicy.recordDismissal(currentSafeSnapshot());
       recordInteractionTelemetry("suggestion_dismissed");
     }
     outputs.resetDebugApiState();
@@ -171,8 +176,17 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     textSessionSnapshot = null;
   }
 
+  function currentSafeSnapshot() {
+    if (textSessionSnapshot) {
+      return createSafeTextSessionSnapshot(textSessionSnapshot);
+    }
+
+    return deps.typingContext.getSnapshot();
+  }
+
   function clearContext(recordDismissed = true): void {
     if (recordDismissed && currentSuggestion) {
+      triggerPolicy.recordDismissal(currentSafeSnapshot());
       recordInteractionTelemetry("suggestion_dismissed");
     }
     clearTextSessionSnapshot();
