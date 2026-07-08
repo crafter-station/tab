@@ -634,7 +634,7 @@ export function createWebApp(config: WebAppConfig) {
     if (!sessionCheck.ok) return sessionCheck.response;
 
     const form = await request.formData();
-    if (String(form.get("confirm") ?? "") !== memoryId) {
+    if (String(form.get("confirm") ?? "") !== "delete-memory") {
       return redirect("/dashboard/memories");
     }
 
@@ -645,6 +645,31 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (response.status === 401) return redirect("/login");
+    return redirect("/dashboard/memories");
+  }
+
+  async function deleteSelectedMemoriesHandler(
+    request: Request,
+    cookieHeader: string | undefined,
+  ): Promise<Response> {
+    const sessionCheck = await requireSession(cookieHeader);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const form = await request.formData();
+    if (String(form.get("confirm") ?? "") !== "delete-selected-memories") {
+      return redirect("/dashboard/memories");
+    }
+
+    const memoryIds = [...new Set(form.getAll("memoryId").map((value) => String(value)).filter(Boolean))];
+    for (const memoryId of memoryIds) {
+      const response = await apiRequest(
+        `/api/account/memory/${encodeURIComponent(memoryId)}`,
+        { method: "DELETE" },
+        cookieHeader,
+      );
+      if (response.status === 401) return redirect("/login");
+    }
+
     return redirect("/dashboard/memories");
   }
 
@@ -788,6 +813,10 @@ export function createWebApp(config: WebAppConfig) {
 
       if ((path === "/account/memory/create" || path === "/dashboard/memories/create") && request.method === "POST") {
         return createMemoryHandler(request, cookieHeader);
+      }
+
+      if (path === "/dashboard/memories/delete-selected" && request.method === "POST") {
+        return deleteSelectedMemoriesHandler(request, cookieHeader);
       }
 
       if (path === "/billing/checkout" && request.method === "GET") {

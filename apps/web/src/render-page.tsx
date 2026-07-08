@@ -42,11 +42,11 @@ function userAvatarUrl(user: User): string {
 
 function StaticThemeMenu() {
   return (
-    <details className="group relative" aria-label="Theme selection">
+    <details className="group relative" name="header-menu" aria-label="Theme selection">
       <summary className={buttonVariants({ variant: "secondary", size: "icon", className: "cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden" })}>
         <ThemeIcon mode="system" />
       </summary>
-      <div className="absolute right-0 z-50 mt-2 min-w-40 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground shadow-[var(--tab-shadow-soft)]">
+      <div className="absolute right-0 z-50 mt-2 min-w-40 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground shadow-[var(--tab-shadow-soft)] [&_svg]:size-4 [&_svg]:shrink-0">
         <div className="px-2 py-1.5 text-sm font-semibold">Theme</div>
         {THEME_MODES.map((mode) => (
           <button className="flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground" data-theme-choice={mode} key={mode} type="button" aria-pressed="false">
@@ -63,14 +63,14 @@ function UserMenu({ user }: { user: User }) {
   const userLabel = user.email ?? user.name ?? "Account";
 
   return (
-    <details className="group relative" aria-label="User menu">
+    <details className="group relative" name="header-menu" aria-label="User menu">
       <summary className={buttonVariants({ variant: "secondary", size: "icon", className: "cursor-pointer list-none rounded-full p-1 marker:hidden [&::-webkit-details-marker]:hidden" })}>
         <Avatar className="size-8">
           <AvatarFallback>{userLabel.slice(0, 1).toUpperCase()}</AvatarFallback>
           <img className="absolute inset-0 size-full" src={userAvatarUrl(user)} alt={`${userLabel} profile picture`} width="32" height="32" loading="lazy" />
         </Avatar>
       </summary>
-      <div className="absolute right-0 z-50 mt-2 min-w-56 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground shadow-[var(--tab-shadow-soft)]">
+      <div className="absolute right-0 z-50 mt-2 min-w-56 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground shadow-[var(--tab-shadow-soft)] [&_svg]:size-4 [&_svg]:shrink-0">
         <div className="max-w-56 truncate px-2 py-1.5 text-sm font-semibold">{userLabel}</div>
         <div>
           <a className="flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground" href="/dashboard">

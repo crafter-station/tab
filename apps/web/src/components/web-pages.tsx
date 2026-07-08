@@ -56,6 +56,7 @@ export type DashboardSection = "overview" | "account" | "usage" | "devices" | "m
 
 const authTitleClassName = "font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]";
 const quotaExhaustedClassName = "rounded-lg border border-warning/30 bg-[var(--tab-warning-tint)] p-3 text-warning";
+const bulkDeleteMemoriesFormId = "bulk-delete-memories";
 
 const homeProofRows = [
   {
@@ -724,87 +725,137 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
 }
 
 function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
+  const memoryCountLabel = `${formatCount(memories.length)} ${memories.length === 1 ? "memory" : "memories"}`;
+
   return (
     <SectionBlock id="memories">
       <SurfaceHeader
         eyebrow="Saved memories"
         title="Saved memories"
-        description="Add, edit, and delete saved details. Turn memory use on or off from the Mac app settings."
+        description="Review the details Tab can use for personalization. Turn memory use on or off from the Mac app settings."
       />
-      <div className="mt-4">
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Use saved memories in suggestions</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-            <p>
-              Saved memories can personalize suggestions when memory is enabled in the Mac app.
-            </p>
-            <Badge variant="secondary">Controlled on each Mac</Badge>
-          </CardContent>
-        </Card>
-        <form method="post" action="/dashboard/memories/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
-          <Label htmlFor="memory-content">Add a saved memory</Label>
-          <textarea
-            id="memory-content"
-            name="content"
-            maxLength={500}
-            required
-            rows={3}
-            autoComplete="off"
-            className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
-            placeholder="Example: I prefer concise morning status summaries…"
-          />
-          <p><Button type="submit">Save memory</Button></p>
-        </form>
+      <div className="mt-4 grid gap-4">
+        <div className="flex flex-col gap-2 rounded-[var(--radius-card)] border border-border bg-muted/35 p-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+          <p>Saved memories can personalize suggestions when memory is enabled in the Mac app.</p>
+          <Badge variant="secondary" className="w-max">Controlled on each Mac</Badge>
+        </div>
+        <details className="rounded-[var(--radius-card)] border border-border bg-background p-3">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-control)] px-2 py-1 text-sm font-bold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+            Add a memory
+            <span className="text-xs font-medium text-muted-foreground">500 character limit</span>
+          </summary>
+          <form method="post" action="/dashboard/memories/create" className="mt-3 grid gap-3">
+            <Label htmlFor="memory-content">Memory content</Label>
+            <textarea
+              id="memory-content"
+              name="content"
+              maxLength={500}
+              required
+              rows={3}
+              autoComplete="off"
+              className="min-h-20 rounded-[var(--radius-media)] border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
+              placeholder="Example: I prefer concise morning status summaries…"
+            />
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="submit" size="sm">Save memory</Button>
+              <span className="text-xs font-medium text-muted-foreground">Only save details you are comfortable reusing.</span>
+            </div>
+          </form>
+        </details>
         {memories.length === 0 ? (
           <EmptyState
             title="No saved memories yet"
             description="Add a saved memory when you want Tab to personalize suggestions."
           />
         ) : (
-          <Table aria-label="Saved memories">
-            <caption className="sr-only">Saved memories, source, updated date, and actions</caption>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Content</TableHead>
-                <TableHead>Created by</TableHead>
-                <TableHead>Updated</TableHead>
-                <TableHead><span className="sr-only">Actions</span></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {memories.map((memory) => (
-                <TableRow key={memory.id}>
-                  <TableCell>
-                    <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/edit`} className="grid gap-2">
-                      <textarea
-                        name="content"
-                        maxLength={500}
-                        required
-                        rows={2}
-                        autoComplete="off"
-                        className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
-                        defaultValue={memory.content}
-                      />
-                      <p><Button type="submit" size="sm" variant="secondary">Save edit</Button></p>
-                    </form>
-                  </TableCell>
-                  <TableCell><Badge variant="outline">{memorySourceLabel(memory.createdBy)}</Badge></TableCell>
-                  <TableCell>{formatDate(memory.updatedAt)}</TableCell>
-                  <TableCell>
-                    <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`} className="grid gap-2">
-                      <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                        <input type="checkbox" name="confirm" value={memory.id} required />
-                        Confirm delete
-                      </Label>
-                      <Button type="submit" size="sm" variant="destructive">Delete memory</Button>
-                    </form>
-                  </TableCell>
+          <div className="grid gap-3">
+            <form id={bulkDeleteMemoriesFormId} method="post" action="/dashboard/memories/delete-selected" />
+            <div className="flex flex-col gap-3 rounded-[var(--radius-card)] border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="grid gap-1">
+                <p className="text-sm font-bold text-foreground">Memory Library</p>
+                <p className="text-sm text-muted-foreground">Select one or more rows, confirm, then delete the selected memories.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline" className="w-max">{memoryCountLabel}</Badge>
+                <Label className="flex items-center gap-2 rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 py-2 text-xs font-bold text-muted-foreground">
+                  <input form={bulkDeleteMemoriesFormId} type="checkbox" name="confirm" value="delete-selected-memories" required />
+                  Confirm deletion
+                </Label>
+                <Button form={bulkDeleteMemoriesFormId} type="submit" size="sm" variant="destructive">Delete Selected</Button>
+              </div>
+            </div>
+            <Table aria-label="Saved memories">
+              <caption className="sr-only">Saved memories available for personalized suggestions</caption>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-12"><span className="sr-only">Select</span></TableHead>
+                  <TableHead>Memory</TableHead>
+                  <TableHead>Source</TableHead>
+                  <TableHead>Updated</TableHead>
+                  <TableHead className="min-w-64"><span className="sr-only">Actions</span></TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {memories.map((memory) => (
+                  <TableRow key={memory.id}>
+                    <TableCell>
+                      <Label className="flex size-9 items-center justify-center rounded-[var(--radius-control)] border border-border bg-muted/30 hover:bg-muted">
+                        <span className="sr-only">Select memory updated {formatDate(memory.updatedAt)}</span>
+                        <input form={bulkDeleteMemoriesFormId} type="checkbox" name="memoryId" value={memory.id} />
+                      </Label>
+                    </TableCell>
+                    <TableCell className="min-w-[18rem] max-w-[36rem]">
+                      <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground">{memory.content}</p>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="w-max whitespace-nowrap">{memorySourceLabel(memory.createdBy)}</Badge>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap font-[var(--font-code)] text-xs tabular-nums text-muted-foreground">
+                      {formatDate(memory.updatedAt)}
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex min-w-64 flex-wrap items-start gap-2">
+                        <details className="rounded-[var(--radius-media)] border border-border bg-card/60 p-1">
+                          <summary className="cursor-pointer list-none rounded-[var(--radius-control)] px-2 py-1 text-xs font-bold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                            Edit memory
+                          </summary>
+                          <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/edit`} className="mt-2 grid w-full gap-2 sm:w-[min(36rem,75vw)]">
+                            <Label htmlFor={`memory-${memory.id}-content`}>Memory content</Label>
+                            <textarea
+                              id={`memory-${memory.id}-content`}
+                              name="content"
+                              maxLength={500}
+                              required
+                              rows={3}
+                              autoComplete="off"
+                              className="min-h-20 rounded-[var(--radius-media)] border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
+                              defaultValue={memory.content}
+                            />
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Button type="submit" size="sm">Save Changes</Button>
+                              <a className={buttonVariants({ size: "sm", variant: "secondary" })} href="/dashboard/memories">Cancel</a>
+                            </div>
+                          </form>
+                        </details>
+                        <details className="rounded-[var(--radius-media)] border border-border bg-card/60 p-1">
+                          <summary className="cursor-pointer list-none rounded-[var(--radius-control)] px-2 py-1 text-xs font-bold text-muted-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                            Delete memory
+                          </summary>
+                          <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`} className="mt-2 grid gap-2 sm:w-80">
+                            <p className="rounded-[var(--radius-media)] border border-destructive/25 bg-destructive/5 p-2 text-xs text-muted-foreground">
+                              <strong className="text-foreground">Delete this saved detail?</strong> This cannot be undone.
+                            </p>
+                            <input type="hidden" name="confirm" value="delete-memory" />
+                            <Button type="submit" size="sm" variant="destructive" className="w-max">Delete saved detail</Button>
+                          </form>
+                        </details>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         )}
       </div>
     </SectionBlock>

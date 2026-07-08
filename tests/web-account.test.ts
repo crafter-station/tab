@@ -729,10 +729,25 @@ describe("Web account surface", () => {
 
     const accountBefore = await webRequest(webApp, "/dashboard/memories", {}, cookie);
     expect(accountBefore.status).toBe(200);
-    await textIncludes(accountBefore, "Lives in Portland");
+    const bodyBefore = await accountBefore.text();
+    expect(bodyBefore).toInclude("Lives in Portland");
+    expect(bodyBefore).toInclude("Edit memory");
+    expect(bodyBefore).toInclude("Delete saved detail");
+
+    const unconfirmedDeleteResponse = await webRequest(
+      webApp,
+      `/dashboard/memories/${memory.id}/delete`,
+      { method: "POST", body: new FormData() },
+      cookie,
+    );
+    expect(unconfirmedDeleteResponse.status).toBe(302);
+    expect(unconfirmedDeleteResponse.headers.get("location")).toBe(
+      "/dashboard/memories",
+    );
+    expect(await personalMemoryStorage.findMemoryById(memory.id)).toBeTruthy();
 
     const deleteForm = new FormData();
-    deleteForm.set("confirm", memory.id);
+    deleteForm.set("confirm", "delete-memory");
     const deleteResponse = await webRequest(
       webApp,
       `/dashboard/memories/${memory.id}/delete`,
@@ -805,7 +820,7 @@ describe("Web account surface", () => {
     const body = await accountPage.text();
     expect(body).toInclude("Prefers concise summaries");
     expect(body).toInclude("Works at Acme Robotics");
-    expect(body).toInclude("Add a saved memory");
+    expect(body).toInclude("Add a memory");
   });
 
   it("lists and revokes native devices from the account surface", async () => {
