@@ -10,6 +10,7 @@ import {
   BillingWebhookHandler,
   hasActivePolarEntitlement,
   type BillingCheckoutClient,
+  type PlanChangeOptions,
   type BillingService,
 } from "../billing.ts";
 import { requireSession } from "../http/auth.ts";
@@ -22,7 +23,7 @@ function isPlanId(planId: string | undefined): planId is PlanId {
 function getPlanChangeProrationBehavior(
   currentPlanId: PlanId,
   targetPlanId: PlanId,
-): "prorate" | "next_period" | undefined {
+): PlanChangeOptions["prorationBehavior"] | undefined {
   if (currentPlanId === "pro" && targetPlanId === "max") return "prorate";
   if (currentPlanId === "max" && targetPlanId === "pro") return "next_period";
   return undefined;

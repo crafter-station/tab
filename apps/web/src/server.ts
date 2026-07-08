@@ -77,8 +77,7 @@ function htmlErrorPage(
     createElement(MessagePage, {
       title,
       message,
-      actionHref: action?.href,
-      actionLabel: action?.label,
+      action,
     }),
     title,
   );
