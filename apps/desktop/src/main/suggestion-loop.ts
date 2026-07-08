@@ -4,6 +4,7 @@ import {
   type RequestableTypingContextSnapshot,
   type SafeTypingContextSnapshot,
 } from "./typing-context.ts";
+import type { TriggerPolicy } from "./trigger-policy.ts";
 
 export type SuggestionLoopState =
   | { status: "idle" }
@@ -19,6 +20,7 @@ export type SuggestionLoopDependencies = {
   onRequestFinished?: (suggestion: Suggestion | null) => void;
   onSuggestionStale?: (suggestion: Suggestion) => void;
   onSecretLikeContextDetected?: () => void;
+  triggerPolicy?: TriggerPolicy;
   debounceMs: number;
   maxVisibleMs?: number;
 };
@@ -49,6 +51,12 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
       if (snapshot.suppressionReason === "secret_like_context") {
         deps.onSecretLikeContextDetected?.();
       }
+      invalidate();
+      return;
+    }
+
+    const triggerDecision = deps.triggerPolicy?.onContextChanged(snapshot);
+    if (triggerDecision && !triggerDecision.allow) {
       invalidate();
       return;
     }
@@ -94,10 +102,17 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
+        const showDecision = deps.triggerPolicy?.onSuggestionCandidate(latest, suggestion);
+        if (showDecision && !showDecision.allow) {
+          state = { status: "idle" };
+          return;
+        }
+
         const expiryTimer = setTimeout(() => {
           if (state.status !== "showing" || state.contextHash !== hash) {
             return;
           }
+          deps.triggerPolicy?.recordStale(deps.getContext());
           deps.onSuggestionStale?.(state.suggestion);
           deps.onHideSuggestion();
           state = { status: "idle" };
