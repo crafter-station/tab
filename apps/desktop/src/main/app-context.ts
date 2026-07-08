@@ -6,6 +6,8 @@ const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
 const ZED_PROVIDER = "zed-focused-editor";
 const ZED_BUNDLE_IDS = new Set(["dev.zed.Zed", "dev.zed.Zed-Preview"]);
+const ZED_CONTEXT_CONFIDENCE = 0.82;
+const FOCUSED_EDITOR_BEFORE_CARET_RATIO = 0.7;
 const MIN_EDITOR_CONTEXT_LENGTH = 8;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
 
@@ -33,7 +35,7 @@ function createSafeRedactionSummary(): AppContextFragment["redaction"] {
   };
 }
 
-function emptyProviderSnapshot(
+function createEmptyProviderSnapshot(
   provider: string,
   status: AppContextSnapshot["metadata"]["status"],
 ): AppContextSnapshot {
@@ -105,10 +107,10 @@ function takeLeadingText(text: string, maxLength: number): string {
 }
 
 function buildBoundedFocusedEditorText(beforeCaret: string, afterCaret: string): string {
-  const beforeBudget = Math.ceil(MAX_FRAGMENT_LENGTH * 0.7);
-  const afterBudget = MAX_FRAGMENT_LENGTH - beforeBudget;
-  const before = takeTrailingText(beforeCaret, beforeBudget).trimStart();
-  const after = takeLeadingText(afterCaret, afterBudget).trimEnd();
+  const beforeCaretBudget = Math.ceil(MAX_FRAGMENT_LENGTH * FOCUSED_EDITOR_BEFORE_CARET_RATIO);
+  const afterCaretBudget = MAX_FRAGMENT_LENGTH - beforeCaretBudget;
+  const before = takeTrailingText(beforeCaret, beforeCaretBudget).trimStart();
+  const after = takeLeadingText(afterCaret, afterCaretBudget).trimEnd();
 
   return [before, after].filter((part) => part.trim().length > 0).join("");
 }
@@ -121,17 +123,17 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
   return (snapshot) => {
     const textSession = snapshot.textSession;
     if (!isZedBundleId(snapshot.activeApplication?.bundleId)) {
-      return emptyProviderSnapshot(ZED_PROVIDER, "unsupported");
+      return createEmptyProviderSnapshot(ZED_PROVIDER, "unsupported");
     }
     if (!textSession || textSession.accessibilityReliability !== "reliable" || textSession.secureLike) {
-      return emptyProviderSnapshot(ZED_PROVIDER, "empty");
+      return createEmptyProviderSnapshot(ZED_PROVIDER, "empty");
     }
 
     const beforeCaret = textSession.surroundingContext?.beforeCaret ?? "";
     const afterCaret = textSession.surroundingContext?.afterCaret ?? "";
     const text = buildBoundedFocusedEditorText(beforeCaret, afterCaret);
     if (text.trim().length < MIN_EDITOR_CONTEXT_LENGTH) {
-      return emptyProviderSnapshot(ZED_PROVIDER, "empty");
+      return createEmptyProviderSnapshot(ZED_PROVIDER, "empty");
     }
 
     return sanitizeAppContextSnapshot({
@@ -141,7 +143,7 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
           provider: ZED_PROVIDER,
           kind: "focused_editor",
           text,
-          confidence: 0.82,
+          confidence: ZED_CONTEXT_CONFIDENCE,
           redaction: createSafeRedactionSummary(),
           requestable: true,
           memoryEligible: false,
@@ -150,7 +152,7 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
       metadata: {
         provider: ZED_PROVIDER,
         status: "available",
-        confidence: 0.82,
+        confidence: ZED_CONTEXT_CONFIDENCE,
       },
     });
   };

@@ -943,14 +943,15 @@ describe("desktop native suggestion loop", () => {
           status: "available",
         });
         expect(markdown.fragments).toHaveLength(1);
-        expect(markdown.fragments[0]).toMatchObject({
+        const markdownFragment = markdown.fragments[0];
+        expect(markdownFragment).toMatchObject({
           provider: "zed-focused-editor",
           kind: "focused_editor",
           requestable: true,
           memoryEligible: false,
         });
-        expect(markdown.fragments[0].text).toContain("# Launch notes");
-        expect(markdown.fragments[0].text).toContain("before the demo starts.");
+        expect(markdownFragment.text).toContain("# Launch notes");
+        expect(markdownFragment.text).toContain("before the demo starts.");
 
         const comment = providerSnapshot(zedTextSession({
           surroundingContext: {
@@ -960,17 +961,19 @@ describe("desktop native suggestion loop", () => {
         }));
 
         expect(comment.metadata.status).toBe("available");
-        expect(comment.fragments[0].text).toContain("// Keep app context separate");
+        const commentFragment = comment.fragments[0];
+        expect(commentFragment.text).toContain("// Keep app context separate");
 
         const longBefore = `${"Earlier paragraph. ".repeat(220)}Current caret idea`;
         const long = providerSnapshot(zedTextSession({
           surroundingContext: { beforeCaret: longBefore, afterCaret: " Next sentence." },
         }));
 
-        expect(long.fragments[0].text.length).toBeLessThanOrEqual(2_000);
-        expect(long.fragments[0].text).toContain("Current caret idea");
-        expect(long.fragments[0].text).not.toBe(longBefore + " Next sentence.");
-        expect(long.fragments[0].text).not.toStartWith("Earlier paragraph. Earlier paragraph. Earlier paragraph.");
+        const longFragment = long.fragments[0];
+        expect(longFragment.text.length).toBeLessThanOrEqual(2_000);
+        expect(longFragment.text).toContain("Current caret idea");
+        expect(longFragment.text).not.toBe(longBefore + " Next sentence.");
+        expect(longFragment.text).not.toStartWith("Earlier paragraph. Earlier paragraph. Earlier paragraph.");
       });
 
       it("falls back safely for unsupported, unreliable, partial, and secret-like editor states", () => {
