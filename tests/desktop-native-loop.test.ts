@@ -373,7 +373,10 @@ describe("desktop native suggestion loop", () => {
       });
 
       createSuggestionLoop({ ...terminal.deps, triggerPolicy: policy }).onContextChanged();
-      createSuggestionLoop({ ...prose.deps, triggerPolicy: createPoliteTriggerPolicy({ now: () => 10_000 }) }).onContextChanged();
+      createSuggestionLoop({
+        ...prose.deps,
+        triggerPolicy: createPoliteTriggerPolicy({ now: () => 10_000 }),
+      }).onContextChanged();
       await wait(10);
 
       expect(terminalRequestSuggestionCalls).toHaveLength(0);

@@ -11,6 +11,7 @@ import {
   createSafeTextSessionSnapshot,
   isReliableTextSessionSnapshot,
   type RequestableTypingContextSnapshot,
+  type SafeTypingContextSnapshot,
   type TextSessionSnapshot,
   type TypingContextBuffer,
   type TypingDeletionUnit,
@@ -121,13 +122,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   }
 
   const suggestionLoop = createSuggestionLoop({
-    getContext: () => {
-      if (textSessionSnapshot) {
-        return createSafeTextSessionSnapshot(textSessionSnapshot);
-      }
-
-      return deps.typingContext.getSnapshot();
-    },
+    getContext: () => currentSafeSnapshot(),
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
@@ -176,7 +171,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     textSessionSnapshot = null;
   }
 
-  function currentSafeSnapshot() {
+  function currentSafeSnapshot(): SafeTypingContextSnapshot {
     if (textSessionSnapshot) {
       return createSafeTextSessionSnapshot(textSessionSnapshot);
     }

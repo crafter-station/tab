@@ -85,11 +85,16 @@ function uniquePolicyKeys(snapshot: SafeTypingContextSnapshot): string[] {
   return Array.from(new Set(policyKeys(snapshot)));
 }
 
-function mostRestrictiveStats(stats: InteractionStats[]): InteractionStats | null {
-  return stats.reduce<InteractionStats | null>((current, next) => {
-    if (!current || next.cooldownUntil > current.cooldownUntil) return next;
-    return current;
-  }, null);
+function statsWithLatestCooldown(stats: InteractionStats[]): InteractionStats | null {
+  let latestStats: InteractionStats | null = null;
+
+  for (const nextStats of stats) {
+    if (!latestStats || nextStats.cooldownUntil > latestStats.cooldownUntil) {
+      latestStats = nextStats;
+    }
+  }
+
+  return latestStats;
 }
 
 function hasNaturalBoundary(context: string): boolean {
@@ -117,29 +122,29 @@ export function createPoliteTriggerPolicy(options: PoliteTriggerPolicyOptions = 
     return stats;
   }
 
-  function statsFor(snapshot: SafeTypingContextSnapshot): InteractionStats[] {
+  function statsForSnapshot(snapshot: SafeTypingContextSnapshot): InteractionStats[] {
     return uniquePolicyKeys(snapshot).map(statsForKey);
   }
 
   function activeCooldown(snapshot: SafeTypingContextSnapshot): TriggerPolicyDecision | null {
-    const currentStats = mostRestrictiveStats(
-      statsFor(snapshot).filter((stats) => stats.cooldownUntil > now()),
+    const currentStats = statsWithLatestCooldown(
+      statsForSnapshot(snapshot).filter((stats) => stats.cooldownUntil > now()),
     );
 
     if (!currentStats) return null;
 
-    return suppress(
-      currentStats.dismissals >= dismissalCooldownThreshold
-        ? "dismissal_cooldown"
-        : "stale_cooldown",
-    );
+    if (currentStats.dismissals >= dismissalCooldownThreshold) {
+      return suppress("dismissal_cooldown");
+    }
+
+    return suppress("stale_cooldown");
   }
 
   function recordForKeys(
     snapshot: SafeTypingContextSnapshot,
     update: (stats: InteractionStats) => void,
   ): void {
-    for (const stats of statsFor(snapshot)) {
+    for (const stats of statsForSnapshot(snapshot)) {
       update(stats);
     }
   }
@@ -158,8 +163,15 @@ export function createPoliteTriggerPolicy(options: PoliteTriggerPolicyOptions = 
       const cooldown = activeCooldown(snapshot);
       if (cooldown) return cooldown;
 
-      if (isTerminalActiveApplication(snapshot.activeApplication) || snapshot.contextSource === "terminal_input") {
-        return hasNaturalBoundary(snapshot.sanitizedContext) ? allow() : suppress("terminal_strictness");
+      const isTerminalContext = isTerminalActiveApplication(snapshot.activeApplication)
+        || snapshot.contextSource === "terminal_input";
+
+      if (isTerminalContext) {
+        if (hasNaturalBoundary(snapshot.sanitizedContext)) {
+          return allow();
+        }
+
+        return suppress("terminal_strictness");
       }
 
       if (
