@@ -99,6 +99,10 @@ export function isReliableTextSessionSnapshot(snapshot: TextSessionSnapshot): bo
   return snapshot.accessibilityReliability === "reliable";
 }
 
+export function isPrivateTextSessionSnapshot(snapshot: TextSessionSnapshot): boolean {
+  return snapshot.secureLike || isPrivateActiveApplication(snapshot.activeApplication);
+}
+
 function rangeKey(range: TextSessionRange | null): string {
   if (!range) return "range-unknown";
   return `${range.location}:${range.length}`;
@@ -117,7 +121,7 @@ function textSessionIdentityKey(snapshot: TextSessionSnapshot): string {
 }
 
 export function createSafeTextSessionSnapshot(snapshot: TextSessionSnapshot): SafeTypingContextSnapshot {
-  const privateContext = snapshot.secureLike || isPrivateActiveApplication(snapshot.activeApplication);
+  const privateContext = isPrivateTextSessionSnapshot(snapshot);
   const state: TypingContextState = {
     context: snapshot.surroundingContext?.beforeCaret ?? "",
     activeApplication: snapshot.activeApplication,
