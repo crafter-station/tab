@@ -605,6 +605,51 @@ export function createWebApp(config: WebAppConfig) {
     return redirect("/dashboard?tab=memories");
   }
 
+  async function submitMemoryForm(
+    request: Request,
+    cookieHeader: string | undefined,
+    path: string,
+    method: "POST" | "PATCH",
+  ): Promise<Response> {
+    const sessionCheck = await requireSession(cookieHeader);
+    if (!sessionCheck.ok) return sessionCheck.response;
+
+    const form = await request.formData();
+    const content = String(form.get("content") ?? "");
+    const response = await apiRequest(
+      path,
+      {
+        method,
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ content }),
+      },
+      cookieHeader,
+    );
+
+    if (response.status === 401) return redirect("/login");
+    return redirect("/dashboard?tab=memories");
+  }
+
+  async function createMemoryHandler(
+    request: Request,
+    cookieHeader: string | undefined,
+  ): Promise<Response> {
+    return submitMemoryForm(request, cookieHeader, "/api/account/memory", "POST");
+  }
+
+  async function editMemoryHandler(
+    request: Request,
+    cookieHeader: string | undefined,
+    memoryId: string,
+  ): Promise<Response> {
+    return submitMemoryForm(
+      request,
+      cookieHeader,
+      `/api/account/memory/${encodeURIComponent(memoryId)}`,
+      "PATCH",
+    );
+  }
+
   async function logoutHandler(
     cookieHeader: string | undefined,
   ): Promise<Response> {
@@ -677,6 +722,10 @@ export function createWebApp(config: WebAppConfig) {
         return accountPage(cookieHeader, path, url.searchParams);
       }
 
+      if (path === "/account/memory/create" && request.method === "POST") {
+        return createMemoryHandler(request, cookieHeader);
+      }
+
       if (path === "/billing/checkout" && request.method === "GET") {
         return checkoutRedirect(cookieHeader, url.searchParams);
       }
@@ -693,6 +742,17 @@ export function createWebApp(config: WebAppConfig) {
         const deviceId = routeSegment(path, 3);
         if (deviceId) {
           return revokeDeviceHandler(cookieHeader, deviceId);
+        }
+      }
+
+      if (
+        (path.startsWith("/account/memory/") || path.startsWith("/dashboard/memory/")) &&
+        path.endsWith("/edit") &&
+        request.method === "POST"
+      ) {
+        const memoryId = routeSegment(path, 3);
+        if (memoryId) {
+          return editMemoryHandler(request, cookieHeader, memoryId);
         }
       }
 

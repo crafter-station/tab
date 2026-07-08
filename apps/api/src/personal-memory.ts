@@ -199,8 +199,13 @@ export type RelevanceInput = {
 
 const createMemoryInputSchema = z.object({
   userId: z.string().min(1),
-  content: z.string().min(1),
+  content: z.string().trim().min(1).max(500),
   createdBy: PersonalMemorySchema.shape.createdBy,
+});
+
+const updateMemoryInputSchema = z.object({
+  content: z.string().trim().min(1).max(500).optional(),
+  createdBy: PersonalMemorySchema.shape.createdBy.optional(),
 });
 
 function normalizeTokens(text: string): Set<string> {
@@ -281,7 +286,25 @@ export class PersonalMemoryService {
     id: string,
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
-    return this.storage.updateMemory(id, input);
+    const parsed = updateMemoryInputSchema.parse(input);
+    return this.storage.updateMemory(id, parsed);
+  }
+
+  async updateMemoryForUser(
+    userId: string,
+    id: string,
+    input: { readonly content: string },
+  ): Promise<PersonalMemory | null> {
+    const memory = await this.storage.findMemoryById(id);
+    if (!memory || memory.userId !== userId) {
+      return null;
+    }
+
+    const userAuthoredUpdate = updateMemoryInputSchema.parse({
+      content: input.content,
+      createdBy: "user",
+    });
+    return this.storage.updateMemory(id, userAuthoredUpdate);
   }
 
   async selectRelevantMemories(input: RelevanceInput): Promise<PersonalMemory[]> {

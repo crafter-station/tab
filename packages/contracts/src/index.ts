@@ -96,6 +96,19 @@ export const MemoryListResponseSchema = z.object({
   }),
 });
 
+export const MemoryWriteRequestSchema = z
+  .object({
+    content: z.string().trim().min(1).max(500),
+  })
+  .strict();
+
+export const MemoryWriteResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    memory: PersonalMemorySchema,
+  }),
+});
+
 export const MemoryDeleteResponseSchema = z.object({
   status: z.literal("ok"),
   data: z.object({

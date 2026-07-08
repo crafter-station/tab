@@ -9,6 +9,7 @@ import {
   ApiResponseSchema,
   MemoryDeleteResponseSchema,
   MemoryListResponseSchema,
+  MemoryWriteResponseSchema,
 } from "../packages/contracts/src/index.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type {
@@ -148,6 +149,78 @@ describe("Personal Memory API", () => {
     ]);
   });
 
+  it("creates a user-authored memory manually", async () => {
+    const { app, token } = await createAuthenticatedTestApp();
+
+    const response = await app.request("/api/memory", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ content: "Prefers morning meetings" }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = MemoryWriteResponseSchema.parse(await response.json());
+    expect(body.data.memory.content).toBe("Prefers morning meetings");
+    expect(body.data.memory.userId).toBe("user-1");
+    expect(body.data.memory.createdBy).toBe("user");
+
+    const listResponse = await app.request("/api/memory", {
+      headers: authHeaders(token),
+    });
+    const listBody = MemoryListResponseSchema.parse(await listResponse.json());
+    expect(listBody.data.memories.map((memory) => memory.id)).toEqual([
+      body.data.memory.id,
+    ]);
+  });
+
+  it("edits a system-created memory and converts authorship to user", async () => {
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp();
+
+    const memory = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Works at Acme",
+      createdBy: "system",
+    });
+
+    const response = await app.request(`/api/memory/${memory.id}`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ content: "Works at Acme Robotics" }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = MemoryWriteResponseSchema.parse(await response.json());
+    expect(body.data.memory.content).toBe("Works at Acme Robotics");
+    expect(body.data.memory.createdBy).toBe("user");
+
+    const stored = await personalMemoryStorage.findMemoryById(memory.id);
+    expect(stored?.createdBy).toBe("user");
+  });
+
+  it("rejects editing another user's memory", async () => {
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp();
+
+    const otherMemory = await personalMemoryStorage.createMemory({
+      userId: "user-2",
+      content: "Private user two note",
+      createdBy: "system",
+    });
+
+    const response = await app.request(`/api/memory/${otherMemory.id}`, {
+      method: "PATCH",
+      headers: authHeaders(token),
+      body: JSON.stringify({ content: "Edited" }),
+    });
+
+    expect(response.status).toBe(404);
+    const body = ApiResponseSchema.parse(await response.json());
+    expect(body.status).toBe("error");
+    if (body.status !== "error") throw new Error("Expected error response");
+    expect(body.error.code).toBe("invalid_request");
+  });
+
   it("deletes the user's own memory", async () => {
     const { app, token, personalMemoryStorage } =
       await createAuthenticatedTestApp();
@@ -172,6 +245,25 @@ describe("Personal Memory API", () => {
     });
     const listBody = MemoryListResponseSchema.parse(await listResponse.json());
     expect(listBody.data.memories).toHaveLength(0);
+  });
+
+  it("hard-deletes a system-created memory", async () => {
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp();
+
+    const memory = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Learned note",
+      createdBy: "system",
+    });
+
+    const response = await app.request(`/api/memory/${memory.id}`, {
+      method: "DELETE",
+      headers: authHeaders(token),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await personalMemoryStorage.findMemoryById(memory.id)).toBeNull();
   });
 
   it("rejects deletion of another user's memory", async () => {
