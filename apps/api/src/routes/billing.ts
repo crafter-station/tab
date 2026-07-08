@@ -19,6 +19,13 @@ function isPlanId(planId: string | undefined): planId is PlanId {
   return Boolean(planId && planId in planQuotas);
 }
 
+function supportsImmediatePlanChange(
+  currentPlanId: PlanId,
+  targetPlanId: PlanId,
+): targetPlanId is Exclude<PlanId, "free"> {
+  return currentPlanId === "pro" && targetPlanId === "max";
+}
+
 export function registerBillingRoutes(
   app: ApiApp,
   deps: {
@@ -89,7 +96,7 @@ export function registerBillingRoutes(
     const requestedPaidPlan = planId !== "free";
 
     if (hasActivePaidSubscription && requestedPaidPlan && planId !== entitlement.planId) {
-      if (entitlement.planId !== "pro" || planId !== "max") {
+      if (!supportsImmediatePlanChange(entitlement.planId, planId)) {
         return c.json(
           createErrorResponse(
             "plan_change_required",

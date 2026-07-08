@@ -12,6 +12,7 @@ import {
   type BillingCheckoutClient,
   BillingService,
   InMemoryBillingStorage,
+  type PlanChangeOptions,
 } from "../apps/api/src/billing.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import { createWebApp, type WebApp } from "../apps/web/src/index.ts";
@@ -22,11 +23,7 @@ const WEB_ORIGIN = "http://localhost:3000";
 
 class TestBillingCheckoutClient implements BillingCheckoutClient {
   readonly checkoutRequests: PlanId[] = [];
-  readonly planChangeRequests: Array<{
-    subscriptionId: string;
-    targetPlanId: Exclude<PlanId, "free">;
-    prorationBehavior: "prorate" | "next_period";
-  }> = [];
+  readonly planChangeRequests: PlanChangeOptions[] = [];
 
   async createCheckoutUrl(
     planId: PlanId,
@@ -43,11 +40,7 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
     return `https://portal.test/${encodeURIComponent(customerId ?? userId)}`;
   }
 
-  async changePlan(options: {
-    subscriptionId: string;
-    targetPlanId: Exclude<PlanId, "free">;
-    prorationBehavior: "prorate" | "next_period";
-  }): Promise<void> {
+  async changePlan(options: PlanChangeOptions): Promise<void> {
     this.planChangeRequests.push(options);
   }
 }
@@ -340,7 +333,8 @@ describe("Web account surface", () => {
   });
 
   it("upgrades active Pro subscribers to Max without checkout and unlocks quota immediately", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } = await createWebTestEnv();
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+      await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
