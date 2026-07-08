@@ -6,10 +6,12 @@ import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/
 import {
   InMemoryPersonalMemoryStorage,
   PersonalMemoryService,
+  type QueryPersonalMemoryVectorsInput,
   type PersonalMemoryEmbeddingService,
   type PersonalMemoryVectorIndex,
   type PersonalMemoryVectorMatch,
   type PersonalMemoryVectorMetadata,
+  type UpsertPersonalMemoryVectorInput,
 } from "../apps/api/src/personal-memory.ts";
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import {
@@ -110,24 +112,26 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
   matches: PersonalMemoryVectorMatch[] = [];
   failQueries = false;
 
-  async upsertMemory(input: {
-    id: string;
-    values: number[];
-    metadata: PersonalMemoryVectorMetadata;
-  }): Promise<void> {
-    this.upserts.push(input);
+  async upsertMemory(input: UpsertPersonalMemoryVectorInput): Promise<void> {
+    this.upserts.push({
+      id: input.id,
+      values: Array.from(input.values),
+      metadata: input.metadata,
+    });
   }
 
   async deleteMemory(id: string): Promise<void> {
     this.deletes.push(id);
   }
 
-  async queryMemories(input: {
-    values: number[];
-    userId: string;
-    limit: number;
-  }): Promise<PersonalMemoryVectorMatch[]> {
-    this.queries.push(input);
+  async queryMemories(
+    input: QueryPersonalMemoryVectorsInput,
+  ): Promise<PersonalMemoryVectorMatch[]> {
+    this.queries.push({
+      values: Array.from(input.values),
+      userId: input.userId,
+      limit: input.limit,
+    });
     if (this.failQueries) {
       throw new Error("vector unavailable");
     }

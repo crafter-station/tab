@@ -7,7 +7,9 @@ export type WorkersAiBinding = {
 };
 
 export type VectorizeBinding = {
-  upsert(vectors: Array<{ id: string; values: number[]; metadata?: object }>): Promise<unknown>;
+  upsert(
+    vectors: Array<{ id: string; values: number[]; metadata?: object }>,
+  ): Promise<unknown>;
   deleteByIds(ids: string[]): Promise<unknown>;
   query(
     values: number[],
