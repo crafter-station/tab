@@ -19,6 +19,8 @@ export type NativeSuggestionSessionOutputs = {
   readonly onSecretLikeContextDetected?: () => void;
 };
 
+type RecordInteractionTelemetry = (event: RecordTelemetryEventRequest) => void | Promise<void>;
+
 export type NativeSuggestionSessionDependencies = {
   readonly typingContext: TypingContextBuffer;
   readonly requestSuggestion: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
@@ -30,7 +32,7 @@ export type NativeSuggestionSessionDependencies = {
   ) => InsertionDependencies;
   readonly debounceMs: number;
   readonly maxVisibleMs?: number;
-  readonly recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
+  readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
 };
 
 type VisibleSuggestionTelemetry = {
@@ -39,20 +41,28 @@ type VisibleSuggestionTelemetry = {
   readonly suggestionLength: number;
 };
 
+type InteractionTelemetryEventType = RecordTelemetryEventRequest["eventType"];
+
 function activeApplicationKey(app: ActiveApplication | null): string | null {
   if (!app) return null;
   return `${app.bundleId}:${app.windowId ?? "window-unknown"}`;
 }
 
+const SUGGESTION_ID_PREFIX = "sg-";
+
 export function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
   let currentSuggestion: Suggestion | null = null;
-  let currentTelemetry: VisibleSuggestionTelemetry | null = null;
+  let visibleSuggestionTelemetry: VisibleSuggestionTelemetry | null = null;
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
   const { outputs } = deps;
 
   function requestIdFromSuggestion(suggestion: Suggestion): string {
-    return suggestion.id.startsWith("sg-") ? suggestion.id.slice(3) : suggestion.id;
+    if (suggestion.id.startsWith(SUGGESTION_ID_PREFIX)) {
+      return suggestion.id.slice(SUGGESTION_ID_PREFIX.length);
+    }
+
+    return suggestion.id;
   }
 
   function buildTelemetry(suggestion: Suggestion): VisibleSuggestionTelemetry {
@@ -64,21 +74,38 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     };
   }
 
-  function recordInteractionTelemetry(eventType: RecordTelemetryEventRequest["eventType"]): void {
-    if (!currentTelemetry || !deps.recordInteractionTelemetry) return;
+  function clearVisibleSuggestion(): void {
+    currentSuggestion = null;
+    visibleSuggestionTelemetry = null;
+  }
+
+  function buildTelemetryEvent(
+    eventType: InteractionTelemetryEventType,
+  ): RecordTelemetryEventRequest | null {
+    if (!visibleSuggestionTelemetry) return null;
 
     const event: RecordTelemetryEventRequest = {
       eventType,
-      requestId: currentTelemetry.requestId,
+      requestId: visibleSuggestionTelemetry.requestId,
       timestamp: new Date().toISOString(),
-      ...(currentTelemetry.activeApplicationBundleId
-        ? { activeApplicationBundleId: currentTelemetry.activeApplicationBundleId }
-        : {}),
-      suggestionLength: currentTelemetry.suggestionLength,
+      suggestionLength: visibleSuggestionTelemetry.suggestionLength,
     };
 
+    if (visibleSuggestionTelemetry.activeApplicationBundleId) {
+      event.activeApplicationBundleId = visibleSuggestionTelemetry.activeApplicationBundleId;
+    }
+
+    return event;
+  }
+
+  function recordInteractionTelemetry(eventType: InteractionTelemetryEventType): void {
+    if (!deps.recordInteractionTelemetry) return;
+
+    const event = buildTelemetryEvent(eventType);
+    if (!event) return;
+
     Promise.resolve(deps.recordInteractionTelemetry(event)).catch(() => {
-      // Interaction telemetry is best-effort and must never interrupt typing or Acceptance.
+      // Interaction telemetry is best-effort and must never interrupt typing or acceptance.
     });
   }
 
@@ -87,20 +114,18 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
-      currentTelemetry = buildTelemetry(suggestion);
+      visibleSuggestionTelemetry = buildTelemetry(suggestion);
       outputs.showSuggestion(suggestion);
     },
     onHideSuggestion: () => {
-      currentSuggestion = null;
-      currentTelemetry = null;
+      clearVisibleSuggestion();
       outputs.hideOverlay();
     },
     onRequestStarted: outputs.onRequestStarted,
     onRequestFinished: outputs.onRequestFinished,
     onSuggestionStale: () => {
       recordInteractionTelemetry("suggestion_stale");
-      currentSuggestion = null;
-      currentTelemetry = null;
+      clearVisibleSuggestion();
     },
     onSecretLikeContextDetected: () => {
       deps.typingContext.clear();
@@ -115,8 +140,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       recordInteractionTelemetry("suggestion_dismissed");
     }
     outputs.resetDebugApiState();
-    currentSuggestion = null;
-    currentTelemetry = null;
+    clearVisibleSuggestion();
     outputs.clearSuggestion();
     suggestionLoop.onContextChanged();
     outputs.showDebugContext();
@@ -128,8 +152,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     }
     deps.typingContext.clear();
     outputs.resetDebugApiState();
-    currentSuggestion = null;
-    currentTelemetry = null;
+    clearVisibleSuggestion();
     suggestionLoop.invalidate();
   }
 

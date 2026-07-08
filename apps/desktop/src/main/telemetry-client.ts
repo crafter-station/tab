@@ -35,7 +35,8 @@ export function createDesktopTelemetryClient(deps: DesktopTelemetryClientDepende
       if (!response.ok) return;
 
       const body = (await response.json()) as unknown;
-      TelemetryEventsResponseSchema.safeParse(body);
+      const parsedBody = TelemetryEventsResponseSchema.safeParse(body);
+      if (!parsedBody.success) return;
     } catch {
       // Interaction telemetry is best-effort and must never block desktop input.
     }
