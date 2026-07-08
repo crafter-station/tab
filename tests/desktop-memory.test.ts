@@ -7,13 +7,52 @@ import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.
 import { PersonalMemoryService, InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import { createDesktopMemoryClient } from "../apps/desktop/src/main/memory-client.ts";
+import { createMemoryExtractionDispatcher } from "../apps/desktop/src/main/memory-extraction-dispatcher.ts";
 import { createMemoryExtractionWindow } from "../apps/desktop/src/main/memory-extraction-window.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
 const textEncoder = new TextEncoder();
 
+type ScheduledTimer = { readonly id: number; readonly delayMs: number; readonly callback: () => void };
+
 function textByteLength(text: string): number {
   return textEncoder.encode(text).length;
+}
+
+function createManualScheduler() {
+  let nextId = 1;
+  const timers: ScheduledTimer[] = [];
+
+  function findTimerIndex(delayMs?: number): number {
+    return timers.findIndex((timer) => delayMs === undefined || timer.delayMs === delayMs);
+  }
+
+  function missingTimerMessage(delayMs?: number): string {
+    if (delayMs === undefined) return "No timer scheduled";
+    return `No timer scheduled for ${delayMs}ms`;
+  }
+
+  return {
+    timers,
+    setTimeout(callback: () => void, delayMs: number) {
+      const id = nextId;
+      nextId += 1;
+      timers.push({ id, delayMs, callback });
+      return id;
+    },
+    clearTimeout(id: number) {
+      const index = timers.findIndex((timer) => timer.id === id);
+      if (index >= 0) timers.splice(index, 1);
+    },
+    async run(delayMs?: number) {
+      const index = findTimerIndex(delayMs);
+      if (index < 0) throw new Error(missingTimerMessage(delayMs));
+      const [timer] = timers.splice(index, 1);
+      timer.callback();
+      await Promise.resolve();
+      await Promise.resolve();
+    },
+  };
 }
 
 async function createApiFixture() {
@@ -177,14 +216,59 @@ describe("desktop memory client", () => {
     const memories = await client.listMemories();
     expect(memories).toEqual([]);
   });
+
+  it("posts extraction batches and returns only operation counts", async () => {
+    const requests: Array<{ url: string; init?: RequestInit }> = [];
+    const client = createDesktopMemoryClient({
+      apiBaseUrl: TEST_ORIGIN,
+      getAuthorizationHeader: async () => "Bearer device-token",
+      fetch: async (input, init) => {
+        requests.push({ url: String(input), init });
+        return new Response(
+          JSON.stringify({
+            status: "ok",
+            data: { counts: { created: 1, updated: 2, deleted: 0, rejected: 3 } },
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } },
+        );
+      },
+    });
+
+    const counts = await client.extractMemory({
+      batchId: "batch-client",
+      entries: [
+        {
+          id: "entry-client",
+          text: "I prefer concise status updates",
+          timestamp: "2026-07-08T12:00:00.000Z",
+          contextSource: "typed_text",
+          activeApplication: { bundleId: "com.example.editor" },
+          redaction: { applied: false, redactionCount: 0, kinds: [] },
+        },
+      ],
+    });
+
+    expect(counts).toEqual({ created: 1, updated: 2, deleted: 0, rejected: 3 });
+    expect(requests).toHaveLength(1);
+    expect(requests[0].url).toBe(`${TEST_ORIGIN}/api/memory/extract`);
+    expect(requests[0].init?.method).toBe("POST");
+    expect(requests[0].init?.headers).toMatchObject({
+      Authorization: "Bearer device-token",
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    });
+    expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({ batchId: "batch-client" });
+  });
 });
 
 describe("desktop memory extraction window", () => {
   it("buffers only redacted eligible user-authored entries with minimal metadata", () => {
     let now = new Date("2026-07-08T10:00:00.000Z");
+    let nextId = 1;
     const window = createMemoryExtractionWindow({
       memoryEnabled: () => true,
       now: () => now,
+      createId: () => `entry-${nextId++}`,
     });
 
     expect(
@@ -236,8 +320,9 @@ describe("desktop memory extraction window", () => {
     const entries = window.getEntries();
     expect(entries).toHaveLength(2);
     expect(entries[0]).toEqual({
+      id: "entry-1",
       timestamp: "2026-07-08T10:00:00.000Z",
-      activeApplicationBundleId: "com.apple.TextEdit",
+      activeApplication: { bundleId: "com.apple.TextEdit" },
       contextSource: "typed_text",
       text: "My API key is api_key=[REDACTED_SECRET] and I prefer concise updates",
       redaction: { applied: true, redactionCount: 1, kinds: ["api_key"] },
@@ -308,6 +393,190 @@ describe("desktop memory extraction window", () => {
       }),
     ).toBe(false);
 
+    expect(window.getEntries()).toEqual([]);
+  });
+
+  it("sends an eligible idle batch to the backend and clears only processed entries after success", async () => {
+    let currentTimeMs = Date.parse("2026-07-08T13:00:00.000Z");
+    let nextId = 1;
+    const scheduler = createManualScheduler();
+    const window = createMemoryExtractionWindow({
+      memoryEnabled: true,
+      now: () => new Date(currentTimeMs),
+      createId: () => `entry-${nextId++}`,
+    });
+    const requests: unknown[] = [];
+    const dispatcher = createMemoryExtractionDispatcher({
+      window,
+      client: {
+        extractMemory: async (request) => {
+          requests.push(request);
+          return { created: 1, updated: 0, deleted: 0, rejected: 0 };
+        },
+      },
+      now: () => new Date(currentTimeMs),
+      setTimeout: scheduler.setTimeout,
+      clearTimeout: scheduler.clearTimeout,
+      createBatchId: () => "batch-success",
+    });
+
+    dispatcher.append({
+      text: "I prefer concise launch planning updates. ".repeat(14),
+      source: "typed_text",
+      activeApplication: { bundleId: "com.example.editor", windowId: "ignored" },
+    });
+    dispatcher.append({
+      text: "New entry typed while the first idle batch is pending",
+      source: "typed_text",
+      activeApplication: { bundleId: "com.example.editor" },
+    });
+
+    expect(requests).toHaveLength(0);
+    expect(scheduler.timers.some((timer) => timer.delayMs === 60_000)).toBe(true);
+
+    await scheduler.run(60_000);
+
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      batchId: "batch-success",
+      entries: [
+        {
+          id: "entry-1",
+          activeApplication: { bundleId: "com.example.editor" },
+          contextSource: "typed_text",
+        },
+        {
+          id: "entry-2",
+          activeApplication: { bundleId: "com.example.editor" },
+          contextSource: "typed_text",
+        },
+      ],
+    });
+    expect(window.getEntries()).toEqual([]);
+  });
+
+  it("retries failed extraction batches and drops them after retry exhaustion", async () => {
+    let currentTimeMs = Date.parse("2026-07-08T14:00:00.000Z");
+    const scheduler = createManualScheduler();
+    const window = createMemoryExtractionWindow({
+      memoryEnabled: true,
+      now: () => new Date(currentTimeMs),
+      createId: () => "entry-retry",
+    });
+    let attempts = 0;
+    const dispatcher = createMemoryExtractionDispatcher({
+      window,
+      client: {
+        extractMemory: async () => {
+          attempts += 1;
+          throw new Error("backend unavailable");
+        },
+      },
+      now: () => new Date(currentTimeMs),
+      setTimeout: scheduler.setTimeout,
+      clearTimeout: scheduler.clearTimeout,
+      createBatchId: () => "batch-retry",
+    });
+
+    dispatcher.append({
+      text: "remember this durable fact ".repeat(25),
+      source: "typed_text",
+      activeApplication: { bundleId: "com.example.editor" },
+    });
+
+    await scheduler.run(60_000);
+    expect(attempts).toBe(1);
+    expect(window.getEntries()).toHaveLength(1);
+    expect(scheduler.timers.some((timer) => timer.delayMs === 1_000)).toBe(true);
+
+    currentTimeMs += 1_000;
+    await scheduler.run(1_000);
+    expect(attempts).toBe(2);
+    expect(window.getEntries()).toHaveLength(1);
+    expect(scheduler.timers.some((timer) => timer.delayMs === 2_000)).toBe(true);
+
+    currentTimeMs += 2_000;
+    await scheduler.run(2_000);
+    expect(attempts).toBe(3);
+    expect(window.getEntries()).toEqual([]);
+  });
+
+  it("drops failed extraction batches after the failed-batch TTL expires", async () => {
+    let currentTimeMs = Date.parse("2026-07-08T14:30:00.000Z");
+    const scheduler = createManualScheduler();
+    const window = createMemoryExtractionWindow({
+      memoryEnabled: true,
+      now: () => new Date(currentTimeMs),
+      createId: () => "entry-ttl",
+    });
+    let attempts = 0;
+    const dispatcher = createMemoryExtractionDispatcher({
+      window,
+      client: {
+        extractMemory: async () => {
+          attempts += 1;
+          throw new Error("backend unavailable");
+        },
+      },
+      now: () => new Date(currentTimeMs),
+      setTimeout: scheduler.setTimeout,
+      clearTimeout: scheduler.clearTimeout,
+      createBatchId: () => "batch-ttl",
+      maxRetries: 10,
+      failedBatchTtlMs: 500,
+    });
+
+    dispatcher.append({
+      text: "remember this temporary fact ".repeat(25),
+      source: "typed_text",
+      activeApplication: { bundleId: "com.example.editor" },
+    });
+
+    await scheduler.run(60_000);
+    expect(attempts).toBe(1);
+    expect(window.getEntries()).toHaveLength(1);
+
+    currentTimeMs += 1_000;
+    await scheduler.run(1_000);
+
+    expect(attempts).toBe(2);
+    expect(window.getEntries()).toEqual([]);
+  });
+
+  it("flushes a small batch when the thirty-minute extraction window limit is reached", async () => {
+    let currentTimeMs = Date.parse("2026-07-08T15:00:00.000Z");
+    const scheduler = createManualScheduler();
+    const window = createMemoryExtractionWindow({
+      memoryEnabled: true,
+      now: () => new Date(currentTimeMs),
+      createId: () => "entry-aged",
+    });
+    let sent = 0;
+    const dispatcher = createMemoryExtractionDispatcher({
+      window,
+      client: {
+        extractMemory: async () => {
+          sent += 1;
+          return { created: 0, updated: 0, deleted: 0, rejected: 0 };
+        },
+      },
+      now: () => new Date(currentTimeMs),
+      setTimeout: scheduler.setTimeout,
+      clearTimeout: scheduler.clearTimeout,
+      createBatchId: () => "batch-aged",
+    });
+
+    dispatcher.append({
+      text: "small durable fact",
+      source: "terminal_input",
+      activeApplication: { bundleId: "com.apple.Terminal" },
+    });
+
+    expect(scheduler.timers.some((timer) => timer.delayMs === 30 * 60 * 1_000)).toBe(true);
+    currentTimeMs += 30 * 60 * 1_000;
+    await scheduler.run(30 * 60 * 1_000);
+
+    expect(sent).toBe(1);
     expect(window.getEntries()).toEqual([]);
   });
 });

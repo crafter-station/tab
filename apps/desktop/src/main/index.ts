@@ -42,6 +42,8 @@ import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
 import { createDesktopMemoryClient } from "./memory-client.ts";
+import { createMemoryExtractionWindow } from "./memory-extraction-window.ts";
+import { createMemoryExtractionDispatcher } from "./memory-extraction-dispatcher.ts";
 import { MACOS_PERMISSION_SETTINGS_URLS, createOnboardingManager, getMacOSAppBundlePath } from "./onboarding.ts";
 import { createOnboardingWindowManager } from "./onboarding-window.ts";
 import { createSettingsWindowManager } from "./settings-window.ts";
@@ -162,6 +164,19 @@ const recordInteractionTelemetry = createDesktopTelemetryClient({
 const memoryClient = createDesktopMemoryClient({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+});
+
+const memoryExtractionWindow = createMemoryExtractionWindow({
+  memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
+});
+
+const memoryExtractionDispatcher = createMemoryExtractionDispatcher({
+  window: memoryExtractionWindow,
+  client: memoryClient,
+  clientMetadata: {
+    appVersion: APP_VERSION,
+    platform: process.platform,
+  },
 });
 
 let updateAvailable = false;
@@ -1171,6 +1186,7 @@ app.on("will-quit", () => {
     debugOverlayWindow.close();
   }
   inputTapProcess?.kill();
+  memoryExtractionDispatcher.stop();
   typingContextBuffer.clear();
 });
 
@@ -1185,6 +1201,14 @@ app.on("activate", () => {
 
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
+  const activeApplication = typingContextBuffer.getState().activeApplication;
+  if (activeApplication) {
+    memoryExtractionDispatcher.append({
+      text,
+      source: getTypedContextSource(),
+      activeApplication,
+    });
+  }
   nativeSuggestionSession.appendText(text);
 }
 
