@@ -12,7 +12,11 @@ import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engi
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
-import { createAppContextManager, type AppContextSnapshot } from "../apps/desktop/src/main/app-context.ts";
+import {
+  createAppContextManager,
+  createZedFocusedEditorAppContextProvider,
+  type AppContextSnapshot,
+} from "../apps/desktop/src/main/app-context.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
@@ -909,6 +913,88 @@ describe("desktop native suggestion loop", () => {
 
       expect(manager.getSnapshot().fragments).toHaveLength(0);
       expect(manager.getSnapshot().metadata.status).toBe("cleared");
+    });
+
+    describe("Zed focused editor App Context", () => {
+      const zedProvider = createZedFocusedEditorAppContextProvider();
+      const zedTextSession = (overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot => {
+        const beforeCaret = overrides.surroundingContext?.beforeCaret ?? "# Launch notes\n\nWe should explain the privacy model";
+        const afterCaret = overrides.surroundingContext?.afterCaret ?? " before the demo starts.";
+        return {
+          activeApplication: { bundleId: "dev.zed.Zed", windowId: "window:zed" },
+          focusedElementId: "focus:editor",
+          textElementId: "text:editor",
+          selectedRange: { location: beforeCaret.length, length: 0 },
+          caretIdentity: `caret:${beforeCaret.length}`,
+          secureLike: false,
+          accessibilityReliability: "reliable",
+          supportsSemanticInsertion: true,
+          surroundingContext: { beforeCaret, afterCaret },
+          ...overrides,
+        };
+      };
+      const providerSnapshot = (textSession: TextSessionSnapshot): AppContextSnapshot =>
+        zedProvider(createSafeTextSessionSnapshot(textSession));
+
+      it("extracts bounded suggestion-only context for Zed prose, markdown, and comments", () => {
+        const markdown = providerSnapshot(zedTextSession());
+        expect(markdown.metadata).toMatchObject({
+          provider: "zed-focused-editor",
+          status: "available",
+        });
+        expect(markdown.fragments).toHaveLength(1);
+        expect(markdown.fragments[0]).toMatchObject({
+          provider: "zed-focused-editor",
+          kind: "focused_editor",
+          requestable: true,
+          memoryEligible: false,
+        });
+        expect(markdown.fragments[0].text).toContain("# Launch notes");
+        expect(markdown.fragments[0].text).toContain("before the demo starts.");
+
+        const comment = providerSnapshot(zedTextSession({
+          surroundingContext: {
+            beforeCaret: "function buildPrompt() {\n  // Keep app context separate from typing context",
+            afterCaret: "\n  return prompt;\n}",
+          },
+        }));
+
+        expect(comment.metadata.status).toBe("available");
+        expect(comment.fragments[0].text).toContain("// Keep app context separate");
+
+        const longBefore = `${"Earlier paragraph. ".repeat(220)}Current caret idea`;
+        const long = providerSnapshot(zedTextSession({
+          surroundingContext: { beforeCaret: longBefore, afterCaret: " Next sentence." },
+        }));
+
+        expect(long.fragments[0].text.length).toBeLessThanOrEqual(2_000);
+        expect(long.fragments[0].text).toContain("Current caret idea");
+        expect(long.fragments[0].text).not.toBe(longBefore + " Next sentence.");
+        expect(long.fragments[0].text).not.toStartWith("Earlier paragraph. Earlier paragraph. Earlier paragraph.");
+      });
+
+      it("falls back safely for unsupported, unreliable, partial, and secret-like editor states", () => {
+        const unsupported = providerSnapshot(zedTextSession({
+          activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        }));
+        expect(unsupported.fragments).toHaveLength(0);
+        expect(unsupported.metadata.status).toBe("unsupported");
+
+        const unreliable = providerSnapshot(zedTextSession({ accessibilityReliability: "unreliable" }));
+        expect(unreliable.fragments).toHaveLength(0);
+        expect(unreliable.metadata.status).toBe("empty");
+
+        const partial = providerSnapshot(zedTextSession({ surroundingContext: { beforeCaret: "", afterCaret: "" } }));
+        expect(partial.fragments).toHaveLength(0);
+        expect(partial.metadata.status).toBe("empty");
+
+        const secretLike = providerSnapshot(zedTextSession({
+          surroundingContext: { beforeCaret: "OPENAI_API_KEY=sk-abc1234567890", afterCaret: "" },
+        }));
+        expect(secretLike.fragments).toHaveLength(0);
+        expect(secretLike.metadata.status).toBe("suppressed");
+        expect(secretLike.metadata.suppressionReason).toBe("secret_like_context");
+      });
     });
 
     it("updates context when the user deletes text", () => {

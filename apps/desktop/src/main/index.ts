@@ -26,6 +26,7 @@ import {
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
+import { createZedFocusedEditorAppContextProvider } from "./app-context.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -139,6 +140,7 @@ const requestSuggestion = createApiSuggestionClient({
   memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
+const getAppContext = createZedFocusedEditorAppContextProvider();
 
 const recordInteractionTelemetry = createDesktopTelemetryClient({
   apiBaseUrl: API_BASE_URL,
@@ -239,6 +241,7 @@ let debugApiState: DebugApiState = { status: "idle" };
 const nativeSuggestionSession = createNativeSuggestionSession({
   typingContext: typingContextBuffer,
   requestSuggestion,
+  getAppContext,
   getContextSource: getTypedContextSource,
   outputs: {
     showSuggestion: showOverlay,
