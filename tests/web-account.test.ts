@@ -731,8 +731,10 @@ describe("Web account surface", () => {
     expect(accountBefore.status).toBe(200);
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("Lives in Portland");
-    expect(bodyBefore).toInclude("Edit memory");
-    expect(bodyBefore).toInclude("Delete saved detail");
+    expect(bodyBefore).toInclude("Memory Library");
+    expect(bodyBefore).toInclude("Delete Selected");
+    expect(bodyBefore).toInclude("Update Memory");
+    expect(bodyBefore).toInclude("Delete Memory");
 
     const unconfirmedDeleteResponse = await webRequest(
       webApp,
@@ -820,7 +822,51 @@ describe("Web account surface", () => {
     const body = await accountPage.text();
     expect(body).toInclude("Prefers concise summaries");
     expect(body).toInclude("Works at Acme Robotics");
-    expect(body).toInclude("Add a memory");
+    expect(body).toInclude("Add a Memory");
+  });
+
+  it("deletes selected Personal Memories from the dashboard table", async () => {
+    const { apiApp, billingService, database, webApp, personalMemoryStorage } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activateFreePlan(billingService, userId);
+
+    const firstMemory = await personalMemoryStorage.createMemory({
+      userId,
+      content: "Likes weekly recaps",
+      createdBy: "user",
+    });
+    const secondMemory = await personalMemoryStorage.createMemory({
+      userId,
+      content: "Uses short bullet points",
+      createdBy: "system",
+    });
+    const remainingMemory = await personalMemoryStorage.createMemory({
+      userId,
+      content: "Prefers Monday planning",
+      createdBy: "system",
+    });
+
+    const deleteSelectedForm = new FormData();
+    deleteSelectedForm.set("confirm", "delete-selected-memories");
+    deleteSelectedForm.append("memoryId", firstMemory.id);
+    deleteSelectedForm.append("memoryId", secondMemory.id);
+
+    const deleteSelectedResponse = await webRequest(
+      webApp,
+      "/dashboard/memories/delete-selected",
+      { method: "POST", body: deleteSelectedForm },
+      cookie,
+    );
+
+    expect(deleteSelectedResponse.status).toBe(302);
+    expect(deleteSelectedResponse.headers.get("location")).toBe(
+      "/dashboard/memories",
+    );
+    expect(await personalMemoryStorage.findMemoryById(firstMemory.id)).toBeNull();
+    expect(await personalMemoryStorage.findMemoryById(secondMemory.id)).toBeNull();
+    expect(await personalMemoryStorage.findMemoryById(remainingMemory.id)).toBeTruthy();
   });
 
   it("lists and revokes native devices from the account surface", async () => {
