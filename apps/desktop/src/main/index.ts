@@ -749,6 +749,7 @@ function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
     isStringOrNull(snapshot.caretIdentity) &&
     typeof snapshot.secureLike === "boolean" &&
     isTextSessionReliability(snapshot.accessibilityReliability) &&
+    (snapshot.supportsSemanticInsertion === undefined || typeof snapshot.supportsSemanticInsertion === "boolean") &&
     (snapshot.surroundingContext === undefined || isTextSessionSurroundingContext(snapshot.surroundingContext)) &&
     (snapshot.caretBounds === undefined || isTextSessionCaretBounds(snapshot.caretBounds))
   );

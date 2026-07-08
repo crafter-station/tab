@@ -420,6 +420,18 @@ describe("desktop native suggestion loop", () => {
   });
 
   describe("acceptance and insertion", () => {
+    const semanticTarget: TextSessionSnapshot = {
+      activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+      focusedElementId: "focus:1",
+      textElementId: "text:1",
+      selectedRange: { location: 5, length: 0 },
+      caretIdentity: "range:5:0",
+      secureLike: false,
+      accessibilityReliability: "reliable",
+      supportsSemanticInsertion: true,
+      surroundingContext: { beforeCaret: "Hello", afterCaret: "" },
+    };
+
     it("inserts the current suggestion into the previously active app", async () => {
       const calls: Array<{ type: string; value?: string }> = [];
       const result = await acceptAndInsertSuggestion({
@@ -437,6 +449,75 @@ describe("desktop native suggestion loop", () => {
       expect(calls.map((c) => c.type)).toEqual(["setClipboard", "sendPaste", "waitForPaste", "restoreClipboard"]);
       expect(calls[0].value).toBe(" world");
       expect(calls[3].value).toBe("previous-clipboard");
+    });
+
+    it("prefers semantic insertion when the visible Text Session target is still compatible", async () => {
+      const calls: Array<{ type: string; value?: unknown }> = [];
+      const result = await acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit", windowId: "window:1" }),
+        getVisibleTextSessionTarget: () => semanticTarget,
+        getCurrentTextSessionTarget: () => semanticTarget,
+        insertSemantically: async (text, target) => {
+          calls.push({ type: "insertSemantically", value: { text, target } });
+          return true;
+        },
+        setClipboard: async (text) => {
+          calls.push({ type: "setClipboard", value: text });
+          return "previous-clipboard";
+        },
+        sendPaste: async () => calls.push({ type: "sendPaste" }),
+        restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
+      });
+
+      expect(result).toBe("inserted");
+      expect(calls.map((call) => call.type)).toEqual(["insertSemantically"]);
+    });
+
+    it("falls back to clipboard paste when semantic insertion fails", async () => {
+      const calls: Array<{ type: string; value?: unknown }> = [];
+      const result = await acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit", windowId: "window:1" }),
+        getVisibleTextSessionTarget: () => semanticTarget,
+        getCurrentTextSessionTarget: () => semanticTarget,
+        insertSemantically: async () => {
+          calls.push({ type: "insertSemantically" });
+          return false;
+        },
+        setClipboard: async (text) => {
+          calls.push({ type: "setClipboard", value: text });
+          return "previous-clipboard";
+        },
+        sendPaste: async () => calls.push({ type: "sendPaste" }),
+        restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
+      });
+
+      expect(result).toBe("inserted");
+      expect(calls.map((call) => call.type)).toEqual(["insertSemantically", "setClipboard", "sendPaste", "restoreClipboard"]);
+    });
+
+    it("uses clipboard fallback without attempting semantic insertion when the target is stale", async () => {
+      const calls: Array<{ type: string; value?: unknown }> = [];
+      const result = await acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit", windowId: "window:1" }),
+        getVisibleTextSessionTarget: () => semanticTarget,
+        getCurrentTextSessionTarget: () => ({ ...semanticTarget, selectedRange: { location: 6, length: 0 } }),
+        insertSemantically: async () => {
+          calls.push({ type: "insertSemantically" });
+          return true;
+        },
+        setClipboard: async (text) => {
+          calls.push({ type: "setClipboard", value: text });
+          return "previous-clipboard";
+        },
+        sendPaste: async () => calls.push({ type: "sendPaste" }),
+        restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
+      });
+
+      expect(result).toBe("inserted");
+      expect(calls.map((call) => call.type)).toEqual(["setClipboard", "sendPaste", "restoreClipboard"]);
     });
 
     it("returns no_suggestion when there is nothing to insert", async () => {
@@ -470,6 +551,7 @@ describe("desktop native suggestion loop", () => {
       maxVisibleMs?: number;
       recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
+      insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
     } = {}) {
       const buffer = createTypingContextBuffer();
       const calls: Array<{ type: string; value?: unknown }> = [];
@@ -496,6 +578,12 @@ describe("desktop native suggestion loop", () => {
           },
           sendPaste: async () => calls.push({ type: "sendPaste" }),
           restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
+          insertSemantically: overrides.insertSemantically
+            ? async (text, target) => {
+              calls.push({ type: "insertSemantically", value: text });
+              return overrides.insertSemantically?.(text, target) ?? false;
+            }
+            : undefined,
         }),
         debounceMs: 5,
         maxVisibleMs: overrides.maxVisibleMs,
@@ -530,6 +618,31 @@ describe("desktop native suggestion loop", () => {
       expect(calls.map((call) => call.type)).toContain("setClipboard");
       expect(calls).toContainEqual({ type: "setClipboard", value: " world" });
       expect(calls.map((call) => call.type)).toContain("sendPaste");
+      expect(buffer.getState().context).toBe("");
+      expect(session.getCurrentSuggestion()).toBeNull();
+    });
+
+    it("accepts through semantic insertion and clears only after insertion succeeds", async () => {
+      const { buffer, calls, session } = makeSession({ insertSemantically: async () => true });
+      const textSession: TextSessionSnapshot = {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 5, length: 0 },
+        caretIdentity: "range:5:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        supportsSemanticInsertion: true,
+        surroundingContext: { beforeCaret: "Hello", afterCaret: "" },
+      };
+
+      session.applyTextSessionSnapshot(textSession);
+      await wait(10);
+      await session.acceptCurrentSuggestion();
+
+      expect(calls.map((call) => call.type)).toContain("insertSemantically");
+      expect(calls.map((call) => call.type)).not.toContain("setClipboard");
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
       expect(buffer.getState().context).toBe("");
       expect(session.getCurrentSuggestion()).toBeNull();
     });
