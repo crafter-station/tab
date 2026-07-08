@@ -883,6 +883,40 @@ describe("desktop native suggestion loop", () => {
       });
     });
 
+    it("records App Context compatibility metadata without raw context", async () => {
+      const compatibilityStore = createApplicationCompatibilityStore();
+      const rawAppContext = "Dana: The launch room is Atlas 417";
+      const { session } = makeSession({
+        compatibilityStore,
+        getAppContext: () => ({
+          fragments: [
+            {
+              id: "slack-1",
+              provider: "slack-accessibility",
+              kind: "conversation",
+              text: rawAppContext,
+              confidence: 0.82,
+              redaction: { applied: false, redactionCount: 0, kinds: [] },
+              requestable: true,
+              memoryEligible: false,
+            },
+          ],
+          metadata: { provider: "slack-accessibility", status: "available", confidence: 0.82 },
+        }),
+      });
+
+      session.setActiveApplication("com.tinyspeck.slackmacgap", "window:1");
+      session.appendText("Reply draft");
+      await wait(10);
+
+      const profile = compatibilityStore.getProfile({ bundleId: "com.tinyspeck.slackmacgap" });
+      expect(profile.appContextAvailableCount).toBeGreaterThan(0);
+      expect(JSON.stringify(profile)).not.toContain(rawAppContext);
+      expect(JSON.stringify(profile)).not.toContain("Reply draft");
+      expect(JSON.stringify(profile)).not.toContain("suggestionText");
+      expect(JSON.stringify(profile)).not.toContain("finalInsertedText");
+    });
+
     it("clears App Context on lifecycle clearing events", () => {
       const manager = createAppContextManager();
       manager.setSnapshot({

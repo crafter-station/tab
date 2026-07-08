@@ -1,4 +1,5 @@
 import type { ActiveApplication } from "@tabb/contracts";
+import type { AppContextSnapshot } from "./app-context.ts";
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
 
 export type InsertionStrategy = "semantic" | "clipboard";
@@ -14,6 +15,9 @@ export type ApplicationCompatibilityProfile = {
   readonly semanticInsertionFailureCount: number;
   readonly clipboardInsertionSuccessCount: number;
   readonly clipboardInsertionFailureCount: number;
+  readonly appContextAvailableCount: number;
+  readonly appContextSuppressedCount: number;
+  readonly appContextUnsupportedCount: number;
 };
 
 export type ApplicationCompatibilityStore = {
@@ -21,6 +25,10 @@ export type ApplicationCompatibilityStore = {
   readonly recordDismissal: (snapshot: SafeTypingContextSnapshot) => void;
   readonly recordAcceptance: (snapshot: SafeTypingContextSnapshot) => void;
   readonly recordTextSessionSnapshot: (snapshot: TextSessionSnapshot) => void;
+  readonly recordAppContextSnapshot: (
+    activeApplication: ActiveApplication | null,
+    snapshot: AppContextSnapshot,
+  ) => void;
   readonly recordInsertionOutcome: (
     activeApplication: ActiveApplication | null,
     strategy: InsertionStrategy,
@@ -41,6 +49,9 @@ type MutableApplicationCompatibilityProfile = {
   semanticInsertionFailureCount: number;
   clipboardInsertionSuccessCount: number;
   clipboardInsertionFailureCount: number;
+  appContextAvailableCount: number;
+  appContextSuppressedCount: number;
+  appContextUnsupportedCount: number;
 };
 
 export type ApplicationCompatibilityOptions = {
@@ -60,6 +71,9 @@ const EMPTY_PROFILE: ApplicationCompatibilityProfile = {
   semanticInsertionFailureCount: 0,
   clipboardInsertionSuccessCount: 0,
   clipboardInsertionFailureCount: 0,
+  appContextAvailableCount: 0,
+  appContextSuppressedCount: 0,
+  appContextUnsupportedCount: 0,
 };
 
 const DEFAULT_STRICT_DISMISSAL_THRESHOLD = 10;
@@ -146,6 +160,21 @@ export function createApplicationCompatibilityStore(
         ? "textSessionReliableCount"
         : "textSessionUnreliableCount";
       incrementProfileCount(snapshot.activeApplication, count);
+    },
+    recordAppContextSnapshot(activeApplication, snapshot) {
+      if (snapshot.metadata.status === "available") {
+        incrementProfileCount(activeApplication, "appContextAvailableCount");
+        return;
+      }
+
+      if (snapshot.metadata.status === "unsupported") {
+        incrementProfileCount(activeApplication, "appContextUnsupportedCount");
+        return;
+      }
+
+      if (snapshot.metadata.status === "suppressed") {
+        incrementProfileCount(activeApplication, "appContextSuppressedCount");
+      }
     },
     recordInsertionOutcome(activeApplication, strategy, outcome) {
       incrementProfileCount(activeApplication, INSERTION_OUTCOME_COUNTS[strategy][outcome]);

@@ -207,6 +207,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     }
 
     const appContext = deps.getAppContext(snapshot);
+    compatibilityStore.recordAppContextSnapshot(snapshot.activeApplication, appContext);
     if (appContext.metadata.status !== "available" || appContext.fragments.length === 0) {
       return snapshot;
     }
