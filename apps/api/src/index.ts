@@ -154,7 +154,6 @@ export function createApp(deps: ApiDependencies = {}) {
     billingService,
     usageMeterService,
     personalMemoryService,
-    memoryJobQueue,
     telemetryService,
     generateSuggestion,
   });

@@ -825,6 +825,31 @@ describe("Personal Memory API", () => {
     ]);
   });
 
+  it("does not perform memory extraction during suggestion generation", async () => {
+    let extractionModelCalls = 0;
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        async () => ({ text: " suggestion" }),
+        undefined,
+        {
+          async proposeOperations() {
+            extractionModelCalls += 1;
+            return [{ type: "create", content: "Should not be extracted" }];
+          },
+        },
+      );
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validSuggestionRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(extractionModelCalls).toBe(0);
+    expect(await personalMemoryStorage.listMemoriesByUser("user-1")).toEqual([]);
+  });
+
   it("continues suggestions without memory when vector retrieval fails", async () => {
     let capturedInput: SuggestionInput | null = null;
     const embeddingService = new FakeEmbeddingService();

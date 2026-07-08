@@ -1,7 +1,6 @@
 import { generateText } from "ai";
 import { groq } from "@ai-sdk/groq";
 import { shouldCountSuggestionResponse } from "@tabb/billing";
-import { getMemoryEligibility } from "@tabb/memory-policy";
 import type {
   ActiveApplication,
   AppContext,
@@ -14,7 +13,6 @@ import type {
 } from "@tabb/contracts";
 import type { BillingService, UsageMeterService } from "./billing.ts";
 import type { Device } from "./device-tokens.ts";
-import type { MemoryJobQueue } from "./memory-agent.ts";
 import type { PersonalMemoryService } from "./personal-memory.ts";
 import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
@@ -39,7 +37,6 @@ export type SuggestionUseCaseDependencies = {
   readonly billingService: BillingService;
   readonly usageMeterService: UsageMeterService;
   readonly personalMemoryService: PersonalMemoryService;
-  readonly memoryJobQueue: MemoryJobQueue;
   readonly telemetryService: TelemetryService;
   readonly generateSuggestion: SuggestionGenerator;
 };
@@ -204,15 +201,21 @@ export class SuggestionUseCase {
       }
     };
 
-    try {
-      const memories =
-        await this.deps.personalMemoryService.selectRelevantMemories({
+    let memories: readonly PersonalMemory[] = [];
+    if (request.memoryEnabled) {
+      try {
+        memories = await this.deps.personalMemoryService.selectRelevantMemories({
           userId: device.userId,
           typingContext: request.typingContext,
           activeApplication: request.activeApplication,
           memoryEnabled: request.memoryEnabled,
         });
+      } catch {
+        // Memory retrieval is best-effort; suggestions continue without memory.
+      }
+    }
 
+    try {
       const generated = await this.deps.generateSuggestion({
         requestId: request.requestId,
         typingContext: request.typingContext,
@@ -258,38 +261,6 @@ export class SuggestionUseCase {
           });
 
         options.waitUntil?.(usageMeterPromise);
-      }
-
-      const memoryEligibility = getMemoryEligibility(request.contextSource);
-      if (request.memoryEnabled && memoryEligibility.eligible) {
-        try {
-          await this.deps.memoryJobQueue.enqueue({
-            requestId: request.requestId,
-            userId: device.userId,
-            typingContext: request.typingContext,
-            contextSource: request.contextSource,
-            activeApplication: request.activeApplication,
-            memoryEligible: true,
-            redaction: request.redaction,
-            clientMetadata: request.clientMetadata,
-          });
-
-          await recordSuggestionEvent({
-            eventType: "memory_job_enqueued",
-            timestamp: new Date().toISOString(),
-            activeApplicationBundleId: request.activeApplication.bundleId,
-            contextSource: request.contextSource,
-            planId: quotaCheck.entitlement.planId,
-            memoryEligible: true,
-            redactionApplied: request.redaction.applied,
-            redactionCount: request.redaction.redactionCount,
-            clientAppVersion: request.clientMetadata?.appVersion,
-            clientPlatform: request.clientMetadata?.platform,
-          });
-        } catch {
-          // Background memory jobs are best-effort; do not fail the hot
-          // suggestion response when enqueueing is unavailable.
-        }
       }
 
       return { ok: true, suggestions };

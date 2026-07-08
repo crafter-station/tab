@@ -180,8 +180,8 @@ describe("Metadata-only suggestion telemetry", () => {
     assertNoRawText(events, rawContext);
   });
 
-  it("records memory job metadata without storing typing context", async () => {
-    const rawContext = "Hello telemetry-memory-raw-context";
+  it("does not record memory job telemetry from suggestions", async () => {
+    const rawContext = "Hello telemetry-no-memory-job-raw-context";
     const { app, token, telemetryService } = await createAuthenticatedTestApp(
       async () => ({ text: " world" }),
     );
@@ -195,12 +195,7 @@ describe("Metadata-only suggestion telemetry", () => {
     expect(response.status).toBe(200);
     const events = await telemetryService.listEvents();
     const memoryEvent = events.find((e) => e.eventType === "memory_job_enqueued");
-    expect(memoryEvent).toBeDefined();
-    expect(memoryEvent?.contextSource).toBe("typed_text");
-    expect(memoryEvent?.memoryEligible).toBe(true);
-    expect(memoryEvent?.redactionApplied).toBe(false);
-    expect(memoryEvent?.redactionCount).toBe(0);
-    expect(memoryEvent?.activeApplicationBundleId).toBe("com.apple.TextEdit");
+    expect(memoryEvent).toBeUndefined();
     assertNoRawText(events, rawContext);
   });
 
