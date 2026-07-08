@@ -201,19 +201,7 @@ export class SuggestionUseCase {
       }
     };
 
-    let memories: readonly PersonalMemory[] = [];
-    if (request.memoryEnabled) {
-      try {
-        memories = await this.deps.personalMemoryService.selectRelevantMemories({
-          userId: device.userId,
-          typingContext: request.typingContext,
-          activeApplication: request.activeApplication,
-          memoryEnabled: request.memoryEnabled,
-        });
-      } catch {
-        // Memory retrieval is best-effort; suggestions continue without memory.
-      }
-    }
+    const memories = await this.selectRelevantMemories(device, request);
 
     try {
       const generated = await this.deps.generateSuggestion({
@@ -291,6 +279,25 @@ export class SuggestionUseCase {
         code: "provider_failure",
         message,
       };
+    }
+  }
+
+  private async selectRelevantMemories(
+    device: Device,
+    request: SuggestionRequest,
+  ): Promise<readonly PersonalMemory[]> {
+    if (!request.memoryEnabled) return [];
+
+    try {
+      return await this.deps.personalMemoryService.selectRelevantMemories({
+        userId: device.userId,
+        typingContext: request.typingContext,
+        activeApplication: request.activeApplication,
+        memoryEnabled: request.memoryEnabled,
+      });
+    } catch {
+      // Memory retrieval is best-effort; suggestions continue without memory.
+      return [];
     }
   }
 }
