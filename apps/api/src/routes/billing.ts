@@ -153,7 +153,7 @@ export function registerBillingRoutes(
         );
       } catch (error) {
         const message = error instanceof Error ? error.message : "Plan Change failed.";
-        return c.json(createErrorResponse("provider_failure", message), 503);
+        return c.json(createErrorResponse("provider_failure", `Plan Change failed: ${message}`), 503);
       }
     }
 
