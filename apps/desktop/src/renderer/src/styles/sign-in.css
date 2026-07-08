@@ -4,25 +4,75 @@
   height: 100%;
   overflow: hidden;
   color: var(--text);
-  background:
-    radial-gradient(circle at 64% 0%, rgba(218, 190, 77, 0.1), transparent 34%),
-    var(--bg);
+  background: var(--bg);
 }
 
 .sign-in-hero {
+  display: grid;
   flex: 1;
   min-width: 0;
+  place-items: center;
+  padding: 34px;
   overflow: hidden;
-  background: var(--bg-elevated);
+  background:
+    var(--tabb-page-wash),
+    var(--tabb-grid-bg),
+    var(--bg);
+  background-size: auto, 32px 32px, auto;
   border-right: 1px solid var(--border);
 }
 
-.sign-in-hero img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  user-select: none;
-  -webkit-user-drag: none;
+.sign-in-proof {
+  display: grid;
+  width: min(100%, 560px);
+  gap: 18px;
+  padding: 24px;
+  background-color: color-mix(in srgb, var(--card) 86%, transparent);
+  border: 1px solid var(--tabb-glass-border);
+  border-radius: var(--radius-surface);
+  box-shadow: var(--tabb-glass-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.sign-in-proof h2 {
+  max-width: 460px;
+  font-family: var(--font-display);
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 0.98;
+  letter-spacing: -0.055em;
+}
+
+.sign-in-proof__steps {
+  display: grid;
+  gap: 10px;
+}
+
+.sign-in-proof__step {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 14px;
+  align-items: start;
+  padding: 13px 14px;
+  background: color-mix(in srgb, var(--muted) 58%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+}
+
+.sign-in-proof__step div {
+  display: grid;
+  gap: 4px;
+}
+
+.sign-in-proof__step strong {
+  font-size: 13px;
+  letter-spacing: -0.01em;
+}
+
+.sign-in-proof__step span {
+  color: var(--text-subtle);
+  font-size: 12px;
+  line-height: 1.45;
 }
 
 .sign-in-panel {
@@ -34,8 +84,8 @@
   justify-content: center;
   padding: 52px 42px 42px;
   background:
-    radial-gradient(circle at 100% 0%, rgba(218, 190, 77, 0.14), transparent 32%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.045), transparent 48%), var(--bg);
+    linear-gradient(180deg, color-mix(in srgb, var(--card) 38%, transparent), transparent 54%),
+    var(--bg);
 }
 
 .sign-in-panel__drag {
@@ -69,7 +119,7 @@
   font-weight: 900;
   background: var(--signal);
   border-radius: 15px;
-  box-shadow: 0 14px 36px rgba(218, 190, 77, 0.2);
+  box-shadow: var(--tabb-shadow-soft);
 }
 
 .sign-in-brand strong {
@@ -86,8 +136,9 @@
 
 .sign-in-copy h1 {
   max-width: 300px;
+  font-family: var(--font-display);
   font-size: 36px;
-  font-weight: 900;
+  font-weight: 800;
   letter-spacing: -0.06em;
   line-height: 0.95;
 }
@@ -108,10 +159,25 @@
   }
 
   .sign-in-hero {
-    height: 200px;
+    height: 320px;
     flex: none;
+    padding: 18px;
     border-right: 0;
     border-bottom: 1px solid var(--border);
+  }
+
+  .sign-in-proof {
+    max-height: 100%;
+    overflow: auto;
+    padding: 18px;
+  }
+
+  .sign-in-proof h2 {
+    font-size: 26px;
+  }
+
+  .sign-in-proof__step {
+    grid-template-columns: 1fr;
   }
 
   .sign-in-panel {

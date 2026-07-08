@@ -1,41 +1,38 @@
 import { useState } from "react";
-import { Button } from "@tabb/ui";
+import { Button, StatusBadge } from "@tabb/ui";
 
-const heroImage = `data:image/svg+xml,${encodeURIComponent(`
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1100">
-  <defs>
-    <radialGradient id="glow" cx="30%" cy="12%" r="75%">
-      <stop offset="0" stop-color="#f2d86a" stop-opacity="0.92"/>
-      <stop offset="0.38" stop-color="#6e5b1b" stop-opacity="0.46"/>
-      <stop offset="1" stop-color="#11110f"/>
-    </radialGradient>
-    <linearGradient id="card" x1="0" y1="0" x2="1" y2="1">
-      <stop offset="0" stop-color="#fff7c2" stop-opacity="0.24"/>
-      <stop offset="1" stop-color="#ffffff" stop-opacity="0.04"/>
-    </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="30" stdDeviation="28" flood-color="#000000" flood-opacity="0.45"/>
-    </filter>
-  </defs>
-  <rect width="900" height="1100" fill="url(#glow)"/>
-  <g opacity="0.34" stroke="#fff2a8" stroke-width="1">
-    <path d="M96 920 C252 748 336 756 492 584 S724 332 828 196" fill="none"/>
-    <path d="M42 802 C248 664 304 548 470 450 S670 284 804 84" fill="none"/>
-    <path d="M162 1018 C244 888 366 820 518 748 S760 600 878 410" fill="none"/>
-  </g>
-  <g filter="url(#shadow)">
-    <rect x="196" y="264" width="508" height="572" rx="54" fill="url(#card)" stroke="#fff6bf" stroke-opacity="0.22"/>
-    <rect x="254" y="338" width="282" height="34" rx="17" fill="#fff7c2" fill-opacity="0.86"/>
-    <rect x="254" y="406" width="392" height="22" rx="11" fill="#ffffff" fill-opacity="0.28"/>
-    <rect x="254" y="452" width="326" height="22" rx="11" fill="#ffffff" fill-opacity="0.18"/>
-    <rect x="254" y="534" width="392" height="92" rx="28" fill="#11110f" fill-opacity="0.58" stroke="#fff6bf" stroke-opacity="0.18"/>
-    <rect x="292" y="570" width="236" height="20" rx="10" fill="#f2d86a" fill-opacity="0.74"/>
-    <circle cx="602" cy="580" r="21" fill="#f2d86a"/>
-    <path d="M593 580h18M602 571v18" stroke="#17140a" stroke-width="5" stroke-linecap="round"/>
-    <rect x="254" y="676" width="214" height="58" rx="29" fill="#f2d86a"/>
-  </g>
-</svg>
-`)}`;
+const setupSteps = [
+  {
+    title: "Browser handoff",
+    description: "Sign in opens your browser and returns this Mac to Tabb without changing the device-token contract.",
+    status: "Required",
+    tone: "warning" as const,
+  },
+  {
+    title: "Accessibility",
+    description: "Enables focused Text Session understanding and accepted Suggestion insertion.",
+    status: "Setup step",
+    tone: "muted" as const,
+  },
+  {
+    title: "Input Monitoring",
+    description: "Supports typing timing, acceptance shortcuts, and fallback Typing Context signals.",
+    status: "Setup step",
+    tone: "muted" as const,
+  },
+  {
+    title: "Privacy scope",
+    description: "Typing Context stays in memory; no Screen Recording or Full Disk Access is requested.",
+    status: "Visible",
+    tone: "ok" as const,
+  },
+  {
+    title: "Practice Suggestion",
+    description: "New users can accept, reject, and try mock Suggestions before Tabb runs in another app.",
+    status: "Sandboxed",
+    tone: "ok" as const,
+  },
+];
 
 export function SignInSurface() {
   const [opened, setOpened] = useState(false);
@@ -47,8 +44,22 @@ export function SignInSurface() {
 
   return (
     <main className="sign-in-shell">
-      <section className="sign-in-hero drag-region" aria-label="Tabb preview">
-        <img alt="Tabb assistant preview" draggable={false} src={heroImage} />
+      <section className="sign-in-hero drag-region" aria-label="Tabb setup preview">
+        <div className="sign-in-proof pug-dot-grid">
+          <p className="eyebrow">Private Utility Grid</p>
+          <h2>Connect this Mac, then review setup step by step.</h2>
+          <div className="sign-in-proof__steps">
+            {setupSteps.map((item) => (
+              <article className="sign-in-proof__step" key={item.title}>
+                <div>
+                  <strong>{item.title}</strong>
+                  <span>{item.description}</span>
+                </div>
+                <StatusBadge tone={item.tone}>{item.status}</StatusBadge>
+              </article>
+            ))}
+          </div>
+        </div>
       </section>
 
       <section className="sign-in-panel">
