@@ -201,21 +201,25 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     textSessionSnapshot = null;
   }
 
-  function currentSafeSnapshot(): SafeTypingContextSnapshot {
-    const snapshot = textSessionSnapshot
-      ? createSafeTextSessionSnapshot(textSessionSnapshot)
-      : deps.typingContext.getSnapshot();
-
+  function withAppContext(snapshot: SafeTypingContextSnapshot): SafeTypingContextSnapshot {
     if (!snapshot.requestable || !deps.getAppContext) {
       return snapshot;
     }
 
     const appContext = deps.getAppContext(snapshot);
-    if (appContext.fragments.length === 0 || appContext.metadata.status !== "available") {
+    if (appContext.metadata.status !== "available" || appContext.fragments.length === 0) {
       return snapshot;
     }
 
     return { ...snapshot, appContext };
+  }
+
+  function currentSafeSnapshot(): SafeTypingContextSnapshot {
+    const snapshot = textSessionSnapshot
+      ? createSafeTextSessionSnapshot(textSessionSnapshot)
+      : deps.typingContext.getSnapshot();
+
+    return withAppContext(snapshot);
   }
 
   function clearContext(recordDismissed = true): void {

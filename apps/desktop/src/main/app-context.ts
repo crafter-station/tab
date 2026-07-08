@@ -3,6 +3,7 @@ import { redactSensitiveText } from "@tabb/redaction";
 
 const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
+const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
 
 export type AppContextSnapshot = AppContext;
 
@@ -18,23 +19,27 @@ function emptySnapshot(status: AppContextSnapshot["metadata"]["status"]): AppCon
   return { fragments: [], metadata: { status } };
 }
 
+function createSafeRedactionSummary(): AppContextFragment["redaction"] {
+  return {
+    applied: false,
+    redactionCount: 0,
+    kinds: [],
+  };
+}
+
 function sanitizeFragment(fragment: AppContextFragment): AppContextFragment | null {
   if (!fragment.requestable || fragment.confidence <= 0) return null;
 
   const boundedText = fragment.text.slice(0, MAX_FRAGMENT_LENGTH);
-  const redaction = redactSensitiveText(boundedText);
-  if (redaction.redactions.length > 0 || redaction.text.trim().length === 0) {
+  const redacted = redactSensitiveText(boundedText);
+  if (redacted.redactions.length > 0 || redacted.text.trim().length === 0) {
     return null;
   }
 
   return {
     ...fragment,
-    text: redaction.text,
-    redaction: {
-      applied: false,
-      redactionCount: 0,
-      kinds: [],
-    },
+    text: redacted.text,
+    redaction: createSafeRedactionSummary(),
     memoryEligible: false,
   };
 }
@@ -52,7 +57,7 @@ export function sanitizeAppContextSnapshot(snapshot: AppContextSnapshot): AppCon
         provider: snapshot.metadata.provider,
         status: "suppressed",
         confidence: snapshot.metadata.confidence,
-        suppressionReason: "secret_like_context",
+        suppressionReason: SECRET_LIKE_CONTEXT_SUPPRESSION_REASON,
       },
     };
   }
