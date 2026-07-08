@@ -57,7 +57,7 @@ type VisibleSuggestionTelemetry = {
   readonly requestId: string;
   readonly activeApplicationBundleId?: string;
   readonly suggestionLength: number;
-  readonly shownAtMs: number;
+  readonly visibleSinceMs: number;
 };
 
 type InteractionTelemetryEventType = RecordTelemetryEventRequest["eventType"];
@@ -94,8 +94,12 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       requestId: requestIdFromSuggestion(suggestion),
       activeApplicationBundleId: activeApplication?.bundleId,
       suggestionLength: suggestion.text.length,
-      shownAtMs: Date.now(),
+      visibleSinceMs: Date.now(),
     };
+  }
+
+  function interactionLatencyMs(telemetry: VisibleSuggestionTelemetry): number {
+    return Math.max(0, Date.now() - telemetry.visibleSinceMs);
   }
 
   function clearVisibleSuggestion(): void {
@@ -114,7 +118,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       requestId: visibleSuggestionTelemetry.requestId,
       timestamp: new Date().toISOString(),
       suggestionLength: visibleSuggestionTelemetry.suggestionLength,
-      latencyMs: Math.max(0, Date.now() - visibleSuggestionTelemetry.shownAtMs),
+      latencyMs: interactionLatencyMs(visibleSuggestionTelemetry),
     };
 
     if (visibleSuggestionTelemetry.activeApplicationBundleId) {
