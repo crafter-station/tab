@@ -5,6 +5,8 @@ import {
   MemoryListResponseSchema,
   MemoryWriteRequestSchema,
   MemoryWriteResponseSchema,
+  type MemoryExtractionCounts,
+  type TelemetryEvent,
 } from "@tab/contracts";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
@@ -17,7 +19,6 @@ import {
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
 import type { TelemetryService } from "../telemetry.ts";
-import type { TelemetryEvent } from "@tab/contracts";
 
 export function registerMemoryRoutes(
   app: ApiApp,
@@ -153,6 +154,15 @@ export function registerMemoryRoutes(
     }
     const device = c.get("device");
     const startedAt = performance.now();
+    const extractionTelemetry = {
+      activeApplicationBundleId: firstEntry.activeApplication.bundleId,
+      contextSource: firstEntry.contextSource,
+      modelId: MEMORY_EXTRACTION_MODEL_ID,
+      redactionApplied: firstEntry.redaction.applied,
+      redactionCount: firstEntry.redaction.redactionCount,
+      clientAppVersion: body.clientMetadata?.appVersion,
+      clientPlatform: body.clientMetadata?.platform,
+    };
     const recordExtractionEvent = async (
       event: Omit<TelemetryEvent, "id" | "requestId" | "userId" | "deviceId">,
     ): Promise<void> => {
@@ -169,48 +179,30 @@ export function registerMemoryRoutes(
     };
 
     await recordExtractionEvent({
+      ...extractionTelemetry,
       eventType: "memory_extraction_attempted",
       timestamp: new Date().toISOString(),
-      activeApplicationBundleId: firstEntry.activeApplication.bundleId,
-      contextSource: firstEntry.contextSource,
-      modelId: MEMORY_EXTRACTION_MODEL_ID,
-      redactionApplied: firstEntry.redaction.applied,
-      redactionCount: firstEntry.redaction.redactionCount,
-      clientAppVersion: body.clientMetadata?.appVersion,
-      clientPlatform: body.clientMetadata?.platform,
     });
 
-    let counts;
+    let counts: MemoryExtractionCounts;
     try {
       counts = await deps.memoryExtractionService.extract(userId, body);
     } catch (error) {
       await recordExtractionEvent({
+        ...extractionTelemetry,
         eventType: "memory_extraction_failed",
         timestamp: new Date().toISOString(),
-        activeApplicationBundleId: firstEntry.activeApplication.bundleId,
-        contextSource: firstEntry.contextSource,
-        modelId: MEMORY_EXTRACTION_MODEL_ID,
         latencyMs: Math.round(performance.now() - startedAt),
         errorCode: "provider_failure",
-        redactionApplied: firstEntry.redaction.applied,
-        redactionCount: firstEntry.redaction.redactionCount,
-        clientAppVersion: body.clientMetadata?.appVersion,
-        clientPlatform: body.clientMetadata?.platform,
       });
       throw error;
     }
 
     await recordExtractionEvent({
+      ...extractionTelemetry,
       eventType: "memory_extraction_succeeded",
       timestamp: new Date().toISOString(),
-      activeApplicationBundleId: firstEntry.activeApplication.bundleId,
-      contextSource: firstEntry.contextSource,
-      modelId: MEMORY_EXTRACTION_MODEL_ID,
       latencyMs: Math.round(performance.now() - startedAt),
-      redactionApplied: firstEntry.redaction.applied,
-      redactionCount: firstEntry.redaction.redactionCount,
-      clientAppVersion: body.clientMetadata?.appVersion,
-      clientPlatform: body.clientMetadata?.platform,
       memoryCreatedCount: counts.created,
       memoryUpdatedCount: counts.updated,
       memoryDeletedCount: counts.deleted,
