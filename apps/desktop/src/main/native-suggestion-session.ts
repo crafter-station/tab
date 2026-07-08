@@ -208,6 +208,17 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     textSessionSnapshot = null;
   }
 
+  function invalidateVisibleSuggestionWithoutContextChange(): void {
+    if (!currentSuggestion) return;
+
+    recordDismissal(currentSafeSnapshot());
+    outputs.resetDebugApiState();
+    outputs.clearSuggestion();
+    suggestionLoop.invalidate();
+    clearVisibleSuggestion();
+    outputs.showDebugContext();
+  }
+
   function withAppContext(snapshot: SafeTypingContextSnapshot): SafeTypingContextSnapshot {
     if (!snapshot.requestable || !deps.getAppContext) {
       return snapshot;
@@ -247,6 +258,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     appendText(text: string): void {
       if (observationPaused) return;
       if (textSessionSnapshot) {
+        invalidateVisibleSuggestionWithoutContextChange();
         return;
       }
       clearTextSessionSnapshot();

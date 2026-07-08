@@ -1399,6 +1399,37 @@ describe("desktop native suggestion loop", () => {
       expect(calls).toContainEqual({ type: "requestSuggestion", value: "Alpha!" });
     });
 
+    it("clears a visible Text Session suggestion when fallback text arrives before the next snapshot", async () => {
+      const { calls, session } = makeSession();
+      const textSession = (beforeCaret: string): TextSessionSnapshot => ({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: beforeCaret.length, length: 0 },
+        caretIdentity: `range:${beforeCaret.length}:0`,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        supportsSemanticInsertion: true,
+        surroundingContext: { beforeCaret, afterCaret: "" },
+      });
+
+      session.applyTextSessionSnapshot(textSession("Alpha"));
+      await wait(10);
+
+      expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
+      calls.length = 0;
+
+      session.appendText("!");
+      await wait(10);
+
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(0);
+      expect(calls.map((call) => call.type)).toContain("clearSuggestion");
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(session.getLoopState().status).toBe("idle");
+      expect(session.getCurrentSnapshot().sanitizedContext).toBe("Alpha");
+    });
+
     it("does not clear or request again when only Text Session caret bounds change", async () => {
       const { calls, session } = makeSession();
       const textSession = (x: number): TextSessionSnapshot => ({
