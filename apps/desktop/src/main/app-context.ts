@@ -1,6 +1,6 @@
 import type { AppContext, AppContextFragment } from "@tabb/contracts";
 import { redactSensitiveText } from "@tabb/redaction";
-import type { SafeTypingContextSnapshot } from "./typing-context.ts";
+import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
 
 const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
@@ -10,6 +10,10 @@ const GHOSTTY_PROVIDER = "ghostty-terminal";
 const MIN_GHOSTTY_CONTEXT_LENGTH = 20;
 const MAX_GHOSTTY_CONTEXT_LINES = 16;
 const MAX_CONTROL_CHARACTER_RATIO = 0.08;
+const ANSI_OSC_SEQUENCE = /\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g;
+const ANSI_CSI_SEQUENCE = /\u001b\[[0-?]*[ -/]*[@-~]/g;
+const NON_WHITESPACE_CONTROL_CHARACTERS = /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g;
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f]/g;
 
 export type AppContextSnapshot = AppContext;
 
@@ -33,7 +37,7 @@ function createSafeRedactionSummary(): AppContextFragment["redaction"] {
   };
 }
 
-function ghosttySnapshot(status: AppContextSnapshot["metadata"]["status"], confidence?: number): AppContextSnapshot {
+function emptyGhosttySnapshot(status: AppContextSnapshot["metadata"]["status"], confidence?: number): AppContextSnapshot {
   return {
     fragments: [],
     metadata: { provider: GHOSTTY_PROVIDER, status, confidence },
@@ -42,15 +46,23 @@ function ghosttySnapshot(status: AppContextSnapshot["metadata"]["status"], confi
 
 function stripAnsiControlSequences(text: string): string {
   return text
-    .replace(/\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g, "")
-    .replace(/\u001b\[[0-?]*[ -/]*[@-~]/g, "")
-    .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "");
+    .replace(ANSI_OSC_SEQUENCE, "")
+    .replace(ANSI_CSI_SEQUENCE, "")
+    .replace(NON_WHITESPACE_CONTROL_CHARACTERS, "");
 }
 
 function controlCharacterRatio(text: string): number {
   if (text.length === 0) return 0;
-  const controls = text.match(/[\u0000-\u001f\u007f]/g)?.length ?? 0;
+  const controls = text.match(CONTROL_CHARACTERS)?.length ?? 0;
   return controls / text.length;
+}
+
+function terminalSessionText(snapshot: TextSessionSnapshot): string {
+  return [
+    snapshot.surroundingContext?.beforeCaret ?? "",
+    snapshot.selectedText ?? "",
+    snapshot.surroundingContext?.afterCaret ?? "",
+  ].filter(Boolean).join("\n");
 }
 
 function normalizeTerminalContext(text: string): string {
@@ -66,27 +78,23 @@ function normalizeTerminalContext(text: string): string {
 
 export function createGhosttyAppContextSnapshot(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
   if (snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID) {
-    return ghosttySnapshot("unsupported");
+    return emptyGhosttySnapshot("unsupported");
   }
 
   const textSession = snapshot.textSession;
   if (!textSession || textSession.accessibilityReliability !== "reliable" || textSession.secureLike) {
-    return ghosttySnapshot("empty", 0);
+    return emptyGhosttySnapshot("empty", 0);
   }
 
-  const rawContext = [
-    textSession.surroundingContext?.beforeCaret ?? "",
-    textSession.selectedText ?? "",
-    textSession.surroundingContext?.afterCaret ?? "",
-  ].filter(Boolean).join("\n");
+  const rawContext = terminalSessionText(textSession);
 
   if (rawContext.trim().length === 0 || controlCharacterRatio(rawContext) > MAX_CONTROL_CHARACTER_RATIO) {
-    return ghosttySnapshot("empty", 0);
+    return emptyGhosttySnapshot("empty", 0);
   }
 
   const text = normalizeTerminalContext(rawContext);
   if (text.length < MIN_GHOSTTY_CONTEXT_LENGTH) {
-    return ghosttySnapshot("empty", 0.4);
+    return emptyGhosttySnapshot("empty", 0.4);
   }
 
   const confidence = 0.86;

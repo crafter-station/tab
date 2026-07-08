@@ -63,8 +63,9 @@ describe("Ghostty App Context provider", () => {
 
   it("falls back to Typing Context when the focused app is not Ghostty", () => {
     const textSession = makeTextSession({ activeApplication: { bundleId: "com.apple.Terminal" } });
+    const snapshot = makeSnapshot({ activeApplication: textSession.activeApplication, textSession });
 
-    expect(createGhosttyAppContextSnapshot(makeSnapshot({ activeApplication: textSession.activeApplication, textSession }))).toEqual({
+    expect(createGhosttyAppContextSnapshot(snapshot)).toEqual({
       fragments: [],
       metadata: { provider: "ghostty-terminal", status: "unsupported" },
     });
@@ -86,7 +87,10 @@ describe("Ghostty App Context provider", () => {
     const snapshot = createGhosttyAppContextSnapshot(
       makeSnapshot({
         textSession: makeTextSession({
-          surroundingContext: { beforeCaret: "\u001b[31m\u0000\u0007\u001b[0m\u001b[?2004h\u001b]0;noise\u0007", afterCaret: "" },
+          surroundingContext: {
+            beforeCaret: "\u001b[31m\u0000\u0007\u001b[0m\u001b[?2004h\u001b]0;noise\u0007",
+            afterCaret: "",
+          },
         }),
       }),
     );
@@ -100,7 +104,10 @@ describe("Ghostty App Context provider", () => {
       createGhosttyAppContextSnapshot(
         makeSnapshot({
           textSession: makeTextSession({
-            surroundingContext: { beforeCaret: "$ deploy\nAuthorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9", afterCaret: "" },
+            surroundingContext: {
+              beforeCaret: "$ deploy\nAuthorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+              afterCaret: "",
+            },
           }),
         }),
       ),
