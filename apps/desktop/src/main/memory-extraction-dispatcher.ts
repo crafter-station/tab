@@ -1,4 +1,4 @@
-import type { MemoryExtractionCounts, MemoryExtractionRequest } from "@tabb/contracts";
+import type { MemoryExtractionCounts, MemoryExtractionRequest } from "@tab/contracts";
 import type { MemoryExtractionAppendInput, MemoryExtractionEntry, MemoryExtractionWindow } from "./memory-extraction-window.ts";
 
 export type MemoryExtractionDispatchClient = {

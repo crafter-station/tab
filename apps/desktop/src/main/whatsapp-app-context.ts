@@ -1,4 +1,4 @@
-import type { ActiveApplication, AppContextFragment } from "@tabb/contracts";
+import type { ActiveApplication, AppContextFragment } from "@tab/contracts";
 import { sanitizeAppContextSnapshot, type AppContextSnapshot } from "./app-context.ts";
 
 const PROVIDER = "whatsapp-conversation";
