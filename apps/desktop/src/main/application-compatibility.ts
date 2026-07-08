@@ -4,6 +4,7 @@ import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-co
 
 export type InsertionStrategy = "semantic" | "clipboard";
 export type InsertionOutcome = "success" | "failure";
+type AppContextStatus = AppContextSnapshot["metadata"]["status"];
 
 export type ApplicationCompatibilityProfile = {
   readonly staleCount: number;
@@ -95,6 +96,12 @@ const INSERTION_OUTCOME_COUNTS: Record<
   },
 };
 
+const APP_CONTEXT_STATUS_COUNTS: Partial<Record<AppContextStatus, keyof MutableApplicationCompatibilityProfile>> = {
+  available: "appContextAvailableCount",
+  suppressed: "appContextSuppressedCount",
+  unsupported: "appContextUnsupportedCount",
+};
+
 function applicationKey(activeApplication: ActiveApplication | null): string | null {
   return activeApplication?.bundleId ?? null;
 }
@@ -162,19 +169,8 @@ export function createApplicationCompatibilityStore(
       incrementProfileCount(snapshot.activeApplication, count);
     },
     recordAppContextSnapshot(activeApplication, snapshot) {
-      if (snapshot.metadata.status === "available") {
-        incrementProfileCount(activeApplication, "appContextAvailableCount");
-        return;
-      }
-
-      if (snapshot.metadata.status === "unsupported") {
-        incrementProfileCount(activeApplication, "appContextUnsupportedCount");
-        return;
-      }
-
-      if (snapshot.metadata.status === "suppressed") {
-        incrementProfileCount(activeApplication, "appContextSuppressedCount");
-      }
+      const count = APP_CONTEXT_STATUS_COUNTS[snapshot.metadata.status];
+      if (count) incrementProfileCount(activeApplication, count);
     },
     recordInsertionOutcome(activeApplication, strategy, outcome) {
       incrementProfileCount(activeApplication, INSERTION_OUTCOME_COUNTS[strategy][outcome]);

@@ -4,8 +4,9 @@ import { redactSensitiveText } from "@tabb/redaction";
 const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
 const MAX_EXTRACTED_TEXT_LENGTH = 1_500;
-const MIN_GENERIC_CONFIDENCE = 0.7;
+const MIN_ACCESSIBILITY_CONFIDENCE = 0.7;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
+const ACCESSIBILITY_TEXT_FIELDS = ["value", "title", "description"] as const;
 
 export type AppContextSnapshot = AppContext;
 
@@ -44,9 +45,21 @@ type ProviderDefinition = {
 };
 
 const APP_SPECIFIC_PROVIDERS: Record<string, ProviderDefinition> = {
-  "com.apple.Notes": { provider: "apple-notes-accessibility", kind: "focused_note", confidence: 0.88 },
-  "com.tinyspeck.slackmacgap": { provider: "slack-accessibility", kind: "conversation", confidence: 0.82 },
-  "com.hnc.Discord": { provider: "discord-accessibility", kind: "conversation", confidence: 0.8 },
+  "com.apple.Notes": {
+    provider: "apple-notes-accessibility",
+    kind: "focused_note",
+    confidence: 0.88,
+  },
+  "com.tinyspeck.slackmacgap": {
+    provider: "slack-accessibility",
+    kind: "conversation",
+    confidence: 0.82,
+  },
+  "com.hnc.Discord": {
+    provider: "discord-accessibility",
+    kind: "conversation",
+    confidence: 0.8,
+  },
 };
 
 const GENERIC_ACCESSIBILITY_APPS = new Set([
@@ -57,7 +70,8 @@ const GENERIC_ACCESSIBILITY_APPS = new Set([
 ]);
 
 function collectAccessibilityText(node: AccessibilityTextNode, values: string[]): void {
-  for (const candidate of [node.value, node.title, node.description]) {
+  for (const field of ACCESSIBILITY_TEXT_FIELDS) {
+    const candidate = node[field];
     const normalized = candidate?.replace(/\s+/g, " ").trim();
     if (normalized) values.push(normalized);
   }
@@ -70,12 +84,17 @@ function collectAccessibilityText(node: AccessibilityTextNode, values: string[])
 function extractBoundedAccessibilityText(root: AccessibilityTextNode): string {
   const values: string[] = [];
   collectAccessibilityText(root, values);
-  return [...new Set(values)].join("\n").slice(0, MAX_EXTRACTED_TEXT_LENGTH).trim();
+  const deduplicatedValues = [...new Set(values)];
+  return deduplicatedValues.join("\n").slice(0, MAX_EXTRACTED_TEXT_LENGTH).trim();
 }
 
 function genericProviderFor(activeApplication: ActiveApplication): ProviderDefinition | null {
   if (!GENERIC_ACCESSIBILITY_APPS.has(activeApplication.bundleId)) return null;
   return { provider: "generic-accessibility-text", kind: "visible_text", confidence: 0.76 };
+}
+
+function providerDefinitionFor(activeApplication: ActiveApplication): ProviderDefinition | null {
+  return APP_SPECIFIC_PROVIDERS[activeApplication.bundleId] ?? genericProviderFor(activeApplication);
 }
 
 export function extractAppContextFromAccessibility(
@@ -86,14 +105,14 @@ export function extractAppContextFromAccessibility(
     return emptySnapshot("unsupported");
   }
 
-  const definition = APP_SPECIFIC_PROVIDERS[activeApplication.bundleId] ?? genericProviderFor(activeApplication);
+  const definition = providerDefinitionFor(activeApplication);
   if (!definition) {
-    return { fragments: [], metadata: { status: "unsupported" } };
+    return emptySnapshot("unsupported");
   }
 
   const text = extractBoundedAccessibilityText(root);
   const confidence = text.length >= 12 ? definition.confidence : 0.2;
-  if (confidence < MIN_GENERIC_CONFIDENCE) {
+  if (confidence < MIN_ACCESSIBILITY_CONFIDENCE) {
     return {
       fragments: [],
       metadata: {
