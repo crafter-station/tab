@@ -50,6 +50,13 @@ export type DashboardData = {
   memories: readonly PersonalMemory[];
 };
 
+type PlanEntry = [PlanId, (typeof planQuotas)[PlanId]];
+type StatusPresentation = { value: string; tone: PatternTone };
+
+function getPlanEntries(): PlanEntry[] {
+  return Object.entries(planQuotas) as PlanEntry[];
+}
+
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   return date.toLocaleDateString("en-US", {
@@ -77,13 +84,17 @@ function planCheckoutLabel(authenticated: boolean): string {
   return "Billing path: Sign in required";
 }
 
+function checkoutPlanHref(planId: PlanId): string {
+  return `/billing/checkout?plan=${planId}`;
+}
+
 function checkoutAuthHref(planId: PlanId): string {
-  const next = `/billing/checkout?plan=${encodeURIComponent(planId)}`;
+  const next = checkoutPlanHref(planId);
   return `/login?next=${encodeURIComponent(next)}`;
 }
 
 function checkoutHref(planId: PlanId, authenticated: boolean): string {
-  if (authenticated) return `/billing/checkout?plan=${planId}`;
+  if (authenticated) return checkoutPlanHref(planId);
   return checkoutAuthHref(planId);
 }
 
@@ -97,7 +108,7 @@ function planActionLabel(planName: string, monthlyPriceUsd: number): string {
   return `Upgrade to ${planName}`;
 }
 
-function emailStatus(emailVerified: boolean | undefined): { value: string; tone: PatternTone } {
+function emailStatus(emailVerified: boolean | undefined): StatusPresentation {
   if (emailVerified === false) {
     return { value: "Warning: verification needed", tone: "warning" };
   }
@@ -105,7 +116,7 @@ function emailStatus(emailVerified: boolean | undefined): { value: string; tone:
   return { value: "Active: email verified", tone: "success" };
 }
 
-function quotaStatus(quotaExhausted: boolean): { value: string; tone: PatternTone } {
+function quotaStatus(quotaExhausted: boolean): StatusPresentation {
   if (quotaExhausted) {
     return { value: "Warning: quota exhausted", tone: "warning" };
   }
@@ -178,8 +189,8 @@ export function HomePage() {
 }
 
 export function PricingPage({ authenticated = false }: { authenticated?: boolean }) {
-  const plans = Object.entries(planQuotas).map(([planId, plan]) => ({
-    planId: planId as PlanId,
+  const plans = getPlanEntries().map(([planId, plan]) => ({
+    planId,
     ...plan,
   }));
 
@@ -315,7 +326,7 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
     return <DashboardPlaceholder />;
   }
 
-  const upgradePlans = Object.entries(planQuotas).filter(([planId]) => planId !== data.quota.planId);
+  const upgradePlans = getPlanEntries().filter(([planId]) => planId !== data.quota.planId);
   const quotaExhausted = data.quota.usage >= data.quota.quota;
   const accountName = data.user.email ?? data.user.name ?? data.user.id;
   const accountEmailStatus = emailStatus(data.user.emailVerified);
@@ -375,7 +386,7 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
               <p className="text-sm font-bold text-foreground">Billing actions</p>
               <p className="flex flex-wrap gap-2">
                 {upgradePlans.map(([planId, plan]) => (
-                  <a key={planId} className={buttonVariants()} href={`/billing/checkout?plan=${planId}`}>
+                  <a key={planId} className={buttonVariants()} href={checkoutPlanHref(planId)}>
                     {planActionLabel(plan.name, plan.monthlyPriceUsd)}
                   </a>
                 ))}

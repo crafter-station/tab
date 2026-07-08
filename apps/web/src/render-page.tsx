@@ -6,6 +6,10 @@ import type { User } from "./components/web-pages.tsx";
 const themeInitScript = getThemeInitScript();
 const themeControlScript = getThemeControlScript();
 
+function formatThemeModeLabel(mode: string): string {
+  return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
 function WebDocument({
   title,
   children,
@@ -35,7 +39,7 @@ function WebDocument({
                 <div className="flex rounded-full border bg-card p-1 text-xs text-muted-foreground" aria-label="Theme selection">
                   {THEME_MODES.map((mode) => (
                     <button className="rounded-full px-2 py-1" data-theme-choice={mode} key={mode} type="button">
-                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                      {formatThemeModeLabel(mode)}
                     </button>
                   ))}
                 </div>
