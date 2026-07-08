@@ -35,6 +35,15 @@ const SEMANTIC_TEXT_ROLES = new Set([
   "textbox",
   "textarea",
 ]);
+const AGGREGATE_TEXT_CONTAINER_ROLES = new Set([
+  "AXDocument",
+  "AXGroup",
+  "AXWebArea",
+  "article",
+  "document",
+  "group",
+  "section",
+]);
 const EXCLUDED_WEB_ROLES = new Set([
   "AXAddressField",
   "AXButton",
@@ -186,7 +195,15 @@ function collectNearbyVisibleText(
 
   const role = nodeRole(node);
   const text = nodeText(node);
-  if (text && SEMANTIC_TEXT_ROLES.has(role) && isNearbyNode(node, focused) && !URL_LIKE_PATTERN.test(text)) {
+  const hasChildren = (node.children?.length ?? 0) > 0;
+  const canUseOwnText = !hasChildren || !AGGREGATE_TEXT_CONTAINER_ROLES.has(role);
+  if (
+    canUseOwnText &&
+    text &&
+    SEMANTIC_TEXT_ROLES.has(role) &&
+    isNearbyNode(node, focused) &&
+    !URL_LIKE_PATTERN.test(text)
+  ) {
     collected.push(text);
     if (collected.length >= MAX_NEARBY_TEXT_NODES) return;
   }

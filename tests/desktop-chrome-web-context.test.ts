@@ -97,6 +97,25 @@ describe("Chrome web writing context adapter", () => {
     expect(serialized).not.toContain("Send");
   });
 
+  it("ignores aggregate web area text instead of treating it as nearby semantics", () => {
+    const snapshot = createChromeWebWritingContextSnapshot({
+      activeApplication: chrome,
+      accessibilityTree: {
+        role: "AXWebArea",
+        text: "Inbox Sent Drafts Hidden archived thread Cookie banner unrelated page dump",
+        children: [
+          textNode("Riley: Can you review the proposal summary?", 440),
+          editable("I'll review it today.", 520),
+        ],
+      },
+    });
+
+    const serialized = JSON.stringify(snapshot);
+    expect(serialized).toContain("Riley: Can you review");
+    expect(serialized).not.toContain("Hidden archived thread");
+    expect(serialized).not.toContain("unrelated page dump");
+  });
+
   it("falls back safely when Accessibility data is missing or lacks a focused editable field", () => {
     expect(
       createChromeWebWritingContextSnapshot({ activeApplication: chrome, accessibilityTree: null }),
