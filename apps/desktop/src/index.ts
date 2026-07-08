@@ -7,6 +7,7 @@ export const desktopAppBoundary = {
     "typing context observation",
     "floating suggestion overlay",
     "suggestion acceptance",
+    "temporary Memory Extraction Window",
     "local privacy suppression and redaction",
     "global pause/opt-out control",
   ],
@@ -25,6 +26,7 @@ export { createDesktopAuthClient } from "./main/auth.ts";
 export { createMemoryKeychain, createMacOSKeychain } from "./main/keychain.ts";
 export { createDesktopStatusService, type DesktopStatus } from "./main/status.ts";
 export { createDesktopMemoryClient } from "./main/memory-client.ts";
+export { createMemoryExtractionWindow } from "./main/memory-extraction-window.ts";
 export { createOnboardingManager, ONBOARDING_PERMISSIONS_COPY, type OnboardingPreferences } from "./main/onboarding.ts";
 export { createPreferencesManager, createMemoryPreferencesStorage, type DesktopPreferences } from "./main/preferences.ts";
 export { createUpdateChecker, type UpdateChecker } from "./main/release.ts";
