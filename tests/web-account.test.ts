@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
+import type { PlanId } from "@tabb/billing";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import {
@@ -11,7 +12,6 @@ import {
   type BillingCheckoutClient,
   BillingService,
   InMemoryBillingStorage,
-  type UserEntitlement,
 } from "../apps/api/src/billing.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import { createWebApp, type WebApp } from "../apps/web/src/index.ts";
@@ -21,10 +21,10 @@ const TEST_ORIGIN = "http://localhost:8787";
 const WEB_ORIGIN = "http://localhost:3000";
 
 class TestBillingCheckoutClient implements BillingCheckoutClient {
-  readonly checkoutRequests: string[] = [];
+  readonly checkoutRequests: PlanId[] = [];
 
   async createCheckoutUrl(
-    planId: string,
+    planId: PlanId,
     user: { id: string; email?: string; name?: string },
   ): Promise<string> {
     this.checkoutRequests.push(planId);
@@ -141,7 +141,7 @@ async function activateFreePlan(billingService: BillingService, userId: string) 
 async function activatePaidPlan(
   billingService: BillingService,
   userId: string,
-  planId: "pro" | "max",
+  planId: Exclude<PlanId, "free">,
 ) {
   await billingService.applyEntitlement({
     userId,
@@ -150,7 +150,7 @@ async function activatePaidPlan(
     polarSubscriptionId: `polar-sub-${planId}`,
     status: "active",
     cachedAt: new Date(),
-  } satisfies UserEntitlement);
+  });
 }
 
 function webRequest(
