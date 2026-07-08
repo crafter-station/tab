@@ -5,9 +5,9 @@ import {
   MemoryJobSchema,
   type MemoryJob,
   type PersonalMemory,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import { generateText, Output } from "ai";
-import { validateMemoryContent } from "@tabb/memory-policy";
+import { validateMemoryContent } from "@tab/memory-policy";
 import type { PersonalMemoryService } from "./personal-memory.ts";
 import { env } from "./env.ts";
 import { z } from "zod";

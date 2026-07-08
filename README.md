@@ -1,6 +1,6 @@
-# Tabb
+# Tab
 
-Tabb is a native desktop autocomplete product that suggests continuations while a person types in other applications.
+Tab is a native desktop autocomplete product that suggests continuations while a person types in other applications.
 
 ## Development
 

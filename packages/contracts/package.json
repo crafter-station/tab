@@ -1,5 +1,5 @@
 {
-  "name": "@tabb/contracts",
+  "name": "@tab/contracts",
   "type": "module",
   "private": true,
   "main": "src/index.ts",
@@ -7,6 +7,6 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@tabb/memory-policy": "workspace:*"
+    "@tab/memory-policy": "workspace:*"
   }
 }

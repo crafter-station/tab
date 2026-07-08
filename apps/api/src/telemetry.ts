@@ -1,7 +1,7 @@
 import {
   TelemetryEventSchema,
   type TelemetryEvent,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import { eq } from "drizzle-orm";
 import type { AppDatabase } from "./db/index.ts";
 import { telemetryEvents } from "./db/schema.ts";

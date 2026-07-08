@@ -205,7 +205,7 @@ describe("Personal Memory API", () => {
               {
                 type: "update",
                 id: memories[0].id,
-                content: "Works on Tabb launch planning",
+                content: "Works on Tab launch planning",
               },
               { type: "delete", id: memories[1].id, reason: "Contradicted" },
             ];
@@ -214,7 +214,7 @@ describe("Personal Memory API", () => {
       );
     const updated = await personalMemoryStorage.createMemory({
       userId: "user-1",
-      content: "Works on Tabb",
+      content: "Works on Tab",
       createdBy: "system",
     });
     const deleted = await personalMemoryStorage.createMemory({
@@ -239,7 +239,7 @@ describe("Personal Memory API", () => {
     });
     expect(await personalMemoryStorage.findMemoryById(deleted.id)).toBeNull();
     expect((await personalMemoryStorage.findMemoryById(updated.id))?.content).toBe(
-      "Works on Tabb launch planning",
+      "Works on Tab launch planning",
     );
     expect(vectorIndex.queries).toHaveLength(1);
     expect(embeddingService.embeddedTexts[0]).toBe(
@@ -526,7 +526,7 @@ describe("Personal Memory API", () => {
 
     await personalMemoryStorage.createMemory({
       userId: "user-1",
-      content: "Uses Tabb for work",
+      content: "Uses Tab for work",
       createdBy: "system",
     });
     await personalMemoryStorage.createMemory({

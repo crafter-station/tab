@@ -1,5 +1,5 @@
-import { getMemoryEligibility, type SuggestionContextSource } from "@tabb/memory-policy";
-import { redactSensitiveText } from "@tabb/redaction";
+import { getMemoryEligibility, type SuggestionContextSource } from "@tab/memory-policy";
+import { redactSensitiveText } from "@tab/redaction";
 
 export type ActiveApplicationLike = {
   readonly bundleId: string;

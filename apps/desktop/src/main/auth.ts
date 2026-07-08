@@ -1,10 +1,10 @@
 import {
   DeviceTokenExchangeResponseSchema,
   type DeviceTokenExchangeRequest,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import type { Keychain } from "./keychain.ts";
 
-const TOKEN_SERVICE = "tabb";
+const TOKEN_SERVICE = "tab";
 const TOKEN_ACCOUNT = "device-token";
 
 export type DesktopAuthClientDependencies = {
@@ -22,7 +22,7 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
 
   function buildBrowserLoginUrl({
-    callbackScheme = "tabb",
+    callbackScheme = "tab",
   }: { callbackScheme?: string } = {}) {
     const callbackUrl = `${callbackScheme}://auth/callback`;
     const url = new URL("/login", deps.webBaseUrl);

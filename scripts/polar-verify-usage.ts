@@ -22,8 +22,8 @@ const organizationScope = env.POLAR_SEND_ORGANIZATION_ID
   : {};
 
 const runId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-const externalCustomerId = `tabb-polar-usage-${runId}`;
-const requestId = `tabb-polar-usage-request-${runId}`;
+const externalCustomerId = `tab-polar-usage-${runId}`;
+const requestId = `tab-polar-usage-request-${runId}`;
 const timestamp = new Date();
 const startTimestamp = new Date(timestamp.getTime() - 60_000);
 const endTimestamp = new Date(timestamp.getTime() + 60 * 60_000);
@@ -70,8 +70,8 @@ try {
     type: "individual",
     email: `polar-usage+${runId}@cueva.io`,
     externalId: externalCustomerId,
-    name: "Tabb Polar Usage Verify",
-    metadata: { source: "tabb-polar-verify-usage" },
+    name: "Tab Polar Usage Verify",
+    metadata: { source: "tab-polar-verify-usage" },
     ...organizationScope,
   });
   customerId = customer.id;
@@ -79,7 +79,7 @@ try {
   const subscription = await polar.subscriptions.create({
     productId,
     externalCustomerId,
-    metadata: { source: "tabb-polar-verify-usage" },
+    metadata: { source: "tab-polar-verify-usage" },
   });
 
   const customerSession = await polar.customerSessions.create({

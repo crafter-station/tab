@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, PermissionCard, SectionCard, StatusBadge } from "@tabb/ui";
+import { Button, PermissionCard, SectionCard, StatusBadge } from "@tab/ui";
 import type { DesktopStatus } from "../../../main/status";
 
 type OnboardingStep = "sign-in" | "permissions" | "how-it-works" | "practice" | "done";
@@ -55,7 +55,7 @@ export function OnboardingSurface() {
     (granted: boolean) => {
       setAccessibilityGranted(granted);
       if (granted) {
-        setStatusMessage("Accessibility is enabled. Next, add Tabb to Input Monitoring.");
+        setStatusMessage("Accessibility is enabled. Next, add Tab to Input Monitoring.");
         stopAccessibilityPolling();
       }
     },
@@ -63,12 +63,12 @@ export function OnboardingSurface() {
   );
 
   const refreshAccessibilityStatus = useCallback(async () => {
-    if (!window.tabb?.checkAccessibilityPermission) {
+    if (!window.tab?.checkAccessibilityPermission) {
       setAccessibilityState(false);
       return false;
     }
 
-    const granted = Boolean(await window.tabb.checkAccessibilityPermission());
+    const granted = Boolean(await window.tab.checkAccessibilityPermission());
     setAccessibilityState(granted);
     return granted;
   }, [setAccessibilityState]);
@@ -81,10 +81,10 @@ export function OnboardingSurface() {
   }, [refreshAccessibilityStatus, stopAccessibilityPolling]);
 
   useEffect(() => {
-    if (!window.tabb) return;
+    if (!window.tab) return;
 
-    window.tabb.onStatusChanged((nextStatus) => setStatus(nextStatus));
-    window.tabb
+    window.tab.onStatusChanged((nextStatus) => setStatus(nextStatus));
+    window.tab
       .getInitialState()
       .then((initialState) => setStatus(initialState.status))
       .catch(() => {});
@@ -101,11 +101,11 @@ export function OnboardingSurface() {
   async function openAccessibility() {
     setBusy(true);
     try {
-      const alreadyGranted = Boolean(await window.tabb?.openAccessibilitySettings?.());
+      const alreadyGranted = Boolean(await window.tab?.openAccessibilitySettings?.());
       setAccessibilityState(alreadyGranted);
       if (!alreadyGranted) {
         setStatusMessage(
-          "System Settings opened to Accessibility. Turn on Tabb; this window will continue once macOS reports it is enabled.",
+          "System Settings opened to Accessibility. Turn on Tab; this window will continue once macOS reports it is enabled.",
         );
         startAccessibilityPolling();
       }
@@ -117,11 +117,11 @@ export function OnboardingSurface() {
   async function openInputMonitoring() {
     setBusy(true);
     try {
-      await window.tabb?.openInputMonitoringSettings?.();
-      await window.tabb?.revealAppInFinder?.();
+      await window.tab?.openInputMonitoringSettings?.();
+      await window.tab?.revealAppInFinder?.();
       setInputMonitoringOpened(true);
       setStatusMessage(
-        "System Settings opened to Input Monitoring. Enable Tabb there, then relaunch Tabb if macOS does not reopen it.",
+        "System Settings opened to Input Monitoring. Enable Tab there, then relaunch Tab if macOS does not reopen it.",
       );
     } finally {
       setBusy(false);
@@ -147,7 +147,7 @@ export function OnboardingSurface() {
   async function handlePrimaryAction() {
     if (step === "sign-in") {
       if (!signedIn) {
-        window.tabb?.signIn?.();
+        window.tab?.signIn?.();
         setStatusMessage("Complete sign-in in your browser, then return here.");
         return;
       }
@@ -182,7 +182,7 @@ export function OnboardingSurface() {
       return;
     }
 
-    window.tabb?.completeOnboarding?.();
+    window.tab?.completeOnboarding?.();
   }
 
   function approveSuggestion() {
@@ -221,7 +221,7 @@ export function OnboardingSurface() {
           ? "Practice Suggestions"
           : step === "practice"
             ? "Finish Practice"
-            : "Open Tabb";
+            : "Open Tab";
 
   return (
     <main className="onboarding-shell">
@@ -229,10 +229,10 @@ export function OnboardingSurface() {
         <div className="onboarding-card__chrome drag-region" aria-hidden="true" />
         <header className="onboarding-header drag-region">
           <div>
-            <p className="eyebrow">Welcome to Tabb</p>
+            <p className="eyebrow">Welcome to Tab</p>
             <h1>Set up your private typing assistant.</h1>
           </div>
-          <Button className="no-drag" onClick={() => window.tabb?.skipOnboarding?.()} variant="ghost">
+          <Button className="no-drag" onClick={() => window.tab?.skipOnboarding?.()} variant="ghost">
             Skip setup
           </Button>
         </header>
@@ -249,7 +249,7 @@ export function OnboardingSurface() {
               <div className="onboarding-hero">
                 <h2>Sign in is required before setup continues.</h2>
                 <p className="lede">
-                  Tabb links this Mac to your account before it requests autocomplete suggestions. You can configure permissions
+                  Tab links this Mac to your account before it requests autocomplete suggestions. You can configure permissions
                   after sign-in returns here.
                 </p>
               </div>
@@ -268,7 +268,7 @@ export function OnboardingSurface() {
               <div className="onboarding-hero">
                 <h2>Two permissions, no screen or file access.</h2>
                 <p className="lede">
-                  Tabb uses Accessibility for focused Text Session understanding and accepted Suggestion insertion, while
+                  Tab uses Accessibility for focused Text Session understanding and accepted Suggestion insertion, while
                   Input Monitoring supports typing timing, acceptance shortcuts, and fallback Typing Context signals.
                 </p>
               </div>
@@ -290,7 +290,7 @@ export function OnboardingSurface() {
                 <strong>Privacy scope</strong>
                 <span>
                   Typing Context stays in memory only. Personal Memory remains visible and controlled by you, telemetry is
-                  metadata-only, raw logs are not stored, and Tabb does not request Screen Recording or Full Disk Access.
+                  metadata-only, raw logs are not stored, and Tab does not request Screen Recording or Full Disk Access.
                 </span>
               </div>
             </>
@@ -299,9 +299,9 @@ export function OnboardingSurface() {
           {step === "how-it-works" ? (
             <>
               <div className="onboarding-hero">
-                <h2>How Tabb suggestions work.</h2>
+                <h2>How Tab suggestions work.</h2>
                 <p className="lede">
-                  Tabb watches recent typing context in memory, requests a continuation, and shows a floating overlay near the
+                  Tab watches recent typing context in memory, requests a continuation, and shows a floating overlay near the
                   bottom of the active display.
                 </p>
               </div>
@@ -362,14 +362,14 @@ export function OnboardingSurface() {
           {step === "done" ? (
             <>
               <div className="onboarding-hero">
-                <h2>Tabb is ready.</h2>
+                <h2>Tab is ready.</h2>
                 <p className="lede">
-                  Finish setup to open the Tabb app. You can revisit account, permissions, pause, and memory controls in Settings.
+                  Finish setup to open the Tab app. You can revisit account, permissions, pause, and memory controls in Settings.
                 </p>
               </div>
               <div className="privacy-card">
                 <strong>Running in the background</strong>
-                <span>Tabb keeps the overlay hidden until there is a suggestion to show.</span>
+                <span>Tab keeps the overlay hidden until there is a suggestion to show.</span>
               </div>
             </>
           ) : null}
@@ -381,8 +381,8 @@ export function OnboardingSurface() {
           <details className="dev-note no-drag">
             <summary>Development mode note</summary>
             <p>
-              macOS permission entries are tied to the exact app bundle. If Tabb is not listed while running from source,
-              use <code>bun run desktop:permissions</code> and enable the packaged Tabb app.
+              macOS permission entries are tied to the exact app bundle. If Tab is not listed while running from source,
+              use <code>bun run desktop:permissions</code> and enable the packaged Tab app.
             </p>
           </details>
         ) : null}
@@ -402,8 +402,8 @@ export function OnboardingSurface() {
             </Button>
           ) : null}
           {step === "permissions" && inputMonitoringOpened ? (
-            <Button disabled={busy} onClick={() => window.tabb?.relaunchForPermissions?.()} variant="ghost">
-              Relaunch Tabb
+            <Button disabled={busy} onClick={() => window.tab?.relaunchForPermissions?.()} variant="ghost">
+              Relaunch Tab
             </Button>
           ) : null}
           {step === "practice" && !practiceComplete ? (

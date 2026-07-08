@@ -1,4 +1,4 @@
-import type { Suggestion } from "@tabb/contracts";
+import type { Suggestion } from "@tab/contracts";
 import {
   isRequestableTypingContextSnapshot,
   type RequestableTypingContextSnapshot,

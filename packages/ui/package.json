@@ -1,5 +1,5 @@
 {
-  "name": "@tabb/ui",
+  "name": "@tab/ui",
   "type": "module",
   "private": true,
   "main": "src/index.ts",

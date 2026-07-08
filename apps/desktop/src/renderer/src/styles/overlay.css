@@ -23,11 +23,11 @@
   color: var(--debug-text);
   background:
     linear-gradient(135deg, var(--debug-bg), var(--debug-bg-raised)),
-    var(--tabb-grid-bg);
+    var(--tab-grid-bg);
   background-size: auto, 24px 24px;
   border: 1px solid var(--debug-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--tabb-glass-shadow);
+  box-shadow: var(--tab-glass-shadow);
   backdrop-filter: blur(24px);
   -webkit-backdrop-filter: blur(24px);
   opacity: 0;

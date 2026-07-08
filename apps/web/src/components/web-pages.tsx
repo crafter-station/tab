@@ -1,10 +1,10 @@
-import { planQuotas, type PlanId } from "@tabb/billing";
+import { planQuotas, type PlanId } from "@tab/billing";
 import type { ReactNode } from "react";
 import type {
   BillingQuotaResponse,
   DeviceListItem,
   PersonalMemory,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import {
   Badge,
   Button,
@@ -26,7 +26,7 @@ import {
   TableHeader,
   TableRow,
   buttonVariants,
-} from "@tabb/ui";
+} from "@tab/ui";
 
 export type User = {
   id: string;
@@ -94,7 +94,7 @@ const downloadPermissionRows = [
     label: "Accessibility permission",
     value: "Required",
     tone: "warning",
-    description: "Tabb needs macOS Accessibility permission to show and accept inline Suggestions.",
+    description: "Tab needs macOS Accessibility permission to show and accept inline Suggestions.",
   },
   {
     label: "Input Monitoring",
@@ -180,7 +180,7 @@ function AuthShell({
       <SectionBlock className="pug-dot-grid min-h-full">
         <SurfaceHeader eyebrow={eyebrow} title={title} description={description} />
         <div className="mt-6 grid gap-3">
-          <StatusRow label="Native Autocomplete App" value="Private" tone="success" description="Tabb keeps the browser entry point aligned with the Mac app handoff." />
+          <StatusRow label="Native Autocomplete App" value="Private" tone="success" description="Tab keeps the browser entry point aligned with the Mac app handoff." />
           <StatusRow label="Typing Context" value="Local first" tone="info" description="Sign-in does not change how writing context is handled in the desktop app." />
           {handoff ? (
             <StatusRow label="Desktop handoff" value="Preserved" tone="warning" description="Device id, callback, and next fields stay attached to this form." />
@@ -197,11 +197,11 @@ function AuthShell({
 export function HomePage() {
   return (
     <>
-      <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,4rem)] shadow-[var(--tabb-shadow-soft)] md:grid-cols-[minmax(0,1.08fr)_minmax(280px,0.92fr)]">
+      <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,4rem)] shadow-[var(--tab-shadow-soft)] md:grid-cols-[minmax(0,1.08fr)_minmax(280px,0.92fr)]">
         <div className="grid content-center gap-5">
           <PageKicker>Private Utility Grid</PageKicker>
           <h1 className="font-[var(--font-display)] text-[clamp(2.6rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Native Autocomplete App for macOS.</h1>
-          <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Tabb suggests the next few words inside the Active Application, then lets you accept a Suggestion with Option+Tab or a click without changing where you write.</p>
+          <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Tab suggests the next few words inside the Active Application, then lets you accept a Suggestion with Option+Tab or a click without changing where you write.</p>
           <div className="mt-6 flex flex-wrap gap-3">
             <a className={buttonVariants()} href="/download">Download for macOS</a>
             <a className={buttonVariants({ variant: "secondary" })} href="/pricing">See pricing</a>
@@ -265,7 +265,7 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
   const signupHref = `/signup${preserveAuthSearchParams(search)}`;
 
   return (
-    <AuthShell eyebrow="Account access" title="Sign in" description="Open the Tabb web control plane or complete a trusted desktop handoff." handoff={hasDesktopHandoff(search)}>
+    <AuthShell eyebrow="Account access" title="Sign in" description="Open the Tab web control plane or complete a trusted desktop handoff." handoff={hasDesktopHandoff(search)}>
       <AuthPageTitle>Sign in</AuthPageTitle>
       <form className="flex flex-col gap-4" method="post" action="/login">
         <ErrorMessage message={error} />
@@ -300,7 +300,7 @@ export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boo
 
 export function ResetPasswordPage({ error, token }: { error?: string; token?: string }) {
   return (
-    <AuthShell eyebrow="Account recovery" title="Choose a new password" description="Set a new password for your Tabb account and return to the same web routes.">
+    <AuthShell eyebrow="Account recovery" title="Choose a new password" description="Set a new password for your Tab account and return to the same web routes.">
       <AuthPageTitle>Choose a new password</AuthPageTitle>
       {token ? (
         <form className="flex flex-col gap-4" method="post" action="/reset-password">
@@ -321,7 +321,7 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
   const loginHref = `/login${preserveAuthSearchParams(search)}`;
 
   return (
-    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tabb with a web account for quota, billing, linked devices, and Personal Memory." handoff={hasDesktopHandoff(search)}>
+    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tab with a web account for quota, billing, linked devices, and Personal Memory." handoff={hasDesktopHandoff(search)}>
       <AuthPageTitle>Create your account</AuthPageTitle>
       <form className="flex flex-col gap-4" method="post" action="/signup">
         <ErrorMessage message={error} />
@@ -353,7 +353,7 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
           <CardHeader><CardTitle>Account configuration</CardTitle></CardHeader>
           <CardContent className="text-muted-foreground">
             <p><strong className="text-foreground">{data.user.email ?? data.user.name ?? data.user.id}</strong></p>
-            <p>Identity is managed by Tabb auth. Additional account settings will appear here when supported by the API.</p>
+            <p>Identity is managed by Tab auth. Additional account settings will appear here when supported by the API.</p>
           </CardContent>
           <CardFooter>
             <form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>
@@ -393,7 +393,7 @@ function DashboardPlaceholder() {
       <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Dashboard</h1>
       <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Manage account configuration, usage, billing, devices, permissions, and Personal Memory.</p>
       <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-        <Card><CardHeader><CardTitle>Monthly usage</CardTitle></CardHeader><CardContent className="flex flex-col gap-4 text-muted-foreground"><p>Plan, quota, and reset dates load from the Tabb API when you are signed in.</p><p className="flex flex-wrap gap-2"><a className={buttonVariants()} href="/billing/checkout?plan=pro">Upgrade to Pro</a><a className={buttonVariants()} href="/billing/checkout?plan=max">Upgrade to Max</a><a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a></p></CardContent></Card>
+        <Card><CardHeader><CardTitle>Monthly usage</CardTitle></CardHeader><CardContent className="flex flex-col gap-4 text-muted-foreground"><p>Plan, quota, and reset dates load from the Tab API when you are signed in.</p><p className="flex flex-wrap gap-2"><a className={buttonVariants()} href="/billing/checkout?plan=pro">Upgrade to Pro</a><a className={buttonVariants()} href="/billing/checkout?plan=max">Upgrade to Max</a><a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a></p></CardContent></Card>
         <Card><CardHeader><CardTitle>Account</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Identity and safe account settings appear here without inventing unsupported settings APIs.</p></CardContent></Card>
         <Card id="devices"><CardHeader><CardTitle>Devices</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Linked native devices, versions, status, and revoke controls are powered by the existing device APIs.</p></CardContent></Card>
         <Card id="memories"><CardHeader><CardTitle>Personal Memory</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Review and delete memories collected for autocomplete personalization.</p></CardContent></Card>
@@ -434,11 +434,11 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
     <Card id="memories">
       <CardHeader>
         <CardTitle>Personal Memory</CardTitle>
-        <CardDescription>Teach, edit, and delete the facts Tabb can use for personalization.</CardDescription>
+        <CardDescription>Teach, edit, and delete the facts Tab can use for personalization.</CardDescription>
       </CardHeader>
       <CardContent>
         <form method="post" action="/account/memory/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
-          <Label htmlFor="memory-content">Teach Tabb a memory</Label>
+          <Label htmlFor="memory-content">Teach Tab a memory</Label>
           <textarea
             id="memory-content"
             name="content"
@@ -484,12 +484,12 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
 
 export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
   return (
-    <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,3.5rem)] shadow-[var(--tabb-shadow-soft)] md:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
+    <section className="grid gap-8 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card/88 p-[clamp(1.25rem,4vw,3.5rem)] shadow-[var(--tab-shadow-soft)] md:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)]">
       <div className="grid content-center gap-5">
         <PageKicker>Desktop entry point</PageKicker>
-        <h1 className="font-[var(--font-display)] text-[clamp(2.5rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Download Tabb for macOS</h1>
+        <h1 className="font-[var(--font-display)] text-[clamp(2.5rem,8vw,5.75rem)] font-black leading-[0.9] tracking-[-0.08em]">Download Tab for macOS</h1>
         <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] leading-relaxed text-muted-foreground">Install the private Native Autocomplete App directly on your Mac and keep Suggestions in the apps where you write.</p>
-        <p className="mt-6"><a className={buttonVariants()} href="/download/tabb.dmg">Download Tabb.dmg</a></p>
+        <p className="mt-6"><a className={buttonVariants()} href="/download/tab.dmg">Download Tab.dmg</a></p>
         {latestVersion ? <p className="mt-4 text-sm text-muted-foreground">Version {latestVersion}</p> : null}
       </div>
       <Card className="pug-dot-grid">

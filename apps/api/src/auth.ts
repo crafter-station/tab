@@ -47,11 +47,11 @@ export function createAuthInstance(
       sendResetPassword: async ({ user, url }) => {
         await deliverAuthEmail({
           to: user.email,
-          subject: "Reset your Tabb password",
-          text: `Reset your Tabb password: ${url}`,
+          subject: "Reset your Tab password",
+          text: `Reset your Tab password: ${url}`,
           html: await renderLinkEmail({
-            message: "Use this link to reset your Tabb password.",
-            preview: "Reset your Tabb password",
+            message: "Use this link to reset your Tab password.",
+            preview: "Reset your Tab password",
             url,
           }),
         });
@@ -64,11 +64,11 @@ export function createAuthInstance(
       sendVerificationEmail: async ({ user, url }) => {
         await deliverAuthEmail({
           to: user.email,
-          subject: "Verify your Tabb email",
-          text: `Verify your Tabb email address: ${url}`,
+          subject: "Verify your Tab email",
+          text: `Verify your Tab email address: ${url}`,
           html: await renderLinkEmail({
-            message: "Use this link to verify your Tabb email address.",
-            preview: "Verify your Tabb email address",
+            message: "Use this link to verify your Tab email address.",
+            preview: "Verify your Tab email address",
             url,
           }),
         });

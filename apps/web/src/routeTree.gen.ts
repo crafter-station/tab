@@ -21,7 +21,7 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as BillingPortalRouteImport } from './routes/billing.portal'
 import { Route as BillingCheckoutRouteImport } from './routes/billing.checkout'
-import { Route as DownloadTabbDmgRouteImport } from './routes/download.tabb.dmg'
+import { Route as DownloadTabDmgRouteImport } from './routes/download.tab.dmg'
 import { Route as DownloadLatestJsonRouteImport } from './routes/download.latest.json'
 
 const SignupRoute = SignupRouteImport.update({
@@ -84,9 +84,9 @@ const BillingCheckoutRoute = BillingCheckoutRouteImport.update({
   path: '/billing/checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DownloadTabbDmgRoute = DownloadTabbDmgRouteImport.update({
-  id: '/tabb/dmg',
-  path: '/tabb/dmg',
+const DownloadTabDmgRoute = DownloadTabDmgRouteImport.update({
+  id: '/tab/dmg',
+  path: '/tab/dmg',
   getParentRoute: () => DownloadRoute,
 } as any)
 const DownloadLatestJsonRoute = DownloadLatestJsonRouteImport.update({
@@ -109,7 +109,7 @@ export interface FileRoutesByFullPath {
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/portal': typeof BillingPortalRoute
   '/download/latest/json': typeof DownloadLatestJsonRoute
-  '/download/tabb/dmg': typeof DownloadTabbDmgRoute
+  '/download/tab/dmg': typeof DownloadTabDmgRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -125,7 +125,7 @@ export interface FileRoutesByTo {
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/portal': typeof BillingPortalRoute
   '/download/latest/json': typeof DownloadLatestJsonRoute
-  '/download/tabb/dmg': typeof DownloadTabbDmgRoute
+  '/download/tab/dmg': typeof DownloadTabDmgRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -142,7 +142,7 @@ export interface FileRoutesById {
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/portal': typeof BillingPortalRoute
   '/download/latest/json': typeof DownloadLatestJsonRoute
-  '/download/tabb/dmg': typeof DownloadTabbDmgRoute
+  '/download/tab/dmg': typeof DownloadTabDmgRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -160,7 +160,7 @@ export interface FileRouteTypes {
     | '/billing/checkout'
     | '/billing/portal'
     | '/download/latest/json'
-    | '/download/tabb/dmg'
+    | '/download/tab/dmg'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -176,7 +176,7 @@ export interface FileRouteTypes {
     | '/billing/checkout'
     | '/billing/portal'
     | '/download/latest/json'
-    | '/download/tabb/dmg'
+    | '/download/tab/dmg'
   id:
     | '__root__'
     | '/'
@@ -192,7 +192,7 @@ export interface FileRouteTypes {
     | '/billing/checkout'
     | '/billing/portal'
     | '/download/latest/json'
-    | '/download/tabb/dmg'
+    | '/download/tab/dmg'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -296,11 +296,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BillingCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/download/tabb/dmg': {
-      id: '/download/tabb/dmg'
-      path: '/tabb/dmg'
-      fullPath: '/download/tabb/dmg'
-      preLoaderRoute: typeof DownloadTabbDmgRouteImport
+    '/download/tab/dmg': {
+      id: '/download/tab/dmg'
+      path: '/tab/dmg'
+      fullPath: '/download/tab/dmg'
+      preLoaderRoute: typeof DownloadTabDmgRouteImport
       parentRoute: typeof DownloadRoute
     }
     '/download/latest/json': {
@@ -315,12 +315,12 @@ declare module '@tanstack/react-router' {
 
 interface DownloadRouteChildren {
   DownloadLatestJsonRoute: typeof DownloadLatestJsonRoute
-  DownloadTabbDmgRoute: typeof DownloadTabbDmgRoute
+  DownloadTabDmgRoute: typeof DownloadTabDmgRoute
 }
 
 const DownloadRouteChildren: DownloadRouteChildren = {
   DownloadLatestJsonRoute: DownloadLatestJsonRoute,
-  DownloadTabbDmgRoute: DownloadTabbDmgRoute,
+  DownloadTabDmgRoute: DownloadTabDmgRoute,
 }
 
 const DownloadRouteWithChildren = DownloadRoute._addFileChildren(

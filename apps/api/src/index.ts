@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { logger } from "hono/logger";
-import { ApiSuccessResponseSchema, SuggestionRequestSchema } from "@tabb/contracts";
+import { ApiSuccessResponseSchema, SuggestionRequestSchema } from "@tab/contracts";
 import { createAuthInstance, type AuthInstance } from "./auth.ts";
 import {
   D1DeviceTokenStorage,

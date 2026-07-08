@@ -2,7 +2,7 @@ import {
   MemoryDeleteResponseSchema,
   MemoryListResponseSchema,
   type PersonalMemory,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 
 export type DesktopMemoryClientDependencies = {
   apiBaseUrl: string;

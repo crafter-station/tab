@@ -33,7 +33,7 @@ module.exports = async function notarizing(context) {
   console.log(`Notarizing ${appPath} ...`);
 
   await notarize({
-    appBundleId: "app.tabb.desktop",
+    appBundleId: "app.tab.desktop",
     appPath,
     appleId,
     appleIdPassword,

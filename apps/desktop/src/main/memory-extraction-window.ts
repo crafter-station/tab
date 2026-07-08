@@ -1,6 +1,6 @@
-import type { ActiveApplication, RedactionSummary } from "@tabb/contracts";
-import { getMemoryEligibility, type MemorySource } from "@tabb/memory-policy";
-import { redactSensitiveText } from "@tabb/redaction";
+import type { ActiveApplication, RedactionSummary } from "@tab/contracts";
+import { getMemoryEligibility, type MemorySource } from "@tab/memory-policy";
+import { redactSensitiveText } from "@tab/redaction";
 
 export type MemoryExtractionEntry = {
   readonly timestamp: string;

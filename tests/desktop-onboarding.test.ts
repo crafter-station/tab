@@ -74,7 +74,7 @@ describe("desktop onboarding", () => {
   });
 
   it("reveals the app bundle instead of the executable inside a macOS app", () => {
-    expect(getMacOSAppBundlePath("/Applications/Tabb.app/Contents/MacOS/Tabb")).toBe("/Applications/Tabb.app");
+    expect(getMacOSAppBundlePath("/Applications/Tab.app/Contents/MacOS/Tab")).toBe("/Applications/Tab.app");
   });
 
   it("falls back to the executable path when not running from a macOS app bundle", () => {

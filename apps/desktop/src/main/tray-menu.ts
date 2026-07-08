@@ -30,7 +30,7 @@ export type CreateTrayMenuDependencies = {
   actions: TrayMenuActions;
 };
 
-export type TabbTray = Tray & {
+export type TabTray = Tray & {
   update(state: TrayMenuState): void;
 };
 
@@ -41,25 +41,25 @@ const INITIAL_TRAY_STATE: TrayMenuState = {
   updateAvailable: false,
 };
 
-export function createTrayMenu(deps: CreateTrayMenuDependencies): TabbTray {
+export function createTrayMenu(deps: CreateTrayMenuDependencies): TabTray {
   const icon = typeof deps.icon === "string" ? nativeImage.createFromPath(deps.icon) : deps.icon;
   icon.setTemplateImage(true);
 
-  const tray = new Tray(icon) as TabbTray;
-  tray.setToolTip("Tabb");
+  const tray = new Tray(icon) as TabTray;
+  tray.setToolTip("Tab");
 
   function buildStatusLabel(state: TrayMenuState): string {
-    if (state.paused) return "Tabb — Paused";
-    if (state.auth === "revoked_device") return "Tabb — Device Revoked";
-    if (state.auth === "sign_in_required") return "Tabb — Sign In Required";
-    if (state.quotaExhausted) return "Tabb — Quota Exhausted";
-    if (state.auth === "signed_in") return "Tabb — Signed In";
-    return "Tabb";
+    if (state.paused) return "Tab — Paused";
+    if (state.auth === "revoked_device") return "Tab — Device Revoked";
+    if (state.auth === "sign_in_required") return "Tab — Sign In Required";
+    if (state.quotaExhausted) return "Tab — Quota Exhausted";
+    if (state.auth === "signed_in") return "Tab — Signed In";
+    return "Tab";
   }
 
   function buildContextMenu(state: TrayMenuState): Menu {
     const isSignedIn = state.auth === "signed_in";
-    const pauseLabel = state.paused ? "Resume Tabb" : "Pause Tabb";
+    const pauseLabel = state.paused ? "Resume Tab" : "Pause Tab";
     let updateItem: MenuItemConstructorOptions;
     if (state.updateAvailable) {
       updateItem = {

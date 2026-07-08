@@ -1,5 +1,5 @@
 {
-  "name": "@tabb/billing",
+  "name": "@tab/billing",
   "type": "module",
   "private": true,
   "main": "src/index.ts",

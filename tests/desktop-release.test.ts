@@ -42,7 +42,7 @@ describe("Desktop update checker", () => {
       feedUrl: "https://example.com/latest.json",
       fetch: async () =>
         new Response(
-          JSON.stringify(makeFeed("0.2.0", "https://example.com/tabb.dmg")),
+          JSON.stringify(makeFeed("0.2.0", "https://example.com/tab.dmg")),
         ),
       onUpdateAvailable: (version, url) => calls.push({ version, url }),
     });
@@ -51,7 +51,7 @@ describe("Desktop update checker", () => {
 
     expect(result).toBe(true);
     expect(calls).toEqual([
-      { version: "0.2.0", url: "https://example.com/tabb.dmg" },
+      { version: "0.2.0", url: "https://example.com/tab.dmg" },
     ]);
   });
 
@@ -62,7 +62,7 @@ describe("Desktop update checker", () => {
       feedUrl: "https://example.com/latest.json",
       fetch: async () =>
         new Response(
-          JSON.stringify(makeFeed("0.2.0", "https://example.com/tabb.dmg")),
+          JSON.stringify(makeFeed("0.2.0", "https://example.com/tab.dmg")),
         ),
       onUpdateAvailable: (version, url) => calls.push({ version, url }),
     });
@@ -91,7 +91,7 @@ describe("Desktop update checker", () => {
   it("validates feed responses with the shared schema", () => {
     const valid = {
       version: "0.2.0",
-      url: "https://example.com/tabb.dmg",
+      url: "https://example.com/tab.dmg",
       notes: "Bug fixes.",
     };
     expect(DesktopReleaseFeedSchema.safeParse(valid).success).toBe(true);

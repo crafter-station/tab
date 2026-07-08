@@ -1,9 +1,9 @@
-import { planQuotas, type PlanId } from "@tabb/billing";
+import { planQuotas, type PlanId } from "@tab/billing";
 import {
   BillingCheckoutResponseSchema,
   BillingPortalResponseSchema,
   BillingQuotaResponseSchema,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
 import {
@@ -47,7 +47,7 @@ export function registerBillingRoutes(
       return c.json(
         createErrorResponse(
           "billing_required",
-          "Choose the free plan in Polar to continue using Tabb.",
+          "Choose the free plan in Polar to continue using Tab.",
           {
             quota: quotaCheck.quota,
             usage: quotaCheck.usage,

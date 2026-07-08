@@ -88,12 +88,12 @@ function authHeaders(token: string) {
 const baseSuggestionRequest = {
   requestId: "req-memory-agent",
   deviceId: "device-1",
-  typingContext: "Working on the Tabb launch plan",
+  typingContext: "Working on the Tab launch plan",
   contextSource: "typed_text" as const,
   redaction: { applied: false, redactionCount: 0, kinds: [] as string[] },
   activeApplication: { bundleId: "com.apple.TextEdit" },
   memoryEnabled: true,
-  contextHash: "com.apple.TextEdit:Working on the Tabb launch plan:false",
+  contextHash: "com.apple.TextEdit:Working on the Tab launch plan:false",
   clientMetadata: { appVersion: "0.0.1", platform: "darwin" },
 };
 
@@ -129,7 +129,7 @@ describe("Background Memory Agent", () => {
     const job = await jobPromise;
     expect(job.userId).toBe("user-1");
     expect(job.contextSource).toBe("typed_text");
-    expect(job.typingContext).toBe("Working on the Tabb launch plan");
+    expect(job.typingContext).toBe("Working on the Tab launch plan");
     expect(job.memoryEligible).toBe(true);
   });
 
@@ -174,7 +174,7 @@ describe("Background Memory Agent", () => {
         ...baseSuggestionRequest,
         requestId: "req-terminal",
         contextSource: "terminal_input",
-        typingContext: "git commit -m \"Launch Tabb\"",
+        typingContext: "git commit -m \"Launch Tab\"",
       }),
     });
 
@@ -234,7 +234,7 @@ describe("Background Memory Agent", () => {
         return [
           {
             type: "create",
-            content: "Working on Tabb launch plan",
+            content: "Working on Tab launch plan",
           },
         ];
       },
@@ -254,7 +254,7 @@ describe("Background Memory Agent", () => {
 
     const memories = await personalMemoryService.listMemories("user-1");
     expect(memories).toHaveLength(1);
-    expect(memories[0].content).toBe("Working on Tabb launch plan");
+    expect(memories[0].content).toBe("Working on Tab launch plan");
     expect(memories[0].createdBy).toBe("system");
   });
 

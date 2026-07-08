@@ -11,11 +11,11 @@
     "prefix": ""
   },
   "aliases": {
-    "components": "@tabb/ui/components",
-    "utils": "@tabb/ui/lib/utils",
-    "ui": "@tabb/ui/components/ui",
-    "lib": "@tabb/ui/lib",
-    "hooks": "@tabb/ui/hooks"
+    "components": "@tab/ui/components",
+    "utils": "@tab/ui/lib/utils",
+    "ui": "@tab/ui/components/ui",
+    "lib": "@tab/ui/lib",
+    "hooks": "@tab/ui/hooks"
   },
   "iconLibrary": "lucide"
 }

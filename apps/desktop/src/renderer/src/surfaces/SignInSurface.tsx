@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button } from "@tabb/ui";
+import { Button } from "@tab/ui";
 
 const heroImage = `data:image/svg+xml,${encodeURIComponent(`
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 1100">
@@ -42,13 +42,13 @@ export function SignInSurface() {
 
   function handleSignIn() {
     setOpened(true);
-    window.tabb?.signIn?.();
+    window.tab?.signIn?.();
   }
 
   return (
     <main className="sign-in-shell">
-      <section className="sign-in-hero drag-region" aria-label="Tabb preview">
-        <img alt="Tabb assistant preview" draggable={false} src={heroImage} />
+      <section className="sign-in-hero drag-region" aria-label="Tab preview">
+        <img alt="Tab assistant preview" draggable={false} src={heroImage} />
       </section>
 
       <section className="sign-in-panel">
@@ -57,7 +57,7 @@ export function SignInSurface() {
           <div className="sign-in-brand">
             <div className="sign-in-brand__mark">T</div>
             <div>
-              <p className="eyebrow">Tabb Desktop</p>
+              <p className="eyebrow">Tab Desktop</p>
               <strong>Private autocomplete for your Mac</strong>
             </div>
           </div>
@@ -65,7 +65,7 @@ export function SignInSurface() {
           <div className="sign-in-copy">
             <h1>Sign in to continue.</h1>
             <p className="lede">
-              Tabb opens your browser to connect this desktop app. After sign-in, new users continue through onboarding;
+              Tab opens your browser to connect this desktop app. After sign-in, new users continue through onboarding;
               returning users go straight to settings.
             </p>
           </div>
@@ -74,7 +74,7 @@ export function SignInSurface() {
             {opened ? "Waiting for browser sign-in..." : "Sign In"}
           </Button>
 
-          {opened ? <p className="sign-in-hint">Complete sign-in in your browser, then return to Tabb.</p> : null}
+          {opened ? <p className="sign-in-hint">Complete sign-in in your browser, then return to Tab.</p> : null}
         </div>
       </section>
     </main>

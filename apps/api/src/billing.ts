@@ -1,7 +1,7 @@
 import { Polar } from "@polar-sh/sdk";
 import { validateEvent } from "@polar-sh/sdk/webhooks";
 import { and, eq, sql } from "drizzle-orm";
-import { planQuotas, type PlanId } from "@tabb/billing";
+import { planQuotas, type PlanId } from "@tab/billing";
 import type { AppDatabase } from "./db/index.ts";
 import { usageRecords, user, userEntitlements } from "./db/schema.ts";
 import { env } from "./env.ts";
@@ -307,11 +307,11 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
       customerEmail: user.email,
       customerName: user.name,
       customerMetadata: {
-        tabbUserId: user.id,
+        tabUserId: user.id,
       },
       metadata: {
         planId,
-        tabbUserId: user.id,
+        tabUserId: user.id,
       },
       successUrl: this.successUrl,
     });
@@ -764,10 +764,10 @@ export class BillingWebhookHandler {
           customer?.externalCustomerId,
           data.external_customer_id,
           data.externalCustomerId,
-          metadata?.tabbUserId,
-          metadata?.tabb_user_id,
-          customerMetadata?.tabbUserId,
-          customerMetadata?.tabb_user_id,
+          metadata?.tabUserId,
+          metadata?.tab_user_id,
+          customerMetadata?.tabUserId,
+          customerMetadata?.tab_user_id,
         );
         const customerId = firstString(data.customer_id, data.customerId, customer?.id);
         const subscriptionId = optionalString(data.id);

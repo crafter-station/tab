@@ -1,4 +1,4 @@
-import type { ActiveApplication, RedactionSummary, SuggestionContextSource } from "@tabb/contracts";
+import type { ActiveApplication, RedactionSummary, SuggestionContextSource } from "@tab/contracts";
 import type { AppContextSnapshot } from "./app-context.ts";
 import {
   activeApplicationKey,
@@ -8,7 +8,7 @@ import {
   isPrivateActiveApplication,
   redactPastedSuggestionContext,
   type ContextSuppressionReason,
-} from "@tabb/context-policy";
+} from "@tab/context-policy";
 
 export type TypingContextState = {
   context: string;

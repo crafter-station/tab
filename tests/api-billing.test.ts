@@ -327,7 +327,7 @@ describe("Billing and quota enforcement", () => {
         customer_id: "polar-customer-1",
         id: "polar-sub-1",
         status: "active",
-        product: { name: "Tabb Pro" },
+        product: { name: "Tab Pro" },
         current_period_end: new Date(
           Date.now() + 30 * 24 * 60 * 60 * 1000,
         ).toISOString(),
@@ -396,7 +396,7 @@ describe("Billing and quota enforcement", () => {
         customer_id: "polar-customer-1",
         id: "polar-sub-1",
         status: "active",
-        product: { name: "Tabb Pro" },
+        product: { name: "Tab Pro" },
       },
     });
 

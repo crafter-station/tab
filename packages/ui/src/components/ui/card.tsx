@@ -1,6 +1,6 @@
 import * as React from "react"
 
-import { cn } from "@tabb/ui/lib/utils"
+import { cn } from "@tab/ui/lib/utils"
 
 const Card = React.forwardRef<
   HTMLDivElement,
@@ -9,7 +9,7 @@ const Card = React.forwardRef<
   <div
     ref={ref}
     className={cn(
-      "rounded-[var(--radius-card)] border border-border bg-card text-card-foreground shadow-[var(--tabb-shadow-soft)]",
+      "rounded-[var(--radius-card)] border border-border bg-card text-card-foreground shadow-[var(--tab-shadow-soft)]",
       className
     )}
     {...props}

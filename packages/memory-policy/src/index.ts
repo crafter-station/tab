@@ -1,4 +1,4 @@
-import { detectSensitiveData, type RedactionKind } from "@tabb/redaction";
+import { detectSensitiveData, type RedactionKind } from "@tab/redaction";
 
 export const SUGGESTION_CONTEXT_SOURCES = [
   "typed_text",

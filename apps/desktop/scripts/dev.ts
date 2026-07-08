@@ -32,7 +32,7 @@ async function buildEntry(entrypoint: string, outfile: string, format: "esm" | "
 async function copyRuntimeFiles() {
   await Bun.write(
     path.join(devRoot, "package.json"),
-    JSON.stringify({ name: "tabb-dev", productName: "Tabb", type: "module", main: "src/main.js" }, null, 2),
+    JSON.stringify({ name: "tab-dev", productName: "Tab", type: "module", main: "src/main.js" }, null, 2),
   );
 
 }
@@ -95,12 +95,12 @@ async function main() {
     cwd: workspaceRoot,
     env: {
       ...process.env,
-      TABB_PRELOAD_PATH: path.join(devSrc, "preload.cjs"),
-      TABB_APP_RENDERER_PATH: appRendererHtmlPath,
-      TABB_OVERLAY_RENDERER_PATH: overlayRendererHtmlPath,
-      TABB_TRAY_ICON_PATH: trayIconPath,
-      ...(inputTapPath ? { TABB_INPUT_TAP_PATH: inputTapPath } : {}),
-      TABB_DEVICE_ID: env.TABB_DEVICE_ID,
+      TAB_PRELOAD_PATH: path.join(devSrc, "preload.cjs"),
+      TAB_APP_RENDERER_PATH: appRendererHtmlPath,
+      TAB_OVERLAY_RENDERER_PATH: overlayRendererHtmlPath,
+      TAB_TRAY_ICON_PATH: trayIconPath,
+      ...(inputTapPath ? { TAB_INPUT_TAP_PATH: inputTapPath } : {}),
+      TAB_DEVICE_ID: env.TAB_DEVICE_ID,
     },
     stdin: "inherit",
     stdout: "inherit",

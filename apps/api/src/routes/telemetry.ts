@@ -1,4 +1,4 @@
-import { RecordTelemetryEventRequestSchema, TelemetryEventsResponseSchema } from "@tabb/contracts";
+import { RecordTelemetryEventRequestSchema, TelemetryEventsResponseSchema } from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { TelemetryService } from "../telemetry.ts";
 import { createErrorResponse, formatValidationIssues } from "../http/responses.ts";

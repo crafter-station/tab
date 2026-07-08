@@ -16,9 +16,9 @@ type ThemeMode = "light" | "dark";
 
 const toneClasses: Record<PatternTone, string> = {
   neutral: "border-border bg-muted text-muted-foreground",
-  success: "border-[color-mix(in_srgb,var(--success)_26%,transparent)] bg-[var(--tabb-success-tint)] text-[var(--success)]",
-  warning: "border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-[var(--tabb-warning-tint)] text-[var(--warning)]",
-  info: "border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--tabb-info-tint)] text-[var(--info)]",
+  success: "border-[color-mix(in_srgb,var(--success)_26%,transparent)] bg-[var(--tab-success-tint)] text-[var(--success)]",
+  warning: "border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-[var(--tab-warning-tint)] text-[var(--warning)]",
+  info: "border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--tab-info-tint)] text-[var(--info)]",
   destructive: "border-[color-mix(in_srgb,var(--destructive)_28%,transparent)] bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] text-[var(--destructive)]",
 };
 
@@ -45,7 +45,7 @@ export function SectionBlock({ className, children, id }: SectionBlockProps) {
     <section
       id={id}
       className={cn(
-        "rounded-[var(--radius-surface)] border border-border bg-card/88 p-5 shadow-[var(--tabb-shadow-soft)] backdrop-blur sm:p-6",
+        "rounded-[var(--radius-surface)] border border-border bg-card/88 p-5 shadow-[var(--tab-shadow-soft)] backdrop-blur sm:p-6",
         className,
       )}
     >
@@ -129,7 +129,7 @@ type CommandBlockProps = {
 
 export function CommandBlock({ command, label = "Command", description, className }: CommandBlockProps) {
   return (
-    <div className={cn("rounded-[var(--radius-card)] border border-border bg-foreground p-4 text-background shadow-[var(--tabb-shadow-soft)]", className)}>
+    <div className={cn("rounded-[var(--radius-card)] border border-border bg-foreground p-4 text-background shadow-[var(--tab-shadow-soft)]", className)}>
       <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-65">{label}</p>
       <code className="mt-2 block break-words font-[var(--font-code)] text-sm font-bold">{command}</code>
       {description ? <p className="mt-2 text-sm opacity-72">{description}</p> : null}
@@ -204,7 +204,7 @@ function ReviewPanel({ mode }: { mode: ThemeMode }) {
           </SettingsRow>
         </div>
         <CommandBlock command="debug:typing-context --active-application" label="debug:typing-context" />
-        <EmptyState title="No Personal Memory yet" description="Tabb will show saved memories here after you enable personalization." action="Open settings" />
+        <EmptyState title="No Personal Memory yet" description="Tab will show saved memories here after you enable personalization." action="Open settings" />
       </CardContent>
     </Card>
   );
@@ -216,7 +216,7 @@ export function ComponentReviewSurface({ className }: { className?: string }) {
       <SurfaceHeader
         eyebrow="Design system"
         title="Private Utility Grid components"
-        description="A lightweight review surface for shared primitives and app-level Tabb patterns in both supported theme modes."
+        description="A lightweight review surface for shared primitives and app-level Tab patterns in both supported theme modes."
       />
       <div className="grid gap-4 lg:grid-cols-2">
         {reviewModes.map((mode) => (

@@ -1,4 +1,4 @@
-import { DesktopReleaseFeedSchema } from "@tabb/contracts";
+import { DesktopReleaseFeedSchema } from "@tab/contracts";
 
 export type UpdateCheckerDependencies = {
   currentVersion: string;

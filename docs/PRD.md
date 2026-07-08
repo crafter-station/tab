@@ -1,10 +1,10 @@
-# Tabb MVP PRD
+# Tab MVP PRD
 
 ## Problem Statement
 
 People write across many macOS applications and often repeat the same phrasing, personal details, work context, and writing patterns. Existing autocomplete experiences are usually confined to one editor, browser, or app, so they cannot help while the user writes in Mail, Slack, Notes, terminals, or terminal-based tools like OpenCode.
 
-Tabb should provide native autocomplete across active macOS applications without feeling like a web app, keylogger, or intrusive assistant. It must show a lightweight floating suggestion overlay, generate suggestions from recent typing context and backend-stored Personal Memory, and insert accepted suggestions into the active application while preserving user trust.
+Tab should provide native autocomplete across active macOS applications without feeling like a web app, keylogger, or intrusive assistant. It must show a lightweight floating suggestion overlay, generate suggestions from recent typing context and backend-stored Personal Memory, and insert accepted suggestions into the active application while preserving user trust.
 
 ## Solution
 
@@ -18,47 +18,47 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 
 ## User Stories
 
-1. As a macOS user, I want to download Tabb from a website, so that I can install the native autocomplete app directly.
+1. As a macOS user, I want to download Tab from a website, so that I can install the native autocomplete app directly.
 2. As a macOS user, I want the app to guide me through required permissions, so that I understand why Accessibility or Input Monitoring is needed.
-3. As a macOS user, I want Tabb to avoid Screen Recording and Full Disk Access, so that I can trust the permission scope.
-4. As a macOS user, I want Tabb to run in the background, so that it can help while I type in other applications.
-5. As a macOS user, I want Tabb to observe only recent typing context in memory, so that it does not persist a local typing log.
-6. As a macOS user, I want Tabb to identify the active application, so that suggestions are grounded in where I am typing.
-7. As a macOS user, I want Tabb to ignore shortcuts, navigation, window switching, and non-text actions, so that suggestions are based on real typing context.
-8. As a macOS user, I want Tabb to suppress suggestions in secure input contexts, so that passwords and sensitive fields are not sent.
-9. As a macOS user, I want Tabb to redact obvious secrets before sending context, so that pasted or typed credentials are not intentionally transmitted.
-10. As a macOS user, I want Tabb to include pasted text in immediate suggestion context after redaction, so that suggestions can account for what I pasted.
+3. As a macOS user, I want Tab to avoid Screen Recording and Full Disk Access, so that I can trust the permission scope.
+4. As a macOS user, I want Tab to run in the background, so that it can help while I type in other applications.
+5. As a macOS user, I want Tab to observe only recent typing context in memory, so that it does not persist a local typing log.
+6. As a macOS user, I want Tab to identify the active application, so that suggestions are grounded in where I am typing.
+7. As a macOS user, I want Tab to ignore shortcuts, navigation, window switching, and non-text actions, so that suggestions are based on real typing context.
+8. As a macOS user, I want Tab to suppress suggestions in secure input contexts, so that passwords and sensitive fields are not sent.
+9. As a macOS user, I want Tab to redact obvious secrets before sending context, so that pasted or typed credentials are not intentionally transmitted.
+10. As a macOS user, I want Tab to include pasted text in immediate suggestion context after redaction, so that suggestions can account for what I pasted.
 11. As a macOS user, I do not want pasted text to create Personal Memory by default, so that copied third-party text, logs, or configs do not become durable profile data.
-12. As a macOS user, I want Tabb to work in terminal applications, so that it helps while I write inside terminal-based tools.
-13. As an engineer, I want Tabb to learn from user-authored terminal input, so that my OpenCode and terminal writing patterns can improve suggestions.
-14. As an engineer, I do not want Tabb to learn from terminal output, logs, or passive buffer content, so that server logs and command output do not become memories.
+12. As a macOS user, I want Tab to work in terminal applications, so that it helps while I write inside terminal-based tools.
+13. As an engineer, I want Tab to learn from user-authored terminal input, so that my OpenCode and terminal writing patterns can improve suggestions.
+14. As an engineer, I do not want Tab to learn from terminal output, logs, or passive buffer content, so that server logs and command output do not become memories.
 15. As a writer, I want suggestions to appear in a bottom-of-screen Floating Suggestion Overlay, so that the active application keeps receiving input.
 16. As a writer, I want the overlay to be semitransparent and lightweight, so that it does not obscure my work.
 17. As a writer, I want suggestions to appear only after a short pause, so that the overlay does not flicker on every keystroke.
 18. As a writer, I want stale suggestions to disappear when I keep typing, so that I never accept text for the wrong context.
 19. As a writer, I want to accept a suggestion with Option+Tab, so that I can insert text without leaving the keyboard.
 20. As a writer, I want to accept a suggestion by clicking the overlay, so that I can insert it with the pointer.
-21. As a writer, I want Tabb to paste the accepted suggestion into the active application, so that it works across many macOS apps.
-22. As a writer, I want Tabb to preserve my clipboard as best as possible, so that accepting a suggestion does not unexpectedly destroy clipboard contents.
-23. As a writer, I want Tabb to fail silently when the network is slow, so that typing is never blocked.
+21. As a writer, I want Tab to paste the accepted suggestion into the active application, so that it works across many macOS apps.
+22. As a writer, I want Tab to preserve my clipboard as best as possible, so that accepting a suggestion does not unexpectedly destroy clipboard contents.
+23. As a writer, I want Tab to fail silently when the network is slow, so that typing is never blocked.
 24. As a writer, I want durable status to appear in tray/settings, so that I can diagnose auth, quota, or connectivity issues without typing interruptions.
-25. As a user, I want Tabb to make suggestions feel personal, so that it can complete text using facts and preferences I commonly use.
+25. As a user, I want Tab to make suggestions feel personal, so that it can complete text using facts and preferences I commonly use.
 26. As a user, I want Personal Memory stored in the backend, so that personalization follows my account and not only one local machine.
-27. As a user, I want to see all stored Personal Memory, so that I know what Tabb remembers about me.
-28. As a user, I want to delete any Personal Memory, so that I control what Tabb uses for personalization.
+27. As a user, I want to see all stored Personal Memory, so that I know what Tab remembers about me.
+28. As a user, I want to delete any Personal Memory, so that I control what Tab uses for personalization.
 29. As a user, I want memory controls in the web app, so that I can manage memories from my account surface.
 30. As a user, I want quick memory controls in the native app, so that I can pause, review, or delete memory near where suggestions happen.
-31. As a privacy-conscious user, I want Tabb to avoid storing raw typing logs by default, so that my private writing is not retained as a corpus.
+31. As a privacy-conscious user, I want Tab to avoid storing raw typing logs by default, so that my private writing is not retained as a corpus.
 32. As a privacy-conscious user, I want sensitive-data guardrails before memory persistence, so that secrets, tokens, payment data, and identifiers are rejected.
 33. As a privacy-conscious user, I want metadata-only suggestion telemetry, so that product quality can improve without storing raw text.
 34. As a privacy-conscious user, I do not want accepted suggestion text stored by default, so that private inserted content is not retained.
-35. As a user, I want to globally pause or opt out of typing observation, so that I can disable Tabb when I choose.
+35. As a user, I want to globally pause or opt out of typing observation, so that I can disable Tab when I choose.
 36. As a future user, I want per-application controls eventually, so that I can choose where suggestions and memory learning apply.
 37. As a new user, I want to sign in through the browser, so that account authentication is familiar and secure.
 38. As a desktop user, I want the native app to stay signed in through a device token, so that I do not need browser cookies in the app.
 39. As a user, I want to revoke old devices, so that lost or unused installations stop accessing my account.
 40. As a free user, I want 100 autocompletes per month, so that I can try the product before paying.
-41. As a Pro user, I want 1,000 autocompletes per month for $10, so that I can use Tabb regularly.
+41. As a Pro user, I want 1,000 autocompletes per month for $10, so that I can use Tab regularly.
 42. As a Max user, I want 1,000,000 autocompletes per month for $100, so that heavy usage is supported.
 43. As a user, I want Personal Memory available on all plans, so that personalization is part of the core product.
 44. As a user, I want quota to count only returned suggestions, so that empty or failed requests do not consume my autocomplete quota.
@@ -167,8 +167,8 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 ## Further Notes
 
 - The riskiest assumption is that Electron plus a macOS native bridge can reliably observe text-bearing global input, filter non-text actions, identify the active application, show a non-disruptive bottom overlay, detect Option+Tab, and paste into the previously active application without stealing focus. This must be proven before the full stack is built.
-- The second riskiest assumption is trust. Tabb needs explicit language and controls that distinguish Typing Context, Personal Memory, telemetry metadata, and raw logs. Raw logs are not part of the default product.
-- Polar usage-based billing requires Tabb to enforce usage limits. Polar receives immutable usage events and aggregates meters, but it does not automatically block customer actions based on meter balance.
+- The second riskiest assumption is trust. Tab needs explicit language and controls that distinguish Typing Context, Personal Memory, telemetry metadata, and raw logs. Raw logs are not part of the default product.
+- Polar usage-based billing requires Tab to enforce usage limits. Polar receives immutable usage events and aggregates meters, but it does not automatically block customer actions based on meter balance.
 - AI SDK and AI Gateway implementation details, including current model IDs, must be verified against current docs during implementation rather than relying on memory.
 - The glossary in `CONTEXT.md` is the canonical product language for future specs, implementation, and UI copy.
 - Do not close until all subissues are closed.

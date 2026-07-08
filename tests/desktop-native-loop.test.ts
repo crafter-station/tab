@@ -21,7 +21,7 @@ import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/ap
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
-import type { Suggestion, ActiveApplication, RecordTelemetryEventRequest } from "@tabb/contracts";
+import type { Suggestion, ActiveApplication, RecordTelemetryEventRequest } from "@tab/contracts";
 
 describe("desktop native suggestion loop", () => {
   function makeSnapshot(overrides: {

@@ -1,6 +1,6 @@
-appId: app.tabb.desktop
-productName: Tabb
-copyright: Copyright © Tabb
+appId: app.tab.desktop
+productName: Tab
+copyright: Copyright © Tab
 directories:
   output: release
   buildResources: build
@@ -25,8 +25,8 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSAccessibilityUsageDescription: Tabb needs accessibility access to paste accepted suggestions into other apps.
-    NSInputMonitoringUsageDescription: Tabb needs input monitoring access to observe typing context and the Option+Tab shortcut across apps.
+    NSAccessibilityUsageDescription: Tab needs accessibility access to paste accepted suggestions into other apps.
+    NSInputMonitoringUsageDescription: Tab needs input monitoring access to observe typing context and the Option+Tab shortcut across apps.
   artifactName: "${productName}-${version}-${arch}.${ext}"
 dmg:
   sign: false

@@ -1,4 +1,4 @@
-import { SUGGESTION_CONTEXT_SOURCES } from "@tabb/memory-policy";
+import { SUGGESTION_CONTEXT_SOURCES } from "@tab/memory-policy";
 import { z } from "zod";
 
 const errorCodes = [

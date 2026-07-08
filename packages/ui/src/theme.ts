@@ -3,7 +3,7 @@ export const THEME_MODES = ["system", "light", "dark"] as const;
 export type ThemeMode = (typeof THEME_MODES)[number];
 export type AppliedThemeMode = "light" | "dark";
 
-export const THEME_STORAGE_KEY = "tabb-theme";
+export const THEME_STORAGE_KEY = "tab-theme";
 
 type ThemeElement = {
   dataset: Record<string, string | undefined>;

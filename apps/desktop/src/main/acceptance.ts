@@ -1,4 +1,4 @@
-import type { Suggestion, ActiveApplication } from "@tabb/contracts";
+import type { Suggestion, ActiveApplication } from "@tab/contracts";
 import type { InsertionOutcome, InsertionStrategy } from "./application-compatibility.ts";
 import type { TextSessionSnapshot } from "./typing-context.ts";
 

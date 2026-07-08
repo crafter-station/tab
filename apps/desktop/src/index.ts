@@ -1,4 +1,4 @@
-import type { SuggestionRequest } from "@tabb/contracts";
+import type { SuggestionRequest } from "@tab/contracts";
 
 export const desktopAppBoundary = {
   runtime: "electron",

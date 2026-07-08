@@ -1,5 +1,5 @@
 {
-  "name": "@tabb/effect-services",
+  "name": "@tab/effect-services",
   "type": "module",
   "private": true,
   "main": "src/index.ts",

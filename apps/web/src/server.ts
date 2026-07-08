@@ -1,7 +1,7 @@
 import { createElement } from "react";
 import type { ReactNode } from "react";
-import { ApiErrorResponseSchema } from "@tabb/contracts";
-import { ComponentReviewSurface } from "@tabb/ui";
+import { ApiErrorResponseSchema } from "@tab/contracts";
+import { ComponentReviewSurface } from "@tab/ui";
 import {
   DashboardPage,
   DownloadPage,
@@ -132,9 +132,9 @@ function routeSegment(path: string, index: number): string | undefined {
 export function createWebApp(config: WebAppConfig) {
   const baseUrl = config.apiBaseUrl.replace(/\/$/, "");
   const fetchImpl = config.fetch ?? globalThis.fetch;
-  const appName = config.appName ?? "Tabb";
-  const macDownloadUrl = config.macDownloadUrl ?? env.TABB_MAC_DOWNLOAD_URL;
-  const latestVersion = config.latestVersion ?? env.TABB_DESKTOP_LATEST_VERSION;
+  const appName = config.appName ?? "Tab";
+  const macDownloadUrl = config.macDownloadUrl ?? env.TAB_MAC_DOWNLOAD_URL;
+  const latestVersion = config.latestVersion ?? env.TAB_DESKTOP_LATEST_VERSION;
 
   async function apiRequest(
     path: string,
@@ -804,7 +804,7 @@ export function createWebApp(config: WebAppConfig) {
         return downloadPage(cookieHeader);
       }
 
-      if (path === "/download/tabb.dmg" && request.method === "GET") {
+      if (path === "/download/tab.dmg" && request.method === "GET") {
         return redirect(macDownloadUrl);
       }
 
@@ -828,7 +828,7 @@ export function createWebApp(config: WebAppConfig) {
 export type WebApp = ReturnType<typeof createWebApp>;
 
 const devServerApp = createWebApp({
-  apiBaseUrl: env.TABB_API_BASE_URL,
+  apiBaseUrl: env.TAB_API_BASE_URL,
 });
 
 export default {

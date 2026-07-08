@@ -1,6 +1,6 @@
 import { Polar } from "@polar-sh/sdk";
 import type { ProductCreateRecurringPrices } from "@polar-sh/sdk/models/components/productcreaterecurring.js";
-import { planQuotas, type PlanId } from "@tabb/billing";
+import { planQuotas, type PlanId } from "@tab/billing";
 import { env } from "./env.ts";
 
 const accessToken = env.POLAR_ACCESS_TOKEN;
@@ -140,7 +140,7 @@ async function createPlanProduct(
   const plan = planQuotas[planId];
 
   const result = await polar.products.create({
-    name: `Tabb ${plan.name}`,
+    name: `Tab ${plan.name}`,
     description: `${plan.monthlyAutocompleteSuggestions.toLocaleString()} autocomplete suggestions per month.`,
     prices: createPlanPrices(planId, meterId),
     recurringInterval: "month",
@@ -164,7 +164,7 @@ async function attachBenefitToProduct(productId: string, benefitId: string): Pro
 async function createWebhookEndpoint(url: string): Promise<CreatedResource> {
   const result = await polar.webhooks.createWebhookEndpoint({
     url,
-    name: "Tabb billing sync",
+    name: "Tab billing sync",
     format: "raw",
     events: [
       "subscription.created",

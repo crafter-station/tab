@@ -12,18 +12,18 @@ import {
   getStoredThemePreference,
   setThemePreference,
   type ThemeMode,
-} from "@tabb/ui";
-import type { PersonalMemory } from "@tabb/contracts";
+} from "@tab/ui";
+import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
 
-type InitialState = Awaited<ReturnType<NonNullable<typeof window.tabb>["getInitialState"]>>;
+type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitialState"]>>;
 type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
   { value: "account", label: "Account", description: "Sign-in, quota, and connectivity" },
   { value: "controls", label: "Controls", description: "Pause or resume observation" },
   { value: "appearance", label: "Appearance", description: "Theme follows this Mac by default" },
-  { value: "permissions", label: "Permissions", description: "macOS access required by Tabb" },
+  { value: "permissions", label: "Permissions", description: "macOS access required by Tab" },
   { value: "memory", label: "Memory", description: "Personalization snippets" },
 ];
 
@@ -74,23 +74,23 @@ export function SettingsSurface() {
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
 
   const refreshAccessibility = useCallback(async () => {
-    if (!window.tabb?.checkAccessibilityPermission) return false;
-    const granted = Boolean(await window.tabb.checkAccessibilityPermission());
+    if (!window.tab?.checkAccessibilityPermission) return false;
+    const granted = Boolean(await window.tab.checkAccessibilityPermission());
     setAccessibilityGranted(granted);
     return granted;
   }, []);
 
   useEffect(() => {
-    if (!window.tabb) return;
+    if (!window.tab) return;
 
-    window.tabb.onStatusChanged((nextStatus) => setStatus(nextStatus));
-    window.tabb.onMemoriesChanged((nextMemories) => setMemories(nextMemories));
-    window.tabb.onPauseChanged((nextPaused) => setPaused(nextPaused));
-    window.tabb.onPreferencesChanged((nextPreferences) => {
+    window.tab.onStatusChanged((nextStatus) => setStatus(nextStatus));
+    window.tab.onMemoriesChanged((nextMemories) => setMemories(nextMemories));
+    window.tab.onPauseChanged((nextPaused) => setPaused(nextPaused));
+    window.tab.onPreferencesChanged((nextPreferences) => {
       setUsePersonalMemory(nextPreferences.suggestions.usePersonalMemory);
     });
 
-    window.tabb
+    window.tab
       .getInitialState()
       .then((initialState: InitialState) => {
         setStatus(initialState.status);
@@ -106,7 +106,7 @@ export function SettingsSurface() {
   async function handleAccessibility() {
     setPermissionBusy("accessibility");
     try {
-      const alreadyGranted = Boolean(await window.tabb?.openAccessibilitySettings?.());
+      const alreadyGranted = Boolean(await window.tab?.openAccessibilitySettings?.());
       setAccessibilityGranted(alreadyGranted);
       if (!alreadyGranted) {
         window.setTimeout(() => {
@@ -121,8 +121,8 @@ export function SettingsSurface() {
   async function handleInputMonitoring() {
     setPermissionBusy("input-monitoring");
     try {
-      await window.tabb?.openInputMonitoringSettings?.();
-      await window.tabb?.revealAppInFinder?.();
+      await window.tab?.openInputMonitoringSettings?.();
+      await window.tab?.revealAppInFinder?.();
     } finally {
       setPermissionBusy(null);
     }
@@ -130,7 +130,7 @@ export function SettingsSurface() {
 
   function handleUsePersonalMemory(nextEnabled: boolean) {
     setUsePersonalMemory(nextEnabled);
-    window.tabb?.setUsePersonalMemoryForSuggestions?.(nextEnabled);
+    window.tab?.setUsePersonalMemoryForSuggestions?.(nextEnabled);
   }
 
   function handleThemeMode(nextMode: ThemeMode) {
@@ -145,7 +145,7 @@ export function SettingsSurface() {
           <div className="settings-tabs__brand">
             <div className="settings-tabs__mark">T</div>
             <div>
-              <p className="eyebrow">Tabb</p>
+              <p className="eyebrow">Tab</p>
               <h1>Settings</h1>
             </div>
           </div>
@@ -175,8 +175,8 @@ export function SettingsSurface() {
 
           <div className="settings-tabs__content">
           {paused ? (
-            <div className="rounded-2xl border border-[color-mix(in_srgb,var(--tabb-signal)_24%,transparent)] bg-[var(--tabb-signal-tint)] px-4 py-3 text-sm font-medium text-[var(--tabb-signal)]">
-              Tabb is paused. Typing observation and suggestions are disabled.
+            <div className="rounded-2xl border border-[color-mix(in_srgb,var(--tab-signal)_24%,transparent)] bg-[var(--tab-signal-tint)] px-4 py-3 text-sm font-medium text-[var(--tab-signal)]">
+              Tab is paused. Typing observation and suggestions are disabled.
             </div>
           ) : null}
 
@@ -205,11 +205,11 @@ export function SettingsSurface() {
               </SettingsRow>
               <div className="pt-4">
                 {status.auth === "signed_in" ? (
-                  <Button variant="secondary" onClick={() => window.tabb?.signOut?.()}>
+                  <Button variant="secondary" onClick={() => window.tab?.signOut?.()}>
                     Sign Out
                   </Button>
                 ) : (
-                  <Button onClick={() => window.tabb?.signIn?.()}>Sign In</Button>
+                  <Button onClick={() => window.tab?.signIn?.()}>Sign In</Button>
                 )}
               </div>
             </CardContent>
@@ -224,7 +224,7 @@ export function SettingsSurface() {
             </CardHeader>
             <CardContent>
               <SettingsRow label="Typing observation">
-                <Button variant={paused ? "default" : "secondary"} onClick={() => window.tabb?.togglePause?.()}>
+                <Button variant={paused ? "default" : "secondary"} onClick={() => window.tab?.togglePause?.()}>
                   {paused ? "Resume" : "Pause"}
                 </Button>
               </SettingsRow>
@@ -236,7 +236,7 @@ export function SettingsSurface() {
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Appearance</CardTitle>
-              <CardDescription>Use your macOS theme by default, or keep Tabb pinned to light or dark.</CardDescription>
+              <CardDescription>Use your macOS theme by default, or keep Tab pinned to light or dark.</CardDescription>
             </CardHeader>
             <CardContent>
               <SettingsRow label="Theme">
@@ -280,20 +280,20 @@ export function SettingsSurface() {
                 <Button disabled={permissionBusy === "input-monitoring"} onClick={handleInputMonitoring}>
                   Open Settings
                 </Button>
-                <Button variant="secondary" onClick={() => window.tabb?.relaunchForPermissions?.()}>
-                  Relaunch Tabb
+                <Button variant="secondary" onClick={() => window.tab?.relaunchForPermissions?.()}>
+                  Relaunch Tab
                 </Button>
               </SettingsRow>
               <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-                Tabb does not request Screen Recording or Full Disk Access. Typing Context stays in memory only, Personal
+                Tab does not request Screen Recording or Full Disk Access. Typing Context stays in memory only, Personal
                 Memory stays visible and controlled by you, telemetry is metadata-only, and raw logs are not stored.
               </p>
               <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
-                If macOS shows Electron in dev mode, it granted the Electron host instead of the packaged Tabb app. Run
+                If macOS shows Electron in dev mode, it granted the Electron host instead of the packaged Tab app. Run
                 <code className="mx-1 rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
                   bun run desktop:permissions
                 </code>
-                , enable Tabb, then relaunch.
+                , enable Tab, then relaunch.
               </p>
             </CardContent>
           </Card>
@@ -328,7 +328,7 @@ export function SettingsSurface() {
                       <p className="text-sm leading-relaxed">{memory.content}</p>
                       <p className="mt-1 text-xs text-muted-foreground">Created by {memory.createdBy}</p>
                     </div>
-                    <Button variant="secondary" size="sm" onClick={() => window.tabb?.deleteMemory?.(memory.id)}>
+                    <Button variant="secondary" size="sm" onClick={() => window.tab?.deleteMemory?.(memory.id)}>
                       Delete
                     </Button>
                   </div>

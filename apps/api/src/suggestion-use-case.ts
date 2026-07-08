@@ -1,7 +1,7 @@
 import { generateText } from "ai";
 import { groq } from "@ai-sdk/groq";
-import { shouldCountSuggestionResponse } from "@tabb/billing";
-import { getMemoryEligibility } from "@tabb/memory-policy";
+import { shouldCountSuggestionResponse } from "@tab/billing";
+import { getMemoryEligibility } from "@tab/memory-policy";
 import type {
   ActiveApplication,
   AppContext,
@@ -11,7 +11,7 @@ import type {
   SuggestionContextSource,
   SuggestionRequest,
   TelemetryEvent,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import type { BillingService, UsageMeterService } from "./billing.ts";
 import type { Device } from "./device-tokens.ts";
 import type { MemoryJobQueue } from "./memory-agent.ts";
@@ -170,7 +170,7 @@ export class SuggestionUseCase {
           ok: false,
           status: 402,
           code: "billing_required",
-          message: "Choose the free plan in Polar to continue using Tabb.",
+          message: "Choose the free plan in Polar to continue using Tab.",
           details: {
             ...createQuotaExhaustedDetails(quotaCheck),
             upgradeUrl: "/billing/checkout?plan=free",

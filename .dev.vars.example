@@ -2,15 +2,15 @@
 PORT=8787
 API_PORT=8787
 WEB_PORT=3000
-TABB_API_BASE_URL=http://localhost:8787
-TABB_WEB_BASE_URL=http://localhost:3000
-TABB_DEVICE_ID=dev-device
+TAB_API_BASE_URL=http://localhost:8787
+TAB_WEB_BASE_URL=http://localhost:3000
+TAB_DEVICE_ID=dev-device
 
 # Desktop debug overlay
 # Set to 1 to force the typing debug overlay in packaged builds.
 # In local desktop dev, the debug overlay is enabled by default unless set to 0.
-TABB_DEBUG_TYPING_OVERLAY=1
-TABB_SHOW_SETTINGS_ON_START=0
+TAB_DEBUG_TYPING_OVERLAY=1
+TAB_SHOW_SETTINGS_ON_START=0
 
 # API auth
 BETTER_AUTH_URL=http://localhost:8787
@@ -18,18 +18,18 @@ BETTER_AUTH_SECRET=replace-with-at-least-32-characters
 
 # Suggestion model
 OPENAI_API_KEY=
-TABB_SUGGESTION_MODEL=gpt-4o-mini
+TAB_SUGGESTION_MODEL=gpt-4o-mini
 AI_GATEWAY_API_KEY=
 GROQ_API_KEY=
 
 # Optional: Cloudflare AI Gateway for OpenAI-compatible requests
 CLOUDFLARE_ACCOUNT_ID=
-CLOUDFLARE_AI_GATEWAY_ID=tabb
+CLOUDFLARE_AI_GATEWAY_ID=tab
 CLOUDFLARE_API_TOKEN=
 
 # Optional: web download metadata
-TABB_MAC_DOWNLOAD_URL=https://downloads.tabb.app/tabb.dmg
-TABB_DESKTOP_LATEST_VERSION=0.1.0
+TAB_MAC_DOWNLOAD_URL=https://downloads.tab.app/tab.dmg
+TAB_DESKTOP_LATEST_VERSION=0.1.0
 
 # Optional: Polar billing and usage metering
 POLAR_ACCESS_TOKEN=

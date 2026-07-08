@@ -3,7 +3,7 @@ import {
   DeviceListResponseSchema,
   DeviceTokenExchangeRequestSchema,
   DeviceTokenExchangeResponseSchema,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
 import type { BillingService } from "../billing.ts";

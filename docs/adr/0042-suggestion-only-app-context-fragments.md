@@ -1,6 +1,6 @@
 # Suggestion-Only App Context Fragments
 
-Tabb may send bounded, redacted App Context fragments to the hot suggestion API as background for the current request only. App Context is separate from Typing Context, Text Session snapshots, the Memory Extraction Window, and Personal Memory.
+Tab may send bounded, redacted App Context fragments to the hot suggestion API as background for the current request only. App Context is separate from Typing Context, Text Session snapshots, the Memory Extraction Window, and Personal Memory.
 
 Suggestion requests carry App Context in an optional `appContext` field instead of concatenating passive content into `typingContext`. The prompt labels these fragments as suggestion-only background and still asks the model to continue the user's exact draft.
 

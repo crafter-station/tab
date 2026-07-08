@@ -1,3 +1,3 @@
 # Polar Meters And Webhooks Drive Cached Entitlements
 
-Tabb uses Polar for billing, subscription management, and monthly autocomplete metering across all plans, including free users. Polar webhooks update cached user entitlements in D1 or KV, successful returned suggestions are ingested as Polar usage events, and the hot suggestion path reads cached entitlement and usage state instead of calling Polar synchronously on each suggestion request.
+Tab uses Polar for billing, subscription management, and monthly autocomplete metering across all plans, including free users. Polar webhooks update cached user entitlements in D1 or KV, successful returned suggestions are ingested as Polar usage events, and the hot suggestion path reads cached entitlement and usage state instead of calling Polar synchronously on each suggestion request.

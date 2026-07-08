@@ -2,7 +2,7 @@ import {
   ApiErrorResponseSchema,
   ApiSuccessResponseSchema,
   type Suggestion,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 
 export const ERROR_CODES = [
   "invalid_request",

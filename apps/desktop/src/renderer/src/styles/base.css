@@ -11,16 +11,16 @@
   --text: var(--foreground);
   --text-subtle: var(--muted-foreground);
   --text-muted: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
-  --signal: var(--tabb-signal);
+  --signal: var(--tab-signal);
   --signal-dim: var(--muted-foreground);
-  --signal-tint: var(--tabb-signal-tint);
+  --signal-tint: var(--tab-signal-tint);
   --on-signal: var(--primary-foreground);
-  --success-tint: var(--tabb-success-tint);
-  --glass-bg: var(--tabb-glass-bg);
-  --glass-border: var(--tabb-glass-border);
-  --glass-shadow: var(--tabb-glass-shadow);
-  --ease-out: var(--tabb-ease-out);
-  --ease-in-out: var(--tabb-ease-in-out);
+  --success-tint: var(--tab-success-tint);
+  --glass-bg: var(--tab-glass-bg);
+  --glass-border: var(--tab-glass-border);
+  --glass-shadow: var(--tab-glass-shadow);
+  --ease-out: var(--tab-ease-out);
+  --ease-in-out: var(--tab-ease-in-out);
   font-family: var(--font-body);
   color: var(--text);
   background: transparent;
@@ -47,8 +47,8 @@ body[data-surface="settings"],
 body[data-surface="onboarding"],
 body[data-surface="sign-in"] {
   background:
-    var(--tabb-page-wash),
-    var(--tabb-grid-bg),
+    var(--tab-page-wash),
+    var(--tab-grid-bg),
     var(--bg);
   background-size: auto, 32px 32px, auto;
   pointer-events: auto;

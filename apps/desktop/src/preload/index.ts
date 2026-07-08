@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopStatus } from "../main/status.ts";
 import type { DesktopPreferences } from "../main/preferences.ts";
-import type { PersonalMemory } from "@tabb/contracts";
+import type { PersonalMemory } from "@tab/contracts";
 
 type DebugApiState =
   | { status: "idle" }
@@ -20,7 +20,7 @@ type DebugContext = {
   api?: DebugApiState;
 };
 
-export type TabbPreloadApi = {
+export type TabPreloadApi = {
   onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => () => void;
   onDebugContext: (callback: (debug: DebugContext) => void) => () => void;
   onHide: (callback: () => void) => () => void;
@@ -49,7 +49,7 @@ export type TabbPreloadApi = {
   deleteMemory: (id: string) => void;
 };
 
-contextBridge.exposeInMainWorld("tabb", {
+contextBridge.exposeInMainWorld("tab", {
   onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, suggestion: { id: string; text: string }) => callback(suggestion);
     ipcRenderer.on("suggestion", listener);
@@ -112,10 +112,10 @@ contextBridge.exposeInMainWorld("tabb", {
   deleteMemory: (id: string) => {
     ipcRenderer.send("delete-memory", id);
   },
-} satisfies TabbPreloadApi);
+} satisfies TabPreloadApi);
 
 declare global {
   interface Window {
-    tabb: TabbPreloadApi;
+    tab: TabPreloadApi;
   }
 }

@@ -1,5 +1,5 @@
 {
-  "name": "@tabb/desktop",
+  "name": "@tab/desktop",
   "type": "module",
   "private": true,
   "version": "0.1.0",
@@ -12,12 +12,12 @@
     "build:renderer": "electron-vite build",
     "build:native": "bun scripts/build-native.ts",
     "build:copy": "cp -R assets dist/",
-    "dev:permissions": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false bunx electron-builder --mac dir && open -n release/mac*/Tabb.app --args --permission-debug --typing-debug",
+    "dev:permissions": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false bunx electron-builder --mac dir && open -n release/mac*/Tab.app --args --permission-debug --typing-debug",
     "dist": "bun run build && bunx electron-builder",
     "dist:mac": "bun run build && bunx electron-builder --mac"
   },
   "dependencies": {
-    "@tabb/ui": "workspace:*",
+    "@tab/ui": "workspace:*",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

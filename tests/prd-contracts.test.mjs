@@ -61,7 +61,7 @@ function escapeRegExp(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-describe("Tabb MVP PRD contracts", () => {
+describe("Tab MVP PRD contracts", () => {
   it("publishes the PRD at docs/PRD.md with all required sections", () => {
     const prdFullPath = join(root, prdPath);
     assert.ok(existsSync(prdFullPath), "PRD file exists at docs/PRD.md");

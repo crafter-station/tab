@@ -19,7 +19,7 @@ export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies)
     maximizable: false,
     fullscreenable: false,
     show: false,
-    title: "Welcome to Tabb",
+    title: "Welcome to Tab",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 16 },
     backgroundColor: "#11110f",

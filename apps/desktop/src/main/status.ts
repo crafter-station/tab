@@ -1,7 +1,7 @@
 import {
   ApiErrorResponseSchema,
   DesktopStatusResponseSchema,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 
 export type DesktopAuthStatus =
   | "sign_in_required"

@@ -1,7 +1,7 @@
 import {
   DeviceTokenExchangeRequestSchema,
   type DeviceMetadata,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";

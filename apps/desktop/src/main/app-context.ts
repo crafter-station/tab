@@ -1,5 +1,5 @@
-import type { ActiveApplication, AppContext, AppContextFragment } from "@tabb/contracts";
-import { redactSensitiveText } from "@tabb/redaction";
+import type { ActiveApplication, AppContext, AppContextFragment } from "@tab/contracts";
+import { redactSensitiveText } from "@tab/redaction";
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
 
 const MAX_FRAGMENTS = 5;

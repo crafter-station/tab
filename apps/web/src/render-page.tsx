@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { THEME_MODES, buttonVariants, getThemeControlScript, getThemeInitScript } from "@tabb/ui";
+import { THEME_MODES, buttonVariants, getThemeControlScript, getThemeInitScript } from "@tab/ui";
 import type { User } from "./components/web-pages.tsx";
 
 const themeInitScript = getThemeInitScript();
@@ -32,7 +32,7 @@ function WebDocument({
         <div className="pug-grid-surface min-h-dvh px-3 sm:px-5">
           <div className="mx-auto min-h-dvh max-w-6xl border-x border-border/70 bg-background/82 p-4 backdrop-blur-sm sm:p-5">
             <header className="flex items-center justify-between gap-4 border-b border-border/70 pb-4 max-md:flex-col max-md:items-start">
-              <a className="font-[var(--font-display)] text-xl font-black tracking-[-0.04em] no-underline" href="/">Tabb</a>
+              <a className="font-[var(--font-display)] text-xl font-black tracking-[-0.04em] no-underline" href="/">Tab</a>
               <nav className="flex flex-wrap items-center gap-3 text-sm font-bold">
                 <a className="no-underline text-muted-foreground hover:text-foreground" href="/pricing">Pricing</a>
                 <a className="no-underline text-muted-foreground hover:text-foreground" href="/download">Download</a>
@@ -52,7 +52,7 @@ function WebDocument({
             </header>
             <main className="py-10 sm:py-12">{children}</main>
             <footer className="flex items-center justify-between gap-4 border-t border-border/70 py-6 text-sm text-muted-foreground max-md:flex-col max-md:items-start">
-              <span>Tabb, Private Utility Grid Native Autocomplete App.</span>
+              <span>Tab, Private Utility Grid Native Autocomplete App.</span>
               <span>Private Typing Context. Account-controlled Personal Memory.</span>
             </footer>
           </div>

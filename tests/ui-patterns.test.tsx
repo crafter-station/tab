@@ -29,13 +29,13 @@ describe("shared app patterns", () => {
   it("renders app-level patterns with semantic labels and actions", () => {
     const markup = renderToStaticMarkup(
       <SectionBlock>
-        <SurfaceHeader eyebrow="Account" title="Control plane" description="Manage Tabb." />
+        <SurfaceHeader eyebrow="Account" title="Control plane" description="Manage Tab." />
         <StatusRow label="Native app" value="Connected" tone="success" />
         <SettingsNav items={[{ label: "General", href: "#general", active: true }]} />
         <SettingsRow label="Personal Memory" description="Keep suggestions personal.">
           Enabled
         </SettingsRow>
-        <CommandBlock command="tabb://debug" label="Debug command" />
+        <CommandBlock command="tab://debug" label="Debug command" />
         <EmptyState title="No devices linked" description="Sign in from the Mac app." action="Download for macOS" />
       </SectionBlock>,
     );

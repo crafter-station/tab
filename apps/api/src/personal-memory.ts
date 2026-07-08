@@ -3,7 +3,7 @@ import {
   type ActiveApplication,
   type PersonalMemory,
   type PersonalMemoryCreatedBy,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";

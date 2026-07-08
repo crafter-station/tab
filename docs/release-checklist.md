@@ -1,13 +1,13 @@
-# Tabb macOS Release Checklist
+# Tab macOS Release Checklist
 
-This checklist covers producing a signed, notarized, direct-download macOS build of Tabb and verifying the end-to-end install, launch, onboarding, and update path.
+This checklist covers producing a signed, notarized, direct-download macOS build of Tab and verifying the end-to-end install, launch, onboarding, and update path.
 
 ## Prerequisites
 
 - macOS machine with Xcode command-line tools.
 - Valid Apple Developer ID Application certificate installed in Keychain Access.
 - Apple ID, app-specific password, and Team ID for notarization.
-- `TABB_MAC_DOWNLOAD_URL` and `TABB_DESKTOP_LATEST_VERSION` set for the web surface.
+- `TAB_MAC_DOWNLOAD_URL` and `TAB_DESKTOP_LATEST_VERSION` set for the web surface.
 
 ## Environment variables
 
@@ -15,8 +15,8 @@ This checklist covers producing a signed, notarized, direct-download macOS build
 export APPLE_ID="developer@example.com"
 export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
 export APPLE_TEAM_ID="TEAM_ID"
-export TABB_MAC_DOWNLOAD_URL="https://downloads.tabb.app/Tabb-0.1.0.dmg"
-export TABB_DESKTOP_LATEST_VERSION="0.1.0"
+export TAB_MAC_DOWNLOAD_URL="https://downloads.tab.app/Tab-0.1.0.dmg"
+export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 ```
 
 ## Build and package
@@ -36,10 +36,10 @@ export TABB_DESKTOP_LATEST_VERSION="0.1.0"
    bun run dist:mac
    ```
 4. Verify artifacts exist in `apps/desktop/release/`:
-   - `Tabb-0.1.0-x64.dmg`
-   - `Tabb-0.1.0-arm64.dmg`
-   - `Tabb-0.1.0-x64.zip`
-   - `Tabb-0.1.0-arm64.zip`
+   - `Tab-0.1.0-x64.dmg`
+   - `Tab-0.1.0-arm64.dmg`
+   - `Tab-0.1.0-x64.zip`
+   - `Tab-0.1.0-arm64.zip`
 
 ## Signing and notarization
 
@@ -49,33 +49,33 @@ export TABB_DESKTOP_LATEST_VERSION="0.1.0"
 - If credentials are missing, the hook logs a warning and skips notarization so local builds still succeed.
 - After packaging, staple the app:
   ```sh
-  xcrun stapler staple "release/mac/Tabb.app"
+  xcrun stapler staple "release/mac/Tab.app"
   ```
 - Verify code signature:
   ```sh
-  codesign -dv --verbose=4 "release/mac/Tabb.app"
-  spctl -a -v "release/mac/Tabb.app"
+  codesign -dv --verbose=4 "release/mac/Tab.app"
+  spctl -a -v "release/mac/Tab.app"
   ```
 
 ## Download surface
 
-1. Upload the DMG artifact to the location configured in `TABB_MAC_DOWNLOAD_URL`.
+1. Upload the DMG artifact to the location configured in `TAB_MAC_DOWNLOAD_URL`.
 2. Confirm the web download page shows the current version:
    ```sh
-   curl -I https://tabb.app/download/tabb.dmg
+   curl -I https://tab.app/download/tab.dmg
    # Expected: 302 redirect to the artifact URL
    ```
 3. Confirm the desktop update feed is reachable:
    ```sh
-   curl https://tabb.app/download/latest.json
+   curl https://tab.app/download/latest.json
    # Expected: { "version": "0.1.0", "url": "...", "notes": "" }
    ```
 
 ## Install, launch, and onboarding
 
-1. Download `Tabb.dmg` from `/download/tabb.dmg` on a clean macOS machine.
-2. Open the DMG and drag `Tabb.app` to `/Applications`.
-3. Launch Tabb from `/Applications`.
+1. Download `Tab.dmg` from `/download/tab.dmg` on a clean macOS machine.
+2. Open the DMG and drag `Tab.app` to `/Applications`.
+3. Launch Tab from `/Applications`.
 4. Onboarding should appear and explain:
    - Accessibility is needed to paste accepted suggestions.
    - Input Monitoring is needed to observe typing context and Option+Tab.
@@ -92,8 +92,8 @@ export TABB_DESKTOP_LATEST_VERSION="0.1.0"
 
 ## Update behavior
 
-1. Publish a new version by updating `apps/desktop/package.json` version and `TABB_DESKTOP_LATEST_VERSION`.
-2. Build and upload the new DMG to `TABB_MAC_DOWNLOAD_URL`.
+1. Publish a new version by updating `apps/desktop/package.json` version and `TAB_DESKTOP_LATEST_VERSION`.
+2. Build and upload the new DMG to `TAB_MAC_DOWNLOAD_URL`.
 3. Launch the old build and select **Check for Updates** from the tray menu (or wait for the periodic hourly check).
 4. The tray should show **Update Available**; selecting it opens `/download` in the default browser.
 5. Confirm the download page links to the latest DMG and that `/download/latest.json` returns the new version.

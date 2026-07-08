@@ -117,7 +117,7 @@ describe("desktop auth client", () => {
     const url = await client.openBrowserLogin();
 
     expect(url).toContain("desktop-device-1");
-    expect(decodeURIComponent(url)).toContain("tabb://auth/callback");
+    expect(decodeURIComponent(url)).toContain("tab://auth/callback");
     expect(opened).toEqual([url]);
   });
 
@@ -142,10 +142,10 @@ describe("desktop auth client", () => {
       fetch: makeFetch(app),
     });
 
-    const token = await client.handleCallback(`tabb://auth/callback?code=${code}`);
+    const token = await client.handleCallback(`tab://auth/callback?code=${code}`);
 
     expect(token.length).toBeGreaterThan(0);
-    expect(await keychain.get("tabb", "device-token")).toBe(token);
+    expect(await keychain.get("tab", "device-token")).toBe(token);
     expect(await client.getAuthorizationHeader()).toBe(`Bearer ${token}`);
     expect(await client.isAuthenticated()).toBe(true);
   });
@@ -170,7 +170,7 @@ describe("desktop auth client", () => {
       keychain,
       fetch: makeFetch(app),
     });
-    await authClient.handleCallback(`tabb://auth/callback?code=${code}`);
+    await authClient.handleCallback(`tab://auth/callback?code=${code}`);
 
     const suggestionClient = createApiSuggestionClient({
       apiBaseUrl: TEST_ORIGIN,
@@ -205,7 +205,7 @@ describe("desktop auth client", () => {
       keychain,
       fetch: makeFetch(app),
     });
-    await authClient.handleCallback(`tabb://auth/callback?code=${code}`);
+    await authClient.handleCallback(`tab://auth/callback?code=${code}`);
 
     await app.request("/api/auth/device/revoke", {
       method: "POST",

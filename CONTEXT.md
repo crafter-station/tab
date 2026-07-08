@@ -1,6 +1,6 @@
-# Tabb
+# Tab
 
-Tabb is a native desktop autocomplete product that suggests continuations while a person types in other applications.
+Tab is a native desktop autocomplete product that suggests continuations while a person types in other applications.
 
 ## Language
 
@@ -21,7 +21,7 @@ The macOS application currently receiving the user's typing input.
 _Avoid_: Browser tab, page, client app
 
 **Typing Context**:
-The recent text-bearing input Tabb uses to request a suggestion, excluding navigation, shortcuts, window switching, and other non-text actions.
+The recent text-bearing input Tab uses to request a suggestion, excluding navigation, shortcuts, window switching, and other non-text actions.
 _Avoid_: Raw keystroke log, full document scrape
 
 **Floating Suggestion Overlay**:
@@ -33,7 +33,7 @@ A durable backend-stored fact learned from the user's own typing and used to mak
 _Avoid_: Raw typing log, hidden profile, autofill profile
 
 **Memory Authorship**:
-Whether a Personal Memory was explicitly created by the user or created by Tabb's background learning system.
+Whether a Personal Memory was explicitly created by the user or created by Tab's background learning system.
 _Avoid_: Source, category, sensitivity
 
 **Memory Extraction Window**:

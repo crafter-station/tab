@@ -1,6 +1,6 @@
 import { BrowserWindow } from "electron";
 import type { DesktopStatus } from "./status.ts";
-import type { PersonalMemory } from "@tabb/contracts";
+import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopPreferences } from "./preferences.ts";
 
 export type ControlWindowRoute = "settings" | "onboarding" | "sign-in";
@@ -37,7 +37,7 @@ export function createSettingsWindow(deps: CreateSettingsWindowDependencies, rou
     maximizable: false,
     fullscreenable: false,
     show: false,
-    title: "Tabb Settings",
+    title: "Tab Settings",
     backgroundColor: "#11110f",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
     trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,

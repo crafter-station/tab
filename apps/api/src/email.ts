@@ -1,7 +1,7 @@
 import { Resend } from "resend";
 import { env } from "./env.ts";
 
-const resendFromEmail = "Tabb <tabb@cueva.io>";
+const resendFromEmail = "Tab <tab@cueva.io>";
 
 type SendEmailInput = {
   to: string;

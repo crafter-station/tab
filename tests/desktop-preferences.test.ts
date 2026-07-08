@@ -68,7 +68,7 @@ describe("desktop preferences", () => {
     const tmpDir = process.env.TMPDIR ?? process.env.TEMP ?? "/tmp";
 
     function tmpPath(name: string): string {
-      return join(tmpDir, `tabb-preferences-test-${name}-${Date.now()}.json`);
+      return join(tmpDir, `tab-preferences-test-${name}-${Date.now()}.json`);
     }
 
     function cleanup(path: string): void {

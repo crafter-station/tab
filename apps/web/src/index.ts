@@ -1,6 +1,6 @@
 import { createAuthClient } from "better-auth/client";
 
-export { planQuotas as pricingPlans } from "@tabb/billing";
+export { planQuotas as pricingPlans } from "@tab/billing";
 export { createWebApp, type WebAppConfig, type WebApp } from "./server.ts";
 export { apiRequest, getApiBaseUrl, defaultApiBaseUrl } from "./lib/api.ts";
 export { createAppRouter } from "./router.tsx";
@@ -32,7 +32,7 @@ export function createWebAuthClient(config: WebAuthClientConfig) {
 export function buildDeviceHandoffUrl({
   webBaseUrl,
   deviceId,
-  callbackScheme = "tabb",
+  callbackScheme = "tab",
 }: {
   webBaseUrl: string;
   deviceId: string;

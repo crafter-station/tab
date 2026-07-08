@@ -1,4 +1,4 @@
-import { SuggestionRequestSchema } from "@tabb/contracts";
+import { SuggestionRequestSchema } from "@tab/contracts";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { SuggestionUseCase } from "../suggestion-use-case.ts";

@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import type { PlanId } from "@tabb/billing";
+import type { PlanId } from "@tab/billing";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import {
@@ -227,17 +227,17 @@ describe("Web account surface", () => {
     const { webApp } = await createWebTestEnv();
     const response = await webRequest(
       webApp,
-      "/login?device_id=desktop-device-1&callback=tabb%3A%2F%2Fauth%2Fcallback&next=%2Fdashboard",
+      "/login?device_id=desktop-device-1&callback=tab%3A%2F%2Fauth%2Fcallback&next=%2Fdashboard",
     );
 
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toInclude("Desktop handoff");
     expect(body).toInclude("name=\"device_id\" value=\"desktop-device-1\"");
-    expect(body).toInclude("name=\"callback\" value=\"tabb://auth/callback\"");
+    expect(body).toInclude("name=\"callback\" value=\"tab://auth/callback\"");
     expect(body).toInclude("name=\"next\" value=\"/dashboard\"");
     expect(body).toInclude(
-      'href="/signup?device_id=desktop-device-1&amp;callback=tabb%3A%2F%2Fauth%2Fcallback&amp;next=%2Fdashboard"',
+      'href="/signup?device_id=desktop-device-1&amp;callback=tab%3A%2F%2Fauth%2Fcallback&amp;next=%2Fdashboard"',
     );
   });
 
@@ -824,7 +824,7 @@ describe("Web account surface", () => {
     const body = await accountPage.text();
     expect(body).toInclude("Prefers concise summaries");
     expect(body).toInclude("Works at Acme Robotics");
-    expect(body).toInclude("Teach Tabb a memory");
+    expect(body).toInclude("Teach Tab a memory");
   });
 
   it("lists and revokes native devices from the account surface", async () => {

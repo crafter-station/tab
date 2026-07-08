@@ -2,7 +2,7 @@ import {
   RecordTelemetryEventRequestSchema,
   TelemetryEventsResponseSchema,
   type RecordTelemetryEventRequest,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 
 export type DesktopTelemetryClientDependencies = {
   readonly apiBaseUrl: string;

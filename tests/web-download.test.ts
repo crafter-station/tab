@@ -11,24 +11,24 @@ function webRequest(
 }
 
 describe("Web download surface", () => {
-  it("redirects /download/tabb.dmg to the configured macOS artifact URL", async () => {
+  it("redirects /download/tab.dmg to the configured macOS artifact URL", async () => {
     const webApp = createWebApp({
       apiBaseUrl: "http://localhost:8787",
-      macDownloadUrl: "https://cdn.example.com/tabb-0.2.0.dmg",
+      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
     });
 
-    const response = await webRequest(webApp, "/download/tabb.dmg");
+    const response = await webRequest(webApp, "/download/tab.dmg");
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
-      "https://cdn.example.com/tabb-0.2.0.dmg",
+      "https://cdn.example.com/tab-0.2.0.dmg",
     );
   });
 
   it("serves /download/latest.json with the current version and artifact URL", async () => {
     const webApp = createWebApp({
       apiBaseUrl: "http://localhost:8787",
-      macDownloadUrl: "https://cdn.example.com/tabb-0.2.0.dmg",
+      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
       latestVersion: "0.2.0",
     });
 
@@ -42,19 +42,19 @@ describe("Web download surface", () => {
       notes?: string;
     };
     expect(body.version).toBe("0.2.0");
-    expect(body.url).toBe("https://cdn.example.com/tabb-0.2.0.dmg");
+    expect(body.url).toBe("https://cdn.example.com/tab-0.2.0.dmg");
   });
 
   it("download page links to the .dmg route", async () => {
     const webApp = createWebApp({
       apiBaseUrl: "http://localhost:8787",
-      macDownloadUrl: "https://cdn.example.com/tabb-0.2.0.dmg",
+      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
     });
 
     const response = await webRequest(webApp, "/download");
 
     expect(response.status).toBe(200);
     const body = await response.text();
-    expect(body).toInclude("/download/tabb.dmg");
+    expect(body).toInclude("/download/tab.dmg");
   });
 });

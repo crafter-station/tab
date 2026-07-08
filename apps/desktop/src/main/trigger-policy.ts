@@ -1,5 +1,5 @@
-import type { Suggestion } from "@tabb/contracts";
-import { isTerminalActiveApplication } from "@tabb/memory-policy";
+import type { Suggestion } from "@tab/contracts";
+import { isTerminalActiveApplication } from "@tab/memory-policy";
 import type { ApplicationCompatibilityStore } from "./application-compatibility.ts";
 import type { SafeTypingContextSnapshot } from "./typing-context.ts";
 

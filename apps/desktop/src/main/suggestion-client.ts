@@ -3,7 +3,7 @@ import {
   SuggestionRequestSchema,
   type Suggestion,
   type SuggestionRequest,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import type { RequestableTypingContextSnapshot } from "./typing-context.ts";
 
 export type ApiSuggestionClientDependencies = {

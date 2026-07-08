@@ -88,7 +88,7 @@ async function queryLocalEntitlements(
     "wrangler",
     "d1",
     "execute",
-    "tabb-db",
+    "tab-db",
     "--local",
     "--config",
     "wrangler.jsonc",
@@ -247,7 +247,7 @@ async function main() {
 
     if (backfillDelta > 0) {
       const month = currentMonth();
-      const externalId = `tabb-polar-backfill-${localTarget.user_id}-${month}-${meterId}-${localUsageCount}`;
+      const externalId = `tab-polar-backfill-${localTarget.user_id}-${month}-${meterId}-${localUsageCount}`;
       await polar.events.ingest({
         events: [
           {

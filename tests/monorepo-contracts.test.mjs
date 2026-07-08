@@ -33,7 +33,7 @@ const sharedPackageEntrypoints = sharedPackageNames.map((name) => `packages/${na
 const workspaceEntrypoints = [...appEntrypoints, ...sharedPackageEntrypoints];
 
 const sharedPackageBoundaryPattern = new RegExp(
-  `@tabb/(${sharedPackageNames.join("|")})["']`,
+  `@tab/(${sharedPackageNames.join("|")})["']`,
 );
 
 const contractReferences = [
@@ -60,7 +60,7 @@ function readText(path) {
   return readFileSync(join(root, path), "utf8");
 }
 
-describe("Tabb monorepo bootstrap", () => {
+describe("Tab monorepo bootstrap", () => {
   it("defines app and shared package workspaces with CI-ready commands", () => {
     const rootPackage = readJson("package.json");
 

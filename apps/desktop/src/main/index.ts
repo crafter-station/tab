@@ -33,28 +33,28 @@ import { createDesktopMemoryClient } from "./memory-client.ts";
 import { MACOS_PERMISSION_SETTINGS_URLS, createOnboardingManager, getMacOSAppBundlePath } from "./onboarding.ts";
 import { createOnboardingWindowManager } from "./onboarding-window.ts";
 import { createSettingsWindowManager } from "./settings-window.ts";
-import { createTrayMenu, type TabbTray } from "./tray-menu.ts";
+import { createTrayMenu, type TabTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createUpdateChecker } from "./release.ts";
 import { createGhosttyAppContextSnapshot, sanitizeAppContextSnapshot } from "./app-context.ts";
-import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tabb/contracts";
-import { classifyTypingContextSource } from "@tabb/memory-policy";
+import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tab/contracts";
+import { classifyTypingContextSource } from "@tab/memory-policy";
 import { env } from "./env.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
 const runtimeRoot = app.isPackaged ? path.join(app.getAppPath(), "dist") : __dirname;
-const PRELOAD_PATH = env.TABB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
-const OVERLAY_RENDERER_PATH = env.TABB_OVERLAY_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "overlay.html");
-const APP_RENDERER_PATH = env.TABB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
-const TRAY_ICON_PATH = env.TABB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
+const PRELOAD_PATH = env.TAB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
+const OVERLAY_RENDERER_PATH = env.TAB_OVERLAY_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "overlay.html");
+const APP_RENDERER_PATH = env.TAB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
+const TRAY_ICON_PATH = env.TAB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
-const INPUT_TAP_PATH = env.TABB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
+const INPUT_TAP_PATH = env.TAB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
 
 let overlayWindow: BrowserWindow | null = null;
 let debugOverlayWindow: BrowserWindow | null = null;
 let overlayRendererReady = false;
-let tray: TabbTray | null = null;
+let tray: TabTray | null = null;
 let relaunchAfterPermissionQuit = false;
 type InputTapProcess = {
   stdout: { on(event: "data", callback: (chunk: Buffer) => void): void };
@@ -89,24 +89,24 @@ const settingsWindowManager = createSettingsWindowManager({
   preloadPath: PRELOAD_PATH,
 });
 
-const API_BASE_URL = env.TABB_API_BASE_URL;
-const WEB_BASE_URL = env.TABB_WEB_BASE_URL;
+const API_BASE_URL = env.TAB_API_BASE_URL;
+const WEB_BASE_URL = env.TAB_WEB_BASE_URL;
 const APP_VERSION = app.getVersion() || "0.0.0";
 
 function getOrCreateDeviceId(): string {
   const prefs = preferencesManager.get();
   if (prefs.deviceId) return prefs.deviceId;
-  const deviceId = env.TABB_DEVICE_ID || crypto.randomUUID();
+  const deviceId = env.TAB_DEVICE_ID || crypto.randomUUID();
   preferencesManager.update({ deviceId });
   console.log("Generated and persisted new device id:", deviceId);
   return deviceId;
 }
 
 const DEVICE_ID = getOrCreateDeviceId();
-const SHOW_SETTINGS_ON_START = process.argv.includes("--permission-debug") || env.TABB_SHOW_SETTINGS_ON_START === "1";
+const SHOW_SETTINGS_ON_START = process.argv.includes("--permission-debug") || env.TAB_SHOW_SETTINGS_ON_START === "1";
 const SHOW_DEBUG_TYPING_OVERLAY =
-  env.TABB_DEBUG_TYPING_OVERLAY !== "0" &&
-  (!app.isPackaged || env.TABB_DEBUG_TYPING_OVERLAY === "1" || process.argv.includes("--typing-debug") || SHOW_SETTINGS_ON_START);
+  env.TAB_DEBUG_TYPING_OVERLAY !== "0" &&
+  (!app.isPackaged || env.TAB_DEBUG_TYPING_OVERLAY === "1" || process.argv.includes("--typing-debug") || SHOW_SETTINGS_ON_START);
 const DEBUG_TYPING_DEBOUNCE_MS = 300;
 const DEBUG_TYPING_HIDE_MS = 3_600;
 const DEBUG_TYPING_WORD_LIMIT = 100;
@@ -856,7 +856,7 @@ function startMacOSInputTap(): void {
 
 async function bootstrap(): Promise<void> {
   // Onboarding should guide the user to grant Accessibility and Input Monitoring
-  // permissions. Tabb deliberately does not request Screen Recording or Full
+  // permissions. Tab deliberately does not request Screen Recording or Full
   // Disk Access; those are out of scope for the MVP per ADR-0037.
   ipcMain.on("overlay-ready", (event) => {
     if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
@@ -965,11 +965,11 @@ async function bootstrap(): Promise<void> {
   // Register the custom URL scheme so the browser handoff can land back in the
   // native app (ADR-0007).
   if (process.platform === "darwin") {
-    app.setAsDefaultProtocolClient("tabb");
+    app.setAsDefaultProtocolClient("tab");
   }
 
   app.on("open-url", (event, url) => {
-    if (url.startsWith("tabb://")) {
+    if (url.startsWith("tab://")) {
       event.preventDefault();
       console.log("Received auth callback:", url);
       authClient
@@ -1072,7 +1072,7 @@ app.on("will-quit", () => {
 
 app.on("window-all-closed", () => {
   // The overlay is a child window; on macOS the app stays alive until quit.
-  // Do not call app.quit() here so Tabb keeps running in the background.
+  // Do not call app.quit() here so Tab keeps running in the background.
 });
 
 app.on("activate", () => {

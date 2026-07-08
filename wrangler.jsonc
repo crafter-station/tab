@@ -1,13 +1,13 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "tabb-api",
+  "name": "tab-api",
   "main": "apps/api/src/index.ts",
   "compatibility_date": "2026-07-07",
   "compatibility_flags": ["nodejs_compat"],
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "tabb-db",
+      "database_name": "tab-db",
       "database_id": "0c9a8866-1006-4eb8-8926-e1dbdfc8d16d",
       "migrations_dir": "apps/api/drizzle"
     }

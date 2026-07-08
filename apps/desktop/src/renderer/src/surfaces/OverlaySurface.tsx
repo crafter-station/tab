@@ -1,4 +1,4 @@
-import { FloatingSuggestionBar, type Suggestion } from "@tabb/ui";
+import { FloatingSuggestionBar, type Suggestion } from "@tab/ui";
 import { useEffect, useState } from "react";
 import { DebugContextCard, type DebugContext } from "../components/DebugContextCard";
 
@@ -10,27 +10,27 @@ export function OverlaySurface() {
   const [debugContext, setDebugContext] = useState<DebugContext | null>(null);
 
   useEffect(() => {
-    if (!window.tabb) return;
+    if (!window.tab) return;
 
-    const unsubscribeSuggestion = window.tabb.onSuggestion((nextSuggestion) => {
+    const unsubscribeSuggestion = window.tab.onSuggestion((nextSuggestion) => {
       setSuggestion(nextSuggestion);
       setDebugContext(null);
       setMode("suggestion");
     });
 
-    const unsubscribeDebugContext = window.tabb.onDebugContext((debug) => {
+    const unsubscribeDebugContext = window.tab.onDebugContext((debug) => {
       setDebugContext(debug);
       setSuggestion(null);
       setMode("debug");
     });
 
-    const unsubscribeHide = window.tabb.onHide(() => {
+    const unsubscribeHide = window.tab.onHide(() => {
       setSuggestion(null);
       setDebugContext(null);
       setMode("hidden");
     });
 
-    window.tabb.overlayReady();
+    window.tab.overlayReady();
 
     return () => {
       unsubscribeSuggestion();
@@ -43,7 +43,7 @@ export function OverlaySurface() {
     <main className="overlay-shell" data-mode={mode}>
       <FloatingSuggestionBar
         suggestion={mode === "suggestion" ? suggestion : null}
-        onAccept={() => window.tabb?.acceptSuggestion()}
+        onAccept={() => window.tab?.acceptSuggestion()}
       />
       <DebugContextCard debug={mode === "debug" ? debugContext : null} />
     </main>

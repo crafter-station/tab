@@ -19,8 +19,8 @@ export function PermissionCard({ title, description, status, state, className, c
     <article
       className={cn(
         "grid gap-3 rounded-[18px] border bg-muted/70 p-4",
-        state === "granted" && "border-[color-mix(in_srgb,var(--tabb-success)_24%,transparent)] bg-[linear-gradient(145deg,var(--tabb-success-tint),color-mix(in_srgb,var(--muted)_70%,transparent))]",
-        state === "pending" && "border-[color-mix(in_srgb,var(--tabb-signal)_22%,transparent)] bg-[linear-gradient(145deg,var(--tabb-signal-tint),color-mix(in_srgb,var(--muted)_70%,transparent))]",
+        state === "granted" && "border-[color-mix(in_srgb,var(--tab-success)_24%,transparent)] bg-[linear-gradient(145deg,var(--tab-success-tint),color-mix(in_srgb,var(--muted)_70%,transparent))]",
+        state === "pending" && "border-[color-mix(in_srgb,var(--tab-signal)_22%,transparent)] bg-[linear-gradient(145deg,var(--tab-signal-tint),color-mix(in_srgb,var(--muted)_70%,transparent))]",
         className,
       )}
     >

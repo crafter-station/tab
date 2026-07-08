@@ -1,4 +1,4 @@
-import { DesktopStatusResponseSchema } from "@tabb/contracts";
+import { DesktopStatusResponseSchema } from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { BillingService } from "../billing.ts";
 

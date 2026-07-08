@@ -1,4 +1,4 @@
-import type { ActiveApplication } from "@tabb/contracts";
+import type { ActiveApplication } from "@tab/contracts";
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
 
 export type InsertionStrategy = "semantic" | "clipboard";

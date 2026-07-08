@@ -1,4 +1,4 @@
-import { cn } from "@tabb/ui";
+import { cn } from "@tab/ui";
 
 type DebugApiState =
   | { status: "idle" }

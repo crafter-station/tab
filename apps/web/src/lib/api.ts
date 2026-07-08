@@ -6,13 +6,13 @@ import {
   DeviceListResponseSchema,
   MemoryDeleteResponseSchema,
   MemoryListResponseSchema,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import { env } from "../env.ts";
 
 export const defaultApiBaseUrl = "http://localhost:8787";
 
 export function getApiBaseUrl() {
-  return env.TABB_API_BASE_URL.replace(/\/$/, "");
+  return env.TAB_API_BASE_URL.replace(/\/$/, "");
 }
 
 export type ApiRequestOptions = RequestInit & {

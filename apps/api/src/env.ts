@@ -7,7 +7,7 @@ export const env = createEnv({
     BETTER_AUTH_SECRET: z
       .string()
       .min(32)
-      .default("tabb-local-secret-must-be-at-least-32-characters-long"),
+      .default("tab-local-secret-must-be-at-least-32-characters-long"),
     BETTER_AUTH_URL: z.url().default("http://localhost:8787"),
     CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
     CLOUDFLARE_DATABASE_ID: z.string().optional(),

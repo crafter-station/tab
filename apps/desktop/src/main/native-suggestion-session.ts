@@ -3,7 +3,7 @@ import type {
   RecordTelemetryEventRequest,
   Suggestion,
   SuggestionContextSource,
-} from "@tabb/contracts";
+} from "@tab/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import type { AppContextSnapshot } from "./app-context.ts";
 import {
@@ -191,8 +191,8 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   }
 
   function setPreviouslyActiveApplication(activeApplication: ActiveApplication | null): void {
-    const isTabb = activeApplication?.bundleId.toLowerCase().includes("tabb") ?? false;
-    if (activeApplication && !isTabb) {
+    const isTab = activeApplication?.bundleId.toLowerCase().includes("tab") ?? false;
+    if (activeApplication && !isTab) {
       previouslyActiveApplication = activeApplication;
     }
   }
