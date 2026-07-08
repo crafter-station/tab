@@ -22,6 +22,7 @@ import {
   type TextSessionReliability,
   type TextSessionSnapshot,
   type TypingDeletionUnit,
+  type SafeTypingContextSnapshot,
 } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
@@ -31,6 +32,9 @@ import {
   createGhosttyAppContextSnapshot,
   createObsidianDocumentAppContext,
   createZedFocusedEditorAppContextProvider,
+  extractAppContextFromAccessibility,
+  type AccessibilityTextNode,
+  type AppContextSnapshot,
   sanitizeAppContextSnapshot,
 } from "./app-context.ts";
 import { extractWhatsAppConversationContext, type AccessibilityNode } from "./whatsapp-app-context.ts";
@@ -253,6 +257,22 @@ type DebugAppContextState = {
 };
 let debugApiState: DebugApiState = { status: "idle" };
 
+function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
+  const surroundingContext = snapshot.textSession?.surroundingContext;
+  if (!surroundingContext) return { fragments: [], metadata: { status: "empty" } };
+
+  const children: AccessibilityTextNode[] = [];
+  for (const value of [surroundingContext.beforeCaret, surroundingContext.afterCaret]) {
+    const trimmedValue = value?.trim();
+    if (trimmedValue) children.push({ role: "AXStaticText", value: trimmedValue });
+  }
+
+  return extractAppContextFromAccessibility(snapshot.activeApplication, {
+    role: "AXFocusedTextSession",
+    children,
+  });
+}
+
 const nativeSuggestionSession = createNativeSuggestionSession({
   typingContext: typingContextBuffer,
   requestSuggestion,
@@ -315,6 +335,11 @@ const nativeSuggestionSession = createNativeSuggestionSession({
     const zedContext = getZedAppContext(snapshot);
     if (zedContext.metadata.status === "available" && zedContext.fragments.length > 0) {
       return zedContext;
+    }
+
+    const textSessionContext = getAppContextFromTextSession(snapshot);
+    if (textSessionContext.metadata.status === "available" && textSessionContext.fragments.length > 0) {
+      return textSessionContext;
     }
 
     return sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot));

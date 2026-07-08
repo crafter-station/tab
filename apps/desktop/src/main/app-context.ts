@@ -4,9 +4,12 @@ import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-co
 
 const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
+const MAX_EXTRACTED_TEXT_LENGTH = 1_500;
 const MAX_OBSIDIAN_DOCUMENT_CONTEXT_LENGTH = 1_600;
 const MAX_OBSIDIAN_CONTEXT_BEFORE_CARET = 1_000;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
+const MIN_ACCESSIBILITY_CONFIDENCE = 0.7;
+const ACCESSIBILITY_TEXT_FIELDS = ["value", "title", "description"] as const;
 const MIN_PROVIDER_CONFIDENCE = 0.65;
 const GHOSTTY_BUNDLE_ID = "com.mitchellh.ghostty";
 const GHOSTTY_PROVIDER = "ghostty-terminal";
@@ -153,6 +156,14 @@ export type ChromeWebAccessibilityNode = {
 };
 
 type ChromeWebAccessibilityBounds = NonNullable<ChromeWebAccessibilityNode["bounds"]>;
+
+export type AccessibilityTextNode = {
+  readonly role?: string;
+  readonly value?: string;
+  readonly title?: string;
+  readonly description?: string;
+  readonly children?: readonly AccessibilityTextNode[];
+};
 
 export type AppContextManager = {
   setSnapshot(snapshot: AppContextSnapshot): void;
@@ -382,6 +393,148 @@ export function createGhosttyAppContextSnapshot(snapshot: SafeTypingContextSnaps
     ],
     metadata: { provider: GHOSTTY_PROVIDER, status: "available", confidence },
   };
+}
+
+type ProviderDefinition = {
+  readonly provider: string;
+  readonly kind: AppContextFragment["kind"];
+  readonly confidence: number;
+};
+
+type AppSpecificProviderMatcher = {
+  readonly bundleId: string;
+  readonly definition: ProviderDefinition;
+  readonly includeVariants?: boolean;
+};
+
+const APPLE_NOTES_PROVIDER: ProviderDefinition = {
+  provider: "apple-notes-accessibility",
+  kind: "focused_note",
+  confidence: 0.88,
+};
+
+const SLACK_PROVIDER: ProviderDefinition = {
+  provider: "slack-accessibility",
+  kind: "conversation",
+  confidence: 0.82,
+};
+
+const DISCORD_PROVIDER: ProviderDefinition = {
+  provider: "discord-accessibility",
+  kind: "conversation",
+  confidence: 0.8,
+};
+
+const GENERIC_ACCESSIBILITY_PROVIDER: ProviderDefinition = {
+  provider: "generic-accessibility-text",
+  kind: "visible_text",
+  confidence: 0.76,
+};
+
+const APP_SPECIFIC_PROVIDER_MATCHERS: readonly AppSpecificProviderMatcher[] = [
+  { bundleId: "com.apple.Notes", definition: APPLE_NOTES_PROVIDER },
+  { bundleId: "com.tinyspeck.slackmacgap", definition: SLACK_PROVIDER, includeVariants: true },
+  { bundleId: "com.hnc.Discord", definition: DISCORD_PROVIDER, includeVariants: true },
+];
+
+const GENERIC_ACCESSIBILITY_APPS = new Set([
+  "com.apple.mail",
+  "com.apple.MobileSMS",
+  "com.microsoft.VSCode",
+  "com.apple.TextEdit",
+]);
+
+const GENERIC_ACCESSIBILITY_APP_PREFIXES = ["com.microsoft.VSCode", "com.visualstudio.code"] as const;
+
+function matchesAppSpecificProvider(bundleId: string, matcher: AppSpecificProviderMatcher): boolean {
+  return matcher.includeVariants ? bundleId.startsWith(matcher.bundleId) : bundleId === matcher.bundleId;
+}
+
+function collectAccessibilityTextValues(node: AccessibilityTextNode, values: string[]): void {
+  for (const field of ACCESSIBILITY_TEXT_FIELDS) {
+    const candidate = node[field];
+    const normalized = candidate?.replace(/\s+/g, " ").trim();
+    if (normalized) values.push(normalized);
+  }
+
+  for (const child of node.children ?? []) {
+    collectAccessibilityTextValues(child, values);
+  }
+}
+
+function extractBoundedAccessibilityText(root: AccessibilityTextNode): string {
+  const values: string[] = [];
+  collectAccessibilityTextValues(root, values);
+  const deduplicatedValues = [...new Set(values)];
+  return deduplicatedValues.join("\n").slice(0, MAX_EXTRACTED_TEXT_LENGTH).trim();
+}
+
+function genericProviderFor(activeApplication: ActiveApplication): ProviderDefinition | null {
+  const bundleId = activeApplication.bundleId;
+  const isGenericAccessibilityApp = GENERIC_ACCESSIBILITY_APPS.has(bundleId)
+    || GENERIC_ACCESSIBILITY_APP_PREFIXES.some((prefix) => bundleId.startsWith(prefix));
+
+  if (!isGenericAccessibilityApp) {
+    return null;
+  }
+
+  return GENERIC_ACCESSIBILITY_PROVIDER;
+}
+
+function providerDefinitionFor(activeApplication: ActiveApplication): ProviderDefinition | null {
+  const appSpecificProvider = APP_SPECIFIC_PROVIDER_MATCHERS.find((matcher) =>
+    matchesAppSpecificProvider(activeApplication.bundleId, matcher),
+  );
+
+  return appSpecificProvider?.definition ?? genericProviderFor(activeApplication);
+}
+
+export function extractAppContextFromAccessibility(
+  activeApplication: ActiveApplication | null,
+  root: AccessibilityTextNode | null,
+): AppContextSnapshot {
+  if (!activeApplication || !root) {
+    return emptySnapshot("unsupported");
+  }
+
+  const definition = providerDefinitionFor(activeApplication);
+  if (!definition) {
+    return emptySnapshot("unsupported");
+  }
+
+  const text = extractBoundedAccessibilityText(root);
+  const confidence = text.length >= 12 ? definition.confidence : 0.2;
+  if (confidence < MIN_ACCESSIBILITY_CONFIDENCE) {
+    return {
+      fragments: [],
+      metadata: {
+        provider: definition.provider,
+        status: "suppressed",
+        confidence,
+        suppressionReason: "low_confidence_accessibility_text",
+      },
+    };
+  }
+
+  return sanitizeAppContextSnapshot({
+    fragments: [
+      {
+        id: `${definition.provider}:${activeApplication.bundleId}`,
+        provider: definition.provider,
+        kind: definition.kind,
+        text,
+        confidence,
+        redaction: createSafeRedactionSummary(),
+        requestable: true,
+        memoryEligible: false,
+      },
+    ],
+    metadata: {
+      provider: definition.provider,
+      status: "available",
+      confidence,
+    },
+  });
 }
 
 function createEmptyZedSnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextSnapshot {
