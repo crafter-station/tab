@@ -300,11 +300,11 @@ export class PersonalMemoryService {
       return null;
     }
 
-    const parsed = updateMemoryInputSchema.parse({
+    const userAuthoredUpdate = updateMemoryInputSchema.parse({
       content: input.content,
       createdBy: "user",
     });
-    return this.storage.updateMemory(id, parsed);
+    return this.storage.updateMemory(id, userAuthoredUpdate);
   }
 
   async selectRelevantMemories(input: RelevanceInput): Promise<PersonalMemory[]> {

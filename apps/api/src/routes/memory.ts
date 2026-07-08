@@ -37,7 +37,10 @@ export function registerMemoryRoutes(
   async function createMemory(c: MemoryContext, userId: string) {
     const body = await readMemoryWriteBody(c);
     if (!body) {
-      return c.json(createErrorResponse("invalid_request", "Memory content is required."), 400);
+      return c.json(
+        createErrorResponse("invalid_request", "Memory content is required."),
+        400,
+      );
     }
 
     const memory = await deps.personalMemoryService.createMemory({
@@ -55,22 +58,29 @@ export function registerMemoryRoutes(
   async function updateMemory(c: MemoryContext, userId: string) {
     const id = c.req.param("id");
     if (!id) {
-      return c.json(createErrorResponse("invalid_request", "Memory id is required."), 400);
+      return c.json(
+        createErrorResponse("invalid_request", "Memory id is required."),
+        400,
+      );
     }
 
     const body = await readMemoryWriteBody(c);
     if (!body) {
-      return c.json(createErrorResponse("invalid_request", "Memory content is required."), 400);
+      return c.json(
+        createErrorResponse("invalid_request", "Memory content is required."),
+        400,
+      );
     }
 
-    const memory = await deps.personalMemoryService.updateMemoryForUser(
-      userId,
-      id,
-      { content: body.content },
-    );
+    const memory = await deps.personalMemoryService.updateMemoryForUser(userId, id, {
+      content: body.content,
+    });
 
     if (!memory) {
-      return c.json(createErrorResponse("invalid_request", "Memory not found."), 404);
+      return c.json(
+        createErrorResponse("invalid_request", "Memory not found."),
+        404,
+      );
     }
 
     return c.json(
@@ -82,16 +92,19 @@ export function registerMemoryRoutes(
   async function deleteMemory(c: MemoryContext, userId: string) {
     const id = c.req.param("id");
     if (!id) {
-      return c.json(createErrorResponse("invalid_request", "Memory id is required."), 400);
+      return c.json(
+        createErrorResponse("invalid_request", "Memory id is required."),
+        400,
+      );
     }
 
-    const deleted = await deps.personalMemoryService.deleteMemory(
-      userId,
-      id,
-    );
+    const deleted = await deps.personalMemoryService.deleteMemory(userId, id);
 
     if (!deleted) {
-      return c.json(createErrorResponse("invalid_request", "Memory not found."), 404);
+      return c.json(
+        createErrorResponse("invalid_request", "Memory not found."),
+        404,
+      );
     }
 
     return c.json(
@@ -102,8 +115,12 @@ export function registerMemoryRoutes(
 
   app.get("/api/memory", async (c) => listMemories(c, c.get("device").userId));
   app.post("/api/memory", async (c) => createMemory(c, c.get("device").userId));
-  app.patch("/api/memory/:id", async (c) => updateMemory(c, c.get("device").userId));
-  app.delete("/api/memory/:id", async (c) => deleteMemory(c, c.get("device").userId));
+  app.patch("/api/memory/:id", async (c) =>
+    updateMemory(c, c.get("device").userId),
+  );
+  app.delete("/api/memory/:id", async (c) =>
+    deleteMemory(c, c.get("device").userId),
+  );
 
   app.get("/api/account/memory", async (c) => {
     const sessionCheck = await requireSession(c, deps.auth);

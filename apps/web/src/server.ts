@@ -605,9 +605,11 @@ export function createWebApp(config: WebAppConfig) {
     return redirect("/dashboard?tab=memories");
   }
 
-  async function createMemoryHandler(
+  async function submitMemoryForm(
     request: Request,
     cookieHeader: string | undefined,
+    path: string,
+    method: "POST" | "PATCH",
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
@@ -615,9 +617,9 @@ export function createWebApp(config: WebAppConfig) {
     const form = await request.formData();
     const content = String(form.get("content") ?? "");
     const response = await apiRequest(
-      "/api/account/memory",
+      path,
       {
-        method: "POST",
+        method,
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ content }),
       },
@@ -628,28 +630,24 @@ export function createWebApp(config: WebAppConfig) {
     return redirect("/dashboard?tab=memories");
   }
 
+  async function createMemoryHandler(
+    request: Request,
+    cookieHeader: string | undefined,
+  ): Promise<Response> {
+    return submitMemoryForm(request, cookieHeader, "/api/account/memory", "POST");
+  }
+
   async function editMemoryHandler(
     request: Request,
     cookieHeader: string | undefined,
     memoryId: string,
   ): Promise<Response> {
-    const sessionCheck = await requireSession(cookieHeader);
-    if (!sessionCheck.ok) return sessionCheck.response;
-
-    const form = await request.formData();
-    const content = String(form.get("content") ?? "");
-    const response = await apiRequest(
-      `/api/account/memory/${encodeURIComponent(memoryId)}`,
-      {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ content }),
-      },
+    return submitMemoryForm(
+      request,
       cookieHeader,
+      `/api/account/memory/${encodeURIComponent(memoryId)}`,
+      "PATCH",
     );
-
-    if (response.status === 401) return redirect("/login");
-    return redirect("/dashboard?tab=memories");
   }
 
   async function logoutHandler(
