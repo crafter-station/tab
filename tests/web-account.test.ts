@@ -229,6 +229,19 @@ describe("Web account surface", () => {
     expect(body).not.toInclude('href="/billing/checkout?plan=pro"');
   });
 
+  it("serves the shared component review surface in light and dark modes", async () => {
+    const { webApp } = await createWebTestEnv();
+    const response = await webRequest(webApp, "/components");
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude("Private Utility Grid components");
+    expect(body).toInclude('data-theme="light"');
+    expect(body).toInclude('data-theme="dark"');
+    expect(body).toInclude("Status rows");
+    expect(body).toInclude("Settings navigation");
+  });
+
   it("shows dashboard navigation and direct checkout links on pricing when signed in", async () => {
     const { apiApp, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;

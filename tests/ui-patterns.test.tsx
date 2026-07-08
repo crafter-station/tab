@@ -1,0 +1,47 @@
+import { describe, expect, it } from "bun:test";
+import { renderToStaticMarkup } from "react-dom/server";
+import {
+  CommandBlock,
+  ComponentReviewSurface,
+  EmptyState,
+  SectionBlock,
+  SettingsNav,
+  SettingsRow,
+  StatusRow,
+  SurfaceHeader,
+} from "../packages/ui/src/index.ts";
+
+describe("shared app patterns", () => {
+  it("renders reviewable Private Utility Grid patterns in light and dark modes", () => {
+    const markup = renderToStaticMarkup(<ComponentReviewSurface />);
+
+    expect(markup).toInclude("Shared primitive review");
+    expect(markup).toInclude('data-theme="light"');
+    expect(markup).toInclude('data-theme="dark"');
+    expect(markup).toInclude("Status rows");
+    expect(markup).toInclude("Settings navigation");
+    expect(markup).toInclude("No Personal Memory yet");
+    expect(markup).toInclude("debug:typing-context");
+  });
+
+  it("renders app-level patterns with semantic labels and actions", () => {
+    const markup = renderToStaticMarkup(
+      <SectionBlock>
+        <SurfaceHeader eyebrow="Account" title="Control plane" description="Manage Tabb." />
+        <StatusRow label="Native app" value="Connected" tone="success" />
+        <SettingsNav items={[{ label: "General", href: "#general", active: true }]} />
+        <SettingsRow label="Personal Memory" description="Keep suggestions personal.">
+          Enabled
+        </SettingsRow>
+        <CommandBlock command="tabb://debug" label="Debug command" />
+        <EmptyState title="No devices linked" description="Sign in from the Mac app." action="Download for macOS" />
+      </SectionBlock>,
+    );
+
+    expect(markup).toInclude("Control plane");
+    expect(markup).toInclude("Connected");
+    expect(markup).toInclude("aria-current=\"page\"");
+    expect(markup).toInclude("Debug command");
+    expect(markup).toInclude("Download for macOS");
+  });
+});

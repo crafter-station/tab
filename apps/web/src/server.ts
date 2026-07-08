@@ -1,6 +1,7 @@
 import { createElement } from "react";
 import type { ReactNode } from "react";
 import { ApiErrorResponseSchema } from "@tabb/contracts";
+import { ComponentReviewSurface } from "@tabb/ui";
 import {
   DashboardPage,
   DownloadPage,
@@ -710,6 +711,11 @@ export function createWebApp(config: WebAppConfig) {
 
       if (path === "/pricing" && request.method === "GET") {
         return pricingPage(cookieHeader);
+      }
+
+      if (path === "/components" && request.method === "GET") {
+        const user = await getOptionalUser(cookieHeader);
+        return html(createElement(ComponentReviewSurface), `${appName} Component Review`, 200, user);
       }
 
       if (path === "/login") {
