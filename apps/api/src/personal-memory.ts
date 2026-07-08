@@ -446,6 +446,19 @@ export class PersonalMemoryService {
     return this.updateMemory(id, userAuthoredUpdate);
   }
 
+  async reindexMemoryForUser(
+    userId: string,
+    id: string,
+  ): Promise<PersonalMemory | null> {
+    const memory = await this.storage.findMemoryById(id);
+    if (!memory || memory.userId !== userId) {
+      return null;
+    }
+
+    await this.indexMemory(memory);
+    return memory;
+  }
+
   async selectRelevantMemories(input: RelevanceInput): Promise<PersonalMemory[]> {
     if (!input.memoryEnabled) {
       return [];
