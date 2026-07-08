@@ -18,6 +18,7 @@ export type DebugContext = {
     status: string;
     provider: string | null;
     confidence: number | null;
+    suppressionReason?: string | null;
     fragmentCount: number;
     messageCount: number;
   };
@@ -42,7 +43,14 @@ export function DebugContextCard({ debug }: DebugContextCardProps) {
     ? `last ${debug.wordCount}/${debug.wordLimit} words · ${debug.source} · ${debug.app || "no active app"}${debug.secureInput ? " · secure input" : ""}${debug.paused ? " · paused" : ""}`
     : "";
   const appContextText = appContext
-    ? `${appContext.provider ?? "unknown provider"} · ${appContext.status} · confidence ${appContext.confidence ?? "n/a"} · ${appContext.fragmentCount} fragments · ${appContext.messageCount} messages`
+    ? [
+        `status ${appContext.status}`,
+        appContext.provider ? `provider ${appContext.provider}` : null,
+        typeof appContext.confidence === "number" ? `confidence ${Math.round(appContext.confidence * 100)}%` : null,
+        appContext.suppressionReason ? `suppressed ${appContext.suppressionReason}` : null,
+        `${appContext.fragmentCount} fragments`,
+        `${appContext.messageCount} messages`,
+      ].filter(Boolean).join(" · ")
     : "No suggestion-only App Context";
 
   return (

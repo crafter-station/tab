@@ -21,6 +21,7 @@ type DebugContext = {
     status: string;
     provider: string | null;
     confidence: number | null;
+    suppressionReason?: string | null;
     fragmentCount: number;
     messageCount: number;
   };

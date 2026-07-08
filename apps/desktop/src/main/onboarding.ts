@@ -46,7 +46,7 @@ export const ONBOARDING_PERMISSIONS_COPY = {
   notRequested:
     "Tab does not ask to see your screen or access your files. Screen Recording and Full Disk Access stay outside Tab's permission scope.",
   privacyNote:
-    "Typing Context stays in memory only; Personal Memory remains visible and controlled by you. Metadata-only telemetry can improve reliability, but raw logs, raw Typing Context, accepted Suggestion text, and final inserted text are not stored by default.",
+    "Typing Context stays in memory only. App Context is temporary suggestion-only background from supported apps and is not Personal Memory eligible by default. Personal Memory remains visible and controlled by you. Metadata-only telemetry can improve reliability, but raw logs, raw Typing Context, raw App Context, accepted Suggestion text, and final inserted text are not stored by default.",
   cta: "Continue to Permissions",
 } as const;
 

@@ -182,60 +182,96 @@ type AppContextAdapter = {
 };
 
 type SupportedAccessibilityAdapter = {
+  readonly app: string;
   readonly bundleIds: readonly string[];
   readonly adapter: AppContextAdapter;
 };
 
 const SUPPORTED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[] = [
   {
+    app: "WhatsApp",
     bundleIds: ["net.whatsapp.WhatsApp", "com.whatsapp.WhatsApp"],
     adapter: { provider: "whatsapp-accessibility", kind: "conversation", confidence: 0.86 },
   },
   {
+    app: "Ghostty",
     bundleIds: ["com.mitchellh.ghostty"],
     adapter: { provider: "ghostty-accessibility", kind: "terminal_session", confidence: 0.72 },
   },
   {
+    app: "Obsidian",
     bundleIds: ["md.obsidian"],
     adapter: { provider: "obsidian-accessibility", kind: "document", confidence: 0.78 },
   },
   {
+    app: "Zed",
     bundleIds: ["dev.zed.Zed"],
     adapter: { provider: "zed-accessibility", kind: "editor", confidence: 0.74 },
   },
   {
+    app: "Chrome",
     bundleIds: ["com.google.Chrome"],
     adapter: { provider: "chrome-accessibility", kind: "browser_writing_surface", confidence: 0.7 },
   },
   {
+    app: "Apple Notes",
     bundleIds: ["com.apple.Notes"],
     adapter: { provider: "notes-accessibility", kind: "document", confidence: 0.78 },
   },
   {
+    app: "Apple Mail",
     bundleIds: ["com.apple.mail"],
     adapter: { provider: "mail-accessibility", kind: "conversation", confidence: 0.74 },
   },
   {
+    app: "Messages",
     bundleIds: ["com.apple.MobileSMS"],
     adapter: { provider: "messages-accessibility", kind: "conversation", confidence: 0.76 },
   },
   {
+    app: "Slack",
     bundleIds: ["com.tinyspeck.slackmacgap"],
     adapter: { provider: "slack-accessibility", kind: "conversation", confidence: 0.72 },
   },
   {
+    app: "Discord",
     bundleIds: ["com.hnc.Discord"],
     adapter: { provider: "discord-accessibility", kind: "conversation", confidence: 0.7 },
   },
   {
+    app: "VS Code",
     bundleIds: ["com.microsoft.VSCode"],
     adapter: { provider: "vscode-accessibility", kind: "editor", confidence: 0.72 },
   },
   {
+    app: "TextEdit",
     bundleIds: ["com.apple.TextEdit"],
     adapter: { provider: "textedit-accessibility", kind: "document", confidence: 0.8 },
   },
 ];
+
+export const APP_CONTEXT_TRUST_COPY = {
+  title: "App Context",
+  summary:
+    "App Context is temporary, suggestion-only background from supported writing apps. It is separate from Typing Context and Personal Memory.",
+  permissionScope:
+    "Default App Context extraction uses Accessibility metadata and semantic text only. Tabb does not request Screen Recording, Full Disk Access, raw logs, browser history, hidden DOM, screenshots, or file reads for it.",
+  memoryScope:
+    "Passive app, conversation, document, web, and terminal context is not eligible for Personal Memory by default. Personal Memory remains based on eligible user-authored Typing Context and explicit user control.",
+  clearingScope:
+    "Pause Tabb or clear context to immediately clear both Typing Context and App Context. App Context is also cleared on app/window changes, secure input, secret-like detection, sleep, lock, and quit.",
+  debugScope:
+    "Debug and settings surfaces show App Context status, provider, confidence, suppression reason, and supported-app allowlist state as metadata-only diagnostics.",
+} as const;
+
+export const APP_CONTEXT_SUPPORTED_APP_MATRIX = [
+  ...SUPPORTED_ACCESSIBILITY_ADAPTERS.map((entry) => ({
+    app: entry.app,
+    provider: entry.adapter.provider,
+    allowlisted: true,
+    expectedKind: entry.adapter.kind,
+  })),
+] as const;
 
 const NORMALIZED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[] =
   SUPPORTED_ACCESSIBILITY_ADAPTERS.map((entry) => ({

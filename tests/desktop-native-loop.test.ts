@@ -13,6 +13,8 @@ import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.t
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
 import {
+  APP_CONTEXT_SUPPORTED_APP_MATRIX,
+  APP_CONTEXT_TRUST_COPY,
   createAccessibilityAppContextProvider,
   createAppContextManager,
   createObsidianDocumentAppContext,
@@ -189,6 +191,51 @@ describe("desktop native suggestion loop", () => {
   });
 
   describe("Accessibility App Context provider", () => {
+    it("defines trust controls and a validation matrix for supported App Context apps", async () => {
+      const trustCopy = JSON.stringify(APP_CONTEXT_TRUST_COPY).toLowerCase();
+      for (const phrase of [
+        "temporary",
+        "suggestion-only",
+        "typing context",
+        "app context",
+        "personal memory",
+        "metadata-only",
+        "screen recording",
+        "full disk access",
+        "raw logs",
+        "pause tabb",
+        "clear both typing context and app context",
+      ]) {
+        expect(trustCopy).toContain(phrase);
+      }
+
+      for (const app of [
+        "WhatsApp",
+        "Ghostty",
+        "Obsidian",
+        "Zed",
+        "Chrome",
+        "Apple Notes",
+        "Slack",
+        "Discord",
+        "Apple Mail",
+        "VS Code",
+        "TextEdit",
+      ]) {
+        expect(APP_CONTEXT_SUPPORTED_APP_MATRIX.some((entry) => entry.app === app && entry.allowlisted)).toBe(true);
+      }
+
+      const validationDoc = (await Bun.file("docs/manual-validation-app-context.md").text()).toLowerCase();
+      for (const phrase of [
+        "unsupported-app fallback",
+        "low-confidence extraction",
+        "secure/secret-like suppression",
+        "metadata-only compatibility diagnostics",
+      ]) {
+        expect(validationDoc).toContain(phrase);
+      }
+    });
+
     it("extracts bounded suggestion-only context for supported writing apps", () => {
       const provider = createAccessibilityAppContextProvider(() => ({
         activeApplication: { bundleId: "net.whatsapp.WhatsApp", name: "WhatsApp" },

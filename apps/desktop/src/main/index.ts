@@ -267,6 +267,7 @@ type DebugAppContextState = {
   status: string;
   provider: string | null;
   confidence: number | null;
+  suppressionReason: string | null;
   fragmentCount: number;
   messageCount: number;
 };
@@ -731,6 +732,7 @@ function debugAppContextState(appContext: ReturnType<typeof appContextManager.ge
     status: appContext.metadata.status,
     provider: appContext.metadata.provider ?? null,
     confidence: appContext.metadata.confidence ?? null,
+    suppressionReason: appContext.metadata.suppressionReason ?? null,
     fragmentCount: appContext.fragments.length,
     messageCount,
   };

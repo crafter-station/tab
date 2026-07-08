@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, PermissionCard, SectionCard, StatusBadge } from "@tab/ui";
 import type { DesktopStatus } from "../../../main/status";
+import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 
 type OnboardingStep = "sign-in" | "permissions" | "how-it-works" | "practice" | "done";
 
@@ -298,6 +299,7 @@ export function OnboardingSurface() {
                   Typing Context stays in memory only. Personal Memory remains visible and controlled by you, telemetry is
                   metadata-only, raw logs are not stored, and Tab does not request Screen Recording or Full Disk Access.
                 </span>
+                <span>{APP_CONTEXT_TRUST_COPY.summary}</span>
               </div>
             </>
           ) : null}
@@ -323,6 +325,10 @@ export function OnboardingSurface() {
                 <div className="tutorial-panel">
                   <strong>Stay focused</strong>
                   <span>The real suggestion overlay remains separate from this onboarding window.</span>
+                </div>
+                <div className="tutorial-panel">
+                  <strong>Trust controls</strong>
+                  <span>{APP_CONTEXT_TRUST_COPY.clearingScope}</span>
                 </div>
               </div>
             </>

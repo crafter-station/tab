@@ -20,6 +20,7 @@ import {
 } from "@tab/ui";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
+import { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 import { describePauseState, describePersonalMemorySource } from "./settingsCopy";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitialState"]>>;
@@ -293,10 +294,15 @@ export function SettingsSurface() {
                 value="Local control"
                 description="Tab does not request Screen Recording or Full Disk Access. Typing Context stays in memory only, Personal Memory stays visible and controlled by you, telemetry is metadata-only, and raw logs are not stored."
               />
+              <StatusRow
+                label={APP_CONTEXT_TRUST_COPY.title}
+                value="Suggestion-only"
+                description={`${APP_CONTEXT_TRUST_COPY.summary} ${APP_CONTEXT_TRUST_COPY.permissionScope}`}
+              />
               <CommandBlock
                 command="bun run desktop:permissions"
                 label="Development permission reset"
-                 description="If macOS shows Electron in dev mode, enable Tab with this helper, then relaunch."
+                description="If macOS shows Electron in dev mode, enable Tab with this helper, then relaunch."
               />
             </CardContent>
           </Card>
@@ -321,6 +327,12 @@ export function SettingsSurface() {
                   {usePersonalMemory ? "Using Personal Memory" : "Do Not Use"}
                 </Button>
               </SettingsRow>
+              <StatusRow label="App Context" value="Not saved" description={APP_CONTEXT_TRUST_COPY.memoryScope} />
+              <StatusRow
+                label="Supported App Context providers"
+                value={APP_CONTEXT_SUPPORTED_APP_MATRIX.map((entry) => `${entry.app}: ${entry.provider}`).join("; ")}
+                description={APP_CONTEXT_TRUST_COPY.debugScope}
+              />
               {memories.length === 0 ? (
                 <EmptyState
                   title="No Personal Memory stored yet"
