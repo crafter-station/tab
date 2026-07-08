@@ -1,13 +1,97 @@
 import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { THEME_MODES, buttonVariants, getThemeControlScript, getThemeInitScript } from "@tab/ui";
+import {
+  Avatar,
+  AvatarFallback,
+  Separator,
+  THEME_MODES,
+  buttonVariants,
+  getThemeControlScript,
+  getThemeInitScript,
+  type ThemeMode,
+} from "@tab/ui";
+import { Laptop, LogOut, Moon, Settings, Sun, UserRound } from "lucide-react";
 import type { User } from "./components/web-pages.tsx";
 
 const themeInitScript = getThemeInitScript();
 const themeControlScript = getThemeControlScript();
 
+function ThemeIcon({ mode }: { mode: ThemeMode }) {
+  const Icon = mode === "light" ? Sun : mode === "dark" ? Moon : Laptop;
+  return <Icon />;
+}
+
 function formatThemeModeLabel(mode: string): string {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
+}
+
+function userAvatarHash(user: User): string {
+  const identity = user.email ?? user.id;
+  let hash = 0;
+
+  for (const character of identity) {
+    hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
+  }
+
+  return hash.toString().padStart(9, "0");
+}
+
+function userAvatarUrl(user: User): string {
+  return `https://avatar.vercel.sh/${encodeURIComponent(userAvatarHash(user))}`;
+}
+
+function StaticThemeMenu() {
+  return (
+    <details className="group relative" aria-label="Theme selection">
+      <summary className={buttonVariants({ variant: "secondary", size: "icon", className: "cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden" })}>
+        <ThemeIcon mode="system" />
+      </summary>
+      <div className="absolute right-0 z-50 mt-2 min-w-40 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground shadow-[var(--tab-shadow-soft)]">
+        <div className="px-2 py-1.5 text-sm font-semibold">Theme</div>
+        {THEME_MODES.map((mode) => (
+          <button className="flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground" data-theme-choice={mode} key={mode} type="button" aria-pressed="false">
+            <ThemeIcon mode={mode} />
+            {formatThemeModeLabel(mode)}
+          </button>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function UserMenu({ user }: { user: User }) {
+  const userLabel = user.email ?? user.name ?? "Account";
+
+  return (
+    <details className="group relative" aria-label="User menu">
+      <summary className={buttonVariants({ variant: "secondary", size: "icon", className: "cursor-pointer list-none rounded-full p-1 marker:hidden [&::-webkit-details-marker]:hidden" })}>
+        <Avatar className="size-8">
+          <AvatarFallback>{userLabel.slice(0, 1).toUpperCase()}</AvatarFallback>
+          <img className="absolute inset-0 size-full" src={userAvatarUrl(user)} alt={`${userLabel} profile picture`} width="32" height="32" loading="lazy" />
+        </Avatar>
+      </summary>
+      <div className="absolute right-0 z-50 mt-2 min-w-56 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground shadow-[var(--tab-shadow-soft)]">
+        <div className="max-w-56 truncate px-2 py-1.5 text-sm font-semibold">{userLabel}</div>
+        <div>
+          <a className="flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground" href="/dashboard">
+            <UserRound />
+            Dashboard
+          </a>
+          <a className="flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground" href="/dashboard/account">
+            <Settings />
+            Settings
+          </a>
+        </div>
+        <Separator className="my-1" />
+        <form method="post" action="/logout">
+          <button className="flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground" type="submit">
+            <LogOut />
+            Sign out
+          </button>
+        </form>
+      </div>
+    </details>
+  );
 }
 
 function WebDocument({
@@ -40,15 +124,9 @@ function WebDocument({
               <nav className="flex flex-wrap items-center gap-3 text-sm font-bold">
                 <a className="no-underline text-muted-foreground hover:text-foreground" href="/pricing">Pricing</a>
                 <a className="no-underline text-muted-foreground hover:text-foreground" href="/download">Download</a>
-                <div className="flex rounded-full border bg-card p-1 text-xs text-muted-foreground" aria-label="Theme selection">
-                  {THEME_MODES.map((mode) => (
-                    <button className="rounded-full px-2 py-1 font-bold" data-theme-choice={mode} key={mode} type="button" aria-pressed="false">
-                      {formatThemeModeLabel(mode)}
-                    </button>
-                  ))}
-                </div>
+                <StaticThemeMenu />
                 {user ? (
-                  <a className={buttonVariants({ variant: "secondary" })} href="/dashboard">Dashboard</a>
+                  <UserMenu user={user} />
                 ) : (
                   <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>
                 )}
