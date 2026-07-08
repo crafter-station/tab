@@ -6,6 +6,7 @@ import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { PersonalMemoryService, InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
+import type { MemoryAgentModel, MemoryJob } from "../apps/api/src/memory-agent.ts";
 import { createDesktopMemoryClient } from "../apps/desktop/src/main/memory-client.ts";
 import { createMemoryExtractionDispatcher } from "../apps/desktop/src/main/memory-extraction-dispatcher.ts";
 import { createMemoryExtractionWindow } from "../apps/desktop/src/main/memory-extraction-window.ts";
@@ -55,7 +56,7 @@ function createManualScheduler() {
   };
 }
 
-async function createApiFixture() {
+async function createApiFixture(memoryExtractionModel?: MemoryAgentModel) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database, baseURL: TEST_ORIGIN });
   await migrateAuth(auth);
@@ -64,7 +65,7 @@ async function createApiFixture() {
   const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
   const personalMemoryService = new PersonalMemoryService({ storage: personalMemoryStorage });
   const telemetryStorage = new InMemoryTelemetryStorage();
-  const app = createApp({ auth, billingService, deviceTokenService, personalMemoryStorage, telemetryStorage });
+  const app = createApp({ auth, billingService, deviceTokenService, personalMemoryStorage, telemetryStorage, memoryExtractionModel });
   return { app, auth, billingService, deviceTokenService, personalMemoryService };
 }
 
@@ -578,5 +579,68 @@ describe("desktop memory extraction window", () => {
 
     expect(sent).toBe(1);
     expect(window.getEntries()).toEqual([]);
+  });
+
+  it("extracts desktop-owned eligible typing into system-created Personal Memory", async () => {
+    let modelJob: MemoryJob | null = null;
+    const { app, billingService, deviceTokenService, personalMemoryService } = await createApiFixture({
+      async proposeOperations(job) {
+        modelJob = job;
+        return [{ type: "create", content: "Prefers concise launch planning updates" }];
+      },
+    });
+    const { token } = await signUpAndAuthorize(app, deviceTokenService, billingService);
+    const statusResponse = await app.request("/api/status", {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const userId = ((await statusResponse.json()) as { data: { userId?: string } }).data.userId ?? "unknown";
+    let currentTimeMs = Date.parse("2026-07-08T16:00:00.000Z");
+    const scheduler = createManualScheduler();
+    const window = createMemoryExtractionWindow({
+      memoryEnabled: true,
+      now: () => new Date(currentTimeMs),
+      createId: () => "entry-desktop-owned",
+    });
+    const client = createDesktopMemoryClient({
+      apiBaseUrl: TEST_ORIGIN,
+      getAuthorizationHeader: async () => `Bearer ${token}`,
+      fetch: makeFetch(app),
+    });
+    const dispatcher = createMemoryExtractionDispatcher({
+      window,
+      client,
+      now: () => new Date(currentTimeMs),
+      setTimeout: scheduler.setTimeout,
+      clearTimeout: scheduler.clearTimeout,
+      createBatchId: () => "batch-desktop-owned",
+    });
+
+    dispatcher.append({
+      text: "My API key is api_key=1234567890abcdef. I prefer concise launch planning updates. ".repeat(7),
+      source: "typed_text",
+      activeApplication: { bundleId: "com.apple.TextEdit", name: "TextEdit", windowId: "ignored" },
+    });
+
+    currentTimeMs += 60_000;
+    await scheduler.run(60_000);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(modelJob).toMatchObject({
+      requestId: "batch-desktop-owned",
+      userId,
+      contextSource: "typed_text",
+      activeApplication: { bundleId: "com.apple.TextEdit" },
+      redaction: { applied: true, redactionCount: 7, kinds: ["api_key"] },
+    });
+    expect(modelJob?.typingContext).toContain("api_key=[REDACTED_SECRET]");
+    expect(modelJob?.typingContext).not.toContain("1234567890abcdef");
+    expect(window.getEntries()).toEqual([]);
+
+    const memories = await personalMemoryService.listMemories(userId);
+    expect(memories).toHaveLength(1);
+    expect(memories[0]).toMatchObject({
+      content: "Prefers concise launch planning updates",
+      createdBy: "system",
+    });
   });
 });
