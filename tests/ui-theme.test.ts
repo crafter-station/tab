@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { applyThemePreference } from "../packages/ui/src/theme.ts";
+import { THEME_STORAGE_KEY, applyThemePreference, getStoredThemePreference } from "../packages/ui/src/theme.ts";
 
 type TestElement = {
   dataset: Record<string, string | undefined>;
@@ -25,9 +25,9 @@ function createElement(): TestElement {
 function createStorage(initial?: string) {
   let value = initial ?? null;
   return {
-    getItem: (key: string) => (key === "tabb-theme" ? value : null),
+    getItem: (key: string) => (key === THEME_STORAGE_KEY ? value : null),
     setItem: (key: string, nextValue: string) => {
-      if (key === "tabb-theme") value = nextValue;
+      if (key === THEME_STORAGE_KEY) value = nextValue;
     },
   };
 }
@@ -50,15 +50,17 @@ describe("shared theme behavior", () => {
   it("uses and persists an explicit light preference over system dark mode", () => {
     const element = createElement();
 
+    const storage = createStorage("dark");
     const applied = applyThemePreference({
       element,
       mode: "light",
-      storage: createStorage("dark"),
+      storage,
       systemPrefersDark: () => true,
     });
 
     expect(applied).toBe("light");
     expect(element.dataset.theme).toBe("light");
     expect(element.classList.contains("dark")).toBe(false);
+    expect(getStoredThemePreference(storage)).toBe("light");
   });
 });

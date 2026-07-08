@@ -8,6 +8,8 @@ import {
   CardTitle,
   SectionCard,
   StatusBadge,
+  THEME_MODES,
+  getStoredThemePreference,
   setThemePreference,
   type ThemeMode,
 } from "@tabb/ui";
@@ -61,10 +63,9 @@ function SettingsRow({ label, children }: { label: string; children: React.React
 
 export function SettingsSurface() {
   const [activeTab, setActiveTab] = useState<SettingsTab>("account");
-  const [themeMode, setThemeMode] = useState<ThemeMode>(() => {
-    const stored = window.localStorage?.getItem("tabb-theme");
-    return stored === "light" || stored === "dark" || stored === "system" ? stored : "system";
-  });
+  const [themeMode, setThemeMode] = useState<ThemeMode>(
+    () => getStoredThemePreference(window.localStorage) ?? "system",
+  );
   const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
@@ -240,7 +241,7 @@ export function SettingsSurface() {
             <CardContent>
               <SettingsRow label="Theme">
                 <div className="flex flex-wrap gap-2">
-                  {(["system", "light", "dark"] as const).map((mode) => (
+                  {THEME_MODES.map((mode) => (
                     <Button
                       key={mode}
                       onClick={() => handleThemeMode(mode)}

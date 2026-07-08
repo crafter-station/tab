@@ -1,4 +1,6 @@
-export type ThemeMode = "light" | "dark" | "system";
+export const THEME_MODES = ["system", "light", "dark"] as const;
+
+export type ThemeMode = (typeof THEME_MODES)[number];
 export type AppliedThemeMode = "light" | "dark";
 
 export const THEME_STORAGE_KEY = "tabb-theme";
@@ -20,11 +22,11 @@ export type ApplyThemePreferenceOptions = {
   systemPrefersDark?: () => boolean;
 };
 
-function isThemeMode(value: string | null): value is ThemeMode {
-  return value === "light" || value === "dark" || value === "system";
+export function isThemeMode(value: string | null): value is ThemeMode {
+  return THEME_MODES.some((mode) => mode === value);
 }
 
-function readStoredTheme(storage?: ThemeStorage | null): ThemeMode | undefined {
+export function getStoredThemePreference(storage?: ThemeStorage | null): ThemeMode | undefined {
   if (!storage) return undefined;
   try {
     const stored = storage.getItem(THEME_STORAGE_KEY);
@@ -44,7 +46,7 @@ export function resolveThemeMode(mode: ThemeMode | undefined, systemPrefersDark:
 }
 
 export function applyThemePreference(options: ApplyThemePreferenceOptions): AppliedThemeMode {
-  const preferredMode = options.mode ?? readStoredTheme(options.storage) ?? "system";
+  const preferredMode = options.mode ?? getStoredThemePreference(options.storage) ?? "system";
   const appliedMode = resolveThemeMode(preferredMode, options.systemPrefersDark ?? systemPrefersDarkMode);
 
   options.element.dataset.theme = appliedMode;
@@ -77,4 +79,8 @@ export function setThemePreference(mode: ThemeMode): AppliedThemeMode | undefine
 
 export function getThemeInitScript(): string {
   return `(() => { try { var mode = localStorage.getItem('${THEME_STORAGE_KEY}') || 'system'; var dark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.dataset.theme = dark ? 'dark' : 'light'; document.documentElement.classList.toggle('dark', dark); } catch (_) {} })();`;
+}
+
+export function getThemeControlScript(): string {
+  return `document.addEventListener('click', function(event) { var target = event.target instanceof Element ? event.target.closest('[data-theme-choice]') : null; if (!target) return; var mode = target.getAttribute('data-theme-choice') || 'system'; try { localStorage.setItem('${THEME_STORAGE_KEY}', mode); var dark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.dataset.theme = dark ? 'dark' : 'light'; document.documentElement.classList.toggle('dark', dark); } catch (_) {} });`;
 }

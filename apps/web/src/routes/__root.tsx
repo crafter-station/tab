@@ -1,15 +1,16 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import "@tabb/ui/styles.css";
-import { Button, getThemeInitScript } from "@tabb/ui";
+import { Button, THEME_MODES, getThemeControlScript, getThemeInitScript } from "@tabb/ui";
 
-const themeControlScript = `${getThemeInitScript()} document.addEventListener('click', function(event) { var target = event.target instanceof Element ? event.target.closest('[data-theme-choice]') : null; if (!target) return; var mode = target.getAttribute('data-theme-choice') || 'system'; try { localStorage.setItem('tabb-theme', mode); var dark = mode === 'dark' || (mode !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches); document.documentElement.dataset.theme = dark ? 'dark' : 'light'; document.documentElement.classList.toggle('dark', dark); } catch (_) {} });`;
+const themeInitScript = getThemeInitScript();
+const themeControlScript = getThemeControlScript();
 
 function RootComponent() {
   return (
     <html lang="en">
       <head>
         <HeadContent />
-        <script dangerouslySetInnerHTML={{ __html: getThemeInitScript() }} />
+        <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
       </head>
       <body>
         <div className="pug-grid-surface min-h-dvh">
@@ -22,9 +23,11 @@ function RootComponent() {
                 <a className="no-underline" href="/pricing">Pricing</a>
                 <a className="no-underline" href="/download">Download</a>
                 <div className="flex rounded-full border bg-card p-1 text-xs text-muted-foreground" aria-label="Theme selection">
-                  <button className="rounded-full px-2 py-1" data-theme-choice="system" type="button">System</button>
-                  <button className="rounded-full px-2 py-1" data-theme-choice="light" type="button">Light</button>
-                  <button className="rounded-full px-2 py-1" data-theme-choice="dark" type="button">Dark</button>
+                  {THEME_MODES.map((mode) => (
+                    <button className="rounded-full px-2 py-1" data-theme-choice={mode} key={mode} type="button">
+                      {mode.charAt(0).toUpperCase() + mode.slice(1)}
+                    </button>
+                  ))}
                 </div>
                 <Button asChild variant="secondary">
                   <a href="/login">Sign in</a>
