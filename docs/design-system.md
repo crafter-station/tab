@@ -30,6 +30,10 @@ Use `--tab-page-wash`, `--tab-grid-bg`, `--tab-dot-grid-bg`, `--tab-grid-line`, 
 
 Use `success`, `warning`, `info`, `destructive`, `muted`, and active text labels through shared components such as `StatusRow`, `Badge`, and `StatusChip` patterns. Status meaning must appear in text, not color alone. Warning states should use `--warning` and `--tab-warning-tint`, not amber utility classes.
 
+## Review Surface
+
+Use `ComponentReviewSurface` when checking or changing the shared design system. It renders the canonical light and dark Private Utility Grid treatments for `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`, plus app-level patterns for status rows, settings navigation, command/debug blocks, and empty states. Keep this surface small and reviewable so contributors can validate token and primitive changes without navigating billing, auth, desktop onboarding, or native Suggestion flows.
+
 ## Component Usage Rules
 
 Start with primitives from `@tab/ui`: `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`. Build product pages with app patterns such as `SectionBlock`, `SectionCard`, `SurfaceHeader`, `StatusRow`, `SettingsRow`, `SettingsNav`, `CommandBlock`, `EmptyState`, `HeroProofPanel`, and `FloatingSuggestionBar`. Preserve native Electron behavior by keeping drag regions, transparent overlay roots, pointer-event rules, and Acceptance handlers outside visual abstractions.

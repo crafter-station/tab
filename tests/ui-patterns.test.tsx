@@ -22,6 +22,10 @@ describe("shared app patterns", () => {
     expect(markup).toInclude('data-theme="dark"');
     expect(markup).toInclude("Status rows");
     expect(markup).toInclude("Settings navigation");
+    expect(markup).toInclude("Primitive controls");
+    expect(markup).toInclude("Email input");
+    expect(markup).toInclude("Plan table");
+    expect(markup).toInclude("Tooltip guidance");
     expect(markup).toInclude("No Personal Memory yet");
     expect(markup).toInclude("debug:typing-context");
   });

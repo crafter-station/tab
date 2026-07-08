@@ -9,6 +9,7 @@ const designSystemSections = [
   "Radius",
   "Grid And Surface Treatments",
   "Semantic Statuses",
+  "Review Surface",
   "Component Usage Rules",
 ] as const;
 
@@ -21,6 +22,8 @@ const manualValidationCoverage = [
   "Focus traversal",
   "Floating Suggestion Overlay Acceptance",
 ] as const;
+
+const documentedPrimitives = ["Button", "Card", "Badge", "Input", "Label", "Table", "Tooltip", "Separator"] as const;
 
 const migratedDesktopStylePaths = [
   "apps/desktop/src/renderer/src/styles/base.css",
@@ -40,6 +43,11 @@ describe("Private Utility Grid documentation and styling contract", () => {
 
     for (const coverage of manualValidationCoverage) {
       expect(validation).toInclude(coverage);
+    }
+
+    expect(docs).toInclude("ComponentReviewSurface");
+    for (const primitive of documentedPrimitives) {
+      expect(docs).toInclude(primitive);
     }
   });
 
