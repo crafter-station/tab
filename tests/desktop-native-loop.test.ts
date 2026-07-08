@@ -1474,6 +1474,19 @@ describe("desktop native suggestion loop", () => {
       });
     });
 
+    it("falls back safely when Obsidian editor Accessibility semantics are unreliable", () => {
+      const snapshot = createObsidianDocumentAppContext(
+        makeObsidianTextSession({ accessibilityReliability: "unreliable" }),
+      );
+
+      expect(snapshot.fragments).toHaveLength(0);
+      expect(snapshot.metadata).toMatchObject({
+        provider: "obsidian-accessibility-editor",
+        status: "empty",
+        suppressionReason: "missing_focused_editor_semantics",
+      });
+    });
+
     it("drops noisy extraction instead of sending unreliable context", () => {
       const snapshot = createObsidianDocumentAppContext(
         makeObsidianTextSession({
