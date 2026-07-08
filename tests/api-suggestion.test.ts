@@ -77,6 +77,9 @@ function authHeaders(token: string) {
 describe("Hono suggestion API", () => {
   it("normalizes generated suggestions without joining words", () => {
     expect(normalizeGeneratedSuggestion("Hello", "world")).toBe(" world");
+    expect(normalizeGeneratedSuggestion("caf\u00e9", "recommendations")).toBe(
+      " recommendations",
+    );
     expect(normalizeGeneratedSuggestion("Hello ", "world")).toBe("world");
     expect(normalizeGeneratedSuggestion("Hello", "\nworld\n")).toBe(" world");
     expect(normalizeGeneratedSuggestion("Hello", "   ")).toBe("");

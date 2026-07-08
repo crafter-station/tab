@@ -628,16 +628,16 @@ function hideDebugTypingOverlay(): void {
 function sendDebugContext(): void {
   if (!SHOW_DEBUG_TYPING_OVERLAY || !isUsableWebContents(debugOverlayWindow)) return;
 
-  const state = typingContextBuffer.getState();
-  const context = getLastWords(state.context, DEBUG_TYPING_WORD_LIMIT);
+  const snapshot = nativeSuggestionSession.getCurrentSnapshot();
+  const context = getLastWords(snapshot.sanitizedContext, DEBUG_TYPING_WORD_LIMIT);
   debugOverlayWindow.webContents.send("debug-context", {
     context,
     wordLimit: DEBUG_TYPING_WORD_LIMIT,
     wordCount: context.length === 0 ? 0 : context.split(/\s+/).length,
-    source: state.contextSource,
-    app: state.activeApplication?.bundleId ?? null,
-    paused: state.paused,
-    secureInput: state.secureInput,
+    source: snapshot.contextSource,
+    app: snapshot.activeApplication?.bundleId ?? null,
+    paused: snapshot.paused,
+    secureInput: snapshot.secureInput,
     api: debugApiState,
   });
 }

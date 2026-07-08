@@ -219,6 +219,10 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   return {
     appendText(text: string): void {
       if (observationPaused) return;
+      if (textSessionSnapshot) {
+        contextChanged();
+        return;
+      }
       clearTextSessionSnapshot();
       deps.typingContext.appendText(text, deps.getContextSource());
       contextChanged();
@@ -302,6 +306,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     },
     clearContext,
     getCurrentSuggestion: () => currentSuggestion,
+    getCurrentSnapshot: () => currentSafeSnapshot(),
     getPreviouslyActiveApplication: () => previouslyActiveApplication,
     isPaused: () => observationPaused,
     getLoopState: () => suggestionLoop.getState(),

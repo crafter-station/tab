@@ -74,11 +74,18 @@ export function normalizeGeneratedSuggestion(
 
   const lastContextChar = typingContext.at(-1) ?? "";
   const firstSuggestionChar = text.at(0) ?? "";
-  if (/\w/.test(lastContextChar) && /\w/.test(firstSuggestionChar)) {
+  if (
+    isLetterOrNumber(lastContextChar) &&
+    isLetterOrNumber(firstSuggestionChar)
+  ) {
     return ` ${text}`;
   }
 
   return text;
+}
+
+function isLetterOrNumber(value: string): boolean {
+  return /[\p{Letter}\p{Number}]/u.test(value);
 }
 
 export function createRealSuggestionGenerator(): SuggestionGenerator {

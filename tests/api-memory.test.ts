@@ -217,6 +217,39 @@ describe("Personal Memory API", () => {
     expect(capturedInput?.memories[0].content).toBe("Acme Corp is a customer");
   });
 
+  it("matches relevant memories without requiring exact accent marks", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(async (input) => {
+        capturedInput = input;
+        return { text: " suggestion" };
+      });
+
+    await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Jos\u00e9 prefers caf\u00e9 meetings",
+      category: "personal",
+      source: "typed_text",
+      sensitivity: "normal",
+    });
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        ...validSuggestionRequest,
+        typingContext: "Ask Jose about cafe plans",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(capturedInput).not.toBeNull();
+    expect(capturedInput?.memories).toHaveLength(1);
+    expect(capturedInput?.memories[0].content).toBe(
+      "Jos\u00e9 prefers caf\u00e9 meetings",
+    );
+  });
+
   it("does not include irrelevant memories in the suggestion prompt", async () => {
     let capturedInput: SuggestionInput | null = null;
     const { app, token, personalMemoryStorage } =

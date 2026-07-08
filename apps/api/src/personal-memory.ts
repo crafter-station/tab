@@ -231,7 +231,12 @@ const createMemoryInputSchema = z.object({
 
 function normalizeTokens(text: string): Set<string> {
   const tokens = new Set<string>();
-  for (const token of text.toLowerCase().split(/[^a-z0-9]+/)) {
+  const normalizedText = text
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .toLocaleLowerCase();
+
+  for (const token of normalizedText.split(/[^\p{Letter}\p{Number}]+/u)) {
     if (token.length >= 3) {
       tokens.add(token);
     }

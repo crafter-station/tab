@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 import Foundation
 
 func emit(_ payload: [String: Any]) {
@@ -41,6 +42,7 @@ func activeWindowSnapshot() -> ActiveWindowSnapshot? {
 var lastActiveWindowSnapshot: ActiveWindowSnapshot?
 var lastTextSessionSnapshotKey: String?
 let textSessionContextLimit = 500
+var deadKeyState: UInt32 = 0
 
 typealias TextSessionPayload = [String: Any]
 
@@ -246,12 +248,66 @@ func emitTextSessionSnapshotIfChanged() {
   emit(["type": "text-session", "snapshot": snapshot])
 }
 
-func normalizedText(from event: CGEvent) -> String? {
+func currentKeyboardLayout() -> UnsafePointer<UCKeyboardLayout>? {
+  guard let inputSource = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+        let layoutData = TISGetInputSourceProperty(inputSource, kTISPropertyUnicodeKeyLayoutData) else {
+    return nil
+  }
+
+  let data = unsafeBitCast(layoutData, to: CFData.self)
+  guard let bytes = CFDataGetBytePtr(data) else { return nil }
+  return UnsafeRawPointer(bytes).assumingMemoryBound(to: UCKeyboardLayout.self)
+}
+
+func carbonModifierState(from flags: CGEventFlags) -> UInt32 {
+  var modifiers = UInt32(0)
+  if flags.contains(.maskShift) { modifiers |= UInt32(shiftKey) }
+  if flags.contains(.maskAlternate) { modifiers |= UInt32(optionKey) }
+  if flags.contains(.maskAlphaShift) { modifiers |= UInt32(alphaLock) }
+  return modifiers >> 8
+}
+
+func fallbackText(from event: CGEvent) -> String? {
   var length = 0
   var chars = [UniChar](repeating: 0, count: 16)
   event.keyboardGetUnicodeString(maxStringLength: chars.count, actualStringLength: &length, unicodeString: &chars)
   if length == 0 { return nil }
 
+  let text = String(utf16CodeUnits: chars, count: length)
+    .replacingOccurrences(of: "\r", with: "\n")
+  if text.isEmpty { return nil }
+  if text.unicodeScalars.allSatisfy({ CharacterSet.controlCharacters.contains($0) && $0 != "\n" && $0 != "\t" }) {
+    return nil
+  }
+  return text
+}
+
+func normalizedText(from event: CGEvent) -> String? {
+  guard let layout = currentKeyboardLayout() else {
+    return fallbackText(from: event)
+  }
+
+  let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+  var length = 0
+  var chars = [UniChar](repeating: 0, count: 16)
+  let status = UCKeyTranslate(
+    layout,
+    UInt16(keyCode),
+    UInt16(kUCKeyActionDown),
+    carbonModifierState(from: event.flags),
+    UInt32(LMGetKbdType()),
+    OptionBits(0),
+    &deadKeyState,
+    chars.count,
+    &length,
+    &chars
+  )
+
+  guard status == noErr else {
+    return fallbackText(from: event)
+  }
+
+  if length == 0 { return nil }
   let text = String(utf16CodeUnits: chars, count: length)
     .replacingOccurrences(of: "\r", with: "\n")
   if text.isEmpty { return nil }

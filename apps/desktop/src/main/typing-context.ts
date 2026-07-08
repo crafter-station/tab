@@ -154,6 +154,64 @@ function removeLastToken(text: string): string {
   return text.replace(/\s*\S+\s*$/, "");
 }
 
+const MACOS_ACCENT_PICKER_REPLACEMENTS: Record<string, string> = {
+  a1: "\u00e0",
+  a2: "\u00e1",
+  a3: "\u00e2",
+  a4: "\u00e4",
+  a5: "\u00e6",
+  a6: "\u00e3",
+  a7: "\u00e5",
+  a8: "\u0101",
+  c1: "\u00e7",
+  c2: "\u0107",
+  c3: "\u010d",
+  e1: "\u00e8",
+  e2: "\u00e9",
+  e3: "\u00ea",
+  e4: "\u00eb",
+  e5: "\u0113",
+  e6: "\u0117",
+  e7: "\u0119",
+  i1: "\u00ec",
+  i2: "\u00ed",
+  i3: "\u00ee",
+  i4: "\u00ef",
+  i5: "\u012b",
+  i6: "\u012f",
+  l1: "\u0142",
+  n1: "\u00f1",
+  n2: "\u0144",
+  o1: "\u00f2",
+  o2: "\u00f3",
+  o3: "\u00f4",
+  o4: "\u00f6",
+  o5: "\u0153",
+  o6: "\u00f8",
+  o7: "\u014d",
+  o8: "\u00f5",
+  s1: "\u00df",
+  s2: "\u015b",
+  s3: "\u0161",
+  u1: "\u00f9",
+  u2: "\u00fa",
+  u3: "\u00fb",
+  u4: "\u00fc",
+  u5: "\u016b",
+  y1: "\u00ff",
+  z1: "\u017e",
+  z2: "\u017a",
+  z3: "\u017c",
+};
+
+function normalizeMacOSAccentPickerText(text: string): string {
+  return text.replace(/([aceilnosuyz])\1{1,}([1-9])/gi, (match, letter: string, selection: string) => {
+    const replacement = MACOS_ACCENT_PICKER_REPLACEMENTS[`${letter.toLowerCase()}${selection}`];
+    if (!replacement) return match;
+    return letter === letter.toUpperCase() ? replacement.toUpperCase() : replacement;
+  });
+}
+
 export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffer {
   let context = "";
   let activeApplication: ActiveApplication | null = null;
@@ -182,7 +240,7 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
     }
     if (text.length === 0) return;
     lastSource = source;
-    context = (context + text).slice(-maxLength);
+    context = normalizeMacOSAccentPickerText(context + text).slice(-maxLength);
   }
 
   function getState(): TypingContextState {

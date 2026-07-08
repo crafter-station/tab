@@ -50,6 +50,45 @@ describe("desktop native suggestion loop", () => {
       expect(buffer.getState().context).toBe("Hello world");
     });
 
+    it("repairs macOS press-and-hold accent picker artifacts in fallback input", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.appendText("my name ");
+      buffer.appendText("iii2");
+      buffer.appendText("s anthon");
+      buffer.appendText("iii2 cueb");
+      buffer.appendText("aaa2 ajej ");
+      buffer.appendText("uuu4");
+
+      expect(buffer.getState().context).toBe(
+        "my name \u00eds anthon\u00ed cueb\u00e1 ajej \u00fc",
+      );
+    });
+
+    it("repairs the standard macOS Latin accent picker set in fallback input", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.appendText("aa1 aa2 aa3 aa4 aa5 aa6 aa7 aa8 ");
+      buffer.appendText("cc1 cc2 cc3 ");
+      buffer.appendText("ee1 ee2 ee3 ee4 ee5 ee6 ee7 ");
+      buffer.appendText("ii1 ii2 ii3 ii4 ii5 ii6 ");
+      buffer.appendText("ll1 nn1 nn2 ");
+      buffer.appendText("oo1 oo2 oo3 oo4 oo5 oo6 oo7 oo8 ");
+      buffer.appendText("ss1 ss2 ss3 ");
+      buffer.appendText("uu1 uu2 uu3 uu4 uu5 ");
+      buffer.appendText("yy1 zz1 zz2 zz3");
+
+      expect(buffer.getState().context).toBe(
+        "\u00e0 \u00e1 \u00e2 \u00e4 \u00e6 \u00e3 \u00e5 \u0101 " +
+          "\u00e7 \u0107 \u010d " +
+          "\u00e8 \u00e9 \u00ea \u00eb \u0113 \u0117 \u0119 " +
+          "\u00ec \u00ed \u00ee \u00ef \u012b \u012f " +
+          "\u0142 \u00f1 \u0144 " +
+          "\u00f2 \u00f3 \u00f4 \u00f6 \u0153 \u00f8 \u014d \u00f5 " +
+          "\u00df \u015b \u0161 " +
+          "\u00f9 \u00fa \u00fb \u00fc \u016b " +
+          "\u00ff \u017e \u017a \u017c",
+      );
+    });
+
     it("ignores empty text input", () => {
       const buffer = createTypingContextBuffer();
       buffer.appendText("Hello");
@@ -858,6 +897,30 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
 
       expect(calls).toContainEqual({ type: "requestSuggestion", value: "Fallback" });
+    });
+
+    it("does not let raw dead-key fallback text overwrite a reliable Text Session snapshot", async () => {
+      const { buffer, calls, session } = makeSession();
+      const composedContext = "ok! ahora una tilde por aqu\u00ed. una tilde por all\u00e1";
+      const textSession: TextSessionSnapshot = {
+        activeApplication: { bundleId: "com.google.Chrome", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: composedContext.length, length: 0 },
+        caretIdentity: `caret:${composedContext.length}`,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: composedContext, afterCaret: "" },
+      };
+
+      session.applyTextSessionSnapshot(textSession);
+      session.appendText("i2s");
+      await wait(10);
+
+      expect(session.getCurrentSnapshot().sanitizedContext).toBe(composedContext);
+      expect(buffer.getState().context).toBe("");
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: composedContext });
+      expect(calls).not.toContainEqual({ type: "requestSuggestion", value: "i2s" });
     });
 
     it("clears fallback context and disables memory work for secure Text Session snapshots", async () => {
