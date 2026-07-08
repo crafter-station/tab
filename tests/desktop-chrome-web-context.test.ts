@@ -59,7 +59,10 @@ describe("Chrome web writing context adapter", () => {
 
     const snapshot = createChromeWebWritingContextSnapshot({
       activeApplication: chrome,
-      accessibilityTree: { role: "AXWebArea", children: [...longParagraphs, editable("Continue this doc", 900)] },
+      accessibilityTree: {
+        role: "AXWebArea",
+        children: [...longParagraphs, editable("Continue this doc", 900)],
+      },
     });
 
     const nearby = snapshot.fragments.find((fragment) => fragment.kind === "nearby_visible_text");
@@ -124,7 +127,11 @@ describe("Chrome web writing context adapter", () => {
         children: [
           { role: "AXButton", title: "Bold" },
           { role: "AXButton", title: "Italic" },
-          { role: "AXStaticText", text: "api_key=sk-abc1234567890", bounds: { x: 120, y: 420, width: 640, height: 24 } },
+          {
+            role: "AXStaticText",
+            text: "api_key=sk-abc1234567890",
+            bounds: { x: 120, y: 420, width: 640, height: 24 },
+          },
           editable("Draft", 520),
         ],
       },

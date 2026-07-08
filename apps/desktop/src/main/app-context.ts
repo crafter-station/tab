@@ -87,6 +87,8 @@ export type ChromeWebAccessibilityNode = {
   readonly children?: readonly ChromeWebAccessibilityNode[];
 };
 
+type ChromeWebAccessibilityBounds = NonNullable<ChromeWebAccessibilityNode["bounds"]>;
+
 export type AppContextManager = {
   setSnapshot(snapshot: AppContextSnapshot): void;
   getSnapshot(): AppContextSnapshot;
@@ -105,7 +107,7 @@ function createSafeRedactionSummary(): AppContextFragment["redaction"] {
   };
 }
 
-function unsupportedChromeWebSnapshot(status: AppContextSnapshot["metadata"]["status"] = "unsupported"): AppContextSnapshot {
+function chromeWebUnavailableSnapshot(status: AppContextSnapshot["metadata"]["status"] = "unsupported"): AppContextSnapshot {
   return { fragments: [], metadata: { provider: CHROME_WEB_PROVIDER, status } };
 }
 
@@ -130,8 +132,9 @@ function isVisibleNode(node: ChromeWebAccessibilityNode): boolean {
 
 function isExcludedWebNode(node: ChromeWebAccessibilityNode): boolean {
   const role = nodeRole(node);
-  const label = `${role} ${node.title ?? ""} ${node.description ?? ""} ${node.placeholder ?? ""}`.toLowerCase();
-  return EXCLUDED_WEB_ROLES.has(role) || label.includes("address") || label.includes("url");
+  const nodeLabel = `${role} ${node.title ?? ""} ${node.description ?? ""} ${node.placeholder ?? ""}`.toLowerCase();
+
+  return EXCLUDED_WEB_ROLES.has(role) || nodeLabel.includes("address") || nodeLabel.includes("url");
 }
 
 function isEditableNode(node: ChromeWebAccessibilityNode): boolean {
@@ -140,7 +143,9 @@ function isEditableNode(node: ChromeWebAccessibilityNode): boolean {
 
 function findFocusedEditableNode(node: ChromeWebAccessibilityNode, focusedElementId?: string): ChromeWebAccessibilityNode | null {
   if (!isVisibleNode(node)) return null;
-  if ((node.focused === true || (focusedElementId && node.id === focusedElementId)) && isEditableNode(node)) {
+
+  const matchesFocusedElement = Boolean(focusedElementId && node.id === focusedElementId);
+  if ((node.focused === true || matchesFocusedElement) && isEditableNode(node)) {
     return node;
   }
 
@@ -158,7 +163,7 @@ function boundedText(text: string, maxLength: number): string {
   return normalized.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
 }
 
-function verticalDistance(a: NonNullable<ChromeWebAccessibilityNode["bounds"]>, b: NonNullable<ChromeWebAccessibilityNode["bounds"]>): number {
+function verticalDistance(a: ChromeWebAccessibilityBounds, b: ChromeWebAccessibilityBounds): number {
   const aBottom = a.y + a.height;
   const bBottom = b.y + b.height;
   if (aBottom < b.y) return b.y - aBottom;
@@ -192,7 +197,7 @@ function collectNearbyVisibleText(
   }
 }
 
-function appContextFragment(
+function createChromeWebFragment(
   id: string,
   kind: AppContextFragment["kind"],
   text: string,
@@ -229,22 +234,22 @@ export function createChromeWebWritingContextSnapshot(input: {
   readonly accessibilityTree: ChromeWebAccessibilityNode | null | undefined;
   readonly focusedElementId?: string;
 }): AppContextSnapshot {
-  if (!isChromeApplication(input.activeApplication)) return unsupportedChromeWebSnapshot();
-  if (!input.accessibilityTree) return unsupportedChromeWebSnapshot("empty");
+  if (!isChromeApplication(input.activeApplication)) return chromeWebUnavailableSnapshot();
+  if (!input.accessibilityTree) return chromeWebUnavailableSnapshot("empty");
 
   const focused = findFocusedEditableNode(input.accessibilityTree, input.focusedElementId);
-  if (!focused) return unsupportedChromeWebSnapshot("empty");
+  if (!focused) return chromeWebUnavailableSnapshot("empty");
 
   const fragments: AppContextFragment[] = [];
   const focusedText = boundedText(nodeText(focused), FOCUSED_EDITABLE_CONTEXT_LIMIT);
   if (focusedText && containsSensitiveText(focusedText)) return suppressedChromeWebSnapshot();
-  const focusedFragment = appContextFragment("chrome-web-focused-editable", "focused_editable", focusedText, 0.92);
+  const focusedFragment = createChromeWebFragment("chrome-web-focused-editable", "focused_editable", focusedText, 0.92);
   if (focusedFragment) fragments.push(focusedFragment);
 
   const nearbyText: string[] = [];
   collectNearbyVisibleText(input.accessibilityTree, focused, nearbyText);
   if (nearbyText.some(containsSensitiveText)) return suppressedChromeWebSnapshot();
-  const nearbyFragment = appContextFragment(
+  const nearbyFragment = createChromeWebFragment(
     "chrome-web-nearby-visible-text",
     "nearby_visible_text",
     boundedText(nearbyText.join("\n"), NEARBY_VISIBLE_CONTEXT_LIMIT),
@@ -252,11 +257,15 @@ export function createChromeWebWritingContextSnapshot(input: {
   );
   if (nearbyFragment) fragments.push(nearbyFragment);
 
-  if (fragments.length === 0) return unsupportedChromeWebSnapshot("empty");
+  if (fragments.length === 0) return chromeWebUnavailableSnapshot("empty");
 
   return sanitizeAppContextSnapshot({
     fragments,
-    metadata: { provider: CHROME_WEB_PROVIDER, status: "available", confidence: Math.max(...fragments.map((fragment) => fragment.confidence)) },
+    metadata: {
+      provider: CHROME_WEB_PROVIDER,
+      status: "available",
+      confidence: Math.max(...fragments.map((fragment) => fragment.confidence)),
+    },
   });
 }
 
