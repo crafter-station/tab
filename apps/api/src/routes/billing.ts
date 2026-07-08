@@ -90,12 +90,37 @@ export function registerBillingRoutes(
       return c.json(createErrorResponse("invalid_request", "Invalid plan."), 400);
     }
 
-    const entitlement = await deps.billingService.getEntitlement(sessionCheck.session.user.id);
+    const userId = sessionCheck.session.user.id;
+    const entitlement = await deps.billingService.getEntitlement(userId);
     const hasActivePaidSubscription =
       entitlement.planId !== "free" && hasActivePolarEntitlement(entitlement);
-    const requestedPaidPlan = planId !== "free";
 
-    if (hasActivePaidSubscription && requestedPaidPlan && planId !== entitlement.planId) {
+    if (hasActivePaidSubscription) {
+      if (planId === entitlement.planId) {
+        return c.json(
+          BillingCheckoutResponseSchema.parse({ status: "ok", data: { url: "/dashboard" } }),
+          200,
+        );
+      }
+
+      if (planId === "free") {
+        try {
+          const url = await deps.billingCheckoutClient.createPortalUrl(
+            userId,
+            entitlement.polarCustomerId,
+          );
+          return c.json(
+            BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
+            200,
+          );
+        } catch {
+          return c.json(
+            BillingCheckoutResponseSchema.parse({ status: "ok", data: { url: "/billing/portal" } }),
+            200,
+          );
+        }
+      }
+
       if (!supportsImmediatePlanChange(entitlement.planId, planId)) {
         return c.json(
           createErrorResponse(
@@ -136,7 +161,7 @@ export function registerBillingRoutes(
       const url = await deps.billingCheckoutClient.createCheckoutUrl(
         planId,
         {
-          id: sessionCheck.session.user.id,
+          id: userId,
           email: sessionCheck.session.user.email,
           name: sessionCheck.session.user.name,
         },

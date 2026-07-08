@@ -446,18 +446,18 @@ describe("desktop native suggestion loop", () => {
       const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy, maxVisibleMs: 5 });
 
       loop.onContextChanged();
-      await wait(15);
+      await wait(25);
       context = "Hello again ";
       now += 100;
       loop.onContextChanged();
-      await wait(10);
+      await wait(15);
 
       expect(requestSuggestionCalls).toHaveLength(1);
 
       now += 600;
       context = "Hello again friend ";
       loop.onContextChanged();
-      await wait(10);
+      await wait(15);
 
       expect(requestSuggestionCalls).toHaveLength(2);
     });

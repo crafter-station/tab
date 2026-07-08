@@ -24,6 +24,8 @@ const WEB_ORIGIN = "http://localhost:3000";
 class TestBillingCheckoutClient implements BillingCheckoutClient {
   readonly checkoutRequests: PlanId[] = [];
   readonly planChangeRequests: PlanChangeOptions[] = [];
+  readonly portalRequests: Array<{ userId: string; customerId?: string }> = [];
+  failPortalRequests = false;
 
   async createCheckoutUrl(
     planId: PlanId,
@@ -37,6 +39,10 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
   }
 
   async createPortalUrl(userId: string, customerId?: string): Promise<string> {
+    this.portalRequests.push({ userId, customerId });
+    if (this.failPortalRequests) {
+      throw new Error("portal unavailable");
+    }
     return `https://portal.test/${encodeURIComponent(customerId ?? userId)}`;
   }
 
@@ -371,6 +377,84 @@ describe("Web account surface", () => {
     expect(quota.ok).toBe(true);
     expect(quota.quota).toBe(1_000_000);
     expect(quota.usage).toBe(1000);
+  });
+
+  it("treats active paid subscribers choosing their current plan as a no-op", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+      await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activatePaidPlan(billingService, userId, "pro");
+
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=pro",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/dashboard");
+    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    expect(billingCheckoutClient.portalRequests).toEqual([]);
+  });
+
+  it("sends active paid subscribers choosing Free to billing management", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+      await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activatePaidPlan(billingService, userId, "pro");
+
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=free",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://portal.test/polar-customer-pro",
+    );
+    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    expect(billingCheckoutClient.portalRequests).toEqual([
+      { userId, customerId: "polar-customer-pro" },
+    ]);
+    const entitlement = await billingService.getEntitlement(userId);
+    expect(entitlement.planId).toBe("pro");
+    expect(entitlement.status).toBe("active");
+    expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
+  });
+
+  it("falls back to the local billing management route for paid-to-free portal failures", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+      await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activatePaidPlan(billingService, userId, "max");
+    billingCheckoutClient.failPortalRequests = true;
+
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=free",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/billing/portal");
+    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    expect(billingCheckoutClient.portalRequests).toEqual([
+      { userId, customerId: "polar-customer-max" },
+    ]);
+    const entitlement = await billingService.getEntitlement(userId);
+    expect(entitlement.planId).toBe("max");
+    expect(entitlement.status).toBe("active");
   });
 
   it("blocks checkout until the signed-in user verifies email", async () => {
