@@ -22,6 +22,10 @@ import {
   MemoryWriteResponseSchema,
 } from "../packages/contracts/src/index.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
+import type {
+  MemoryAgentModel,
+  ProposedMemoryOperation,
+} from "../apps/api/src/memory-agent.ts";
 import { createTestDatabase } from "./test-db.ts";
 import type {
   SuggestionGenerator,
@@ -34,6 +38,7 @@ async function createAuthenticatedTestApp(
     embeddingService: PersonalMemoryEmbeddingService;
     vectorIndex: PersonalMemoryVectorIndex;
   },
+  memoryExtractionModel?: MemoryAgentModel,
 ) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
@@ -49,6 +54,7 @@ async function createAuthenticatedTestApp(
     billingService,
     deviceTokenService,
     personalMemoryStorage,
+    memoryExtractionModel,
     ...vectorDeps,
     telemetryStorage: new InMemoryTelemetryStorage(),
   });
@@ -126,8 +132,12 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
     [];
   matches: PersonalMemoryVectorMatch[] = [];
   failQueries = false;
+  failUpserts = false;
 
   async upsertMemory(input: UpsertPersonalMemoryVectorInput): Promise<void> {
+    if (this.failUpserts) {
+      throw new Error("vector upsert unavailable");
+    }
     this.upserts.push({
       id: input.id,
       values: Array.from(input.values),
@@ -154,7 +164,228 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
   }
 }
 
+function extractionBatch(batchId: string, text: string) {
+  return {
+    batchId,
+    entries: [
+      {
+        id: `${batchId}-entry-1`,
+        text,
+        timestamp: "2026-07-08T00:00:00.000Z",
+        contextSource: "typed_text" as const,
+        activeApplication: { bundleId: "com.apple.TextEdit" },
+        redaction: { applied: false, redactionCount: 0, kinds: [] as string[] },
+      },
+    ],
+  };
+}
+
+function extractionModel(
+  operations: readonly ProposedMemoryOperation[],
+): MemoryAgentModel {
+  return {
+    async proposeOperations() {
+      return operations;
+    },
+  };
+}
+
 describe("Personal Memory API", () => {
+  it("processes synchronous extraction operations and returns final counts", async () => {
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        undefined,
+        { embeddingService, vectorIndex },
+        {
+          async proposeOperations(_job, memories) {
+            return [
+              { type: "create", content: "Prefers concise launch updates" },
+              {
+                type: "update",
+                id: memories[0].id,
+                content: "Works on Tabb launch planning",
+              },
+              { type: "delete", id: memories[1].id, reason: "Contradicted" },
+            ];
+          },
+        },
+      );
+    const updated = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Works on Tabb",
+      createdBy: "system",
+    });
+    const deleted = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Uses the old launch plan",
+      createdBy: "system",
+    });
+    vectorIndex.matches = [{ id: updated.id }, { id: deleted.id }];
+
+    const response = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(
+        extractionBatch("batch-success", "I now use the new launch plan."),
+      ),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: "ok",
+      data: { counts: { created: 1, updated: 1, deleted: 1, rejected: 0 } },
+    });
+    expect(await personalMemoryStorage.findMemoryById(deleted.id)).toBeNull();
+    expect((await personalMemoryStorage.findMemoryById(updated.id))?.content).toBe(
+      "Works on Tabb launch planning",
+    );
+    expect(vectorIndex.queries).toHaveLength(1);
+    expect(embeddingService.embeddedTexts[0]).toBe(
+      "I now use the new launch plan.",
+    );
+  });
+
+  it("returns prior extraction counts for repeated idempotency keys", async () => {
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        undefined,
+        undefined,
+        extractionModel([
+          { type: "create", content: "Prefers concise launch updates" },
+        ]),
+      );
+
+    const first = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(extractionBatch("batch-idempotent", "Launch facts")),
+    });
+    const second = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(extractionBatch("batch-idempotent", "Different text")),
+    });
+
+    expect(first.status).toBe(200);
+    expect(second.status).toBe(200);
+    expect(await second.json()).toEqual({
+      status: "ok",
+      data: { counts: { created: 1, updated: 0, deleted: 0, rejected: 0 } },
+    });
+    expect(await personalMemoryStorage.listMemoriesByUser("user-1")).toHaveLength(
+      1,
+    );
+  });
+
+  it("rejects unsafe extraction operations and protected user-created mutations", async () => {
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(undefined, undefined, {
+        async proposeOperations(_job, memories) {
+          return [
+            { type: "create", content: "Stripe key sk_live_1234567890abcdef" },
+            { type: "update", id: memories[0].id, content: "Changed by system" },
+            { type: "delete", id: memories[0].id, reason: "Contradicted" },
+            { type: "delete", id: memories[1].id },
+          ];
+        },
+      });
+    const userMemory = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "User-authored fact",
+      createdBy: "user",
+    });
+    const systemMemory = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "System-authored fact",
+      createdBy: "system",
+    });
+
+    const response = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(extractionBatch("batch-rejected", "Sensitive fact")),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: "ok",
+      data: { counts: { created: 0, updated: 0, deleted: 0, rejected: 4 } },
+    });
+    expect(await personalMemoryStorage.findMemoryById(userMemory.id)).toMatchObject({
+      content: "User-authored fact",
+      createdBy: "user",
+    });
+    expect(await personalMemoryStorage.findMemoryById(systemMemory.id)).toMatchObject({
+      content: "System-authored fact",
+    });
+  });
+
+  it("rejects extraction creates at the memory cap while allowing updates", async () => {
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(undefined, undefined, {
+        async proposeOperations(_job, memories) {
+          return [
+            {
+              type: "update",
+              id: memories[0].id,
+              content: "Updated memory at cap",
+            },
+            { type: "create", content: "New memory over cap" },
+          ];
+        },
+      });
+    for (let index = 0; index < 500; index += 1) {
+      await personalMemoryStorage.createMemory({
+        userId: "user-1",
+        content: `Memory ${index}`,
+        createdBy: "system",
+      });
+    }
+
+    const response = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(extractionBatch("batch-cap", "Cap facts")),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      status: "ok",
+      data: { counts: { created: 0, updated: 1, deleted: 0, rejected: 1 } },
+    });
+    const memories = await personalMemoryStorage.listMemoriesByUser("user-1");
+    expect(memories.some((memory) => memory.content === "Updated memory at cap"))
+      .toBe(true);
+    expect(memories).toHaveLength(500);
+  });
+
+  it("fails extraction when a memory write cannot be indexed", async () => {
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    vectorIndex.failUpserts = true;
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        undefined,
+        { embeddingService, vectorIndex },
+        extractionModel([
+          { type: "create", content: "Prefers concise launch updates" },
+        ]),
+      );
+
+    const response = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(extractionBatch("batch-write-fail", "Launch facts")),
+    });
+
+    expect(response.status).toBe(500);
+    expect(await personalMemoryStorage.listMemoriesByUser("user-1")).toHaveLength(
+      1,
+    );
+  });
+
   it("migrates old memory rows into the simplified system-authored shape", async () => {
     const sqlite = new Database(":memory:");
     sqlite.exec(`

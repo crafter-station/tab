@@ -484,6 +484,36 @@ export class PersonalMemoryService {
       .slice(0, this.maxRelevantMemories);
   }
 
+  async selectCandidateMemoriesForExtraction(
+    input: RelevanceInput,
+  ): Promise<PersonalMemory[]> {
+    if (!input.memoryEnabled) {
+      return [];
+    }
+
+    if (this.embeddingService && this.vectorIndex) {
+      const values = await this.embeddingService.embedText(input.typingContext);
+      const matches = await this.vectorIndex.queryMemories({
+        values,
+        userId: input.userId,
+        limit: this.maxRelevantMemories,
+      });
+      const memories: PersonalMemory[] = [];
+
+      for (const match of matches) {
+        if (memories.length >= this.maxRelevantMemories) break;
+        const memory = await this.storage.findMemoryById(match.id);
+        if (memory?.userId === input.userId) {
+          memories.push(memory);
+        }
+      }
+
+      return memories;
+    }
+
+    return this.storage.listMemoriesByUser(input.userId);
+  }
+
   private async selectVectorRelevantMemories(
     input: RelevanceInput,
     embeddingService: PersonalMemoryEmbeddingService,
