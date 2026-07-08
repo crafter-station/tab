@@ -26,7 +26,13 @@ import {
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
-import { createAppContextManager, createObsidianDocumentAppContext } from "./app-context.ts";
+import {
+  createAppContextManager,
+  createGhosttyAppContextSnapshot,
+  createObsidianDocumentAppContext,
+  createZedFocusedEditorAppContextProvider,
+  sanitizeAppContextSnapshot,
+} from "./app-context.ts";
 import { extractWhatsAppConversationContext, type AccessibilityNode } from "./whatsapp-app-context.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
@@ -38,7 +44,6 @@ import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createUpdateChecker } from "./release.ts";
-import { createGhosttyAppContextSnapshot, sanitizeAppContextSnapshot } from "./app-context.ts";
 import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tab/contracts";
 import { classifyTypingContextSource } from "@tab/memory-policy";
 import { env } from "./env.ts";
@@ -143,6 +148,7 @@ const requestSuggestion = createApiSuggestionClient({
   memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
+const getZedAppContext = createZedFocusedEditorAppContextProvider();
 
 const recordInteractionTelemetry = createDesktopTelemetryClient({
   apiBaseUrl: API_BASE_URL,
@@ -304,6 +310,11 @@ const nativeSuggestionSession = createNativeSuggestionSession({
       if (obsidianContext.metadata.status === "available" && obsidianContext.fragments.length > 0) {
         return obsidianContext;
       }
+    }
+
+    const zedContext = getZedAppContext(snapshot);
+    if (zedContext.metadata.status === "available" && zedContext.fragments.length > 0) {
+      return zedContext;
     }
 
     return sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot));

@@ -16,6 +16,7 @@ import {
   createAccessibilityAppContextProvider,
   createAppContextManager,
   createObsidianDocumentAppContext,
+  createZedFocusedEditorAppContextProvider,
   type AppContextSnapshot,
 } from "../apps/desktop/src/main/app-context.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
@@ -958,6 +959,101 @@ describe("desktop native suggestion loop", () => {
 
       expect(manager.getSnapshot().fragments).toHaveLength(0);
       expect(manager.getSnapshot().metadata.status).toBe("cleared");
+    });
+
+    describe("Zed focused editor App Context", () => {
+      const zedProvider = createZedFocusedEditorAppContextProvider();
+      const zedTextSession = (overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot => {
+        const beforeCaret = overrides.surroundingContext?.beforeCaret ?? "# Launch notes\n\nWe should explain the privacy model";
+        const afterCaret = overrides.surroundingContext?.afterCaret ?? " before the demo starts.";
+        return {
+          activeApplication: { bundleId: "dev.zed.Zed", windowId: "window:zed" },
+          focusedElementId: "focus:editor",
+          textElementId: "text:editor",
+          selectedRange: { location: beforeCaret.length, length: 0 },
+          caretIdentity: `caret:${beforeCaret.length}`,
+          secureLike: false,
+          accessibilityReliability: "reliable",
+          supportsSemanticInsertion: true,
+          surroundingContext: { beforeCaret, afterCaret },
+          ...overrides,
+        };
+      };
+      const providerSnapshot = (textSession: TextSessionSnapshot): AppContextSnapshot =>
+        zedProvider(createSafeTextSessionSnapshot(textSession));
+
+      it("extracts bounded suggestion-only context for Zed prose, markdown, and comments", () => {
+        const markdown = providerSnapshot(zedTextSession());
+        expect(markdown.metadata).toMatchObject({
+          provider: "zed-focused-editor",
+          status: "available",
+        });
+        expect(markdown.fragments).toHaveLength(1);
+        const markdownFragment = markdown.fragments[0];
+        expect(markdownFragment).toMatchObject({
+          provider: "zed-focused-editor",
+          kind: "focused_editor",
+          requestable: true,
+          memoryEligible: false,
+        });
+        expect(markdownFragment.text).toContain("# Launch notes");
+        expect(markdownFragment.text).toContain("before the demo starts.");
+
+        const comment = providerSnapshot(zedTextSession({
+          surroundingContext: {
+            beforeCaret: "function buildPrompt() {\n  // Keep app context separate from typing context",
+            afterCaret: "\n  return prompt;\n}",
+          },
+        }));
+
+        expect(comment.metadata.status).toBe("available");
+        const commentFragment = comment.fragments[0];
+        expect(commentFragment.text).toContain("// Keep app context separate");
+
+        const longBefore = `${"Earlier paragraph. ".repeat(220)}Current caret idea`;
+        const long = providerSnapshot(zedTextSession({
+          surroundingContext: { beforeCaret: longBefore, afterCaret: " Next sentence." },
+        }));
+
+        const longFragment = long.fragments[0];
+        expect(longFragment.text.length).toBeLessThanOrEqual(2_000);
+        expect(longFragment.text).toContain("Current caret idea");
+        expect(longFragment.text).not.toBe(longBefore + " Next sentence.");
+        expect(longFragment.text).not.toStartWith("Earlier paragraph. Earlier paragraph. Earlier paragraph.");
+      });
+
+      it("falls back safely for unsupported, unreliable, partial, and secret-like editor states", () => {
+        const unsupported = providerSnapshot(zedTextSession({
+          activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        }));
+        expect(unsupported.fragments).toHaveLength(0);
+        expect(unsupported.metadata.status).toBe("unsupported");
+
+        const unreliable = providerSnapshot(zedTextSession({ accessibilityReliability: "unreliable" }));
+        expect(unreliable.fragments).toHaveLength(0);
+        expect(unreliable.metadata.status).toBe("empty");
+
+        const partial = providerSnapshot(zedTextSession({ surroundingContext: { beforeCaret: "", afterCaret: "" } }));
+        expect(partial.fragments).toHaveLength(0);
+        expect(partial.metadata.status).toBe("empty");
+
+        const secretLike = providerSnapshot(zedTextSession({
+          surroundingContext: { beforeCaret: "OPENAI_API_KEY=sk-abc1234567890", afterCaret: "" },
+        }));
+        expect(secretLike.fragments).toHaveLength(0);
+        expect(secretLike.metadata.status).toBe("suppressed");
+        expect(secretLike.metadata.suppressionReason).toBe("secret_like_context");
+
+        const codeLike = providerSnapshot(zedTextSession({
+          surroundingContext: {
+            beforeCaret: "function issueToken(user) {\n  const token = sign(user.id);\n  return token;\n}",
+            afterCaret: "",
+          },
+        }));
+        expect(codeLike.fragments).toHaveLength(0);
+        expect(codeLike.metadata.status).toBe("suppressed");
+        expect(codeLike.metadata.suppressionReason).toBe("code_like_context");
+      });
     });
 
     it("updates context when the user deletes text", () => {
