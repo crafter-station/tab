@@ -14,6 +14,13 @@ export type DebugContext = {
   app: string | null;
   paused: boolean;
   secureInput: boolean;
+  appContext?: {
+    status: string;
+    provider: string | null;
+    confidence: number | null;
+    fragmentCount: number;
+    messageCount: number;
+  };
   api?: DebugApiState;
 };
 
@@ -30,9 +37,13 @@ function getApiText(api: DebugApiState | undefined): string {
 
 export function DebugContextCard({ debug }: DebugContextCardProps) {
   const api = debug?.api;
+  const appContext = debug?.appContext;
   const meta = debug
     ? `last ${debug.wordCount}/${debug.wordLimit} words · ${debug.source} · ${debug.app || "no active app"}${debug.secureInput ? " · secure input" : ""}${debug.paused ? " · paused" : ""}`
     : "";
+  const appContextText = appContext
+    ? `${appContext.provider ?? "unknown provider"} · ${appContext.status} · confidence ${appContext.confidence ?? "n/a"} · ${appContext.fragmentCount} fragments · ${appContext.messageCount} messages`
+    : "No suggestion-only App Context";
 
   return (
     <section className={cn("debug-card", debug && "debug-card--visible")} aria-hidden={!debug}>
@@ -47,6 +58,10 @@ export function DebugContextCard({ debug }: DebugContextCardProps) {
           <div className={cn("debug-card__api", api?.status !== "suggestion" && "debug-card__api--muted")}>
             {getApiText(api)}
           </div>
+        </div>
+        <div>
+          <div className="debug-card__section-label">App Context</div>
+          <div className="debug-card__api debug-card__api--muted">{appContextText}</div>
         </div>
       </div>
       <div className="debug-card__meta">{meta}</div>

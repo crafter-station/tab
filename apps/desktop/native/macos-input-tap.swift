@@ -41,7 +41,10 @@ func activeWindowSnapshot() -> ActiveWindowSnapshot? {
 
 var lastActiveWindowSnapshot: ActiveWindowSnapshot?
 var lastTextSessionSnapshotKey: String?
+var lastAppContextSnapshotKey: String?
 let textSessionContextLimit = 500
+let appContextNodeLimit = 120
+let appContextDepthLimit = 7
 var deadKeyState: UInt32 = 0
 
 typealias TextSessionPayload = [String: Any]
@@ -73,6 +76,25 @@ func axValue(_ value: Any?) -> AXValue? {
 
 func stringAXAttribute(_ element: AXUIElement, _ attribute: String) -> String? {
   return copyAXAttribute(element, attribute) as? String
+}
+
+func boundedStringAXAttribute(_ element: AXUIElement, _ attribute: String, maxLength: Int = 500) -> String? {
+  guard let value = stringAXAttribute(element, attribute)?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty else {
+    return nil
+  }
+  return String(value.prefix(maxLength))
+}
+
+func addBoundedStringAXAttribute(
+  _ attribute: String,
+  from element: AXUIElement,
+  to payload: inout [String: Any],
+  as key: String,
+  maxLength: Int = 500
+) {
+  if let value = boundedStringAXAttribute(element, attribute, maxLength: maxLength) {
+    payload[key] = value
+  }
 }
 
 func focusedAXElement(for app: NSRunningApplication) -> AXUIElement? {
@@ -248,6 +270,67 @@ func emitTextSessionSnapshotIfChanged() {
   emit(["type": "text-session", "snapshot": snapshot])
 }
 
+func isWhatsAppBundleId(_ bundleId: String) -> Bool {
+  return bundleId == "net.whatsapp.WhatsApp" || bundleId == "net.whatsapp.WhatsAppDesktop" || bundleId == "desktop.WhatsApp"
+}
+
+func accessibilityNodePayload(from element: AXUIElement, depth: Int, remainingNodes: inout Int) -> [String: Any]? {
+  if remainingNodes <= 0 { return nil }
+  remainingNodes -= 1
+
+  var payload: [String: Any] = [:]
+  let stringAttributes: [(attribute: String, key: String, maxLength: Int)] = [
+    (kAXRoleAttribute as String, "role", 120),
+    (kAXSubroleAttribute as String, "subrole", 120),
+    (kAXTitleAttribute as String, "title", 500),
+    (kAXValueAttribute as String, "value", 500),
+    (kAXDescriptionAttribute as String, "description", 500),
+    ("AXIdentifier", "identifier", 120),
+  ]
+  for attribute in stringAttributes {
+    addBoundedStringAXAttribute(
+      attribute.attribute,
+      from: element,
+      to: &payload,
+      as: attribute.key,
+      maxLength: attribute.maxLength
+    )
+  }
+
+  if depth < appContextDepthLimit,
+     let children = copyAXAttribute(element, kAXChildrenAttribute as String) as? [AXUIElement] {
+    let childPayloads = children.compactMap { child in
+      accessibilityNodePayload(from: child, depth: depth + 1, remainingNodes: &remainingNodes)
+    }
+    if !childPayloads.isEmpty {
+      payload["children"] = childPayloads
+    }
+  }
+
+  return payload.isEmpty ? nil : payload
+}
+
+func appContextTreeSnapshot() -> [String: Any]? {
+  guard AXIsProcessTrusted(),
+        let app = NSWorkspace.shared.frontmostApplication,
+        let bundleId = app.bundleIdentifier,
+        isWhatsAppBundleId(bundleId) else {
+    return nil
+  }
+
+  let appElement = AXUIElementCreateApplication(app.processIdentifier)
+  let rootElement = axUIElement(copyAXAttribute(appElement, kAXFocusedWindowAttribute as String)) ?? appElement
+  var remainingNodes = appContextNodeLimit
+  return accessibilityNodePayload(from: rootElement, depth: 0, remainingNodes: &remainingNodes)
+}
+
+func emitAppContextTreeSnapshotIfChanged() {
+  guard let snapshot = appContextTreeSnapshot(), let key = textSessionSnapshotKey(snapshot) else { return }
+  if key == lastAppContextSnapshotKey { return }
+  lastAppContextSnapshotKey = key
+  emit(["type": "app-context-tree", "provider": "whatsapp-conversation", "tree": snapshot])
+}
+
 func currentKeyboardLayout() -> UnsafePointer<UCKeyboardLayout>? {
   guard let inputSource = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
         let layoutData = TISGetInputSourceProperty(inputSource, kTISPropertyUnicodeKeyLayoutData) else {
@@ -331,6 +414,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
 
     emitActiveWindowIfChanged()
     emitTextSessionSnapshotIfChanged()
+    emitAppContextTreeSnapshotIfChanged()
     emit(["type": "delete", "unit": flags.contains(.maskAlternate) ? "token" : "character"])
     return Unmanaged.passUnretained(event)
   }
@@ -349,6 +433,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
 
   emitActiveWindowIfChanged()
   emitTextSessionSnapshotIfChanged()
+  emitAppContextTreeSnapshotIfChanged()
   emit(["type": "text", "text": text])
   return Unmanaged.passUnretained(event)
 }
@@ -372,5 +457,6 @@ emit(["type": "ready"])
 Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
   emitActiveWindowIfChanged()
   emitTextSessionSnapshotIfChanged()
+  emitAppContextTreeSnapshotIfChanged()
 }
 CFRunLoopRun()

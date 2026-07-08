@@ -38,6 +38,7 @@ export const AppContextFragmentSchema = z.object({
   kind: z.string().min(1),
   text: z.string().min(1).max(2_000),
   confidence: z.number().min(0).max(1),
+  metadata: z.record(z.string(), z.unknown()).optional(),
   redaction: RedactionSummarySchema,
   requestable: z.literal(true),
   memoryEligible: z.literal(false).default(false),

@@ -17,6 +17,13 @@ type DebugContext = {
   app: string | null;
   paused: boolean;
   secureInput: boolean;
+  appContext?: {
+    status: string;
+    provider: string | null;
+    confidence: number | null;
+    fragmentCount: number;
+    messageCount: number;
+  };
   api?: DebugApiState;
 };
 
