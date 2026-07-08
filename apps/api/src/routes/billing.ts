@@ -10,7 +10,6 @@ import {
   BillingWebhookHandler,
   hasActivePolarEntitlement,
   type BillingCheckoutClient,
-  type PlanChangeOptions,
   type BillingService,
 } from "../billing.ts";
 import { requireSession } from "../http/auth.ts";
@@ -18,15 +17,6 @@ import { createErrorResponse } from "../http/responses.ts";
 
 function isPlanId(planId: string | undefined): planId is PlanId {
   return Boolean(planId && planId in planQuotas);
-}
-
-function getPlanChangeProrationBehavior(
-  currentPlanId: PlanId,
-  targetPlanId: PlanId,
-): PlanChangeOptions["prorationBehavior"] | undefined {
-  if (currentPlanId === "pro" && targetPlanId === "max") return "prorate";
-  if (currentPlanId === "max" && targetPlanId === "pro") return "next_period";
-  return undefined;
 }
 
 export function registerBillingRoutes(
@@ -106,63 +96,20 @@ export function registerBillingRoutes(
         );
       }
 
-      if (planId === "free") {
-        try {
-          const url = await deps.billingCheckoutClient.createPortalUrl(
-            userId,
-            entitlement.polarCustomerId,
-          );
-          return c.json(
-            BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
-            200,
-          );
-        } catch {
-          return c.json(
-            BillingCheckoutResponseSchema.parse({ status: "ok", data: { url: "/billing/portal" } }),
-            200,
-          );
-        }
-      }
-
-      const prorationBehavior = getPlanChangeProrationBehavior(
-        entitlement.planId,
-        planId,
-      );
-      if (!prorationBehavior) {
-        return c.json(
-          createErrorResponse(
-            "plan_change_required",
-            "Plan Change is required for active paid subscriptions.",
-          ),
-          409,
-        );
-      }
-
-      const subscriptionId = entitlement.polarSubscriptionId;
-      if (!subscriptionId) {
-        return c.json(createErrorResponse("invalid_request", "Missing subscription ID."), 400);
-      }
-
       try {
-        await deps.billingCheckoutClient.changePlan({
-          subscriptionId,
-          targetPlanId: planId,
-          prorationBehavior,
-        });
-        if (prorationBehavior === "prorate") {
-          await deps.billingService.applyEntitlement({
-            ...entitlement,
-            planId,
-            cachedAt: new Date(),
-          });
-        }
+        const url = await deps.billingCheckoutClient.createPortalUrl(
+          userId,
+          entitlement.polarCustomerId,
+        );
         return c.json(
-          BillingCheckoutResponseSchema.parse({ status: "ok", data: { url: "/dashboard" } }),
+          BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
           200,
         );
-      } catch (error) {
-        const message = error instanceof Error ? error.message : "Unknown provider error.";
-        return c.json(createErrorResponse("provider_failure", `Plan Change failed: ${message}`), 503);
+      } catch {
+        return c.json(
+          BillingCheckoutResponseSchema.parse({ status: "ok", data: { url: "/billing/portal" } }),
+          200,
+        );
       }
     }
 

@@ -358,6 +358,92 @@ describe("Billing and quota enforcement", () => {
     expect(exhausted.status).toBe(402);
   });
 
+  it("updates the cached plan when Polar sends a subscription.updated product change", async () => {
+    const { billingService } = await createBillingTestApp(async () => ({
+      text: " world",
+    }));
+
+    await billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "pro",
+      polarCustomerId: "polar-customer-1",
+      polarSubscriptionId: "polar-sub-1",
+      status: "active",
+      cachedAt: new Date(),
+    });
+
+    const webhookHandler = new BillingWebhookHandler({
+      storage: billingService.storage,
+    });
+
+    await webhookHandler.handle({
+      type: "subscription.updated",
+      data: {
+        customer: { external_id: "user-1" },
+        customer_id: "polar-customer-1",
+        id: "polar-sub-1",
+        status: "active",
+        product: { name: "Tab Max" },
+        current_period_end: "2026-08-01T00:00:00.000Z",
+      },
+    });
+
+    const entitlement = await billingService.getEntitlement("user-1");
+    expect(entitlement.planId).toBe("max");
+    expect(entitlement.status).toBe("active");
+    expect(entitlement.polarCustomerId).toBe("polar-customer-1");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
+    expect(entitlement.currentPeriodEnd).toEqual(
+      new Date("2026-08-01T00:00:00.000Z"),
+    );
+  });
+
+  it("prefers the current Polar subscription product over stale checkout metadata", async () => {
+    const { billingService } = await createBillingTestApp(async () => ({
+      text: " world",
+    }));
+
+    await billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "free",
+      polarCustomerId: "polar-customer-1",
+      polarSubscriptionId: "polar-sub-1",
+      status: "active",
+      cachedAt: new Date(),
+    });
+
+    const webhookHandler = new BillingWebhookHandler({
+      storage: billingService.storage,
+    });
+
+    await webhookHandler.handle({
+      type: "subscription.updated",
+      data: {
+        customer: {
+          id: "polar-customer-1",
+          externalId: "user-1",
+        },
+        customerId: "polar-customer-1",
+        id: "polar-sub-1",
+        status: "active",
+        metadata: { planId: "free" },
+        productId: "polar-product-max",
+        product: {
+          id: "polar-product-max",
+          name: "Tab Max",
+          metadata: { planId: "max" },
+        },
+        currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      },
+    });
+
+    const entitlement = await billingService.getEntitlement("user-1");
+    expect(entitlement.planId).toBe("max");
+    expect(entitlement.status).toBe("active");
+    expect(entitlement.polarCustomerId).toBe("polar-customer-1");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
+  });
+
   it("stores entitlements and usage in D1-compatible storage", async () => {
     const db = new Database(":memory:");
     bootstrapBillingTestSchema(db);

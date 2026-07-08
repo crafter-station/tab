@@ -209,14 +209,7 @@ export interface BillingCheckoutClient {
     user: { id: string; email?: string; name?: string },
   ): Promise<string>;
   createPortalUrl(userId: string, customerId?: string): Promise<string>;
-  changePlan(options: PlanChangeOptions): Promise<void>;
 }
-
-export type PlanChangeOptions = {
-  subscriptionId: string;
-  targetPlanId: Exclude<PlanId, "free">;
-  prorationBehavior: "prorate" | "next_period";
-};
 
 export type CreatePolarBillingCheckoutClientOptions = {
   accessToken?: string;
@@ -239,11 +232,6 @@ export class StubBillingCheckoutClient implements BillingCheckoutClient {
     void userId;
     void customerId;
     throw new Error("Polar customer portal is not configured");
-  }
-
-  async changePlan(options: PlanChangeOptions): Promise<void> {
-    void options;
-    throw new Error("Polar plan changes are not configured");
   }
 }
 
@@ -329,16 +317,6 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
     });
 
     return session.customerPortalUrl;
-  }
-
-  async changePlan(options: PlanChangeOptions): Promise<void> {
-    await this.polar.subscriptions.update({
-      id: options.subscriptionId,
-      subscriptionUpdate: {
-        productId: this.productIds[options.targetPlanId],
-        prorationBehavior: options.prorationBehavior,
-      },
-    });
   }
 }
 
@@ -644,6 +622,7 @@ function optionalString(value: unknown): string | undefined {
 }
 
 function optionalDate(value: unknown): Date | undefined {
+  if (value instanceof Date) return value;
   return value ? new Date(String(value)) : undefined;
 }
 
@@ -761,6 +740,7 @@ export class BillingWebhookHandler {
         const productMetadata = optionalRecord(product?.metadata);
         const userId = firstString(
           customer?.external_id,
+          customer?.externalId,
           customer?.externalCustomerId,
           data.external_customer_id,
           data.externalCustomerId,
@@ -795,10 +775,10 @@ export class BillingWebhookHandler {
 
         const existing = await this.storage.getEntitlement(userId);
         const planId =
-          planIdFromMetadata(metadata) ??
-          planIdFromMetadata(productMetadata) ??
           planIdFromProductId(productId) ??
+          planIdFromMetadata(productMetadata) ??
           (productName ? planIdFromProductName(productName) : null) ??
+          planIdFromMetadata(metadata) ??
           existing?.planId ??
           "free";
 
@@ -817,7 +797,13 @@ export class BillingWebhookHandler {
       case "subscription.canceled":
       case "subscription.uncanceled": {
         const customer = optionalRecord(data.customer);
-        const userId = optionalString(customer?.external_id);
+        const userId = firstString(
+          customer?.external_id,
+          customer?.externalId,
+          customer?.externalCustomerId,
+          data.external_customer_id,
+          data.externalCustomerId,
+        );
         if (!userId) return;
 
         if (this.storage.hasUser && !(await this.storage.hasUser(userId))) {
