@@ -17,27 +17,17 @@ import { promisify } from "node:util";
 import {
   createTypingContextBuffer,
   getLastWords,
-  type TextSessionCaretBounds,
-  type TextSessionRange,
-  type TextSessionReliability,
   type TextSessionSnapshot,
   type TypingDeletionUnit,
-  type SafeTypingContextSnapshot,
 } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
 import {
-  createAppContextManager,
-  createGhosttyAppContextSnapshot,
-  createObsidianDocumentAppContext,
-  createZedFocusedEditorAppContextProvider,
-  extractAppContextFromAccessibility,
-  type AccessibilityTextNode,
   type AppContextSnapshot,
-  sanitizeAppContextSnapshot,
 } from "./app-context.ts";
-import { extractWhatsAppConversationContext, type AccessibilityNode } from "./whatsapp-app-context.ts";
+import { createAppContextExtractor, type AppContextAccessibilityTree } from "./app-context-extractor.ts";
+import { createDesktopEventIngress } from "./desktop-event-ingress.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -79,7 +69,7 @@ type InputTapProcess = {
 let inputTapProcess: InputTapProcess | null = null;
 
 const typingContextBuffer = createTypingContextBuffer();
-const appContextManager = createAppContextManager();
+const appContextExtractor = createAppContextExtractor();
 
 const userDataPath = app.getPath("userData");
 mkdirSync(userDataPath, { recursive: true });
@@ -155,8 +145,6 @@ const requestSuggestion = createApiSuggestionClient({
   memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
-const getZedAppContext = createZedFocusedEditorAppContextProvider();
-
 const recordInteractionTelemetry = createDesktopTelemetryClient({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
@@ -275,22 +263,6 @@ type DebugAppContextState = {
 let debugApiState: DebugApiState = { status: "idle" };
 let lastOptionKeyUpAt = 0;
 
-function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
-  const surroundingContext = snapshot.textSession?.surroundingContext;
-  if (!surroundingContext) return { fragments: [], metadata: { status: "empty" } };
-
-  const children: AccessibilityTextNode[] = [];
-  for (const value of [surroundingContext.beforeCaret, surroundingContext.afterCaret]) {
-    const trimmedValue = value?.trim();
-    if (trimmedValue) children.push({ role: "AXStaticText", value: trimmedValue });
-  }
-
-  return extractAppContextFromAccessibility(snapshot.activeApplication, {
-    role: "AXFocusedTextSession",
-    children,
-  });
-}
-
 const nativeSuggestionSession = createNativeSuggestionSession({
   typingContext: typingContextBuffer,
   requestSuggestion,
@@ -337,32 +309,19 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   debounceMs: 300,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
-  getAppContext: (snapshot) => {
-    const managedContext = appContextManager.getSnapshot();
-    if (managedContext.metadata.status === "available" && managedContext.fragments.length > 0) {
-      return managedContext;
-    }
+  getAppContext: (snapshot) => appContextExtractor.getSnapshot(snapshot),
+  clearAppContext: () => appContextExtractor.clear(),
+});
 
-    if (snapshot.textSession) {
-      const obsidianContext = createObsidianDocumentAppContext(snapshot.textSession);
-      if (obsidianContext.metadata.status === "available" && obsidianContext.fragments.length > 0) {
-        return obsidianContext;
-      }
-    }
-
-    const zedContext = getZedAppContext(snapshot);
-    if (zedContext.metadata.status === "available" && zedContext.fragments.length > 0) {
-      return zedContext;
-    }
-
-    const textSessionContext = getAppContextFromTextSession(snapshot);
-    if (textSessionContext.metadata.status === "available" && textSessionContext.fragments.length > 0) {
-      return textSessionContext;
-    }
-
-    return sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot));
-  },
-  clearAppContext: () => appContextManager.clear(),
+const desktopEventIngress = createDesktopEventIngress({
+  onReady: () => console.log("macOS input tap ready."),
+  onError: (message) => console.error("macOS input tap error:", message),
+  onActiveApplicationChanged: handleActiveApplicationChanged,
+  onTextInput: handleTextInput,
+  onDeleteBackward: handleDeleteBackward,
+  onOptionKeyUp: handleOptionKeyUp,
+  onTextSessionSnapshot: handleTextSessionSnapshot,
+  onAppContextTree: handleAppContextTree,
 });
 
 function delay(ms: number): Promise<void> {
@@ -724,7 +683,7 @@ function sendDebugContext(): void {
   });
 }
 
-function debugAppContextState(appContext: ReturnType<typeof appContextManager.getSnapshot>): DebugAppContextState {
+function debugAppContextState(appContext: AppContextSnapshot): DebugAppContextState {
   const messageCount = appContext.fragments.reduce((count, fragment) => {
     const fragmentMessageCount = fragment.metadata?.messageCount;
     return count + (typeof fragmentMessageCount === "number" ? fragmentMessageCount : 0);
@@ -830,145 +789,14 @@ function checkForUpdates(errorMessage: string): void {
 }
 
 function handleInputTapMessage(message: unknown): void {
-  if (!message || typeof message !== "object") return;
-  const payload = message as {
-    type?: unknown;
-    text?: unknown;
-    unit?: unknown;
-    bundleId?: unknown;
-    windowId?: unknown;
-    key?: unknown;
-    phase?: unknown;
-    message?: unknown;
-    snapshot?: unknown;
-    tree?: unknown;
-  };
-
-  if (payload.type === "ready") {
-    console.log("macOS input tap ready.");
-    return;
-  }
-  if (payload.type === "error") {
-    console.error("macOS input tap error:", payload.message);
-    return;
-  }
-  if (payload.type === "active-app" && typeof payload.bundleId === "string") {
-    handleActiveApplicationChanged(
-      payload.bundleId,
-      typeof payload.windowId === "string" ? payload.windowId : null,
-    );
-    return;
-  }
-  if (payload.type === "text" && typeof payload.text === "string") {
-    resetOptionDoublePressState();
-    handleTextInput(payload.text);
-    return;
-  }
-  if (payload.type === "delete") {
-    resetOptionDoublePressState();
-    handleDeleteBackward(payload.unit === "token" ? "token" : "character");
-    return;
-  }
-  if (payload.type === "modifier-key" && payload.key === "option") {
-    if (payload.phase === "up") {
-      handleOptionKeyUp();
-    }
-    return;
-  }
-  if (payload.type === "text-session" && isTextSessionSnapshot(payload.snapshot)) {
-    handleTextSessionSnapshot(payload.snapshot);
-    return;
-  }
-  if (payload.type === "app-context-tree" && isAccessibilityNode(payload.tree)) {
-    handleAppContextTree(payload.tree);
-  }
+  desktopEventIngress.handleMessage(message);
 }
 
-function handleAppContextTree(accessibilityTree: AccessibilityNode): void {
-  appContextManager.setSnapshot(extractWhatsAppConversationContext({
+function handleAppContextTree(accessibilityTree: AppContextAccessibilityTree): void {
+  appContextExtractor.ingestAccessibilityTree({
     activeApplication: typingContextBuffer.getState().activeApplication,
     accessibilityTree,
-  }));
-}
-
-function isAccessibilityNode(value: unknown): value is AccessibilityNode {
-  if (!value || typeof value !== "object") return false;
-  const node = value as Partial<AccessibilityNode>;
-  return (
-    (node.role === undefined || typeof node.role === "string") &&
-    (node.subrole === undefined || typeof node.subrole === "string") &&
-    (node.title === undefined || typeof node.title === "string") &&
-    (node.value === undefined || typeof node.value === "string") &&
-    (node.description === undefined || typeof node.description === "string") &&
-    (node.label === undefined || typeof node.label === "string") &&
-    (node.identifier === undefined || typeof node.identifier === "string") &&
-    (node.children === undefined || (Array.isArray(node.children) && node.children.every(isAccessibilityNode)))
-  );
-}
-
-function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
-  if (!value || typeof value !== "object") return false;
-  const snapshot = value as Partial<TextSessionSnapshot>;
-
-  return (
-    isActiveApplicationOrNull(snapshot.activeApplication) &&
-    isStringOrNull(snapshot.focusedElementId) &&
-    isStringOrNull(snapshot.textElementId) &&
-    isTextSessionRangeOrNull(snapshot.selectedRange) &&
-    (snapshot.selectedText === undefined || typeof snapshot.selectedText === "string") &&
-    isStringOrNull(snapshot.caretIdentity) &&
-    typeof snapshot.secureLike === "boolean" &&
-    isTextSessionReliability(snapshot.accessibilityReliability) &&
-    (snapshot.supportsSemanticInsertion === undefined || typeof snapshot.supportsSemanticInsertion === "boolean") &&
-    (snapshot.surroundingContext === undefined || isTextSessionSurroundingContext(snapshot.surroundingContext)) &&
-    (snapshot.caretBounds === undefined || isTextSessionCaretBounds(snapshot.caretBounds))
-  );
-}
-
-function isStringOrNull(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
-}
-
-function isActiveApplicationOrNull(value: unknown): value is ActiveApplication | null {
-  if (value === null) return true;
-  if (!value || typeof value !== "object") return false;
-
-  const app = value as Partial<ActiveApplication>;
-  return typeof app.bundleId === "string" && (app.windowId === undefined || typeof app.windowId === "string");
-}
-
-function isTextSessionReliability(value: unknown): value is TextSessionReliability {
-  return value === "reliable" || value === "unreliable" || value === "unavailable";
-}
-
-function isTextSessionRangeOrNull(value: unknown): value is TextSessionRange | null {
-  if (value === null) return true;
-  if (!value || typeof value !== "object") return false;
-
-  const range = value as Partial<TextSessionRange>;
-  return Number.isFinite(range.location) && Number.isFinite(range.length);
-}
-
-function isTextSessionSurroundingContext(value: unknown): value is NonNullable<TextSessionSnapshot["surroundingContext"]> {
-  if (!value || typeof value !== "object") return false;
-
-  const context = value as NonNullable<TextSessionSnapshot["surroundingContext"]>;
-  return (
-    (context.beforeCaret === undefined || typeof context.beforeCaret === "string") &&
-    (context.afterCaret === undefined || typeof context.afterCaret === "string")
-  );
-}
-
-function isTextSessionCaretBounds(value: unknown): value is TextSessionCaretBounds {
-  if (!value || typeof value !== "object") return false;
-
-  const bounds = value as Partial<TextSessionCaretBounds>;
-  return (
-    Number.isFinite(bounds.x) &&
-    Number.isFinite(bounds.y) &&
-    Number.isFinite(bounds.width) &&
-    Number.isFinite(bounds.height)
-  );
+  });
 }
 
 function startMacOSInputTap(): void {
@@ -1273,10 +1101,10 @@ export function handleSecureInputChanged(active: boolean): void {
 
 export function handleTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
   if (snapshot.accessibilityReliability === "unavailable") {
-    appContextManager.setSnapshot(extractWhatsAppConversationContext({
+    appContextExtractor.ingestAccessibilityTree({
       activeApplication: snapshot.activeApplication,
       accessibilityTree: null,
-    }));
+    });
   }
   nativeSuggestionSession.applyTextSessionSnapshot(snapshot);
 }

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 
 const nativeHelper = readFileSync(new URL("../apps/desktop/native/macos-input-tap.swift", import.meta.url), "utf8");
 const typingContext = readFileSync(new URL("../apps/desktop/src/main/typing-context.ts", import.meta.url), "utf8");
-const mainProcess = readFileSync(new URL("../apps/desktop/src/main/index.ts", import.meta.url), "utf8");
+const desktopEventIngress = readFileSync(new URL("../apps/desktop/src/main/desktop-event-ingress.ts", import.meta.url), "utf8");
 
 test("macOS helper emits Accessibility Text Session snapshots accepted by desktop", () => {
   assert.match(nativeHelper, /AXIsProcessTrusted/);
@@ -18,7 +18,7 @@ test("macOS helper emits Accessibility Text Session snapshots accepted by deskto
   assert.match(nativeHelper, /emitTextSessionSnapshotIfChanged\(\)/);
 
   assert.match(typingContext, /readonly selectedText\?: string/);
-  assert.match(mainProcess, /snapshot\.selectedText === undefined \|\| typeof snapshot\.selectedText === "string"/);
+  assert.match(desktopEventIngress, /snapshot\.selectedText === undefined \|\| typeof snapshot\.selectedText === "string"/);
 });
 
 test("macOS helper refreshes context before Option modifier shortcut events", () => {

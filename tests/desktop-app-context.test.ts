@@ -5,6 +5,7 @@ import {
   sanitizeAppContextSnapshot,
   type AccessibilityTextNode,
 } from "../apps/desktop/src/main/app-context.ts";
+import { createAppContextExtractor } from "../apps/desktop/src/main/app-context-extractor.ts";
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "../apps/desktop/src/main/typing-context.ts";
 
 function makeTextSession(overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot {
@@ -237,5 +238,74 @@ describe("desktop App Context common writing app providers", () => {
       status: "suppressed",
       suppressionReason: "low_confidence_accessibility_text",
     });
+  });
+});
+
+describe("App Context extraction module", () => {
+  it("routes managed Accessibility trees through the active app adapter registry", () => {
+    const extractor = createAppContextExtractor();
+    extractor.ingestAccessibilityTree({
+      activeApplication: { bundleId: "com.google.Chrome", windowId: "window:1" },
+      accessibilityTree: {
+        role: "AXWebArea",
+        children: [
+          {
+            role: "AXStaticText",
+            text: "Taylor: Please confirm the customer quote before sending.",
+            bounds: { x: 120, y: 420, width: 640, height: 24 },
+          },
+          {
+            id: "compose-box",
+            role: "AXTextArea",
+            value: "I can confirm this today.",
+            focused: true,
+            editable: true,
+            bounds: { x: 120, y: 520, width: 640, height: 96 },
+          },
+        ],
+      },
+    });
+
+    const snapshot = extractor.getSnapshot(makeSnapshot({ activeApplication: { bundleId: "com.google.Chrome" } }));
+
+    expect(snapshot.metadata).toMatchObject({
+      provider: "chrome-web-writing-context",
+      status: "available",
+    });
+    expect(snapshot.fragments.map((fragment) => fragment.kind)).toEqual([
+      "focused_editable",
+      "nearby_visible_text",
+    ]);
+  });
+
+  it("keeps fallback order behind the extraction interface", () => {
+    const extractor = createAppContextExtractor({
+      zedProvider: () => ({
+        fragments: [
+          {
+            id: "zed:test",
+            provider: "zed-focused-editor",
+            kind: "focused_editor",
+            text: "A prose comment visible in the focused editor.",
+            confidence: 0.82,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          },
+        ],
+        metadata: { provider: "zed-focused-editor", status: "available", confidence: 0.82 },
+      }),
+    });
+
+    const snapshot = extractor.getSnapshot(makeSnapshot({
+      activeApplication: { bundleId: "dev.zed.Zed" },
+      textSession: undefined,
+    }));
+
+    expect(snapshot.metadata).toMatchObject({
+      provider: "zed-focused-editor",
+      status: "available",
+    });
+    expect(snapshot.fragments[0]?.memoryEligible).toBe(false);
   });
 });

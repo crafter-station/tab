@@ -6,42 +6,22 @@ import {
   type PersonalMemory,
 } from "@tab/contracts";
 import { generateText, Output } from "ai";
-import { validateMemoryContent } from "@tab/memory-policy";
 import type { PersonalMemoryService } from "./personal-memory.ts";
+import {
+  PersonalMemoryPolicy,
+  hasDurableExtractionResult,
+  type ProposedMemoryOperation,
+} from "./personal-memory-policy.ts";
 import { env } from "./env.ts";
 import { z } from "zod";
 import { and, eq, gt } from "drizzle-orm";
 import type { AppDatabase } from "./db/index.ts";
 import { memoryExtractionIdempotency } from "./db/schema.ts";
 
-const MAX_MEMORIES_PER_USER = 500;
 const EXTRACTION_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type { MemoryJob };
-
-export type ProposedCreateMemory = {
-  readonly type: "create";
-  readonly content: string;
-  readonly reason?: string;
-};
-
-export type ProposedUpdateMemory = {
-  readonly type: "update";
-  readonly id: string;
-  readonly content: string;
-  readonly reason?: string;
-};
-
-export type ProposedDeleteMemory = {
-  readonly type: "delete";
-  readonly id: string;
-  readonly reason?: string;
-};
-
-export type ProposedMemoryOperation =
-  | ProposedCreateMemory
-  | ProposedUpdateMemory
-  | ProposedDeleteMemory;
+export type { ProposedMemoryOperation } from "./personal-memory-policy.ts";
 
 export const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
 
@@ -55,23 +35,6 @@ const MemoryOperationOutputSchema = z.object({
     }),
   ),
 });
-
-function isSafeMemoryText(content: string): boolean {
-  return validateMemoryContent(content).safe;
-}
-
-function emptyExtractionCounts(): MemoryExtractionCounts {
-  return { created: 0, updated: 0, deleted: 0, rejected: 0 };
-}
-
-function hasDurableExtractionResult(counts: MemoryExtractionCounts): boolean {
-  return (
-    counts.created > 0 ||
-    counts.updated > 0 ||
-    counts.deleted > 0 ||
-    counts.rejected > 0
-  );
-}
 
 function toProposedMemoryOperation(
   operation: z.infer<typeof MemoryOperationOutputSchema>["operations"][number],
@@ -231,17 +194,20 @@ export type MemoryExtractionServiceDependencies = {
   readonly personalMemoryService: PersonalMemoryService;
   readonly idempotencyStorage: MemoryExtractionIdempotencyStorage;
   readonly model?: MemoryAgentModel;
+  readonly personalMemoryPolicy?: PersonalMemoryPolicy;
 };
 
 export class MemoryExtractionService {
   private readonly personalMemoryService: PersonalMemoryService;
   private readonly idempotencyStorage: MemoryExtractionIdempotencyStorage;
   private readonly model: MemoryAgentModel;
+  private readonly personalMemoryPolicy: PersonalMemoryPolicy;
 
   constructor(deps: MemoryExtractionServiceDependencies) {
     this.personalMemoryService = deps.personalMemoryService;
     this.idempotencyStorage = deps.idempotencyStorage;
     this.model = deps.model ?? new NoOpMemoryAgentModel();
+    this.personalMemoryPolicy = deps.personalMemoryPolicy ?? new PersonalMemoryPolicy(deps.personalMemoryService);
   }
 
   async extract(
@@ -282,7 +248,7 @@ export class MemoryExtractionService {
       },
       memories,
     );
-    const counts = await this.applyOperations(userId, operations);
+    const counts = await this.personalMemoryPolicy.applyExtractionOperations(userId, operations);
 
     if (hasDurableExtractionResult(counts)) {
       await this.idempotencyStorage.saveResult({
@@ -294,103 +260,6 @@ export class MemoryExtractionService {
     }
 
     return counts;
-  }
-
-  private async applyOperations(
-    userId: string,
-    operations: readonly ProposedMemoryOperation[],
-  ): Promise<MemoryExtractionCounts> {
-    const counts = emptyExtractionCounts();
-
-    for (const operation of operations) {
-      let applied = false;
-
-      switch (operation.type) {
-        case "create": {
-          applied = await this.applyCreateOperation(userId, operation);
-          if (applied) counts.created += 1;
-          break;
-        }
-
-        case "update": {
-          applied = await this.applyUpdateOperation(userId, operation);
-          if (applied) counts.updated += 1;
-          break;
-        }
-
-        case "delete": {
-          applied = await this.applyDeleteOperation(userId, operation);
-          if (applied) counts.deleted += 1;
-          break;
-        }
-      }
-
-      if (!applied) {
-        counts.rejected += 1;
-      }
-    }
-
-    return counts;
-  }
-
-  private async applyCreateOperation(
-    userId: string,
-    operation: ProposedCreateMemory,
-  ): Promise<boolean> {
-    const currentCount = (await this.personalMemoryService.listMemories(userId))
-      .length;
-    if (
-      currentCount >= MAX_MEMORIES_PER_USER ||
-      !isSafeMemoryText(operation.content)
-    ) {
-      return false;
-    }
-
-    await this.personalMemoryService.createMemory({
-      userId,
-      content: operation.content,
-      createdBy: "system",
-    });
-    return true;
-  }
-
-  private async applyUpdateOperation(
-    userId: string,
-    operation: ProposedUpdateMemory,
-  ): Promise<boolean> {
-    const existing = await this.findMutableSystemMemory(userId, operation.id);
-    if (!existing || !isSafeMemoryText(operation.content)) {
-      return false;
-    }
-
-    await this.personalMemoryService.updateMemory(operation.id, {
-      content: operation.content,
-    });
-    return true;
-  }
-
-  private async applyDeleteOperation(
-    userId: string,
-    operation: ProposedDeleteMemory,
-  ): Promise<boolean> {
-    const existing = await this.findMutableSystemMemory(userId, operation.id);
-    if (!existing || !operation.reason?.trim()) {
-      return false;
-    }
-
-    await this.personalMemoryService.deleteMemory(userId, operation.id);
-    return true;
-  }
-
-  private async findMutableSystemMemory(
-    userId: string,
-    memoryId: string,
-  ): Promise<PersonalMemory | null> {
-    const memory = await this.personalMemoryService.findMemoryById(memoryId);
-    if (!memory || memory.userId !== userId || memory.createdBy !== "system") {
-      return null;
-    }
-    return memory;
   }
 }
 
