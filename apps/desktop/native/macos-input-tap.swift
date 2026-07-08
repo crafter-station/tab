@@ -85,6 +85,18 @@ func boundedStringAXAttribute(_ element: AXUIElement, _ attribute: String, maxLe
   return String(value.prefix(maxLength))
 }
 
+func addBoundedStringAXAttribute(
+  _ attribute: String,
+  from element: AXUIElement,
+  to payload: inout [String: Any],
+  as key: String,
+  maxLength: Int = 500
+) {
+  if let value = boundedStringAXAttribute(element, attribute, maxLength: maxLength) {
+    payload[key] = value
+  }
+}
+
 func focusedAXElement(for app: NSRunningApplication) -> AXUIElement? {
   let appElement = AXUIElementCreateApplication(app.processIdentifier)
   return axUIElement(copyAXAttribute(appElement, kAXFocusedUIElementAttribute as String))
@@ -267,23 +279,22 @@ func accessibilityNodePayload(from element: AXUIElement, depth: Int, remainingNo
   remainingNodes -= 1
 
   var payload: [String: Any] = [:]
-  if let role = boundedStringAXAttribute(element, kAXRoleAttribute as String, maxLength: 120) {
-    payload["role"] = role
-  }
-  if let subrole = boundedStringAXAttribute(element, kAXSubroleAttribute as String, maxLength: 120) {
-    payload["subrole"] = subrole
-  }
-  if let title = boundedStringAXAttribute(element, kAXTitleAttribute as String) {
-    payload["title"] = title
-  }
-  if let value = boundedStringAXAttribute(element, kAXValueAttribute as String) {
-    payload["value"] = value
-  }
-  if let description = boundedStringAXAttribute(element, kAXDescriptionAttribute as String) {
-    payload["description"] = description
-  }
-  if let identifier = boundedStringAXAttribute(element, "AXIdentifier", maxLength: 120) {
-    payload["identifier"] = identifier
+  let stringAttributes: [(attribute: String, key: String, maxLength: Int)] = [
+    (kAXRoleAttribute as String, "role", 120),
+    (kAXSubroleAttribute as String, "subrole", 120),
+    (kAXTitleAttribute as String, "title", 500),
+    (kAXValueAttribute as String, "value", 500),
+    (kAXDescriptionAttribute as String, "description", 500),
+    ("AXIdentifier", "identifier", 120),
+  ]
+  for attribute in stringAttributes {
+    addBoundedStringAXAttribute(
+      attribute.attribute,
+      from: element,
+      to: &payload,
+      as: attribute.key,
+      maxLength: attribute.maxLength
+    )
   }
 
   if depth < appContextDepthLimit,

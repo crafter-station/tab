@@ -43,6 +43,8 @@ type WhatsAppMessage = {
   readonly text: string;
 };
 
+type WhatsAppMessageMetadata = Omit<WhatsAppMessage, "text">;
+
 type ExtractWhatsAppConversationContextOptions = {
   readonly activeApplication: ActiveApplication | null;
   readonly accessibilityTree: AccessibilityNode | null | undefined;
@@ -89,10 +91,10 @@ function flattenTree(root: AccessibilityNode): AccessibilityNode[] {
   const nodes: AccessibilityNode[] = [];
   const stack: AccessibilityNode[] = [root];
   while (stack.length > 0) {
-    const node = stack.shift();
+    const node = stack.pop();
     if (!node) continue;
     nodes.push(node);
-    if (node.children) stack.unshift(...node.children);
+    if (node.children) stack.push(...node.children.slice().reverse());
   }
   return nodes;
 }
@@ -131,6 +133,10 @@ function removeTimestamp(text: string): { text: string; timestamp?: string } {
   return { text: normalizeLine(text.replace(TIMESTAMP_PATTERN, "")), timestamp };
 }
 
+function timestampFrom(text: string): string | undefined {
+  return text.match(TIMESTAMP_PATTERN)?.[0];
+}
+
 function directionFromValue(value: unknown): MessageDirection {
   if (typeof value !== "string") return "unknown";
   const normalized = value.toLowerCase();
@@ -166,12 +172,12 @@ function parseMessageNode(node: AccessibilityNode): WhatsAppMessage | null {
   let timestamp: string | undefined;
   let text = "";
 
-  if (lines.length >= 3 && TIMESTAMP_PATTERN.test(lines[1] ?? "")) {
+  if (lines.length >= 3 && timestampFrom(lines[1] ?? "")) {
     sender = lines[0];
-    timestamp = lines[1]?.match(TIMESTAMP_PATTERN)?.[0];
+    timestamp = timestampFrom(lines[1] ?? "");
     text = lines.slice(2).join(" ");
-  } else if (lines.length >= 2 && TIMESTAMP_PATTERN.test(lines[0] ?? "")) {
-    timestamp = lines[0]?.match(TIMESTAMP_PATTERN)?.[0];
+  } else if (lines.length >= 2 && timestampFrom(lines[0] ?? "")) {
+    timestamp = timestampFrom(lines[0] ?? "");
     text = lines.slice(1).join(" ");
   } else {
     const withoutTimestamp = removeTimestamp(compactText);
@@ -214,6 +220,14 @@ function formatMessage(message: WhatsAppMessage): string {
   return `[${message.direction}] ${sender}${message.text}`;
 }
 
+function messageMetadata(message: WhatsAppMessage): WhatsAppMessageMetadata {
+  return {
+    ...(message.sender ? { sender: message.sender } : {}),
+    direction: message.direction,
+    ...(message.timestamp ? { timestamp: message.timestamp } : {}),
+  };
+}
+
 function confidenceFor(chatTitle: string | undefined, messages: readonly WhatsAppMessage[]): number {
   if (messages.length >= 2 && chatTitle) return 0.9;
   if (messages.length >= 2) return 0.8;
@@ -250,11 +264,7 @@ export function extractWhatsAppConversationContext(
     metadata: {
       ...(chatTitle ? { chatTitle } : {}),
       messageCount: messages.length,
-      messages: messages.map((message) => ({
-        ...(message.sender ? { sender: message.sender } : {}),
-        direction: message.direction,
-        ...(message.timestamp ? { timestamp: message.timestamp } : {}),
-      })),
+      messages: messages.map(messageMetadata),
     },
     redaction: { applied: false, redactionCount: 0, kinds: [] },
     requestable: true,

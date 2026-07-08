@@ -237,6 +237,13 @@ type DebugApiState =
   | { status: "loading" }
   | { status: "empty" }
   | { status: "suggestion"; text: string };
+type DebugAppContextState = {
+  status: string;
+  provider: string | null;
+  confidence: number | null;
+  fragmentCount: number;
+  messageCount: number;
+};
 let debugApiState: DebugApiState = { status: "idle" };
 
 const nativeSuggestionSession = createNativeSuggestionSession({
@@ -635,10 +642,6 @@ function sendDebugContext(): void {
 
   const snapshot = nativeSuggestionSession.getCurrentSnapshot();
   const context = getLastWords(snapshot.sanitizedContext, DEBUG_TYPING_WORD_LIMIT);
-  const appContextMessageCount = snapshot.appContext?.fragments.reduce((count, fragment) => {
-    const messageCount = fragment.metadata?.messageCount;
-    return count + (typeof messageCount === "number" ? messageCount : 0);
-  }, 0);
   debugOverlayWindow.webContents.send("debug-context", {
     context,
     wordLimit: DEBUG_TYPING_WORD_LIMIT,
@@ -647,17 +650,24 @@ function sendDebugContext(): void {
     app: snapshot.activeApplication?.bundleId ?? null,
     paused: snapshot.paused,
     secureInput: snapshot.secureInput,
-    appContext: snapshot.appContext
-      ? {
-        status: snapshot.appContext.metadata.status,
-        provider: snapshot.appContext.metadata.provider ?? null,
-        confidence: snapshot.appContext.metadata.confidence ?? null,
-        fragmentCount: snapshot.appContext.fragments.length,
-        messageCount: appContextMessageCount ?? 0,
-      }
-      : undefined,
+    appContext: snapshot.appContext ? debugAppContextState(snapshot.appContext) : undefined,
     api: debugApiState,
   });
+}
+
+function debugAppContextState(appContext: ReturnType<typeof appContextManager.getSnapshot>): DebugAppContextState {
+  const messageCount = appContext.fragments.reduce((count, fragment) => {
+    const fragmentMessageCount = fragment.metadata?.messageCount;
+    return count + (typeof fragmentMessageCount === "number" ? fragmentMessageCount : 0);
+  }, 0);
+
+  return {
+    status: appContext.metadata.status,
+    provider: appContext.metadata.provider ?? null,
+    confidence: appContext.metadata.confidence ?? null,
+    fragmentCount: appContext.fragments.length,
+    messageCount,
+  };
 }
 
 function updateDebugApiState(apiState: DebugApiState): void {
@@ -769,11 +779,15 @@ function handleInputTapMessage(message: unknown): void {
     return;
   }
   if (payload.type === "app-context-tree" && isAccessibilityNode(payload.tree)) {
-    appContextManager.setSnapshot(extractWhatsAppConversationContext({
-      activeApplication: typingContextBuffer.getState().activeApplication,
-      accessibilityTree: payload.tree,
-    }));
+    handleAppContextTree(payload.tree);
   }
+}
+
+function handleAppContextTree(accessibilityTree: AccessibilityNode): void {
+  appContextManager.setSnapshot(extractWhatsAppConversationContext({
+    activeApplication: typingContextBuffer.getState().activeApplication,
+    accessibilityTree,
+  }));
 }
 
 function isAccessibilityNode(value: unknown): value is AccessibilityNode {
