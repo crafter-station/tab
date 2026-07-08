@@ -5,6 +5,8 @@ const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
 const CHROME_WEB_PROVIDER = "chrome-web-writing-context";
+const CHROME_WEB_FOCUSED_EDITABLE_FRAGMENT_ID = "chrome-web-focused-editable";
+const CHROME_WEB_NEARBY_VISIBLE_TEXT_FRAGMENT_ID = "chrome-web-nearby-visible-text";
 const CHROME_BUNDLE_IDS = new Set([
   "com.google.Chrome",
   "com.google.Chrome.beta",
@@ -13,6 +15,8 @@ const CHROME_BUNDLE_IDS = new Set([
 ]);
 const FOCUSED_EDITABLE_CONTEXT_LIMIT = 1_000;
 const NEARBY_VISIBLE_CONTEXT_LIMIT = 1_500;
+const FOCUSED_EDITABLE_CONFIDENCE = 0.92;
+const NEARBY_VISIBLE_TEXT_CONFIDENCE = 0.82;
 const MAX_NEARBY_TEXT_NODES = 12;
 const MAX_NEARBY_VERTICAL_DISTANCE = 1_200;
 const URL_LIKE_PATTERN = /\b(?:https?:\/\/|www\.|[a-z0-9-]+\.[a-z]{2,}(?:\/|$))/i;
@@ -129,10 +133,14 @@ function nodeRole(node: ChromeWebAccessibilityNode): string {
 }
 
 function nodeText(node: ChromeWebAccessibilityNode): string {
-  return [node.value, node.text, node.title, node.description]
-    .filter((value): value is string => typeof value === "string")
-    .map((value) => value.replace(/\s+/g, " ").trim())
-    .find((value) => value.length > 0) ?? "";
+  for (const value of [node.value, node.text, node.title, node.description]) {
+    if (typeof value !== "string") continue;
+
+    const normalized = value.replace(/\s+/g, " ").trim();
+    if (normalized.length > 0) return normalized;
+  }
+
+  return "";
 }
 
 function isVisibleNode(node: ChromeWebAccessibilityNode): boolean {
@@ -185,6 +193,17 @@ function isNearbyNode(node: ChromeWebAccessibilityNode, focused: ChromeWebAccess
   return verticalDistance(node.bounds, focused.bounds) <= MAX_NEARBY_VERTICAL_DISTANCE;
 }
 
+function nearbyNodeText(node: ChromeWebAccessibilityNode, focused: ChromeWebAccessibilityNode): string {
+  const role = nodeRole(node);
+  const hasChildren = (node.children?.length ?? 0) > 0;
+  if (hasChildren && AGGREGATE_TEXT_CONTAINER_ROLES.has(role)) return "";
+
+  const text = nodeText(node);
+  if (!text || !SEMANTIC_TEXT_ROLES.has(role) || !isNearbyNode(node, focused) || URL_LIKE_PATTERN.test(text)) return "";
+
+  return text;
+}
+
 function collectNearbyVisibleText(
   node: ChromeWebAccessibilityNode,
   focused: ChromeWebAccessibilityNode,
@@ -193,17 +212,8 @@ function collectNearbyVisibleText(
   if (collected.length >= MAX_NEARBY_TEXT_NODES || !isVisibleNode(node) || isExcludedWebNode(node)) return;
   if (node === focused) return;
 
-  const role = nodeRole(node);
-  const text = nodeText(node);
-  const hasChildren = (node.children?.length ?? 0) > 0;
-  const canUseOwnText = !hasChildren || !AGGREGATE_TEXT_CONTAINER_ROLES.has(role);
-  if (
-    canUseOwnText &&
-    text &&
-    SEMANTIC_TEXT_ROLES.has(role) &&
-    isNearbyNode(node, focused) &&
-    !URL_LIKE_PATTERN.test(text)
-  ) {
+  const text = nearbyNodeText(node, focused);
+  if (text) {
     collected.push(text);
     if (collected.length >= MAX_NEARBY_TEXT_NODES) return;
   }
@@ -260,17 +270,22 @@ export function createChromeWebWritingContextSnapshot(input: {
   const fragments: AppContextFragment[] = [];
   const focusedText = boundedText(nodeText(focused), FOCUSED_EDITABLE_CONTEXT_LIMIT);
   if (focusedText && containsSensitiveText(focusedText)) return suppressedChromeWebSnapshot();
-  const focusedFragment = createChromeWebFragment("chrome-web-focused-editable", "focused_editable", focusedText, 0.92);
+  const focusedFragment = createChromeWebFragment(
+    CHROME_WEB_FOCUSED_EDITABLE_FRAGMENT_ID,
+    "focused_editable",
+    focusedText,
+    FOCUSED_EDITABLE_CONFIDENCE,
+  );
   if (focusedFragment) fragments.push(focusedFragment);
 
   const nearbyText: string[] = [];
   collectNearbyVisibleText(input.accessibilityTree, focused, nearbyText);
   if (nearbyText.some(containsSensitiveText)) return suppressedChromeWebSnapshot();
   const nearbyFragment = createChromeWebFragment(
-    "chrome-web-nearby-visible-text",
+    CHROME_WEB_NEARBY_VISIBLE_TEXT_FRAGMENT_ID,
     "nearby_visible_text",
     boundedText(nearbyText.join("\n"), NEARBY_VISIBLE_CONTEXT_LIMIT),
-    nearbyText.length > 0 ? 0.82 : 0,
+    nearbyText.length > 0 ? NEARBY_VISIBLE_TEXT_CONFIDENCE : 0,
   );
   if (nearbyFragment) fragments.push(nearbyFragment);
 
