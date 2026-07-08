@@ -81,6 +81,10 @@ function rowToTelemetryEvent(
     redactionCount: optionalNumber(row.redactionCount),
     clientAppVersion: row.clientAppVersion ?? undefined,
     clientPlatform: row.clientPlatform ?? undefined,
+    memoryCreatedCount: optionalNumber(row.memoryCreatedCount),
+    memoryUpdatedCount: optionalNumber(row.memoryUpdatedCount),
+    memoryDeletedCount: optionalNumber(row.memoryDeletedCount),
+    memoryRejectedCount: optionalNumber(row.memoryRejectedCount),
   });
 }
 
@@ -111,6 +115,10 @@ export class D1TelemetryStorage implements TelemetryStorage {
       redactionCount: event.redactionCount ?? null,
       clientAppVersion: event.clientAppVersion ?? null,
       clientPlatform: event.clientPlatform ?? null,
+      memoryCreatedCount: event.memoryCreatedCount ?? null,
+      memoryUpdatedCount: event.memoryUpdatedCount ?? null,
+      memoryDeletedCount: event.memoryDeletedCount ?? null,
+      memoryRejectedCount: event.memoryRejectedCount ?? null,
     });
   }
 

@@ -29,6 +29,13 @@
       "when": 1783495508349,
       "tag": "0003_third_gladiator",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1783538001318,
+      "tag": "0004_cheerful_giant_man",
+      "breakpoints": true
     }
   ]
 }

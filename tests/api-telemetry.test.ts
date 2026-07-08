@@ -10,8 +10,12 @@ import {
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import type { SuggestionGenerator } from "../apps/api/src/index.ts";
+import type { MemoryAgentModel } from "../apps/api/src/memory-agent.ts";
 
-async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerator) {
+async function createAuthenticatedTestApp(
+  generateSuggestion: SuggestionGenerator,
+  memoryExtractionModel?: MemoryAgentModel,
+) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
   await migrateAuth(auth);
@@ -29,6 +33,7 @@ async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerato
     deviceTokenService,
     telemetryService,
     personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
+    memoryExtractionModel,
   });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
     deviceId: "device-1",
@@ -67,6 +72,23 @@ function buildRequest(typingContext: string) {
   };
 }
 
+function buildExtractionRequest(batchId: string, rawText: string) {
+  return {
+    batchId,
+    entries: [
+      {
+        id: `${batchId}-entry-1`,
+        text: rawText,
+        timestamp: new Date().toISOString(),
+        activeApplication: { bundleId: "com.apple.TextEdit" },
+        contextSource: "typed_text" as const,
+        redaction: { applied: false, redactionCount: 0, kinds: [] as string[] },
+      },
+    ],
+    clientMetadata: { appVersion: "0.0.1", platform: "darwin" },
+  };
+}
+
 function assertNoRawText(events: readonly Record<string, unknown>[], rawContext: string) {
   const json = JSON.stringify(events);
   expect(json).not.toContain(rawContext);
@@ -95,6 +117,10 @@ function assertNoRawText(events: readonly Record<string, unknown>[], rawContext:
     "redactionCount",
     "clientAppVersion",
     "clientPlatform",
+    "memoryCreatedCount",
+    "memoryUpdatedCount",
+    "memoryDeletedCount",
+    "memoryRejectedCount",
   ]);
 
   for (const event of events) {
@@ -255,5 +281,85 @@ describe("Metadata-only suggestion telemetry", () => {
     const body = (await response.json()) as { status: string; error: { code: string } };
     expect(body.status).toBe("error");
     expect(body.error.code).toBe("invalid_request");
+  });
+});
+
+describe("Metadata-only memory extraction telemetry", () => {
+  it("records attempts and successful operation counts without memory or window content", async () => {
+    const rawWindowText = "My memory extraction raw window text is private";
+    const createdMemoryContent = "Prefers concise launch updates";
+    const { app, token, telemetryService } = await createAuthenticatedTestApp(
+      async () => ({ text: " world" }),
+      {
+        async proposeOperations() {
+          return [{ type: "create", content: createdMemoryContent }];
+        },
+      },
+    );
+
+    const response = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(buildExtractionRequest("batch-telemetry", rawWindowText)),
+    });
+
+    expect(response.status).toBe(200);
+    const events = await telemetryService.listEvents();
+    expect(events.map((event) => event.eventType)).toEqual([
+      "memory_extraction_attempted",
+      "memory_extraction_succeeded",
+    ]);
+    expect(events[0]).toMatchObject({
+      requestId: "batch-telemetry",
+      activeApplicationBundleId: "com.apple.TextEdit",
+      contextSource: "typed_text",
+      modelId: "openai/gpt-5.5",
+      clientAppVersion: "0.0.1",
+      clientPlatform: "darwin",
+    });
+    expect(events[1]).toMatchObject({
+      requestId: "batch-telemetry",
+      eventType: "memory_extraction_succeeded",
+      memoryCreatedCount: 1,
+      memoryUpdatedCount: 0,
+      memoryDeletedCount: 0,
+      memoryRejectedCount: 0,
+    });
+    expect(typeof events[1].latencyMs).toBe("number");
+    assertNoRawText(events, rawWindowText);
+    assertNoRawText(events, createdMemoryContent);
+  });
+
+  it("records failed extraction metadata without raw window content", async () => {
+    const rawWindowText = "My failed extraction raw window text is private";
+    const { app, token, telemetryService } = await createAuthenticatedTestApp(
+      async () => ({ text: " world" }),
+      {
+        async proposeOperations() {
+          throw new Error("model unavailable");
+        },
+      },
+    );
+
+    const response = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(buildExtractionRequest("batch-telemetry-fail", rawWindowText)),
+    });
+
+    expect(response.status).toBe(500);
+    const events = await telemetryService.listEvents();
+    expect(events.map((event) => event.eventType)).toEqual([
+      "memory_extraction_attempted",
+      "memory_extraction_failed",
+    ]);
+    expect(events[1]).toMatchObject({
+      requestId: "batch-telemetry-fail",
+      eventType: "memory_extraction_failed",
+      modelId: "openai/gpt-5.5",
+      errorCode: "provider_failure",
+    });
+    expect(typeof events[1].latencyMs).toBe("number");
+    assertNoRawText(events, rawWindowText);
   });
 });

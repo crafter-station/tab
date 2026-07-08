@@ -5,14 +5,20 @@ import {
   MemoryListResponseSchema,
   MemoryWriteRequestSchema,
   MemoryWriteResponseSchema,
+  type MemoryExtractionCounts,
+  type TelemetryEvent,
 } from "@tab/contracts";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
 import type { PersonalMemoryService } from "../personal-memory.ts";
-import type { MemoryExtractionService } from "../memory-agent.ts";
+import {
+  MEMORY_EXTRACTION_MODEL_ID,
+  type MemoryExtractionService,
+} from "../memory-agent.ts";
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
+import type { TelemetryService } from "../telemetry.ts";
 
 export function registerMemoryRoutes(
   app: ApiApp,
@@ -20,6 +26,7 @@ export function registerMemoryRoutes(
     auth: AuthInstance;
     personalMemoryService: PersonalMemoryService;
     memoryExtractionService: MemoryExtractionService;
+    telemetryService: TelemetryService;
   },
 ) {
   type MemoryContext = Context<{ Bindings: ApiBindings; Variables: ApiVariables }>;
@@ -138,7 +145,70 @@ export function registerMemoryRoutes(
       );
     }
 
-    const counts = await deps.memoryExtractionService.extract(userId, body);
+    const firstEntry = body.entries[0];
+    if (!firstEntry) {
+      return c.json(
+        createErrorResponse("invalid_request", "Extraction batch is invalid."),
+        400,
+      );
+    }
+    const device = c.get("device");
+    const startedAt = performance.now();
+    const extractionTelemetry = {
+      activeApplicationBundleId: firstEntry.activeApplication.bundleId,
+      contextSource: firstEntry.contextSource,
+      modelId: MEMORY_EXTRACTION_MODEL_ID,
+      redactionApplied: firstEntry.redaction.applied,
+      redactionCount: firstEntry.redaction.redactionCount,
+      clientAppVersion: body.clientMetadata?.appVersion,
+      clientPlatform: body.clientMetadata?.platform,
+    };
+    const recordExtractionEvent = async (
+      event: Omit<TelemetryEvent, "id" | "requestId" | "userId" | "deviceId">,
+    ): Promise<void> => {
+      try {
+        await deps.telemetryService.record({
+          ...event,
+          requestId: body.batchId,
+          userId,
+          deviceId: device.deviceId,
+        });
+      } catch {
+        // Extraction telemetry is best-effort and must not affect processing.
+      }
+    };
+
+    await recordExtractionEvent({
+      ...extractionTelemetry,
+      eventType: "memory_extraction_attempted",
+      timestamp: new Date().toISOString(),
+    });
+
+    let counts: MemoryExtractionCounts;
+    try {
+      counts = await deps.memoryExtractionService.extract(userId, body);
+    } catch (error) {
+      await recordExtractionEvent({
+        ...extractionTelemetry,
+        eventType: "memory_extraction_failed",
+        timestamp: new Date().toISOString(),
+        latencyMs: Math.round(performance.now() - startedAt),
+        errorCode: "provider_failure",
+      });
+      throw error;
+    }
+
+    await recordExtractionEvent({
+      ...extractionTelemetry,
+      eventType: "memory_extraction_succeeded",
+      timestamp: new Date().toISOString(),
+      latencyMs: Math.round(performance.now() - startedAt),
+      memoryCreatedCount: counts.created,
+      memoryUpdatedCount: counts.updated,
+      memoryDeletedCount: counts.deleted,
+      memoryRejectedCount: counts.rejected,
+    });
+
     return c.json(
       MemoryExtractionResponseSchema.parse({ status: "ok", data: { counts } }),
       200,

@@ -164,6 +164,7 @@ export function createApp(deps: ApiDependencies = {}) {
     auth,
     personalMemoryService,
     memoryExtractionService,
+    telemetryService,
   });
   registerBillingRoutes(app, { auth, billingService, billingCheckoutClient });
   registerSuggestionRoutes(app, { suggestionUseCase });

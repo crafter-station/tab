@@ -43,7 +43,7 @@ export type ProposedMemoryOperation =
   | ProposedUpdateMemory
   | ProposedDeleteMemory;
 
-const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
+export const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
 
 const MemoryOperationOutputSchema = z.object({
   operations: z.array(

@@ -174,6 +174,10 @@ export const telemetryEvents = sqliteTable(
     redactionCount: integer("redaction_count"),
     clientAppVersion: text("client_app_version"),
     clientPlatform: text("client_platform"),
+    memoryCreatedCount: integer("memory_created_count"),
+    memoryUpdatedCount: integer("memory_updated_count"),
+    memoryDeletedCount: integer("memory_deleted_count"),
+    memoryRejectedCount: integer("memory_rejected_count"),
   },
   (table) => [
     index("idx_telemetry_events_user").on(table.userId),

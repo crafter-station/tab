@@ -250,6 +250,9 @@ export const TelemetryEventTypeSchema = z.enum([
   "suggestion_stale",
   "suggestion_error",
   "memory_job_enqueued",
+  "memory_extraction_attempted",
+  "memory_extraction_succeeded",
+  "memory_extraction_failed",
 ]);
 
 export const TelemetryEventSchema = z.object({
@@ -271,6 +274,10 @@ export const TelemetryEventSchema = z.object({
   redactionCount: z.number().int().nonnegative().optional(),
   clientAppVersion: z.string().min(1).optional(),
   clientPlatform: z.string().min(1).optional(),
+  memoryCreatedCount: z.number().int().nonnegative().optional(),
+  memoryUpdatedCount: z.number().int().nonnegative().optional(),
+  memoryDeletedCount: z.number().int().nonnegative().optional(),
+  memoryRejectedCount: z.number().int().nonnegative().optional(),
 });
 
 export const RecordTelemetryEventRequestSchema = z
