@@ -1,6 +1,9 @@
 import { Polar } from "@polar-sh/sdk";
 import { validateEvent } from "@polar-sh/sdk/webhooks";
+import { and, eq, sql } from "drizzle-orm";
 import { planQuotas, type PlanId } from "@tabb/billing";
+import type { AppDatabase } from "./db/index.ts";
+import { usageRecords, userEntitlements } from "./db/schema.ts";
 import { env } from "./env.ts";
 
 type PolarServer = "production" | "sandbox";
@@ -505,100 +508,96 @@ export class InMemoryBillingStorage implements BillingStorage {
   }
 }
 
-type D1Statement = {
-  bind(...values: unknown[]): {
-    first<T = unknown>(): Promise<T | null>;
-    run(): Promise<{ success: boolean; error?: string }>;
-    all<T = unknown>(): Promise<{ results: T[] }>;
-  };
-};
-
-type D1DatabaseLike = {
-  prepare(sql: string): D1Statement;
-};
-
-function entitlementRowToEntitlement(row: Record<string, unknown>): UserEntitlement {
+function entitlementRowToEntitlement(
+  row: typeof userEntitlements.$inferSelect,
+): UserEntitlement {
   return {
-    userId: String(row.user_id),
-    planId: String(row.plan_id) as PlanId,
-    polarCustomerId: row.polar_customer_id ? String(row.polar_customer_id) : undefined,
-    polarSubscriptionId: row.polar_subscription_id
-      ? String(row.polar_subscription_id)
+    userId: row.userId,
+    planId: row.planId as PlanId,
+    polarCustomerId: row.polarCustomerId ?? undefined,
+    polarSubscriptionId: row.polarSubscriptionId ?? undefined,
+    status: row.status as UserEntitlement["status"],
+    currentPeriodEnd: row.currentPeriodEnd
+      ? new Date(row.currentPeriodEnd)
       : undefined,
-    status: String(row.status) as UserEntitlement["status"],
-    currentPeriodEnd: row.current_period_end
-      ? new Date(String(row.current_period_end))
-      : undefined,
-    cachedAt: new Date(String(row.cached_at)),
+    cachedAt: new Date(row.cachedAt),
   };
 }
 
 export class D1BillingStorage implements BillingStorage {
-  private readonly db: D1DatabaseLike;
+  private readonly db: AppDatabase;
 
-  constructor(db: unknown) {
-    this.db = db as D1DatabaseLike;
+  constructor(db: AppDatabase) {
+    this.db = db;
   }
 
   async getEntitlement(userId: string): Promise<UserEntitlement | null> {
-    const row = (await this.db
-      .prepare("SELECT * FROM user_entitlements WHERE user_id = ?")
-      .bind(userId)
-      .first()) as Record<string, unknown> | null;
+    const row = await this.db.query.userEntitlements.findFirst({
+      where: eq(userEntitlements.userId, userId),
+    });
     return row ? entitlementRowToEntitlement(row) : null;
   }
 
   async setEntitlement(entitlement: UserEntitlement): Promise<void> {
     await this.db
-      .prepare(
-        `INSERT INTO user_entitlements (user_id, plan_id, polar_customer_id, polar_subscription_id, status, current_period_end, cached_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)
-         ON CONFLICT(user_id) DO UPDATE SET
-           plan_id = excluded.plan_id,
-           polar_customer_id = excluded.polar_customer_id,
-           polar_subscription_id = excluded.polar_subscription_id,
-           status = excluded.status,
-           current_period_end = excluded.current_period_end,
-           cached_at = excluded.cached_at`,
-      )
-      .bind(
-        entitlement.userId,
-        entitlement.planId,
-        entitlement.polarCustomerId ?? null,
-        entitlement.polarSubscriptionId ?? null,
-        entitlement.status,
-        entitlement.currentPeriodEnd?.toISOString() ?? null,
-        entitlement.cachedAt.toISOString(),
-      )
-      .run();
+      .insert(userEntitlements)
+      .values({
+        userId: entitlement.userId,
+        planId: entitlement.planId,
+        polarCustomerId: entitlement.polarCustomerId ?? null,
+        polarSubscriptionId: entitlement.polarSubscriptionId ?? null,
+        status: entitlement.status,
+        currentPeriodEnd: entitlement.currentPeriodEnd?.toISOString() ?? null,
+        cachedAt: entitlement.cachedAt.toISOString(),
+      })
+      .onConflictDoUpdate({
+        target: userEntitlements.userId,
+        set: {
+          planId: entitlement.planId,
+          polarCustomerId: entitlement.polarCustomerId ?? null,
+          polarSubscriptionId: entitlement.polarSubscriptionId ?? null,
+          status: entitlement.status,
+          currentPeriodEnd: entitlement.currentPeriodEnd?.toISOString() ?? null,
+          cachedAt: entitlement.cachedAt.toISOString(),
+        },
+      });
   }
 
   async getUsage(userId: string, month: string): Promise<number> {
-    const row = (await this.db
-      .prepare("SELECT count FROM usage_records WHERE user_id = ? AND month = ?")
-      .bind(userId, month)
-      .first()) as { count: number } | null;
-    return row ? Number(row.count) : 0;
+    const row = await this.db.query.usageRecords.findFirst({
+      where: and(
+        eq(usageRecords.userId, userId),
+        eq(usageRecords.month, month),
+      ),
+    });
+    return row?.count ?? 0;
   }
 
   async incrementUsage(userId: string, month: string): Promise<number> {
     const now = new Date().toISOString();
     await this.db
-      .prepare(
-        `INSERT INTO usage_records (user_id, month, count, updated_at)
-         VALUES (?, ?, 1, ?)
-         ON CONFLICT(user_id, month) DO UPDATE SET
-           count = count + 1,
-           updated_at = excluded.updated_at`,
-      )
-      .bind(userId, month, now)
-      .run();
+      .insert(usageRecords)
+      .values({
+        userId,
+        month,
+        count: 1,
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [usageRecords.userId, usageRecords.month],
+        set: {
+          count: sql`${usageRecords.count} + 1`,
+          updatedAt: now,
+        },
+      });
 
-    const row = (await this.db
-      .prepare("SELECT count FROM usage_records WHERE user_id = ? AND month = ?")
-      .bind(userId, month)
-      .first()) as { count: number } | null;
-    return row ? Number(row.count) : 1;
+    const row = await this.db.query.usageRecords.findFirst({
+      where: and(
+        eq(usageRecords.userId, userId),
+        eq(usageRecords.month, month),
+      ),
+    });
+    return row?.count ?? 1;
   }
 }
 

@@ -172,10 +172,10 @@ function createD1Dependencies(db: D1Database): Required<
   >
 > {
   const database = createDatabase(db);
-  const deviceTokenStorage = new D1DeviceTokenStorage(db);
-  const billingStorage = new D1BillingStorage(db);
-  const personalMemoryStorage = new D1PersonalMemoryStorage(db);
-  const telemetryStorage = new D1TelemetryStorage(db);
+  const deviceTokenStorage = new D1DeviceTokenStorage(database);
+  const billingStorage = new D1BillingStorage(database);
+  const personalMemoryStorage = new D1PersonalMemoryStorage(database);
+  const telemetryStorage = new D1TelemetryStorage(database);
 
   return {
     auth: createAuthInstance({

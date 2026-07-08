@@ -5,8 +5,10 @@ import {
   type PersonalMemorySensitivity,
   type PersonalMemorySource,
 } from "@tabb/contracts";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
-import type { D1DatabaseLike } from "./device-tokens.ts";
+import type { AppDatabase } from "./db/index.ts";
+import { personalMemories } from "./db/schema.ts";
 
 export type CreatePersonalMemoryInput = {
   readonly userId: string;
@@ -101,17 +103,17 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   }
 }
 
-function rowToMemory(row: Record<string, unknown>): PersonalMemory {
+function rowToMemory(row: typeof personalMemories.$inferSelect): PersonalMemory {
   return PersonalMemorySchema.parse({
-    id: String(row.id),
-    userId: String(row.user_id),
-    content: String(row.content),
-    category: String(row.category),
-    source: String(row.source),
-    sensitivity: String(row.sensitivity),
-    active: row.active === true || row.active === 1 || row.active === "1",
-    createdAt: String(row.created_at),
-    updatedAt: String(row.updated_at),
+    id: row.id,
+    userId: row.userId,
+    content: row.content,
+    category: row.category,
+    source: row.source,
+    sensitivity: row.sensitivity,
+    active: row.active,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
   });
 }
 
@@ -121,49 +123,42 @@ function rowToMemory(row: Record<string, unknown>): PersonalMemory {
  * sensitivity, active state, and timestamps.
  */
 export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
-  private db: D1DatabaseLike;
+  private db: AppDatabase;
 
-  constructor(db: unknown) {
-    this.db = db as D1DatabaseLike;
+  constructor(db: AppDatabase) {
+    this.db = db;
   }
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
     const memory = createMemoryRecord(input);
 
-    await this.db
-      .prepare(
-        `INSERT INTO personal_memories (id, user_id, content, category, source, sensitivity, active, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        memory.id,
-        memory.userId,
-        memory.content,
-        memory.category,
-        memory.source,
-        memory.sensitivity,
-        memory.active ? 1 : 0,
-        memory.createdAt,
-        memory.updatedAt,
-      )
-      .run();
+    await this.db.insert(personalMemories).values({
+      id: memory.id,
+      userId: memory.userId,
+      content: memory.content,
+      category: memory.category,
+      source: memory.source,
+      sensitivity: memory.sensitivity,
+      active: memory.active,
+      createdAt: memory.createdAt,
+      updatedAt: memory.updatedAt,
+    });
 
     return memory;
   }
 
   async listMemoriesByUser(userId: string): Promise<PersonalMemory[]> {
-    const result = (await this.db
-      .prepare("SELECT * FROM personal_memories WHERE user_id = ?")
-      .bind(userId)
-      .all()) as { results: Record<string, unknown>[] };
-    return result.results.map(rowToMemory);
+    const rows = await this.db
+      .select()
+      .from(personalMemories)
+      .where(eq(personalMemories.userId, userId));
+    return rows.map(rowToMemory);
   }
 
   async findMemoryById(id: string): Promise<PersonalMemory | null> {
-    const row = (await this.db
-      .prepare("SELECT * FROM personal_memories WHERE id = ?")
-      .bind(id)
-      .first()) as Record<string, unknown> | null;
+    const row = await this.db.query.personalMemories.findFirst({
+      where: eq(personalMemories.id, id),
+    });
     return row ? rowToMemory(row) : null;
   }
 
@@ -182,21 +177,16 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     const updatedAt = toISOTimestamp(new Date());
 
     await this.db
-      .prepare(
-        `UPDATE personal_memories
-         SET content = ?, category = ?, source = ?, sensitivity = ?, active = ?, updated_at = ?
-         WHERE id = ?`,
-      )
-      .bind(
+      .update(personalMemories)
+      .set({
         content,
         category,
         source,
         sensitivity,
-        active ? 1 : 0,
+        active,
         updatedAt,
-        id,
-      )
-      .run();
+      })
+      .where(eq(personalMemories.id, id));
 
     return {
       ...existing,
@@ -211,10 +201,10 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
 
   async deleteMemory(id: string): Promise<boolean> {
     const result = await this.db
-      .prepare("DELETE FROM personal_memories WHERE id = ?")
-      .bind(id)
-      .run();
-    return result.success;
+      .delete(personalMemories)
+      .where(eq(personalMemories.id, id))
+      .returning();
+    return result.length > 0;
   }
 }
 

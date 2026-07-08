@@ -16,6 +16,7 @@ import {
 } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
+import { createTestDatabase } from "./test-db.ts";
 import type { SuggestionGenerator } from "../apps/api/src/index.ts";
 
 const validRequest = {
@@ -359,8 +360,8 @@ describe("Billing and quota enforcement", () => {
 
   it("stores entitlements and usage in D1-compatible storage", async () => {
     const db = new Database(":memory:");
-    const storage = new D1BillingStorage(createD1LikeDatabase(db));
     bootstrapBillingTestSchema(db);
+    const storage = new D1BillingStorage(createTestDatabase(db));
 
     await storage.setEntitlement({
       userId: "user-d1",
@@ -424,33 +425,6 @@ describe("PolarUsageMeterClient", () => {
     expect(event.timestamp).toEqual(new Date("2026-07-07T00:00:00.000Z"));
   });
 });
-
-function createD1LikeDatabase(db: Database) {
-  return {
-    prepare(sql: string) {
-      const statement = db.prepare(sql);
-      return {
-        bind(...values: unknown[]) {
-          return {
-            first<T = unknown>(): Promise<T | null> {
-              return Promise.resolve(statement.get(...values) as T | null);
-            },
-            run(): Promise<{ success: boolean; error?: string }> {
-              statement.run(...values);
-              return Promise.resolve({ success: true });
-            },
-            all<T = unknown>(): Promise<{ results: T[] }> {
-              return Promise.resolve({ results: statement.all(...values) as T[] });
-            },
-          };
-        },
-      };
-    },
-    async exec(sql: string): Promise<void> {
-      db.exec(sql);
-    },
-  };
-}
 
 function bootstrapBillingTestSchema(db: Database): void {
   db.exec(`

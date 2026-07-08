@@ -2,7 +2,10 @@ import {
   DeviceTokenExchangeRequestSchema,
   type DeviceMetadata,
 } from "@tabb/contracts";
+import { eq } from "drizzle-orm";
 import { z } from "zod";
+import type { AppDatabase } from "./db/index.ts";
+import { deviceExchangeCodes, deviceTokens } from "./db/schema.ts";
 
 export type Device = {
   readonly id: string;
@@ -110,38 +113,17 @@ export class InMemoryDeviceTokenStorage implements DeviceTokenStorage {
   }
 }
 
-export type DeviceTokenServiceDependencies = {
-  storage?: DeviceTokenStorage;
-  exchangeCodeTtlMs?: number;
-};
-
-export type D1Statement = {
-  bind(...values: unknown[]): {
-    first<T = unknown>(): Promise<T | null>;
-    run(): Promise<{ success: boolean; error?: string }>;
-    all<T = unknown>(): Promise<{ results: T[] }>;
-  };
-};
-
-export type D1DatabaseLike = {
-  prepare(sql: string): D1Statement;
-};
-
-function asD1Database(db: unknown): D1DatabaseLike {
-  return db as D1DatabaseLike;
-}
-
-function rowToDevice(row: Record<string, unknown>): Device {
+function deviceRowToDevice(row: typeof deviceTokens.$inferSelect): Device {
   return {
-    id: String(row.id),
-    userId: String(row.user_id),
-    deviceId: String(row.device_id),
-    tokenHash: String(row.token_hash),
-    platform: String(row.platform),
-    appVersion: String(row.app_version),
-    createdAt: new Date(String(row.created_at)),
-    lastSeenAt: new Date(String(row.last_seen_at)),
-    revoked: row.revoked === true || row.revoked === 1 || row.revoked === "1",
+    id: row.id,
+    userId: row.userId,
+    deviceId: row.deviceId,
+    tokenHash: row.tokenHash,
+    platform: row.platform,
+    appVersion: row.appVersion,
+    createdAt: new Date(row.createdAt),
+    lastSeenAt: new Date(row.lastSeenAt),
+    revoked: row.revoked,
   };
 }
 
@@ -151,99 +133,93 @@ function rowToDevice(row: Record<string, unknown>): Device {
  * keeps them in D1 for environments without KV wiring.
  */
 export class D1DeviceTokenStorage implements DeviceTokenStorage {
-  private db: D1DatabaseLike;
+  private db: AppDatabase;
 
-  constructor(db: unknown) {
-    this.db = asD1Database(db);
+  constructor(db: AppDatabase) {
+    this.db = db;
   }
 
   async createDevice(record: Omit<Device, "id">): Promise<Device> {
     const id = crypto.randomUUID();
-    await this.db
-      .prepare(
-        `INSERT INTO device_tokens (id, user_id, device_id, token_hash, platform, app_version, created_at, last_seen_at, revoked)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        id,
-        record.userId,
-        record.deviceId,
-        record.tokenHash,
-        record.platform,
-        record.appVersion,
-        record.createdAt.toISOString(),
-        record.lastSeenAt.toISOString(),
-        record.revoked ? 1 : 0,
-      )
-      .run();
-    return { ...record, id };
+    const device: Device = { ...record, id };
+    await this.db.insert(deviceTokens).values({
+      id,
+      userId: record.userId,
+      deviceId: record.deviceId,
+      tokenHash: record.tokenHash,
+      platform: record.platform,
+      appVersion: record.appVersion,
+      createdAt: record.createdAt.toISOString(),
+      lastSeenAt: record.lastSeenAt.toISOString(),
+      revoked: record.revoked,
+    });
+    return device;
   }
 
   async findDeviceByTokenHash(tokenHash: string): Promise<Device | null> {
-    const row = (await this.db
-      .prepare("SELECT * FROM device_tokens WHERE token_hash = ?")
-      .bind(tokenHash)
-      .first()) as Record<string, unknown> | null;
-    return row ? rowToDevice(row) : null;
+    const row = await this.db.query.deviceTokens.findFirst({
+      where: eq(deviceTokens.tokenHash, tokenHash),
+    });
+    return row ? deviceRowToDevice(row) : null;
   }
 
   async findDeviceByDeviceId(deviceId: string): Promise<Device | null> {
-    const row = (await this.db
-      .prepare("SELECT * FROM device_tokens WHERE device_id = ?")
-      .bind(deviceId)
-      .first()) as Record<string, unknown> | null;
-    return row ? rowToDevice(row) : null;
+    const row = await this.db.query.deviceTokens.findFirst({
+      where: eq(deviceTokens.deviceId, deviceId),
+    });
+    return row ? deviceRowToDevice(row) : null;
   }
 
   async updateDevice(device: Device): Promise<Device> {
     await this.db
-      .prepare(
-        `UPDATE device_tokens
-         SET last_seen_at = ?, revoked = ?
-         WHERE id = ?`,
-      )
-      .bind(device.lastSeenAt.toISOString(), device.revoked ? 1 : 0, device.id)
-      .run();
+      .update(deviceTokens)
+      .set({
+        lastSeenAt: device.lastSeenAt.toISOString(),
+        revoked: device.revoked,
+      })
+      .where(eq(deviceTokens.id, device.id));
     return device;
   }
 
   async listDevicesByUser(userId: string): Promise<Device[]> {
-    const result = (await this.db
-      .prepare("SELECT * FROM device_tokens WHERE user_id = ?")
-      .bind(userId)
-      .all()) as { results: Record<string, unknown>[] };
-    return result.results.map(rowToDevice);
+    const rows = await this.db
+      .select()
+      .from(deviceTokens)
+      .where(eq(deviceTokens.userId, userId));
+    return rows.map(deviceRowToDevice);
   }
 
   async createExchangeCode(
     code: string,
     payload: { userId: string; expiresAt: Date },
   ): Promise<void> {
-    await this.db
-      .prepare(
-        "INSERT INTO device_exchange_codes (code, user_id, expires_at) VALUES (?, ?, ?)",
-      )
-      .bind(code, payload.userId, payload.expiresAt.toISOString())
-      .run();
+    await this.db.insert(deviceExchangeCodes).values({
+      code,
+      userId: payload.userId,
+      expiresAt: payload.expiresAt.toISOString(),
+    });
   }
 
   async consumeExchangeCode(code: string): Promise<{ userId: string } | null> {
-    const row = (await this.db
-      .prepare("SELECT * FROM device_exchange_codes WHERE code = ?")
-      .bind(code)
-      .first()) as Record<string, unknown> | null;
+    const row = await this.db.query.deviceExchangeCodes.findFirst({
+      where: eq(deviceExchangeCodes.code, code),
+    });
     if (!row) return null;
 
     await this.db
-      .prepare("DELETE FROM device_exchange_codes WHERE code = ?")
-      .bind(code)
-      .run();
+      .delete(deviceExchangeCodes)
+      .where(eq(deviceExchangeCodes.code, code));
 
-    const expiresAt = new Date(String(row.expires_at));
+    const expiresAt = new Date(row.expiresAt);
     if (expiresAt < new Date()) return null;
-    return { userId: String(row.user_id) };
+    return { userId: row.userId };
   }
 }
+
+export type DeviceTokenServiceDependencies = {
+  storage?: DeviceTokenStorage;
+  exchangeCodeTtlMs?: number;
+};
 
 export class DeviceTokenService {
   private storage: DeviceTokenStorage;
