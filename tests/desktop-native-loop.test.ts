@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import {
+  createSafeTextSessionSnapshot,
   createSafeTypingContextSnapshot,
   createTypingContextBuffer,
   getLastWords,
@@ -606,6 +607,39 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
 
       expect(calls).toContainEqual({ type: "requestSuggestion", value: "Fallback" });
+    });
+
+    it("clears fallback context and disables memory work for secure Text Session snapshots", async () => {
+      const { buffer, calls, session } = makeSession();
+      const secureTextSession: TextSessionSnapshot = {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:password",
+        textElementId: "text:password",
+        selectedRange: { location: 18, length: 0 },
+        caretIdentity: "caret:18",
+        secureLike: true,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "password123secret", afterCaret: "" },
+      };
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("ordinary prose");
+      await wait(10);
+
+      expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
+
+      const requestsBeforeSecureSnapshot = calls.filter((call) => call.type === "requestSuggestion").length;
+      session.applyTextSessionSnapshot(secureTextSession);
+      await wait(10);
+
+      const safeSecureSnapshot = createSafeTextSessionSnapshot(secureTextSession);
+      expect(buffer.getState().context).toBe("");
+      expect(safeSecureSnapshot.requestable).toBe(false);
+      expect(safeSecureSnapshot.suppressionReason).toBe("secure_input");
+      expect(safeSecureSnapshot.memoryEligible).toBe(false);
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(requestsBeforeSecureSnapshot);
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
+      expect(session.getCurrentSuggestion()).toBeNull();
     });
 
     it("records metadata-only accepted, dismissed, and stale interaction telemetry", async () => {

@@ -117,14 +117,15 @@ function textSessionIdentityKey(snapshot: TextSessionSnapshot): string {
 }
 
 export function createSafeTextSessionSnapshot(snapshot: TextSessionSnapshot): SafeTypingContextSnapshot {
+  const privateContext = snapshot.secureLike || isPrivateActiveApplication(snapshot.activeApplication);
   const state: TypingContextState = {
     context: snapshot.surroundingContext?.beforeCaret ?? "",
     activeApplication: snapshot.activeApplication,
     secureInput: snapshot.secureLike,
     paused: false,
-    privateContext: snapshot.secureLike || isPrivateActiveApplication(snapshot.activeApplication),
+    privateContext,
     contextSource: "typed_text",
-    memoryEligible: decideMemoryEligibility("typed_text"),
+    memoryEligible: !privateContext && decideMemoryEligibility("typed_text"),
   };
   const safeSnapshot = createSafeTypingContextSnapshot(state);
   return {

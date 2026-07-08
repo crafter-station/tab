@@ -4,6 +4,7 @@ import type {
   Suggestion,
   SuggestionContextSource,
 } from "@tabb/contracts";
+import { isPrivateActiveApplication } from "@tabb/context-policy";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
 import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
@@ -237,6 +238,9 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       textSessionSnapshot = isReliableTextSessionSnapshot(snapshot) ? snapshot : null;
       if (textSessionSnapshot) {
         setPreviouslyActiveApplication(textSessionSnapshot.activeApplication);
+        if (textSessionSnapshot.secureLike || isPrivateActiveApplication(textSessionSnapshot.activeApplication)) {
+          deps.typingContext.clear();
+        }
       }
       contextChanged();
     },
