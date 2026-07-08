@@ -219,7 +219,7 @@ textarea {
   font: inherit;
 }
 
-a {
+a:not([class]) {
   color: inherit;
 }
 
