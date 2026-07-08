@@ -10,6 +10,7 @@ export const ERROR_CODES = [
   "email_unverified",
   "revoked_device",
   "billing_required",
+  "plan_change_required",
   "quota_exhausted",
   "rate_limited",
   "provider_failure",

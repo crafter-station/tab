@@ -1,4 +1,4 @@
-import { planQuotas } from "@tabb/billing";
+import { planQuotas, type PlanId } from "@tabb/billing";
 import {
   BillingCheckoutResponseSchema,
   BillingPortalResponseSchema,
@@ -6,9 +6,18 @@ import {
 } from "@tabb/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
-import { BillingWebhookHandler, type BillingCheckoutClient, type BillingService } from "../billing.ts";
+import {
+  BillingWebhookHandler,
+  hasActivePolarEntitlement,
+  type BillingCheckoutClient,
+  type BillingService,
+} from "../billing.ts";
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
+
+function isPlanId(planId: string | undefined): planId is PlanId {
+  return Boolean(planId && planId in planQuotas);
+}
 
 export function registerBillingRoutes(
   app: ApiApp,
@@ -69,14 +78,29 @@ export function registerBillingRoutes(
       );
     }
 
-    const planIdParam = c.req.query("plan");
-    if (!planIdParam || !(planIdParam in planQuotas)) {
+    const planId = c.req.query("plan");
+    if (!isPlanId(planId)) {
       return c.json(createErrorResponse("invalid_request", "Invalid plan."), 400);
+    }
+
+    const entitlement = await deps.billingService.getEntitlement(sessionCheck.session.user.id);
+    const hasActivePaidSubscription =
+      entitlement.planId !== "free" && hasActivePolarEntitlement(entitlement);
+    const requestedPaidPlan = planId !== "free";
+
+    if (hasActivePaidSubscription && requestedPaidPlan && planId !== entitlement.planId) {
+      return c.json(
+        createErrorResponse(
+          "plan_change_required",
+          "Plan Change is required for active paid subscriptions.",
+        ),
+        409,
+      );
     }
 
     try {
       const url = await deps.billingCheckoutClient.createCheckoutUrl(
-        planIdParam as keyof typeof planQuotas,
+        planId,
         {
           id: sessionCheck.session.user.id,
           email: sessionCheck.session.user.email,

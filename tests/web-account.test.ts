@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
+import type { PlanId } from "@tabb/billing";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import {
@@ -20,10 +21,13 @@ const TEST_ORIGIN = "http://localhost:8787";
 const WEB_ORIGIN = "http://localhost:3000";
 
 class TestBillingCheckoutClient implements BillingCheckoutClient {
+  readonly checkoutRequests: PlanId[] = [];
+
   async createCheckoutUrl(
-    planId: string,
+    planId: PlanId,
     user: { id: string; email?: string; name?: string },
   ): Promise<string> {
+    this.checkoutRequests.push(planId);
     const url = new URL(`https://checkout.test/${planId}`);
     url.searchParams.set("customer", user.id);
     if (user.email) url.searchParams.set("email", user.email);
@@ -79,6 +83,7 @@ async function createWebTestEnv() {
     deviceTokenService,
     personalMemoryStorage,
     billingService,
+    billingCheckoutClient,
   };
 }
 
@@ -128,6 +133,21 @@ async function activateFreePlan(billingService: BillingService, userId: string) 
     planId: "free",
     polarCustomerId: "polar-customer-free",
     polarSubscriptionId: "polar-sub-free",
+    status: "active",
+    cachedAt: new Date(),
+  });
+}
+
+async function activatePaidPlan(
+  billingService: BillingService,
+  userId: string,
+  planId: Exclude<PlanId, "free">,
+) {
+  await billingService.applyEntitlement({
+    userId,
+    planId,
+    polarCustomerId: `polar-customer-${planId}`,
+    polarSubscriptionId: `polar-sub-${planId}`,
     status: "active",
     cachedAt: new Date(),
   });
@@ -304,6 +324,24 @@ describe("Web account surface", () => {
     const location = response.headers.get("location");
     expect(location).toBeTruthy();
     expect(location).toInclude("checkout.test/pro");
+  });
+
+  it("routes active paid subscribers away from checkout for paid plan changes", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activatePaidPlan(billingService, userId, "pro");
+
+    const response = await apiApp.request("/api/billing/checkout?plan=max", {
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(409);
+    const body = await response.json() as { status: string; error?: { code: string } };
+    expect(body.status).toBe("error");
+    expect(body.error?.code).toBe("plan_change_required");
+    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
   });
 
   it("blocks checkout until the signed-in user verifies email", async () => {
