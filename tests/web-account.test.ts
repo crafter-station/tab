@@ -20,6 +20,7 @@ import type { Hono } from "hono";
 
 const TEST_ORIGIN = "http://localhost:8787";
 const WEB_ORIGIN = "http://localhost:3000";
+const USED_SUGGESTION_COUNT = 1000;
 
 class TestBillingCheckoutClient implements BillingCheckoutClient {
   readonly checkoutRequests: PlanId[] = [];
@@ -171,6 +172,16 @@ async function activatePaidPlan(
     status: "active",
     cachedAt: new Date(),
   });
+}
+
+async function consumeSuggestions(
+  billingService: BillingService,
+  userId: string,
+  count: number,
+) {
+  for (let i = 0; i < count; i++) {
+    await billingService.consumeSuggestion(userId);
+  }
 }
 
 function webRequest(
@@ -366,10 +377,7 @@ describe("Web account surface", () => {
     const password = "password123456";
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
     await activatePaidPlan(billingService, userId, "pro");
-
-    for (let i = 0; i < 1000; i++) {
-      await billingService.consumeSuggestion(userId);
-    }
+    await consumeSuggestions(billingService, userId, USED_SUGGESTION_COUNT);
 
     const response = await webRequest(
       webApp,
@@ -397,7 +405,7 @@ describe("Web account surface", () => {
     const quota = await billingService.checkQuota(userId);
     expect(quota.ok).toBe(true);
     expect(quota.quota).toBe(1_000_000);
-    expect(quota.usage).toBe(1000);
+    expect(quota.usage).toBe(USED_SUGGESTION_COUNT);
   });
 
   it("surfaces failed Plan Change as a billing error with management fallback", async () => {
@@ -474,10 +482,7 @@ describe("Web account surface", () => {
     const password = "password123456";
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
     await activatePaidPlan(billingService, userId, "max");
-
-    for (let i = 0; i < 1000; i++) {
-      await billingService.consumeSuggestion(userId);
-    }
+    await consumeSuggestions(billingService, userId, USED_SUGGESTION_COUNT);
 
     const response = await webRequest(
       webApp,
@@ -506,7 +511,7 @@ describe("Web account surface", () => {
     const quota = await billingService.checkQuota(userId);
     expect(quota.ok).toBe(true);
     expect(quota.quota).toBe(1_000_000);
-    expect(quota.usage).toBe(1000);
+    expect(quota.usage).toBe(USED_SUGGESTION_COUNT);
   });
 
   it("shows billing management when a paid plan change fails without mutating entitlement", async () => {
