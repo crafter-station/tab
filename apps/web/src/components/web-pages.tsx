@@ -52,6 +52,7 @@ export type DashboardData = {
 };
 
 const authTitleClassName = "font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]";
+const quotaExhaustedClassName = "rounded-lg border border-warning/30 bg-[var(--tab-warning-tint)] p-3 text-warning";
 
 const homeProofRows = [
   {
@@ -476,7 +477,7 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
               meta={`Resets ${formatDate(data.quota.resetAt)}`}
             />
             {quotaExhausted ? (
-              <div className="rounded-lg border border-warning/30 bg-[var(--tab-warning-tint)] p-3 text-warning">
+              <div className={quotaExhaustedClassName}>
                 <strong>Quota exhausted.</strong> You have used {data.quota.usage.toLocaleString()} of {data.quota.quota.toLocaleString()} autocompletes this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
               </div>
             ) : null}
