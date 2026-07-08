@@ -17,6 +17,7 @@ export type SuggestionLoopDependencies = {
   onHideSuggestion(): void;
   onRequestStarted?: (context: string) => void;
   onRequestFinished?: (suggestion: Suggestion | null) => void;
+  onSuggestionStale?: (suggestion: Suggestion) => void;
   onSecretLikeContextDetected?: () => void;
   debounceMs: number;
   maxVisibleMs?: number;
@@ -97,6 +98,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           if (state.status !== "showing" || state.contextHash !== hash) {
             return;
           }
+          deps.onSuggestionStale?.(state.suggestion);
           deps.onHideSuggestion();
           state = { status: "idle" };
         }, deps.maxVisibleMs ?? 4_000);

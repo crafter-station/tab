@@ -1,4 +1,9 @@
-import type { ActiveApplication, Suggestion, SuggestionContextSource } from "@tabb/contracts";
+import type {
+  ActiveApplication,
+  RecordTelemetryEventRequest,
+  Suggestion,
+  SuggestionContextSource,
+} from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
 import type { RequestableTypingContextSnapshot, TypingContextBuffer, TypingDeletionUnit } from "./typing-context.ts";
@@ -25,6 +30,13 @@ export type NativeSuggestionSessionDependencies = {
   ) => InsertionDependencies;
   readonly debounceMs: number;
   readonly maxVisibleMs?: number;
+  readonly recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
+};
+
+type VisibleSuggestionTelemetry = {
+  readonly requestId: string;
+  readonly activeApplicationBundleId?: string;
+  readonly suggestionLength: number;
 };
 
 function activeApplicationKey(app: ActiveApplication | null): string | null {
@@ -34,23 +46,62 @@ function activeApplicationKey(app: ActiveApplication | null): string | null {
 
 export function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
   let currentSuggestion: Suggestion | null = null;
+  let currentTelemetry: VisibleSuggestionTelemetry | null = null;
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
   const { outputs } = deps;
+
+  function requestIdFromSuggestion(suggestion: Suggestion): string {
+    return suggestion.id.startsWith("sg-") ? suggestion.id.slice(3) : suggestion.id;
+  }
+
+  function buildTelemetry(suggestion: Suggestion): VisibleSuggestionTelemetry {
+    const activeApplication = deps.typingContext.getState().activeApplication;
+    return {
+      requestId: requestIdFromSuggestion(suggestion),
+      activeApplicationBundleId: activeApplication?.bundleId,
+      suggestionLength: suggestion.text.length,
+    };
+  }
+
+  function recordInteractionTelemetry(eventType: RecordTelemetryEventRequest["eventType"]): void {
+    if (!currentTelemetry || !deps.recordInteractionTelemetry) return;
+
+    const event: RecordTelemetryEventRequest = {
+      eventType,
+      requestId: currentTelemetry.requestId,
+      timestamp: new Date().toISOString(),
+      ...(currentTelemetry.activeApplicationBundleId
+        ? { activeApplicationBundleId: currentTelemetry.activeApplicationBundleId }
+        : {}),
+      suggestionLength: currentTelemetry.suggestionLength,
+    };
+
+    Promise.resolve(deps.recordInteractionTelemetry(event)).catch(() => {
+      // Interaction telemetry is best-effort and must never interrupt typing or Acceptance.
+    });
+  }
 
   const suggestionLoop = createSuggestionLoop({
     getContext: () => deps.typingContext.getSnapshot(),
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
+      currentTelemetry = buildTelemetry(suggestion);
       outputs.showSuggestion(suggestion);
     },
     onHideSuggestion: () => {
       currentSuggestion = null;
+      currentTelemetry = null;
       outputs.hideOverlay();
     },
     onRequestStarted: outputs.onRequestStarted,
     onRequestFinished: outputs.onRequestFinished,
+    onSuggestionStale: () => {
+      recordInteractionTelemetry("suggestion_stale");
+      currentSuggestion = null;
+      currentTelemetry = null;
+    },
     onSecretLikeContextDetected: () => {
       deps.typingContext.clear();
       outputs.onSecretLikeContextDetected?.();
@@ -60,17 +111,25 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   });
 
   function contextChanged(): void {
+    if (currentSuggestion) {
+      recordInteractionTelemetry("suggestion_dismissed");
+    }
     outputs.resetDebugApiState();
     currentSuggestion = null;
+    currentTelemetry = null;
     outputs.clearSuggestion();
     suggestionLoop.onContextChanged();
     outputs.showDebugContext();
   }
 
-  function clearContext(): void {
+  function clearContext(recordDismissed = true): void {
+    if (recordDismissed && currentSuggestion) {
+      recordInteractionTelemetry("suggestion_dismissed");
+    }
     deps.typingContext.clear();
     outputs.resetDebugApiState();
     currentSuggestion = null;
+    currentTelemetry = null;
     suggestionLoop.invalidate();
   }
 
@@ -131,8 +190,9 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       );
 
       if (result === "inserted") {
+        recordInteractionTelemetry("suggestion_accepted");
         outputs.hideOverlay();
-        clearContext();
+        clearContext(false);
       }
     },
     clearContext,
