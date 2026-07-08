@@ -238,15 +238,6 @@ summary {
   background: color-mix(in srgb, var(--card) 78%, transparent);
 }
 
-.settings-tabs__title {
-  margin-top: 6px;
-  max-width: 680px;
-  font-size: clamp(28px, 4vw, 36px);
-  font-weight: 880;
-  letter-spacing: -0.055em;
-  line-height: 0.98;
-}
-
 .settings-pane {
   overflow: hidden;
   background:

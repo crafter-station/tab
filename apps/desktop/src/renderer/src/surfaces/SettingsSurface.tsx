@@ -9,7 +9,7 @@ import {
   CommandBlock,
   EmptyState,
   SectionCard,
-  SettingsRow as UtilitySettingsRow,
+  SettingsRow,
   StatusBadge,
   StatusRow,
   SurfaceHeader,
@@ -44,12 +44,6 @@ export function describePauseState(paused: boolean) {
         description: "Typing Context observation and Suggestions are running.",
         action: "Pause Tabb",
       };
-}
-
-function getAuthTone(auth: DesktopStatus["auth"]) {
-  if (auth === "signed_in") return "ok";
-  if (auth === "revoked_device") return "warning";
-  return "muted";
 }
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
@@ -88,6 +82,7 @@ export function SettingsSurface() {
   const [usePersonalMemory, setUsePersonalMemory] = useState(false);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
+  const activeTabConfig = SETTINGS_TABS.find((tab) => tab.value === activeTab);
   const pauseState = describePauseState(paused);
 
   const refreshAccessibility = useCallback(async () => {
@@ -155,50 +150,10 @@ export function SettingsSurface() {
     setThemePreference(nextMode);
   }
 
-  return (
-    <main className="desktop-shell">
-      <SectionCard className="settings-tabs mx-auto grid h-full max-w-5xl overflow-hidden p-0">
-        <aside className="settings-tabs__sidebar drag-region">
-          <div className="settings-tabs__brand">
-            <div className="settings-tabs__mark">T</div>
-            <div>
-              <p className="eyebrow">Tabb</p>
-              <h1>Native utility settings</h1>
-            </div>
-          </div>
-
-          <nav className="settings-tabs__nav no-drag" aria-label="Settings sections">
-            {SETTINGS_TABS.map((tab) => (
-              <button
-                aria-current={activeTab === tab.value ? "page" : undefined}
-                className="settings-tabs__item"
-                data-active={activeTab === tab.value}
-                key={tab.value}
-                onClick={() => setActiveTab(tab.value)}
-                type="button"
-              >
-                <span className="settings-tabs__item-label">{tab.label}</span>
-                <span className="settings-tabs__item-desc">{tab.description}</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        <div className="no-drag flex min-h-0 flex-col overflow-hidden">
-          <div className="settings-tabs__header drag-region">
-            <SurfaceHeader
-              eyebrow={SETTINGS_TABS.find((tab) => tab.value === activeTab)?.label}
-              title="Control your Native Autocomplete App."
-              description="Account status, Typing Context controls, macOS permissions, quota, connectivity, and Personal Memory stay local, visible, and reversible from this Mac."
-            />
-          </div>
-
-          <div className="settings-tabs__content">
-          {paused ? (
-            <StatusRow label="Tabb is paused" value={pauseState.label} tone="warning" description={pauseState.description} />
-          ) : null}
-
-          {activeTab === "account" ? (
+  function renderActiveTab() {
+    switch (activeTab) {
+      case "account":
+        return (
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Account</CardTitle>
@@ -243,38 +198,40 @@ export function SettingsSurface() {
               </div>
             </CardContent>
           </Card>
-          ) : null}
+        );
 
-          {activeTab === "controls" ? (
+      case "controls":
+        return (
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Controls</CardTitle>
               <CardDescription>Pause Typing Context observation and Suggestions without signing out.</CardDescription>
             </CardHeader>
             <CardContent>
-              <UtilitySettingsRow label="Typing Context and Suggestions" description={pauseState.description}>
+              <SettingsRow label="Typing Context and Suggestions" description={pauseState.description}>
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <StatusBadge tone={paused ? "warning" : "ok"}>{pauseState.label}</StatusBadge>
                   <Button variant={paused ? "default" : "secondary"} onClick={() => window.tabb?.togglePause?.()}>
                     {pauseState.action}
                   </Button>
                 </div>
-              </UtilitySettingsRow>
+              </SettingsRow>
               <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
                 Pause keeps your account connected while disabling local Typing Context observation and Floating Suggestion Overlay updates.
               </p>
             </CardContent>
           </Card>
-          ) : null}
+        );
 
-          {activeTab === "appearance" ? (
+      case "appearance":
+        return (
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Appearance</CardTitle>
               <CardDescription>Use your macOS theme by default, or keep Tabb pinned to light or dark.</CardDescription>
             </CardHeader>
             <CardContent>
-              <UtilitySettingsRow label="Theme" description="Theme preference is stored locally on this Mac.">
+              <SettingsRow label="Theme" description="Theme preference is stored locally on this Mac.">
                 <div className="flex flex-wrap justify-end gap-2">
                   {THEME_MODES.map((mode) => (
                     <Button
@@ -287,12 +244,13 @@ export function SettingsSurface() {
                     </Button>
                   ))}
                 </div>
-              </UtilitySettingsRow>
+              </SettingsRow>
             </CardContent>
           </Card>
-          ) : null}
+        );
 
-          {activeTab === "permissions" ? (
+      case "permissions":
+        return (
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Permissions</CardTitle>
@@ -302,7 +260,7 @@ export function SettingsSurface() {
               </CardDescription>
             </CardHeader>
             <CardContent className="grid gap-3">
-              <UtilitySettingsRow
+              <SettingsRow
                 label="Accessibility"
                 description="Required for Text Session understanding and reliable accepted Suggestion insertion."
               >
@@ -314,8 +272,8 @@ export function SettingsSurface() {
                     {accessibilityGranted ? "Reopen Settings" : "Open Settings"}
                   </Button>
                 </div>
-              </UtilitySettingsRow>
-              <UtilitySettingsRow
+              </SettingsRow>
+              <SettingsRow
                 label="Input Monitoring"
                 description="Required for typing timing, Acceptance shortcuts, and fallback Typing Context signals."
               >
@@ -328,7 +286,7 @@ export function SettingsSurface() {
                     Relaunch Tabb
                   </Button>
                 </div>
-              </UtilitySettingsRow>
+              </SettingsRow>
               <StatusRow
                 label="Privacy boundary"
                 value="Local control"
@@ -341,16 +299,17 @@ export function SettingsSurface() {
               />
             </CardContent>
           </Card>
-          ) : null}
+        );
 
-          {activeTab === "memory" ? (
+      case "memory":
+        return (
           <Card className="settings-pane shadow-none">
             <CardHeader>
               <CardTitle>Personal Memory</CardTitle>
               <CardDescription>Control whether stored Personal Memory can personalize desktop Suggestions.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
-              <UtilitySettingsRow
+              <SettingsRow
                 label="Use in Suggestions"
                 description="Pasted text can still inform the current Suggestion, but it is not saved to Personal Memory by default."
               >
@@ -360,7 +319,7 @@ export function SettingsSurface() {
                 >
                   {usePersonalMemory ? "Using Personal Memory" : "Do Not Use"}
                 </Button>
-              </UtilitySettingsRow>
+              </SettingsRow>
               {memories.length === 0 ? (
                 <EmptyState
                   title="No Personal Memory stored yet"
@@ -383,7 +342,53 @@ export function SettingsSurface() {
               )}
             </CardContent>
           </Card>
-          ) : null}
+        );
+    }
+  }
+
+  return (
+    <main className="desktop-shell">
+      <SectionCard className="settings-tabs mx-auto grid h-full max-w-5xl overflow-hidden p-0">
+        <aside className="settings-tabs__sidebar drag-region">
+          <div className="settings-tabs__brand">
+            <div className="settings-tabs__mark">T</div>
+            <div>
+              <p className="eyebrow">Tabb</p>
+              <h1>Native utility settings</h1>
+            </div>
+          </div>
+
+          <nav className="settings-tabs__nav no-drag" aria-label="Settings sections">
+            {SETTINGS_TABS.map((tab) => (
+              <button
+                aria-current={activeTab === tab.value ? "page" : undefined}
+                className="settings-tabs__item"
+                data-active={activeTab === tab.value}
+                key={tab.value}
+                onClick={() => setActiveTab(tab.value)}
+                type="button"
+              >
+                <span className="settings-tabs__item-label">{tab.label}</span>
+                <span className="settings-tabs__item-desc">{tab.description}</span>
+              </button>
+            ))}
+          </nav>
+        </aside>
+
+        <div className="no-drag flex min-h-0 flex-col overflow-hidden">
+          <div className="settings-tabs__header drag-region">
+            <SurfaceHeader
+              eyebrow={activeTabConfig?.label}
+              title="Control your Native Autocomplete App."
+              description="Account status, Typing Context controls, macOS permissions, quota, connectivity, and Personal Memory stay local, visible, and reversible from this Mac."
+            />
+          </div>
+
+          <div className="settings-tabs__content">
+            {paused ? (
+              <StatusRow label="Tabb is paused" value={pauseState.label} tone="warning" description={pauseState.description} />
+            ) : null}
+            {renderActiveTab()}
           </div>
         </div>
       </SectionCard>
