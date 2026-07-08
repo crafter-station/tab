@@ -231,11 +231,6 @@ export class BackgroundMemoryAgent {
       }
 
       case "delete": {
-        const existing = await this.findMemoryForUser(userId, operation.id);
-        if (!existing) {
-          return;
-        }
-
         await this.personalMemoryService.deleteMemory(userId, operation.id);
         return;
       }

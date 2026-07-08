@@ -47,6 +47,13 @@ function createMemoryRecord(input: CreatePersonalMemoryInput): PersonalMemory {
   };
 }
 
+function compareMemoriesByNewestUpdate(
+  a: PersonalMemory,
+  b: PersonalMemory,
+): number {
+  return new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime();
+}
+
 export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   private memories = new Map<string, PersonalMemory>();
 
@@ -59,10 +66,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   async listMemoriesByUser(userId: string): Promise<PersonalMemory[]> {
     return Array.from(this.memories.values())
       .filter((memory) => memory.userId === userId)
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      );
+      .sort(compareMemoriesByNewestUpdate);
   }
 
   async findMemoryById(id: string): Promise<PersonalMemory | null> {
@@ -293,10 +297,7 @@ export class PersonalMemoryService {
           input.activeApplication,
         ),
       )
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime(),
-      )
+      .sort(compareMemoriesByNewestUpdate)
       .slice(0, this.maxRelevantMemories);
   }
 }
