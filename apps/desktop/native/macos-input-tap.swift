@@ -42,6 +42,8 @@ var lastActiveWindowSnapshot: ActiveWindowSnapshot?
 var lastTextSessionSnapshotKey: String?
 let textSessionContextLimit = 500
 
+typealias TextSessionPayload = [String: Any]
+
 func emitActiveWindowIfChanged() {
   guard let snapshot = activeWindowSnapshot() else { return }
   if snapshot == lastActiveWindowSnapshot { return }
@@ -156,49 +158,53 @@ func jsonValue(_ value: Any?) -> Any {
   return value ?? NSNull()
 }
 
-func textSessionSnapshot() -> [String: Any]? {
+func fallbackTextSessionSnapshot(activeWindow: ActiveWindowSnapshot?, reliability: String) -> TextSessionPayload {
+  return [
+    "activeApplication": jsonValue(activeApplicationPayload(from: activeWindow)),
+    "focusedElementId": NSNull(),
+    "textElementId": NSNull(),
+    "selectedRange": NSNull(),
+    "caretIdentity": NSNull(),
+    "secureLike": false,
+    "accessibilityReliability": reliability,
+  ]
+}
+
+func selectedRangePayload(_ range: CFRange?) -> [String: Int]? {
+  return range.map { ["location": Int($0.location), "length": Int($0.length)] }
+}
+
+func caretIdentity(from range: CFRange?) -> String? {
+  return range.map { "range:\($0.location):\($0.length)" }
+}
+
+func textSessionSnapshot() -> TextSessionPayload? {
   let activeWindow = activeWindowSnapshot()
   guard AXIsProcessTrusted(),
         let app = NSWorkspace.shared.frontmostApplication,
         let bundleId = app.bundleIdentifier else {
-    return [
-      "activeApplication": jsonValue(activeApplicationPayload(from: activeWindow)),
-      "focusedElementId": NSNull(),
-      "textElementId": NSNull(),
-      "selectedRange": NSNull(),
-      "caretIdentity": NSNull(),
-      "secureLike": false,
-      "accessibilityReliability": "unavailable",
-    ]
+    return fallbackTextSessionSnapshot(activeWindow: activeWindow, reliability: "unavailable")
   }
 
   guard let element = focusedAXElement(for: app) else {
-    return [
-      "activeApplication": jsonValue(activeApplicationPayload(from: activeWindow)),
-      "focusedElementId": NSNull(),
-      "textElementId": NSNull(),
-      "selectedRange": NSNull(),
-      "caretIdentity": NSNull(),
-      "secureLike": false,
-      "accessibilityReliability": "unreliable",
-    ]
+    return fallbackTextSessionSnapshot(activeWindow: activeWindow, reliability: "unreliable")
   }
 
   let selectedRange = selectedTextRange(from: element)
   let selectedText = stringAXAttribute(element, kAXSelectedTextAttribute as String)
   let value = stringAXAttribute(element, kAXValueAttribute as String)
-  let context = boundedContext(from: value, selectedRange: selectedRange)
-  let bounds = caretBounds(from: element, selectedRange: selectedRange)
+  let surroundingContext = boundedContext(from: value, selectedRange: selectedRange)
+  let caretBounds = caretBounds(from: element, selectedRange: selectedRange)
   let identity = elementIdentity(element, bundleId: bundleId)
-  let reliability = selectedRange != nil || selectedText != nil || context != nil ? "reliable" : "unreliable"
+  let reliability = selectedRange != nil || selectedText != nil || surroundingContext != nil ? "reliable" : "unreliable"
   let secureLike = isSecureLikeTextElement(element)
 
-  var snapshot: [String: Any] = [
+  var snapshot: TextSessionPayload = [
     "activeApplication": jsonValue(activeApplicationPayload(from: activeWindow)),
     "focusedElementId": jsonValue(identity),
     "textElementId": jsonValue(identity),
-    "selectedRange": jsonValue(selectedRange.map { ["location": Int($0.location), "length": Int($0.length)] }),
-    "caretIdentity": jsonValue(selectedRange.map { "range:\($0.location):\($0.length)" }),
+    "selectedRange": jsonValue(selectedRangePayload(selectedRange)),
+    "caretIdentity": jsonValue(caretIdentity(from: selectedRange)),
     "secureLike": secureLike,
     "accessibilityReliability": reliability,
   ]
@@ -206,11 +212,11 @@ func textSessionSnapshot() -> [String: Any]? {
   if let selectedText = selectedText {
     snapshot["selectedText"] = selectedText
   }
-  if let context = context {
-    snapshot["surroundingContext"] = context
+  if let surroundingContext = surroundingContext {
+    snapshot["surroundingContext"] = surroundingContext
   }
-  if let bounds = bounds {
-    snapshot["caretBounds"] = bounds
+  if let caretBounds = caretBounds {
+    snapshot["caretBounds"] = caretBounds
   }
 
   return snapshot
