@@ -24,14 +24,11 @@ import {
   type PersonalMemoryVectorIndex,
 } from "./personal-memory.ts";
 import {
-  BackgroundMemoryAgent,
   D1MemoryExtractionIdempotencyStorage,
-  InMemoryMemoryJobQueue,
   InMemoryMemoryExtractionIdempotencyStorage,
   MemoryExtractionService,
   type MemoryAgentModel,
   type MemoryExtractionIdempotencyStorage,
-  type MemoryJobQueue,
 } from "./memory-agent.ts";
 import {
   D1TelemetryStorage,
@@ -81,8 +78,6 @@ export type ApiDependencies = {
   readonly personalMemoryStorage?: PersonalMemoryStorage;
   readonly embeddingService?: PersonalMemoryEmbeddingService;
   readonly vectorIndex?: PersonalMemoryVectorIndex;
-  readonly memoryJobQueue?: MemoryJobQueue;
-  readonly memoryAgent?: BackgroundMemoryAgent;
   readonly memoryExtractionModel?: MemoryAgentModel;
   readonly memoryExtractionIdempotencyStorage?: MemoryExtractionIdempotencyStorage;
   readonly telemetryService?: TelemetryService;
@@ -133,13 +128,6 @@ export function createApp(deps: ApiDependencies = {}) {
     embeddingService: deps.embeddingService,
     vectorIndex: deps.vectorIndex,
   });
-  const memoryJobQueue = deps.memoryJobQueue ?? new InMemoryMemoryJobQueue();
-  const memoryAgent =
-    deps.memoryAgent ??
-    new BackgroundMemoryAgent({
-      personalMemoryService,
-      model: deps.generateSuggestion ? undefined : BackgroundMemoryAgent.createRealModel(),
-    });
   const memoryExtractionIdempotencyStorage =
     deps.memoryExtractionIdempotencyStorage ??
     new InMemoryMemoryExtractionIdempotencyStorage();
@@ -154,14 +142,9 @@ export function createApp(deps: ApiDependencies = {}) {
     billingService,
     usageMeterService,
     personalMemoryService,
-    memoryJobQueue,
     telemetryService,
     generateSuggestion,
   });
-
-  if (memoryJobQueue instanceof InMemoryMemoryJobQueue) {
-    memoryJobQueue.subscribe(async (job) => memoryAgent.processJob(job));
-  }
 
   const app = new Hono<{ Bindings: ApiBindings; Variables: ApiVariables }>();
   const authenticateDevice = createDeviceAuthenticator(deviceTokenService);

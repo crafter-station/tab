@@ -825,6 +825,68 @@ describe("Personal Memory API", () => {
     ]);
   });
 
+  it("does not perform memory extraction during suggestion generation", async () => {
+    let extractionModelCalls = 0;
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        async () => ({ text: " suggestion" }),
+        undefined,
+        {
+          async proposeOperations() {
+            extractionModelCalls += 1;
+            return [{ type: "create", content: "Should not be extracted" }];
+          },
+        },
+      );
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validSuggestionRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(extractionModelCalls).toBe(0);
+    expect(await personalMemoryStorage.listMemoriesByUser("user-1")).toEqual([]);
+  });
+
+  it("only reads memory during suggestion generation", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    let extractionModelCalls = 0;
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const { app, token, personalMemoryStorage } = await createAuthenticatedTestApp(
+      async (input) => {
+        capturedInput = input;
+        return { text: " suggestion" };
+      },
+      { embeddingService, vectorIndex },
+      {
+        async proposeOperations() {
+          extractionModelCalls += 1;
+          throw new Error("suggestions must not run memory extraction");
+        },
+      },
+    );
+    const memory = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Acme Corp is a customer",
+      createdBy: "system",
+    });
+    vectorIndex.matches = [{ id: memory.id, score: 0.99 }];
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validSuggestionRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(vectorIndex.queries).toHaveLength(1);
+    expect(capturedInput?.memories.map((item) => item.id)).toEqual([memory.id]);
+    expect(extractionModelCalls).toBe(0);
+  });
+
   it("continues suggestions without memory when vector retrieval fails", async () => {
     let capturedInput: SuggestionInput | null = null;
     const embeddingService = new FakeEmbeddingService();

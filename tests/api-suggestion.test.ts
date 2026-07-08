@@ -9,7 +9,6 @@ import {
 import { BillingService, InMemoryBillingStorage, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
-import { InMemoryMemoryJobQueue } from "../apps/api/src/memory-agent.ts";
 import { InMemoryPersonalMemoryStorage, PersonalMemoryService } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage, TelemetryService } from "../apps/api/src/telemetry.ts";
 import { SuggestionUseCase } from "../apps/api/src/suggestion-use-case.ts";
@@ -281,20 +280,17 @@ describe("SuggestionUseCase", () => {
     const usageMeterClient = new InMemoryUsageMeterClient();
     const usageMeterService = new UsageMeterService({ client: usageMeterClient, retryDelayMs: 0 });
     const personalMemoryService = new PersonalMemoryService({ storage: new InMemoryPersonalMemoryStorage() });
-    const memoryJobQueue = new InMemoryMemoryJobQueue();
     const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
     const useCase = new SuggestionUseCase({
       billingService,
       usageMeterService,
       personalMemoryService,
-      memoryJobQueue,
       telemetryService,
       generateSuggestion,
     });
 
     return {
       billingService,
-      memoryJobQueue,
       personalMemoryService,
       telemetryService,
       usageMeterClient,
@@ -313,9 +309,9 @@ describe("SuggestionUseCase", () => {
     });
   }
 
-  it("orchestrates quota, relevant memory, generation, telemetry, billing, and memory enqueueing", async () => {
+  it("orchestrates quota, relevant memory, generation, telemetry, and billing without memory jobs", async () => {
     let capturedInput: SuggestionInput | null = null;
-    const { billingService, memoryJobQueue, personalMemoryService, telemetryService, useCase } = createUseCase(async (input) => {
+    const { billingService, personalMemoryService, telemetryService, useCase } = createUseCase(async (input) => {
       capturedInput = input;
       return { text: " world", modelId: "test-model" };
     });
@@ -331,17 +327,14 @@ describe("SuggestionUseCase", () => {
     expect(result).toEqual({ ok: true, suggestions: [{ id: "sg-req-1", text: " world" }] });
     expect(capturedInput?.memories).toHaveLength(1);
     expect((await billingService.checkQuota("user-1")).usage).toBe(1);
-    expect(memoryJobQueue.getJobs()).toHaveLength(1);
-    expect(memoryJobQueue.getJobs()[0].typingContext).toBe("Hello");
     expect((await telemetryService.listEvents()).map((event) => event.eventType)).toEqual([
       "suggestion_shown",
-      "memory_job_enqueued",
     ]);
   });
 
-  it("keeps App Context out of Personal Memory jobs", async () => {
+  it("passes App Context to generation without performing memory jobs", async () => {
     let capturedInput: SuggestionInput | null = null;
-    const { billingService, memoryJobQueue, useCase } = createUseCase(async (input) => {
+    const { billingService, useCase } = createUseCase(async (input) => {
       capturedInput = input;
       return { text: " tomorrow", modelId: "test-model" };
     });
@@ -351,9 +344,23 @@ describe("SuggestionUseCase", () => {
 
     expect(result.ok).toBe(true);
     expect(capturedInput?.appContext?.fragments).toHaveLength(1);
-    expect(memoryJobQueue.getJobs()).toHaveLength(1);
-    expect(memoryJobQueue.getJobs()[0].typingContext).toBe("Hello");
-    expect(JSON.stringify(memoryJobQueue.getJobs())).not.toContain("launch date");
+  });
+
+  it("continues without memory when relevant memory retrieval fails", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const { billingService, personalMemoryService, useCase } = createUseCase(async (input) => {
+      capturedInput = input;
+      return { text: " world", modelId: "test-model" };
+    });
+    personalMemoryService.selectRelevantMemories = async () => {
+      throw new Error("vector retrieval unavailable");
+    };
+    await activateFreePlan(billingService);
+
+    const result = await useCase.handle(validDevice, validRequest);
+
+    expect(result).toEqual({ ok: true, suggestions: [{ id: "sg-req-1", text: " world" }] });
+    expect(capturedInput?.memories).toEqual([]);
   });
 
   it("formats App Context as background while preserving the exact draft", () => {
@@ -396,7 +403,7 @@ describe("SuggestionUseCase", () => {
   });
 
   it("records provider failures without enqueueing memory jobs", async () => {
-    const { billingService, memoryJobQueue, telemetryService, useCase } = createUseCase(async () => {
+    const { billingService, telemetryService, useCase } = createUseCase(async () => {
       throw new Error("model timeout");
     });
     await activateFreePlan(billingService);
@@ -407,7 +414,6 @@ describe("SuggestionUseCase", () => {
     if (result.ok) throw new Error("Expected provider failure");
     expect(result.status).toBe(503);
     expect(result.code).toBe("provider_failure");
-    expect(memoryJobQueue.getJobs()).toHaveLength(0);
     expect((await telemetryService.listEvents()).map((event) => event.eventType)).toEqual([
       "suggestion_error",
     ]);

@@ -2,7 +2,6 @@ import {
   MemoryExtractionRequestSchema,
   type MemoryExtractionCounts,
   type MemoryExtractionRequest,
-  MemoryJobSchema,
   type MemoryJob,
   type PersonalMemory,
 } from "@tab/contracts";
@@ -19,50 +18,6 @@ const MAX_MEMORIES_PER_USER = 500;
 const EXTRACTION_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type { MemoryJob };
-
-export interface MemoryJobQueue {
-  enqueue(job: MemoryJob): Promise<void>;
-}
-
-type MemoryQueueSubscriber = (job: MemoryJob) => Promise<void>;
-
-type QueuedMemoryJob = {
-  readonly job: MemoryJob;
-  processed: boolean;
-};
-
-export class InMemoryMemoryJobQueue implements MemoryJobQueue {
-  private jobs: QueuedMemoryJob[] = [];
-  private subscriber?: MemoryQueueSubscriber;
-
-  async enqueue(job: MemoryJob): Promise<void> {
-    const parsed = MemoryJobSchema.parse(job);
-    const queued = { job: parsed, processed: false };
-    this.jobs.push(queued);
-    if (this.subscriber) {
-      await this.subscriber(parsed);
-      queued.processed = true;
-    }
-  }
-
-  subscribe(subscriber: MemoryQueueSubscriber): void {
-    this.subscriber = subscriber;
-  }
-
-  async drain(): Promise<void> {
-    if (!this.subscriber) return;
-    for (const queued of this.jobs) {
-      if (!queued.processed) {
-        await this.subscriber(queued.job);
-        queued.processed = true;
-      }
-    }
-  }
-
-  getJobs(): readonly MemoryJob[] {
-    return this.jobs.map((queued) => queued.job);
-  }
-}
 
 export type ProposedCreateMemory = {
   readonly type: "create";
@@ -147,11 +102,6 @@ export interface MemoryAgentModel {
     memories: readonly PersonalMemory[],
   ): Promise<readonly ProposedMemoryOperation[]>;
 }
-
-export type BackgroundMemoryAgentDependencies = {
-  readonly personalMemoryService: PersonalMemoryService;
-  readonly model?: MemoryAgentModel;
-};
 
 export interface MemoryExtractionIdempotencyStorage {
   findResult(
@@ -465,90 +415,4 @@ function formatMemoriesForPrompt(memories: readonly PersonalMemory[]): string {
         `- id=${memory.id}; createdBy=${memory.createdBy}; content=${memory.content}`,
     )
     .join("\n");
-}
-
-export class BackgroundMemoryAgent {
-  private readonly personalMemoryService: PersonalMemoryService;
-  private readonly model: MemoryAgentModel;
-
-  constructor(deps: BackgroundMemoryAgentDependencies) {
-    this.personalMemoryService = deps.personalMemoryService;
-    this.model = deps.model ?? new NoOpMemoryAgentModel();
-  }
-
-  static createRealModel(): MemoryAgentModel {
-    return new AiGatewayMemoryAgentModel();
-  }
-
-  async processJob(job: MemoryJob): Promise<void> {
-    const parsed = MemoryJobSchema.parse(job);
-
-    if (!parsed.memoryEligible) {
-      return;
-    }
-
-    const memories = await this.personalMemoryService.listMemories(
-      parsed.userId,
-    );
-
-    const operations = await this.model.proposeOperations(parsed, memories);
-
-    for (const operation of operations) {
-      await this.applyOperation(parsed.userId, operation);
-    }
-  }
-
-  private async applyOperation(
-    userId: string,
-    operation: ProposedMemoryOperation,
-  ): Promise<void> {
-    switch (operation.type) {
-      case "create": {
-        if (!isSafeMemoryText(operation.content)) {
-          return;
-        }
-
-        await this.personalMemoryService.createMemory({
-          userId,
-          content: operation.content,
-          createdBy: "system",
-        });
-        return;
-      }
-
-      case "update": {
-        const existing = await this.findMemoryForUser(userId, operation.id);
-        if (!existing) {
-          return;
-        }
-
-        if (!isSafeMemoryText(operation.content)) {
-          return;
-        }
-
-        await this.personalMemoryService.updateMemory(operation.id, {
-          content: operation.content,
-        });
-        return;
-      }
-
-      case "delete": {
-        await this.personalMemoryService.deleteMemory(userId, operation.id);
-        return;
-      }
-    }
-  }
-
-  private async findMemoryForUser(
-    userId: string,
-    memoryId: string,
-  ): Promise<PersonalMemory | null> {
-    const memory = await this.personalMemoryService.findMemoryById(memoryId);
-
-    if (!memory || memory.userId !== userId) {
-      return null;
-    }
-
-    return memory;
-  }
 }
