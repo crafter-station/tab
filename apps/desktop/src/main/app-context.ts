@@ -11,6 +11,11 @@ const FOCUSED_EDITOR_BEFORE_CARET_RATIO = 0.7;
 const MIN_EDITOR_CONTEXT_LENGTH = 8;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
 const CODE_LIKE_CONTEXT_SUPPRESSION_REASON = "code_like_context";
+const COMMENT_LINE_MARKER_PATTERN = /^(\/\/|\/\*|\*|#|<!--)/;
+const COMMENT_MARKER_PATTERN = /^(\/\/|\/\*+|\*|#+|<!--)\s*/;
+const COMMENT_END_MARKER_PATTERN = /\s*(\*\/|-->)$/;
+const PROSE_COMMENT_PATTERN = /[A-Za-z][A-Za-z\s,'-]{12,}/;
+const CODE_LIKE_LINE_PATTERN = /[{};]|=>|^(function|const|let|var|return|import|export|class|if|for|while|switch|try|catch)\b/;
 
 export type AppContextSnapshot = AppContext;
 
@@ -36,15 +41,12 @@ function createSafeRedactionSummary(): AppContextFragment["redaction"] {
   };
 }
 
-function createEmptyProviderSnapshot(
-  provider: string,
-  status: AppContextSnapshot["metadata"]["status"],
-): AppContextSnapshot {
-  return { fragments: [], metadata: { provider, status } };
+function createEmptyZedSnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextSnapshot {
+  return { fragments: [], metadata: { provider: ZED_PROVIDER, status } };
 }
 
-function createSuppressedProviderSnapshot(provider: string, suppressionReason: string): AppContextSnapshot {
-  return { fragments: [], metadata: { provider, status: "suppressed", suppressionReason } };
+function createSuppressedZedSnapshot(suppressionReason: string): AppContextSnapshot {
+  return { fragments: [], metadata: { provider: ZED_PROVIDER, status: "suppressed", suppressionReason } };
 }
 
 function sanitizeFragment(fragment: AppContextFragment): AppContextFragment | null {
@@ -122,19 +124,17 @@ function buildBoundedFocusedEditorText(beforeCaret: string, afterCaret: string):
 
 function isProseCommentLine(line: string): boolean {
   const trimmed = line.trim();
-  if (!/^(\/\/|\/\*|\*|#|<!--)/.test(trimmed)) return false;
+  if (!COMMENT_LINE_MARKER_PATTERN.test(trimmed)) return false;
 
-  const withoutMarker = trimmed.replace(/^(\/\/|\/\*+|\*|#+|<!--)\s*/, "").replace(/\s*(\*\/|-->)$/, "");
-  return /[A-Za-z][A-Za-z\s,'-]{12,}/.test(withoutMarker);
+  const withoutMarker = trimmed.replace(COMMENT_MARKER_PATTERN, "").replace(COMMENT_END_MARKER_PATTERN, "");
+  return PROSE_COMMENT_PATTERN.test(withoutMarker);
 }
 
 function isCodeLikeFocusedEditorText(text: string): boolean {
   const meaningfulLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
   if (meaningfulLines.length < 3 || meaningfulLines.some(isProseCommentLine)) return false;
 
-  const codeLikeLines = meaningfulLines.filter((line) =>
-    /[{};]|=>|^\s*(function|const|let|var|return|import|export|class|if|for|while|switch|try|catch)\b/.test(line),
-  );
+  const codeLikeLines = meaningfulLines.filter((line) => CODE_LIKE_LINE_PATTERN.test(line));
 
   return codeLikeLines.length >= 3 && codeLikeLines.length / meaningfulLines.length >= 0.6;
 }
@@ -147,20 +147,20 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
   return (snapshot) => {
     const textSession = snapshot.textSession;
     if (!isZedBundleId(snapshot.activeApplication?.bundleId)) {
-      return createEmptyProviderSnapshot(ZED_PROVIDER, "unsupported");
+      return createEmptyZedSnapshot("unsupported");
     }
     if (!textSession || textSession.accessibilityReliability !== "reliable" || textSession.secureLike) {
-      return createEmptyProviderSnapshot(ZED_PROVIDER, "empty");
+      return createEmptyZedSnapshot("empty");
     }
 
     const beforeCaret = textSession.surroundingContext?.beforeCaret ?? "";
     const afterCaret = textSession.surroundingContext?.afterCaret ?? "";
     const text = buildBoundedFocusedEditorText(beforeCaret, afterCaret);
     if (text.trim().length < MIN_EDITOR_CONTEXT_LENGTH) {
-      return createEmptyProviderSnapshot(ZED_PROVIDER, "empty");
+      return createEmptyZedSnapshot("empty");
     }
     if (isCodeLikeFocusedEditorText(text)) {
-      return createSuppressedProviderSnapshot(ZED_PROVIDER, CODE_LIKE_CONTEXT_SUPPRESSION_REASON);
+      return createSuppressedZedSnapshot(CODE_LIKE_CONTEXT_SUPPRESSION_REASON);
     }
 
     return sanitizeAppContextSnapshot({
