@@ -69,6 +69,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
   let textSessionSnapshot: TextSessionSnapshot | null = null;
+  let visibleTextSessionTarget: TextSessionSnapshot | null = null;
   const { outputs } = deps;
   const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy();
 
@@ -91,6 +92,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   function clearVisibleSuggestion(): void {
     currentSuggestion = null;
+    visibleTextSessionTarget = null;
     visibleSuggestionTelemetry = null;
   }
 
@@ -130,6 +132,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
+      visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
       visibleSuggestionTelemetry = buildTelemetry(suggestion);
       outputs.showSuggestion(suggestion);
     },
@@ -257,12 +260,15 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       outputs.showDebugContext();
     },
     async acceptCurrentSuggestion(): Promise<void> {
-      const result = await acceptAndInsertSuggestion(
-        deps.createAcceptanceDependencies(
-          () => currentSuggestion,
-          () => previouslyActiveApplication,
-        ),
+      const insertionDeps = deps.createAcceptanceDependencies(
+        () => currentSuggestion,
+        () => previouslyActiveApplication,
       );
+      const result = await acceptAndInsertSuggestion({
+        ...insertionDeps,
+        getVisibleTextSessionTarget: () => visibleTextSessionTarget,
+        getCurrentTextSessionTarget: () => textSessionSnapshot,
+      });
 
       if (result === "inserted") {
         recordInteractionTelemetry("suggestion_accepted");

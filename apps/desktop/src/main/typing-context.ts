@@ -59,6 +59,7 @@ export type TextSessionSnapshot = {
   readonly caretIdentity: string | null;
   readonly secureLike: boolean;
   readonly accessibilityReliability: TextSessionReliability;
+  readonly supportsSemanticInsertion?: boolean;
   readonly surroundingContext?: {
     readonly beforeCaret?: string;
     readonly afterCaret?: string;
