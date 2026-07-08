@@ -330,17 +330,45 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
 function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
   return (
     <Card id="memories">
-      <CardHeader><CardTitle>Personal Memory</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle>Personal Memory</CardTitle>
+        <CardDescription>Teach, edit, and delete the facts Tabb can use for personalization.</CardDescription>
+      </CardHeader>
       <CardContent>
+        <form method="post" action="/account/memory/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
+          <Label htmlFor="memory-content">Teach Tabb a memory</Label>
+          <textarea
+            id="memory-content"
+            name="content"
+            maxLength={500}
+            required
+            rows={3}
+            className="min-h-24 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            placeholder="Example: I prefer concise morning status summaries."
+          />
+          <p><Button type="submit">Save memory</Button></p>
+        </form>
         {memories.length === 0 ? <p className="text-muted-foreground">No memories stored yet.</p> : (
           <Table>
-            <TableHeader><TableRow><TableHead>Content</TableHead><TableHead>Created by</TableHead><TableHead>Added</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader><TableRow><TableHead>Content</TableHead><TableHead>Created by</TableHead><TableHead>Updated</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
               {memories.map((memory) => (
                 <TableRow key={memory.id}>
-                  <TableCell>{memory.content}</TableCell>
+                  <TableCell>
+                    <form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/edit`} className="grid gap-2">
+                      <textarea
+                        name="content"
+                        maxLength={500}
+                        required
+                        rows={2}
+                        className="min-h-20 rounded-md border bg-background px-3 py-2 text-sm text-foreground shadow-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                        defaultValue={memory.content}
+                      />
+                      <p><Button type="submit" size="sm" variant="secondary">Save edit</Button></p>
+                    </form>
+                  </TableCell>
                   <TableCell>{memory.createdBy}</TableCell>
-                  <TableCell>{formatDate(memory.createdAt)}</TableCell>
+                  <TableCell>{formatDate(memory.updatedAt)}</TableCell>
                   <TableCell><form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/delete`}><Button type="submit" size="sm" variant="secondary">Delete</Button></form></TableCell>
                 </TableRow>
               ))}

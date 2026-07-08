@@ -484,6 +484,64 @@ describe("Web account surface", () => {
     expect(bodyAfter).not.toInclude("Lives in Portland");
   });
 
+  it("creates and edits Personal Memory from the account surface", async () => {
+    const { apiApp, billingService, database, webApp, personalMemoryStorage } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activateFreePlan(billingService, userId);
+
+    const createForm = new FormData();
+    createForm.set("content", "Prefers concise summaries");
+    const createResponse = await webRequest(
+      webApp,
+      "/account/memory/create",
+      { method: "POST", body: createForm },
+      cookie,
+    );
+
+    expect(createResponse.status).toBe(302);
+    expect(createResponse.headers.get("location")).toBe(
+      "/dashboard?tab=memories",
+    );
+
+    const memoriesAfterCreate = await personalMemoryStorage.listMemoriesByUser(userId);
+    expect(memoriesAfterCreate).toHaveLength(1);
+    expect(memoriesAfterCreate[0]?.content).toBe("Prefers concise summaries");
+    expect(memoriesAfterCreate[0]?.createdBy).toBe("user");
+
+    const systemMemory = await personalMemoryStorage.createMemory({
+      userId,
+      content: "Works at Acme",
+      createdBy: "system",
+    });
+    const editForm = new FormData();
+    editForm.set("content", "Works at Acme Robotics");
+
+    const editResponse = await webRequest(
+      webApp,
+      `/account/memory/${systemMemory.id}/edit`,
+      { method: "POST", body: editForm },
+      cookie,
+    );
+
+    expect(editResponse.status).toBe(302);
+    expect(editResponse.headers.get("location")).toBe(
+      "/dashboard?tab=memories",
+    );
+
+    const editedMemory = await personalMemoryStorage.findMemoryById(systemMemory.id);
+    expect(editedMemory?.content).toBe("Works at Acme Robotics");
+    expect(editedMemory?.createdBy).toBe("user");
+
+    const accountPage = await webRequest(webApp, "/dashboard", {}, cookie);
+    expect(accountPage.status).toBe(200);
+    const body = await accountPage.text();
+    expect(body).toInclude("Prefers concise summaries");
+    expect(body).toInclude("Works at Acme Robotics");
+    expect(body).toInclude("Teach Tabb a memory");
+  });
+
   it("lists and revokes native devices from the account surface", async () => {
     const { apiApp, billingService, database, webApp, deviceTokenService } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
