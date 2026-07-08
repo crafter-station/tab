@@ -12,7 +12,11 @@ import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engi
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
-import { createAppContextManager, type AppContextSnapshot } from "../apps/desktop/src/main/app-context.ts";
+import {
+  createAccessibilityAppContextProvider,
+  createAppContextManager,
+  type AppContextSnapshot,
+} from "../apps/desktop/src/main/app-context.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
@@ -179,6 +183,50 @@ describe("desktop native suggestion loop", () => {
       expect(getLastWords("one two three four", 2)).toBe("three four");
       expect(getLastWords("  one\n two\tthree  ", 10)).toBe("one two three");
       expect(getLastWords("   ", 100)).toBe("");
+    });
+  });
+
+  describe("Accessibility App Context provider", () => {
+    it("extracts bounded suggestion-only context for supported writing apps", () => {
+      const provider = createAccessibilityAppContextProvider(() => ({
+        activeApplication: { bundleId: "net.whatsapp.WhatsApp", name: "WhatsApp" },
+        visibleRoot: {
+          role: "AXGroup",
+          children: [
+            { role: "AXStaticText", value: "Alex" },
+            { role: "AXStaticText", value: "Can you confirm the launch date?" },
+            { role: "AXStaticText", value: "Me: I can" },
+          ],
+        },
+      }));
+
+      const snapshot = provider();
+
+      expect(snapshot.metadata).toMatchObject({
+        provider: "whatsapp-accessibility",
+        status: "available",
+      });
+      expect(snapshot.fragments).toHaveLength(1);
+      expect(snapshot.fragments[0]).toMatchObject({
+        provider: "whatsapp-accessibility",
+        kind: "conversation",
+        requestable: true,
+        memoryEligible: false,
+      });
+      expect(snapshot.fragments[0].text).toContain("Alex");
+      expect(snapshot.fragments[0].text).toContain("Can you confirm the launch date?");
+    });
+
+    it("falls back safely for unsupported apps", () => {
+      const provider = createAccessibilityAppContextProvider(() => ({
+        activeApplication: { bundleId: "com.example.Unknown" },
+        visibleRoot: { role: "AXStaticText", value: "Visible text" },
+      }));
+
+      expect(provider()).toEqual({
+        fragments: [],
+        metadata: { status: "unsupported" },
+      });
     });
   });
 

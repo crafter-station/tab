@@ -1,13 +1,28 @@
-import type { AppContext, AppContextFragment } from "@tabb/contracts";
+import type { ActiveApplication, AppContext, AppContextFragment } from "@tabb/contracts";
 import { redactSensitiveText } from "@tabb/redaction";
 
 const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
+const MIN_PROVIDER_CONFIDENCE = 0.65;
 
 export type AppContextSnapshot = AppContext;
 
 export type AppContextProvider = () => AppContextSnapshot;
+
+export type AccessibilityContextNode = {
+  readonly role?: string;
+  readonly title?: string;
+  readonly value?: string;
+  readonly description?: string;
+  readonly children?: readonly AccessibilityContextNode[];
+};
+
+export type AccessibilityAppContextInput = {
+  readonly activeApplication: ActiveApplication | null;
+  readonly focusedElement?: AccessibilityContextNode | null;
+  readonly visibleRoot?: AccessibilityContextNode | null;
+};
 
 export type AppContextManager = {
   setSnapshot(snapshot: AppContextSnapshot): void;
@@ -17,6 +32,106 @@ export type AppContextManager = {
 
 function emptySnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextSnapshot {
   return { fragments: [], metadata: { status } };
+}
+
+type AppContextAdapter = {
+  readonly provider: string;
+  readonly kind: string;
+  readonly confidence: number;
+};
+
+const SUPPORTED_ACCESSIBILITY_ADAPTERS: ReadonlyArray<{
+  readonly bundleIds: readonly string[];
+  readonly adapter: AppContextAdapter;
+}> = [
+  {
+    bundleIds: ["net.whatsapp.WhatsApp", "com.whatsapp.WhatsApp"],
+    adapter: { provider: "whatsapp-accessibility", kind: "conversation", confidence: 0.86 },
+  },
+  {
+    bundleIds: ["com.mitchellh.ghostty"],
+    adapter: { provider: "ghostty-accessibility", kind: "terminal_session", confidence: 0.72 },
+  },
+  {
+    bundleIds: ["md.obsidian"],
+    adapter: { provider: "obsidian-accessibility", kind: "document", confidence: 0.78 },
+  },
+  {
+    bundleIds: ["dev.zed.Zed"],
+    adapter: { provider: "zed-accessibility", kind: "editor", confidence: 0.74 },
+  },
+  {
+    bundleIds: ["com.google.Chrome"],
+    adapter: { provider: "chrome-accessibility", kind: "browser_writing_surface", confidence: 0.7 },
+  },
+  {
+    bundleIds: ["com.apple.Notes"],
+    adapter: { provider: "notes-accessibility", kind: "document", confidence: 0.78 },
+  },
+  {
+    bundleIds: ["com.apple.mail"],
+    adapter: { provider: "mail-accessibility", kind: "conversation", confidence: 0.74 },
+  },
+  {
+    bundleIds: ["com.apple.MobileSMS"],
+    adapter: { provider: "messages-accessibility", kind: "conversation", confidence: 0.76 },
+  },
+  {
+    bundleIds: ["com.tinyspeck.slackmacgap"],
+    adapter: { provider: "slack-accessibility", kind: "conversation", confidence: 0.72 },
+  },
+  {
+    bundleIds: ["com.hnc.Discord"],
+    adapter: { provider: "discord-accessibility", kind: "conversation", confidence: 0.7 },
+  },
+  {
+    bundleIds: ["com.microsoft.VSCode"],
+    adapter: { provider: "vscode-accessibility", kind: "editor", confidence: 0.72 },
+  },
+  {
+    bundleIds: ["com.apple.TextEdit"],
+    adapter: { provider: "textedit-accessibility", kind: "document", confidence: 0.8 },
+  },
+];
+
+function findAdapter(activeApplication: ActiveApplication | null): AppContextAdapter | null {
+  if (!activeApplication) return null;
+  const bundleId = activeApplication.bundleId.toLowerCase();
+
+  return SUPPORTED_ACCESSIBILITY_ADAPTERS.find((entry) =>
+    entry.bundleIds.some((candidate) => candidate.toLowerCase() === bundleId),
+  )?.adapter ?? null;
+}
+
+function collectAccessibilityText(
+  node: AccessibilityContextNode | null | undefined,
+  output: string[] = [],
+): string[] {
+  if (!node) return output;
+
+  for (const value of [node.value, node.description, node.title]) {
+    const text = value?.replace(/\s+/g, " ").trim();
+    if (text) output.push(text);
+  }
+
+  for (const child of node.children ?? []) {
+    collectAccessibilityText(child, output);
+  }
+
+  return output;
+}
+
+function uniqueBoundedLines(lines: readonly string[]): string {
+  const seen = new Set<string>();
+  const uniqueLines: string[] = [];
+
+  for (const line of lines) {
+    if (seen.has(line)) continue;
+    seen.add(line);
+    uniqueLines.push(line);
+  }
+
+  return uniqueLines.join("\n").slice(0, MAX_FRAGMENT_LENGTH).trim();
 }
 
 function createSafeRedactionSummary(): AppContextFragment["redaction"] {
@@ -96,5 +211,63 @@ export function createAppContextManager(): AppContextManager {
     clear() {
       snapshot = emptySnapshot("cleared");
     },
+  };
+}
+
+export function createAccessibilityAppContextProvider(
+  readInput: () => AccessibilityAppContextInput,
+): AppContextProvider {
+  return () => {
+    const input = readInput();
+    const adapter = findAdapter(input.activeApplication);
+    if (!adapter) return emptySnapshot("unsupported");
+
+    if (adapter.confidence < MIN_PROVIDER_CONFIDENCE) {
+      return {
+        fragments: [],
+        metadata: {
+          provider: adapter.provider,
+          status: "suppressed",
+          confidence: adapter.confidence,
+          suppressionReason: "low_confidence_provider",
+        },
+      };
+    }
+
+    const text = uniqueBoundedLines([
+      ...collectAccessibilityText(input.focusedElement),
+      ...collectAccessibilityText(input.visibleRoot),
+    ]);
+
+    if (text.length === 0) {
+      return {
+        fragments: [],
+        metadata: {
+          provider: adapter.provider,
+          status: "empty",
+          confidence: adapter.confidence,
+        },
+      };
+    }
+
+    return sanitizeAppContextSnapshot({
+      fragments: [
+        {
+          id: `${adapter.provider}:visible-context`,
+          provider: adapter.provider,
+          kind: adapter.kind,
+          text,
+          confidence: adapter.confidence,
+          redaction: createSafeRedactionSummary(),
+          requestable: true,
+          memoryEligible: false,
+        },
+      ],
+      metadata: {
+        provider: adapter.provider,
+        status: "available",
+        confidence: adapter.confidence,
+      },
+    });
   };
 }
