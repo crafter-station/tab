@@ -131,6 +131,28 @@ function removeTimestamp(text: string): { text: string; timestamp?: string } {
   return { text: normalizeLine(text.replace(TIMESTAMP_PATTERN, "")), timestamp };
 }
 
+function directionFromValue(value: unknown): MessageDirection {
+  if (typeof value !== "string") return "unknown";
+  const normalized = value.toLowerCase();
+  if (normalized.includes("outgoing") || normalized.includes("sent")) return "outgoing";
+  if (normalized.includes("incoming") || normalized.includes("received")) return "incoming";
+  return "unknown";
+}
+
+function directionFromNode(node: AccessibilityNode): MessageDirection {
+  for (const value of [
+    node.attributes?.direction,
+    node.attributes?.AXDirection,
+    node.identifier,
+    node.subrole,
+    node.description,
+  ]) {
+    const direction = directionFromValue(value);
+    if (direction !== "unknown") return direction;
+  }
+  return "unknown";
+}
+
 function parseMessageNode(node: AccessibilityNode): WhatsAppMessage | null {
   const rawText = nodeText(node);
   if (!rawText || !isMessageNode(node, rawText)) return null;
@@ -140,7 +162,7 @@ function parseMessageNode(node: AccessibilityNode): WhatsAppMessage | null {
   if (lines.length === 0 || NOISY_TEXT.has(compactText.toLowerCase())) return null;
 
   let sender: string | undefined;
-  let direction: MessageDirection = "unknown";
+  let direction = directionFromNode(node);
   let timestamp: string | undefined;
   let text = "";
 

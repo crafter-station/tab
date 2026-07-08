@@ -77,6 +77,34 @@ describe("WhatsApp conversation App Context adapter", () => {
     });
   });
 
+  it("preserves explicit Accessibility direction metadata when sender text is absent", () => {
+    const snapshot = extractWhatsAppConversationContext({
+      activeApplication: whatsappApp,
+      accessibilityTree: {
+        children: [
+          { role: "AXHeading", title: "Alex" },
+          message("10:41 AM\nCan you confirm the launch date?", {
+            attributes: { direction: "incoming" },
+          }),
+          message("10:42 AM\nYes, I'll confirm it today.", {
+            attributes: { AXDirection: "outgoing" },
+          }),
+        ],
+      },
+    });
+
+    expect(snapshot.metadata.status).toBe("available");
+    expect(snapshot.fragments[0]?.text).toBe(
+      "Chat: Alex\n[incoming] Can you confirm the launch date?\n[outgoing] Yes, I'll confirm it today.",
+    );
+    expect(snapshot.fragments[0]?.metadata).toMatchObject({
+      messages: [
+        { direction: "incoming", timestamp: "10:41 AM" },
+        { direction: "outgoing", timestamp: "10:42 AM" },
+      ],
+    });
+  });
+
   it("tolerates missing speaker and direction while keeping bounded recent visible messages", () => {
     const snapshot = extractWhatsAppConversationContext({
       activeApplication: whatsappApp,
