@@ -41,6 +41,7 @@ export function registerTelemetryRoutes(
         timestamp: request.timestamp,
         activeApplicationBundleId: request.activeApplicationBundleId,
         suggestionLength: request.suggestionLength,
+        latencyMs: request.latencyMs,
       });
     } catch {
       // Telemetry ingestion is best-effort; still return success to the client

@@ -934,6 +934,8 @@ describe("desktop native suggestion loop", () => {
         suggestionLength: rawSuggestionText.length,
       });
       expect(telemetry.every((event) => typeof event.timestamp === "string")).toBe(true);
+      expect(telemetry.every((event) => typeof event.latencyMs === "number")).toBe(true);
+      expect(telemetry.every((event) => (event.latencyMs ?? -1) >= 0)).toBe(true);
 
       const json = JSON.stringify(telemetry);
       expect(json).not.toContain(rawTypingContext);

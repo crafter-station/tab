@@ -223,6 +223,7 @@ describe("Metadata-only suggestion telemetry", () => {
           timestamp: new Date().toISOString(),
           activeApplicationBundleId: "com.apple.Mail",
           suggestionLength: 5,
+          latencyMs: 12,
         }),
       });
 
@@ -233,6 +234,7 @@ describe("Metadata-only suggestion telemetry", () => {
     expect(events.some((e) => e.eventType === "suggestion_accepted")).toBe(true);
     expect(events.some((e) => e.eventType === "suggestion_dismissed")).toBe(true);
     expect(events.some((e) => e.eventType === "suggestion_stale")).toBe(true);
+    expect(events.every((e) => e.latencyMs === 12)).toBe(true);
     assertNoRawText(events, "accepted suggestion text");
   });
 
