@@ -16,7 +16,7 @@ export function createDesktopSuggestionRequest(input: SuggestionRequest): Sugges
   return input;
 }
 
-export { createTypingContextBuffer } from "./main/typing-context.ts";
+export { createTypingContextBuffer, type TextSessionSnapshot } from "./main/typing-context.ts";
 export { generateFakeSuggestion } from "./main/suggestion-engine.ts";
 export { createSuggestionLoop } from "./main/suggestion-loop.ts";
 export { acceptAndInsertSuggestion } from "./main/acceptance.ts";

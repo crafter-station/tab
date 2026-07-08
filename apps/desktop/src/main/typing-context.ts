@@ -36,12 +36,42 @@ export type TypingDeletionUnit = "character" | "token";
 export type TypingContextSuppressionReason =
   ContextSuppressionReason;
 
+export type TextSessionReliability = "reliable" | "unreliable" | "unavailable";
+
+export type TextSessionRange = {
+  readonly location: number;
+  readonly length: number;
+};
+
+export type TextSessionCaretBounds = {
+  readonly x: number;
+  readonly y: number;
+  readonly width: number;
+  readonly height: number;
+};
+
+export type TextSessionSnapshot = {
+  readonly activeApplication: ActiveApplication | null;
+  readonly focusedElementId: string | null;
+  readonly textElementId: string | null;
+  readonly selectedRange: TextSessionRange | null;
+  readonly caretIdentity: string | null;
+  readonly secureLike: boolean;
+  readonly accessibilityReliability: TextSessionReliability;
+  readonly surroundingContext?: {
+    readonly beforeCaret?: string;
+    readonly afterCaret?: string;
+  };
+  readonly caretBounds?: TextSessionCaretBounds;
+};
+
 export type SafeTypingContextSnapshot = TypingContextState & {
   sanitizedContext: string;
   redaction: RedactionSummary;
   contextHash: string;
   requestable: boolean;
   suppressionReason: TypingContextSuppressionReason | null;
+  textSession?: TextSessionSnapshot;
 };
 
 export type RequestableTypingContextSnapshot = SafeTypingContextSnapshot & {
@@ -62,6 +92,45 @@ export function buildTypingContextHash(state: Pick<TypingContextState, "activeAp
 
 export function createSafeTypingContextSnapshot(state: TypingContextState): SafeTypingContextSnapshot {
   return createSafeSuggestionContext(state);
+}
+
+export function isReliableTextSessionSnapshot(snapshot: TextSessionSnapshot): boolean {
+  return snapshot.accessibilityReliability === "reliable";
+}
+
+function rangeKey(range: TextSessionRange | null): string {
+  if (!range) return "range-unknown";
+  return `${range.location}:${range.length}`;
+}
+
+function textSessionIdentityKey(snapshot: TextSessionSnapshot): string {
+  return [
+    snapshot.activeApplication?.bundleId ?? "app-unknown",
+    snapshot.activeApplication?.windowId ?? "window-unknown",
+    snapshot.focusedElementId ?? "focus-unknown",
+    snapshot.textElementId ?? "text-unknown",
+    rangeKey(snapshot.selectedRange),
+    snapshot.caretIdentity ?? "caret-unknown",
+    snapshot.secureLike ? "secure" : "not-secure",
+  ].join(":");
+}
+
+export function createSafeTextSessionSnapshot(snapshot: TextSessionSnapshot): SafeTypingContextSnapshot {
+  const state: TypingContextState = {
+    context: snapshot.surroundingContext?.beforeCaret ?? "",
+    activeApplication: snapshot.activeApplication,
+    secureInput: snapshot.secureLike,
+    paused: false,
+    privateContext: snapshot.secureLike || isPrivateActiveApplication(snapshot.activeApplication),
+    contextSource: "typed_text",
+    memoryEligible: decideMemoryEligibility("typed_text"),
+  };
+  const safeSnapshot = createSafeTypingContextSnapshot(state);
+  return {
+    ...safeSnapshot,
+    contextHash: `${safeSnapshot.contextHash}:text-session:${textSessionIdentityKey(snapshot)}`,
+    textSession: snapshot,
+  };
 }
 
 export function getLastWords(text: string, maxWords: number): string {

@@ -1,7 +1,14 @@
 import type { ActiveApplication, Suggestion, SuggestionContextSource } from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import { createSuggestionLoop } from "./suggestion-loop.ts";
-import type { RequestableTypingContextSnapshot, TypingContextBuffer, TypingDeletionUnit } from "./typing-context.ts";
+import {
+  createSafeTextSessionSnapshot,
+  isReliableTextSessionSnapshot,
+  type RequestableTypingContextSnapshot,
+  type TextSessionSnapshot,
+  type TypingContextBuffer,
+  type TypingDeletionUnit,
+} from "./typing-context.ts";
 
 export type NativeSuggestionSessionOutputs = {
   readonly showSuggestion: (suggestion: Suggestion) => void;
@@ -36,10 +43,11 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let currentSuggestion: Suggestion | null = null;
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
+  let textSessionSnapshot: TextSessionSnapshot | null = null;
   const { outputs } = deps;
 
   const suggestionLoop = createSuggestionLoop({
-    getContext: () => deps.typingContext.getSnapshot(),
+    getContext: () => textSessionSnapshot ? createSafeTextSessionSnapshot(textSessionSnapshot) : deps.typingContext.getSnapshot(),
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
@@ -67,7 +75,15 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     outputs.showDebugContext();
   }
 
+  function setPreviouslyActiveApplication(activeApplication: ActiveApplication | null): void {
+    const isTabb = activeApplication?.bundleId.toLowerCase().includes("tabb") ?? false;
+    if (activeApplication && !isTabb) {
+      previouslyActiveApplication = activeApplication;
+    }
+  }
+
   function clearContext(): void {
+    textSessionSnapshot = null;
     deps.typingContext.clear();
     outputs.resetDebugApiState();
     currentSuggestion = null;
@@ -77,30 +93,31 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   return {
     appendText(text: string): void {
       if (observationPaused) return;
+      textSessionSnapshot = null;
       deps.typingContext.appendText(text, deps.getContextSource());
       contextChanged();
     },
     appendPastedText(text: string): void {
       if (observationPaused) return;
+      textSessionSnapshot = null;
       deps.typingContext.appendPastedText(text);
       contextChanged();
     },
     deleteBackward(unit: TypingDeletionUnit = "character"): void {
       if (observationPaused) return;
+      textSessionSnapshot = null;
       deps.typingContext.deleteBackward(unit);
       contextChanged();
     },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
       if (observationPaused) return;
+      textSessionSnapshot = null;
 
       const activeApplication = bundleId ? { bundleId, ...(windowId ? { windowId } : {}) } : null;
       const previousActiveKey = activeApplicationKey(deps.typingContext.getState().activeApplication);
       const nextActiveKey = activeApplicationKey(activeApplication);
 
-      const isTabb = bundleId?.toLowerCase().includes("tabb") ?? false;
-      if (activeApplication && !isTabb) {
-        previouslyActiveApplication = activeApplication;
-      }
+      setPreviouslyActiveApplication(activeApplication);
 
       if (nextActiveKey === previousActiveKey) {
         return;
@@ -110,7 +127,16 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       contextChanged();
     },
     setSecureInput(active: boolean): void {
+      textSessionSnapshot = null;
       deps.typingContext.setSecureInput(active);
+      contextChanged();
+    },
+    applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
+      if (observationPaused) return;
+      textSessionSnapshot = isReliableTextSessionSnapshot(snapshot) ? snapshot : null;
+      if (textSessionSnapshot) {
+        setPreviouslyActiveApplication(textSessionSnapshot.activeApplication);
+      }
       contextChanged();
     },
     setPaused(active: boolean): void {

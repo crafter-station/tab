@@ -5,6 +5,7 @@ import {
   getLastWords,
   type RequestableTypingContextSnapshot,
   type SafeTypingContextSnapshot,
+  type TextSessionSnapshot,
 } from "../apps/desktop/src/main/typing-context.ts";
 import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engine.ts";
 import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
@@ -434,6 +435,59 @@ describe("desktop native suggestion loop", () => {
       session.deleteBackward("token");
 
       expect(buffer.getState().context).toBe("Hello");
+    });
+
+    it("routes reliable Text Session snapshots through the loop and falls back to Typing Context when unreliable", async () => {
+      const { calls, session } = makeSession();
+      const textSession = (overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot => ({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 5, length: 0 },
+        caretIdentity: "caret:5",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "Hello", afterCaret: "" },
+        caretBounds: { x: 10, y: 20, width: 1, height: 18 },
+        ...overrides,
+      });
+
+      session.applyTextSessionSnapshot(textSession());
+      await wait(10);
+
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: "Hello" });
+      expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
+
+      session.applyTextSessionSnapshot(textSession({ caretIdentity: "caret:3", selectedRange: { location: 3, length: 0 } }));
+      await wait(10);
+
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
+
+      const hidesAfterCaretChange = calls.filter((call) => call.type === "hideOverlay").length;
+      session.applyTextSessionSnapshot(textSession({ focusedElementId: "focus:2", textElementId: "text:2" }));
+      await wait(10);
+
+      expect(calls.filter((call) => call.type === "hideOverlay").length).toBeGreaterThan(hidesAfterCaretChange);
+
+      const hidesAfterElementChange = calls.filter((call) => call.type === "hideOverlay").length;
+      session.applyTextSessionSnapshot(textSession({ activeApplication: { bundleId: "com.apple.Notes", windowId: "window:2" } }));
+      await wait(10);
+
+      expect(calls.filter((call) => call.type === "hideOverlay").length).toBeGreaterThan(hidesAfterElementChange);
+
+      const requestsBeforeSecureSnapshot = calls.filter((call) => call.type === "requestSuggestion").length;
+      session.applyTextSessionSnapshot(textSession({ secureLike: true }));
+      await wait(10);
+
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(requestsBeforeSecureSnapshot);
+      expect(session.getCurrentSuggestion()).toBeNull();
+
+      session.applyTextSessionSnapshot(textSession({ accessibilityReliability: "unreliable" }));
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Fallback");
+      await wait(10);
+
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: "Fallback" });
     });
   });
 

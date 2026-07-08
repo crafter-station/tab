@@ -14,7 +14,7 @@ import { fileURLToPath } from "node:url";
 import { exec, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { promisify } from "node:util";
-import { createTypingContextBuffer, getLastWords, type TypingDeletionUnit } from "./typing-context.ts";
+import { createTypingContextBuffer, getLastWords, type TextSessionSnapshot, type TypingDeletionUnit } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
 import { createDesktopAuthClient } from "./auth.ts";
@@ -690,6 +690,7 @@ function handleInputTapMessage(message: unknown): void {
     bundleId?: unknown;
     windowId?: unknown;
     message?: unknown;
+    snapshot?: unknown;
   };
 
   if (payload.type === "ready") {
@@ -713,7 +714,27 @@ function handleInputTapMessage(message: unknown): void {
   }
   if (payload.type === "delete") {
     handleDeleteBackward(payload.unit === "token" ? "token" : "character");
+    return;
   }
+  if (payload.type === "text-session" && isTextSessionSnapshot(payload.snapshot)) {
+    handleTextSessionSnapshot(payload.snapshot);
+  }
+}
+
+function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
+  if (!value || typeof value !== "object") return false;
+  const snapshot = value as Partial<TextSessionSnapshot>;
+  return (
+    (snapshot.activeApplication === null || typeof snapshot.activeApplication === "object") &&
+    (snapshot.focusedElementId === null || typeof snapshot.focusedElementId === "string") &&
+    (snapshot.textElementId === null || typeof snapshot.textElementId === "string") &&
+    (snapshot.selectedRange === null || typeof snapshot.selectedRange === "object") &&
+    (snapshot.caretIdentity === null || typeof snapshot.caretIdentity === "string") &&
+    typeof snapshot.secureLike === "boolean" &&
+    (snapshot.accessibilityReliability === "reliable" ||
+      snapshot.accessibilityReliability === "unreliable" ||
+      snapshot.accessibilityReliability === "unavailable")
+  );
 }
 
 function startMacOSInputTap(): void {
@@ -996,6 +1017,10 @@ export function handleActiveApplicationChanged(bundleId: string | null, windowId
 
 export function handleSecureInputChanged(active: boolean): void {
   nativeSuggestionSession.setSecureInput(active);
+}
+
+export function handleTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
+  nativeSuggestionSession.applyTextSessionSnapshot(snapshot);
 }
 
 export function handlePauseChanged(active: boolean): void {
