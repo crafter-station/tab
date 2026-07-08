@@ -10,6 +10,11 @@ import { createDesktopMemoryClient } from "../apps/desktop/src/main/memory-clien
 import { createMemoryExtractionWindow } from "../apps/desktop/src/main/memory-extraction-window.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
+const textEncoder = new TextEncoder();
+
+function textByteLength(text: string): number {
+  return textEncoder.encode(text).length;
+}
 
 async function createApiFixture() {
   const database = new Database(":memory:");
@@ -256,7 +261,7 @@ describe("desktop memory extraction window", () => {
         activeApplication: { bundleId: "com.example.editor" },
       }),
     ).toBe(true);
-    expect(window.getEntries()[0].text.length).toBe(1_024);
+    expect(textByteLength(window.getEntries()[0].text)).toBe(1_024);
 
     for (let i = 0; i < 8; i += 1) {
       currentTimeMs += 1_000;
@@ -267,7 +272,7 @@ describe("desktop memory extraction window", () => {
       });
     }
 
-    expect(window.getEntries().reduce((size, entry) => size + entry.text.length, 0)).toBeLessThanOrEqual(8_192);
+    expect(window.getEntries().reduce((size, entry) => size + textByteLength(entry.text), 0)).toBeLessThanOrEqual(8_192);
 
     currentTimeMs += 31 * 60 * 1_000;
     window.append({

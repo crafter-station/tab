@@ -32,6 +32,7 @@ export type MemoryExtractionWindowDependencies = {
 const DEFAULT_MAX_AGE_MS = 30 * 60 * 1_000;
 const DEFAULT_MAX_TOTAL_TEXT_BYTES = 8 * 1_024;
 const DEFAULT_MAX_ENTRY_TEXT_BYTES = 1 * 1_024;
+const textEncoder = new TextEncoder();
 
 function getMemoryEnabled(value: MemoryExtractionWindowDependencies["memoryEnabled"]): boolean {
   return typeof value === "function" ? value() : value;
@@ -46,14 +47,13 @@ function toRedactionSummary(result: ReturnType<typeof redactSensitiveText>): Red
 }
 
 function truncateUtf8Text(text: string, maxBytes: number): string {
-  if (new TextEncoder().encode(text).length <= maxBytes) return text;
+  if (textByteLength(text) <= maxBytes) return text;
 
   let byteLength = 0;
   let truncated = "";
-  const encoder = new TextEncoder();
 
   for (const char of text) {
-    const charBytes = encoder.encode(char).length;
+    const charBytes = textByteLength(char);
     if (byteLength + charBytes > maxBytes) break;
     byteLength += charBytes;
     truncated += char;
@@ -63,13 +63,14 @@ function truncateUtf8Text(text: string, maxBytes: number): string {
 }
 
 function textByteLength(text: string): number {
-  return new TextEncoder().encode(text).length;
+  return textEncoder.encode(text).length;
 }
 
-function isEligibleExtractionSource(
+function isBufferableExtractionSource(
   source: MemoryExtractionAppendSource,
 ): source is MemoryExtractionEntry["contextSource"] {
-  return source === "typed_text" || source === "terminal_input";
+  if (source !== "typed_text" && source !== "terminal_input") return false;
+  return getMemoryEligibility(source).eligible;
 }
 
 export function createMemoryExtractionWindow(deps: MemoryExtractionWindowDependencies) {
@@ -100,18 +101,7 @@ export function createMemoryExtractionWindow(deps: MemoryExtractionWindowDepende
       return false;
     }
 
-    if (input.source === "suggestion_text" || input.source === "accepted_suggestion_text") {
-      return false;
-    }
-
-    if (!isEligibleExtractionSource(input.source)) {
-      return false;
-    }
-
-    const eligibility = getMemoryEligibility(input.source);
-    if (!eligibility.eligible) {
-      return false;
-    }
+    if (!isBufferableExtractionSource(input.source)) return false;
 
     const redacted = redactSensitiveText(input.text);
     const text = truncateUtf8Text(redacted.text, maxEntryTextBytes);
