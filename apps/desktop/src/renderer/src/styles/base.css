@@ -16,9 +16,6 @@
   --signal-tint: var(--tab-signal-tint);
   --on-signal: var(--primary-foreground);
   --success-tint: var(--tab-success-tint);
-  --glass-bg: var(--tab-glass-bg);
-  --glass-border: var(--tab-glass-border);
-  --glass-shadow: var(--tab-glass-shadow);
   --ease-out: var(--tab-ease-out);
   --ease-in-out: var(--tab-ease-in-out);
   font-family: var(--font-body);

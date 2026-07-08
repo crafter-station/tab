@@ -15,8 +15,8 @@
   padding: 34px;
   overflow: hidden;
   background:
-    var(--tabb-page-wash),
-    var(--tabb-grid-bg),
+    var(--tab-page-wash),
+    var(--tab-grid-bg),
     var(--bg);
   background-size: auto, 32px 32px, auto;
   border-right: 1px solid var(--border);
@@ -30,7 +30,7 @@
   background-color: color-mix(in srgb, var(--card) 92%, transparent);
   border: 1px solid var(--border);
   border-radius: var(--radius-surface);
-  box-shadow: var(--tabb-shadow-soft);
+  box-shadow: var(--tab-shadow-soft);
 }
 
 .sign-in-proof h2 {
@@ -118,7 +118,7 @@
   font-weight: 900;
   background: var(--signal);
   border-radius: 15px;
-  box-shadow: var(--tabb-shadow-soft);
+  box-shadow: var(--tab-shadow-soft);
 }
 
 .sign-in-brand strong {

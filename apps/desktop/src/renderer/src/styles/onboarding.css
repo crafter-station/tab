@@ -132,7 +132,7 @@
 
 .onboarding-status {
   color: var(--info);
-  background: var(--tabb-info-tint);
+  background: var(--tab-info-tint);
   border: 1px solid color-mix(in srgb, var(--info) 28%, transparent);
 }
 
@@ -175,7 +175,7 @@
 
 .practice-suggestion {
   border-color: color-mix(in srgb, var(--info) 28%, var(--border));
-  box-shadow: var(--tabb-shadow-soft);
+  box-shadow: var(--tab-shadow-soft);
 }
 
 .practice-suggestion__actions,

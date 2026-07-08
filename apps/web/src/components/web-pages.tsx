@@ -476,7 +476,7 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
               meta={`Resets ${formatDate(data.quota.resetAt)}`}
             />
             {quotaExhausted ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-950">
+              <div className="rounded-lg border border-warning/30 bg-[var(--tab-warning-tint)] p-3 text-warning">
                 <strong>Quota exhausted.</strong> You have used {data.quota.usage.toLocaleString()} of {data.quota.quota.toLocaleString()} autocompletes this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
               </div>
             ) : null}
