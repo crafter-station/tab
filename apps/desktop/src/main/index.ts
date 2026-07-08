@@ -22,11 +22,16 @@ import {
   type TextSessionReliability,
   type TextSessionSnapshot,
   type TypingDeletionUnit,
+  type SafeTypingContextSnapshot,
 } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
-import { extractAppContextFromAccessibility } from "./app-context.ts";
+import {
+  extractAppContextFromAccessibility,
+  type AccessibilityTextNode,
+  type AppContextSnapshot,
+} from "./app-context.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -237,22 +242,26 @@ type DebugApiState =
   | { status: "suggestion"; text: string };
 let debugApiState: DebugApiState = { status: "idle" };
 
+function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
+  const surroundingContext = snapshot.textSession?.surroundingContext;
+  if (!surroundingContext) return { fragments: [], metadata: { status: "empty" } };
+
+  const children: AccessibilityTextNode[] = [];
+  for (const value of [surroundingContext.beforeCaret, surroundingContext.afterCaret]) {
+    const trimmedValue = value?.trim();
+    if (trimmedValue) children.push({ role: "AXStaticText", value: trimmedValue });
+  }
+
+  return extractAppContextFromAccessibility(snapshot.activeApplication, {
+    role: "AXFocusedTextSession",
+    children,
+  });
+}
+
 const nativeSuggestionSession = createNativeSuggestionSession({
   typingContext: typingContextBuffer,
   requestSuggestion,
-  getAppContext: (snapshot) => {
-    const surroundingContext = snapshot.textSession?.surroundingContext;
-    if (!surroundingContext) return { fragments: [], metadata: { status: "empty" } };
-
-    const values = [surroundingContext.beforeCaret, surroundingContext.afterCaret]
-      .map((value) => value?.trim() ?? "")
-      .filter((value) => value.length > 0);
-
-    return extractAppContextFromAccessibility(snapshot.activeApplication, {
-      role: "AXFocusedTextSession",
-      children: values.map((value) => ({ role: "AXStaticText", value })),
-    });
-  },
+  getAppContext: getAppContextFromTextSession,
   getContextSource: getTypedContextSource,
   outputs: {
     showSuggestion: showOverlay,

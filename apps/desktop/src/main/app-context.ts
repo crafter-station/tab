@@ -44,6 +44,12 @@ type ProviderDefinition = {
   readonly confidence: number;
 };
 
+type AppSpecificProviderMatcher = {
+  readonly bundleId: string;
+  readonly definition: ProviderDefinition;
+  readonly includeVariants?: boolean;
+};
+
 const APPLE_NOTES_PROVIDER: ProviderDefinition = {
   provider: "apple-notes-accessibility",
   kind: "focused_note",
@@ -62,11 +68,17 @@ const DISCORD_PROVIDER: ProviderDefinition = {
   confidence: 0.8,
 };
 
-const APP_SPECIFIC_PROVIDERS: Record<string, ProviderDefinition> = {
-  "com.apple.Notes": APPLE_NOTES_PROVIDER,
-  "com.tinyspeck.slackmacgap": SLACK_PROVIDER,
-  "com.hnc.Discord": DISCORD_PROVIDER,
+const GENERIC_ACCESSIBILITY_PROVIDER: ProviderDefinition = {
+  provider: "generic-accessibility-text",
+  kind: "visible_text",
+  confidence: 0.76,
 };
+
+const APP_SPECIFIC_PROVIDER_MATCHERS: readonly AppSpecificProviderMatcher[] = [
+  { bundleId: "com.apple.Notes", definition: APPLE_NOTES_PROVIDER },
+  { bundleId: "com.tinyspeck.slackmacgap", definition: SLACK_PROVIDER, includeVariants: true },
+  { bundleId: "com.hnc.Discord", definition: DISCORD_PROVIDER, includeVariants: true },
+];
 
 const GENERIC_ACCESSIBILITY_APPS = new Set([
   "com.apple.mail",
@@ -75,12 +87,11 @@ const GENERIC_ACCESSIBILITY_APPS = new Set([
   "com.apple.TextEdit",
 ]);
 
-const APP_SPECIFIC_PROVIDER_PREFIXES: readonly [string, ProviderDefinition][] = [
-  ["com.tinyspeck.slackmacgap", SLACK_PROVIDER],
-  ["com.hnc.Discord", DISCORD_PROVIDER],
-];
-
 const GENERIC_ACCESSIBILITY_APP_PREFIXES = ["com.microsoft.VSCode", "com.visualstudio.code"] as const;
+
+function matchesAppSpecificProvider(bundleId: string, matcher: AppSpecificProviderMatcher): boolean {
+  return matcher.includeVariants ? bundleId.startsWith(matcher.bundleId) : bundleId === matcher.bundleId;
+}
 
 function collectAccessibilityText(node: AccessibilityTextNode, values: string[]): void {
   for (const field of ACCESSIBILITY_TEXT_FIELDS) {
@@ -103,20 +114,22 @@ function extractBoundedAccessibilityText(root: AccessibilityTextNode): string {
 
 function genericProviderFor(activeApplication: ActiveApplication): ProviderDefinition | null {
   const bundleId = activeApplication.bundleId;
-  if (!GENERIC_ACCESSIBILITY_APPS.has(bundleId)
-    && !GENERIC_ACCESSIBILITY_APP_PREFIXES.some((prefix) => bundleId.startsWith(prefix))) {
+  const isGenericAccessibilityApp = GENERIC_ACCESSIBILITY_APPS.has(bundleId)
+    || GENERIC_ACCESSIBILITY_APP_PREFIXES.some((prefix) => bundleId.startsWith(prefix));
+
+  if (!isGenericAccessibilityApp) {
     return null;
   }
 
-  return { provider: "generic-accessibility-text", kind: "visible_text", confidence: 0.76 };
+  return GENERIC_ACCESSIBILITY_PROVIDER;
 }
 
 function providerDefinitionFor(activeApplication: ActiveApplication): ProviderDefinition | null {
-  const exactProvider = APP_SPECIFIC_PROVIDERS[activeApplication.bundleId];
-  if (exactProvider) return exactProvider;
+  const appSpecificProvider = APP_SPECIFIC_PROVIDER_MATCHERS.find((matcher) =>
+    matchesAppSpecificProvider(activeApplication.bundleId, matcher),
+  );
 
-  const prefixedProvider = APP_SPECIFIC_PROVIDER_PREFIXES.find(([prefix]) => activeApplication.bundleId.startsWith(prefix));
-  return prefixedProvider?.[1] ?? genericProviderFor(activeApplication);
+  return appSpecificProvider?.definition ?? genericProviderFor(activeApplication);
 }
 
 export function extractAppContextFromAccessibility(
