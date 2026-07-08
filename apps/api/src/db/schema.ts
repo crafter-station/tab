@@ -106,6 +106,26 @@ export const personalMemories = sqliteTable(
   (table) => [index("idx_personal_memories_user").on(table.userId)],
 );
 
+export const memoryExtractionIdempotency = sqliteTable(
+  "memory_extraction_idempotency",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    batchIdHash: text("batch_id_hash").notNull(),
+    created: integer("created").notNull(),
+    updated: integer("updated").notNull(),
+    deleted: integer("deleted").notNull(),
+    rejected: integer("rejected").notNull(),
+    createdAt: text("created_at").notNull(),
+    expiresAt: text("expires_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.batchIdHash] }),
+    index("idx_memory_extraction_idempotency_expires").on(table.expiresAt),
+  ],
+);
+
 export const userEntitlements = sqliteTable("user_entitlements", {
   userId: text("user_id")
     .primaryKey()
@@ -166,6 +186,7 @@ export const userRelations = relations(user, ({ many }) => ({
   accounts: many(account),
   devices: many(deviceTokens),
   memories: many(personalMemories),
+  memoryExtractionIdempotency: many(memoryExtractionIdempotency),
   usage: many(usageRecords),
   telemetryEvents: many(telemetryEvents),
 }));

@@ -25,7 +25,12 @@ import {
 } from "./personal-memory.ts";
 import {
   BackgroundMemoryAgent,
+  D1MemoryExtractionIdempotencyStorage,
   InMemoryMemoryJobQueue,
+  InMemoryMemoryExtractionIdempotencyStorage,
+  MemoryExtractionService,
+  type MemoryAgentModel,
+  type MemoryExtractionIdempotencyStorage,
   type MemoryJobQueue,
 } from "./memory-agent.ts";
 import {
@@ -78,6 +83,8 @@ export type ApiDependencies = {
   readonly vectorIndex?: PersonalMemoryVectorIndex;
   readonly memoryJobQueue?: MemoryJobQueue;
   readonly memoryAgent?: BackgroundMemoryAgent;
+  readonly memoryExtractionModel?: MemoryAgentModel;
+  readonly memoryExtractionIdempotencyStorage?: MemoryExtractionIdempotencyStorage;
   readonly telemetryService?: TelemetryService;
   readonly telemetryStorage?: TelemetryStorage;
 };
@@ -91,6 +98,7 @@ export function createApp(deps: ApiDependencies = {}) {
       | "billingService"
       | "usageMeterService"
       | "personalMemoryStorage"
+      | "memoryExtractionIdempotencyStorage"
       | "telemetryStorage"
     >
   > = deps.db ? createD1Dependencies(deps.db) : {};
@@ -132,6 +140,14 @@ export function createApp(deps: ApiDependencies = {}) {
       personalMemoryService,
       model: deps.generateSuggestion ? undefined : BackgroundMemoryAgent.createRealModel(),
     });
+  const memoryExtractionIdempotencyStorage =
+    deps.memoryExtractionIdempotencyStorage ??
+    new InMemoryMemoryExtractionIdempotencyStorage();
+  const memoryExtractionService = new MemoryExtractionService({
+    personalMemoryService,
+    idempotencyStorage: memoryExtractionIdempotencyStorage,
+    model: deps.memoryExtractionModel,
+  });
   const telemetryService =
     deps.telemetryService ?? new TelemetryService({ storage: telemetryStorage! });
   const suggestionUseCase = new SuggestionUseCase({
@@ -161,7 +177,11 @@ export function createApp(deps: ApiDependencies = {}) {
   app.use("/telemetry/events", authenticateDevice);
 
   registerStatusRoutes(app, { billingService });
-  registerMemoryRoutes(app, { auth, personalMemoryService });
+  registerMemoryRoutes(app, {
+    auth,
+    personalMemoryService,
+    memoryExtractionService,
+  });
   registerBillingRoutes(app, { auth, billingService, billingCheckoutClient });
   registerSuggestionRoutes(app, { suggestionUseCase });
   registerTelemetryRoutes(app, { telemetryService });
@@ -177,6 +197,7 @@ function createD1Dependencies(db: D1Database): Required<
     | "billingService"
     | "usageMeterService"
     | "personalMemoryStorage"
+    | "memoryExtractionIdempotencyStorage"
     | "telemetryStorage"
   >
 > {
@@ -184,6 +205,8 @@ function createD1Dependencies(db: D1Database): Required<
   const deviceTokenStorage = new D1DeviceTokenStorage(database);
   const billingStorage = new D1BillingStorage(database);
   const personalMemoryStorage = new D1PersonalMemoryStorage(database);
+  const memoryExtractionIdempotencyStorage =
+    new D1MemoryExtractionIdempotencyStorage(database);
   const telemetryStorage = new D1TelemetryStorage(database);
 
   return {
@@ -195,6 +218,7 @@ function createD1Dependencies(db: D1Database): Required<
     billingService: new BillingService({ storage: billingStorage }),
     usageMeterService: new UsageMeterService({ client: createUsageMeterClient() }),
     personalMemoryStorage,
+    memoryExtractionIdempotencyStorage,
     telemetryStorage,
   };
 }

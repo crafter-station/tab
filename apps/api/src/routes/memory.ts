@@ -1,5 +1,7 @@
 import {
   MemoryDeleteResponseSchema,
+  MemoryExtractionRequestSchema,
+  MemoryExtractionResponseSchema,
   MemoryListResponseSchema,
   MemoryWriteRequestSchema,
   MemoryWriteResponseSchema,
@@ -8,12 +10,17 @@ import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
 import type { PersonalMemoryService } from "../personal-memory.ts";
+import type { MemoryExtractionService } from "../memory-agent.ts";
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
 
 export function registerMemoryRoutes(
   app: ApiApp,
-  deps: { auth: AuthInstance; personalMemoryService: PersonalMemoryService },
+  deps: {
+    auth: AuthInstance;
+    personalMemoryService: PersonalMemoryService;
+    memoryExtractionService: MemoryExtractionService;
+  },
 ) {
   type MemoryContext = Context<{ Bindings: ApiBindings; Variables: ApiVariables }>;
 
@@ -28,6 +35,15 @@ export function registerMemoryRoutes(
   async function readMemoryWriteBody(c: MemoryContext) {
     try {
       const parsed = MemoryWriteRequestSchema.safeParse(await c.req.json());
+      return parsed.success ? parsed.data : null;
+    } catch {
+      return null;
+    }
+  }
+
+  async function readMemoryExtractionBody(c: MemoryContext) {
+    try {
+      const parsed = MemoryExtractionRequestSchema.safeParse(await c.req.json());
       return parsed.success ? parsed.data : null;
     } catch {
       return null;
@@ -113,7 +129,26 @@ export function registerMemoryRoutes(
     );
   }
 
+  async function extractMemory(c: MemoryContext, userId: string) {
+    const body = await readMemoryExtractionBody(c);
+    if (!body) {
+      return c.json(
+        createErrorResponse("invalid_request", "Extraction batch is invalid."),
+        400,
+      );
+    }
+
+    const counts = await deps.memoryExtractionService.extract(userId, body);
+    return c.json(
+      MemoryExtractionResponseSchema.parse({ status: "ok", data: { counts } }),
+      200,
+    );
+  }
+
   app.get("/api/memory", async (c) => listMemories(c, c.get("device").userId));
+  app.post("/api/memory/extract", async (c) =>
+    extractMemory(c, c.get("device").userId),
+  );
   app.post("/api/memory", async (c) => createMemory(c, c.get("device").userId));
   app.patch("/api/memory/:id", async (c) =>
     updateMemory(c, c.get("device").userId),

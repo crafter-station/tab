@@ -116,6 +116,45 @@ export const MemoryDeleteResponseSchema = z.object({
   }),
 });
 
+export const MemoryExtractionWindowEntrySchema = z
+  .object({
+    id: z.string().min(1),
+    text: z.string().trim().min(1).max(1_024),
+    timestamp: z.string().datetime(),
+    activeApplication: ActiveApplicationSchema,
+    contextSource: SuggestionContextSourceSchema,
+    redaction: RedactionSummarySchema,
+  })
+  .strict();
+
+export const MemoryExtractionRequestSchema = z
+  .object({
+    batchId: z.string().min(1).max(200),
+    entries: z.array(MemoryExtractionWindowEntrySchema).min(1).max(64),
+    clientMetadata: ClientMetadataSchema.optional(),
+  })
+  .strict()
+  .refine(
+    (request) =>
+      request.entries.reduce((total, entry) => total + entry.text.length, 0) <=
+      8_192,
+    "Extraction window text must be at most 8 KB.",
+  );
+
+export const MemoryExtractionCountsSchema = z.object({
+  created: z.number().int().nonnegative(),
+  updated: z.number().int().nonnegative(),
+  deleted: z.number().int().nonnegative(),
+  rejected: z.number().int().nonnegative(),
+});
+
+export const MemoryExtractionResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    counts: MemoryExtractionCountsSchema,
+  }),
+});
+
 export const DeviceListItemSchema = DeviceMetadataSchema.extend({
   id: z.string().min(1),
   deviceId: z.string().min(1),
@@ -323,6 +362,12 @@ export type PersonalMemoryCreatedBy = z.infer<
 export type PersonalMemory = z.infer<typeof PersonalMemorySchema>;
 export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;
 export type MemoryDeleteResponse = z.infer<typeof MemoryDeleteResponseSchema>;
+export type MemoryExtractionRequest = z.infer<
+  typeof MemoryExtractionRequestSchema
+>;
+export type MemoryExtractionCounts = z.infer<
+  typeof MemoryExtractionCountsSchema
+>;
 export type DeviceListItem = z.infer<typeof DeviceListItemSchema>;
 export type DeviceListResponse = z.infer<typeof DeviceListResponseSchema>;
 export type BillingQuotaResponse = z.infer<typeof BillingQuotaResponseSchema>;

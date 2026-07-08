@@ -484,33 +484,59 @@ export class PersonalMemoryService {
       .slice(0, this.maxRelevantMemories);
   }
 
+  async selectCandidateMemoriesForExtraction(
+    input: RelevanceInput,
+  ): Promise<PersonalMemory[]> {
+    if (!input.memoryEnabled) {
+      return [];
+    }
+
+    if (this.embeddingService && this.vectorIndex) {
+      return this.selectVectorMemories(
+        input,
+        this.embeddingService,
+        this.vectorIndex,
+      );
+    }
+
+    return this.storage.listMemoriesByUser(input.userId);
+  }
+
   private async selectVectorRelevantMemories(
     input: RelevanceInput,
     embeddingService: PersonalMemoryEmbeddingService,
     vectorIndex: PersonalMemoryVectorIndex,
   ): Promise<PersonalMemory[]> {
     try {
-      const values = await embeddingService.embedText(input.typingContext);
-      const matches = await vectorIndex.queryMemories({
-        values,
-        userId: input.userId,
-        limit: this.maxRelevantMemories,
-      });
-      const memories: PersonalMemory[] = [];
-
-      for (const match of matches) {
-        if (memories.length >= this.maxRelevantMemories) break;
-        const memory = await this.storage.findMemoryById(match.id);
-        if (memory?.userId === input.userId) {
-          memories.push(memory);
-        }
-      }
-
-      return memories;
+      return await this.selectVectorMemories(input, embeddingService, vectorIndex);
     } catch {
       // Memory retrieval is best-effort on the hot suggestion path.
       return [];
     }
+  }
+
+  private async selectVectorMemories(
+    input: RelevanceInput,
+    embeddingService: PersonalMemoryEmbeddingService,
+    vectorIndex: PersonalMemoryVectorIndex,
+  ): Promise<PersonalMemory[]> {
+    const values = await embeddingService.embedText(input.typingContext);
+    const matches = await vectorIndex.queryMemories({
+      values,
+      userId: input.userId,
+      limit: this.maxRelevantMemories,
+    });
+    const memories: PersonalMemory[] = [];
+
+    for (const match of matches) {
+      if (memories.length >= this.maxRelevantMemories) break;
+      const memory = await this.storage.findMemoryById(match.id);
+      if (memory?.userId === input.userId) {
+        memories.push(memory);
+      }
+    }
+
+    return memories;
   }
 
   private async indexMemory(memory: PersonalMemory): Promise<void> {
