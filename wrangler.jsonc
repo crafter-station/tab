@@ -12,6 +12,15 @@
       "migrations_dir": "apps/api/drizzle"
     }
   ],
+  "ai": {
+    "binding": "AI"
+  },
+  "vectorize": [
+    {
+      "binding": "MEMORY_VECTORIZE",
+      "index_name": "personal-memories"
+    }
+  ],
   "observability": {
     "enabled": true
   }

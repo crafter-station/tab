@@ -8,6 +8,9 @@ import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";
 import { personalMemories } from "./db/schema.ts";
+import type { VectorizeBinding, WorkersAiBinding } from "./api-types.ts";
+
+const MEMORY_EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
 
 export type CreatePersonalMemoryInput = {
   readonly userId: string;
@@ -29,6 +32,126 @@ export interface PersonalMemoryStorage {
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null>;
   deleteMemory(id: string): Promise<boolean>;
+}
+
+export type PersonalMemoryVectorMetadata = {
+  readonly userId: string;
+  readonly createdBy: PersonalMemoryCreatedBy;
+};
+
+export type PersonalMemoryVectorMatch = {
+  readonly id: string;
+  readonly score?: number;
+};
+
+export type UpsertPersonalMemoryVectorInput = {
+  readonly id: string;
+  readonly values: readonly number[];
+  readonly metadata: PersonalMemoryVectorMetadata;
+};
+
+export type QueryPersonalMemoryVectorsInput = {
+  readonly values: readonly number[];
+  readonly userId: string;
+  readonly limit: number;
+};
+
+export interface PersonalMemoryEmbeddingService {
+  embedText(text: string): Promise<number[]>;
+}
+
+export interface PersonalMemoryVectorIndex {
+  upsertMemory(input: UpsertPersonalMemoryVectorInput): Promise<void>;
+  deleteMemory(id: string): Promise<void>;
+  queryMemories(
+    input: QueryPersonalMemoryVectorsInput,
+  ): Promise<PersonalMemoryVectorMatch[]>;
+}
+
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "number");
+}
+
+function getProperty(value: unknown, key: string): unknown {
+  if (!value || typeof value !== "object") return undefined;
+  return (value as Record<string, unknown>)[key];
+}
+
+function parseEmbeddingResponse(response: unknown): number[] {
+  const data = getProperty(response, "data");
+  const first = Array.isArray(data) ? data[0] : undefined;
+  const embedding = getProperty(first, "embedding") ?? first;
+
+  if (!isNumberArray(embedding)) {
+    throw new Error("Workers AI embedding response did not contain a vector");
+  }
+
+  return embedding;
+}
+
+export class WorkersAiPersonalMemoryEmbeddingService
+  implements PersonalMemoryEmbeddingService
+{
+  constructor(
+    private readonly ai: WorkersAiBinding,
+    private readonly model = MEMORY_EMBEDDING_MODEL,
+  ) {}
+
+  async embedText(text: string): Promise<number[]> {
+    return parseEmbeddingResponse(
+      await this.ai.run(this.model, { text: [text] }),
+    );
+  }
+}
+
+function parseVectorMatches(response: unknown): PersonalMemoryVectorMatch[] {
+  const matches = getProperty(response, "matches");
+  if (!Array.isArray(matches)) return [];
+
+  return matches
+    .map((match) => {
+      const id = (match as { id?: unknown })?.id;
+      if (typeof id !== "string") return null;
+
+      const score = (match as { score?: unknown })?.score;
+      return {
+        id,
+        ...(typeof score === "number" && { score }),
+      } satisfies PersonalMemoryVectorMatch;
+    })
+    .filter((match): match is PersonalMemoryVectorMatch => match !== null);
+}
+
+export class CloudflareVectorizePersonalMemoryIndex
+  implements PersonalMemoryVectorIndex
+{
+  constructor(private readonly index: VectorizeBinding) {}
+
+  async upsertMemory(input: UpsertPersonalMemoryVectorInput): Promise<void> {
+    await this.index.upsert([
+      {
+        id: input.id,
+        values: Array.from(input.values),
+        metadata: input.metadata,
+      },
+    ]);
+  }
+
+  async deleteMemory(id: string): Promise<void> {
+    await this.index.deleteByIds([id]);
+  }
+
+  async queryMemories(
+    input: QueryPersonalMemoryVectorsInput,
+  ): Promise<PersonalMemoryVectorMatch[]> {
+    return parseVectorMatches(
+      await this.index.query(Array.from(input.values), {
+        topK: input.limit,
+        filter: { userId: input.userId },
+        returnMetadata: true,
+      }),
+    );
+  }
 }
 
 function toISOTimestamp(date: Date): string {
@@ -187,6 +310,8 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
 
 export type PersonalMemoryServiceDependencies = {
   storage?: PersonalMemoryStorage;
+  embeddingService?: PersonalMemoryEmbeddingService;
+  vectorIndex?: PersonalMemoryVectorIndex;
   maxRelevantMemories?: number;
 };
 
@@ -251,6 +376,8 @@ function isMemoryRelevant(
  */
 export class PersonalMemoryService {
   private storage: PersonalMemoryStorage;
+  private embeddingService?: PersonalMemoryEmbeddingService;
+  private vectorIndex?: PersonalMemoryVectorIndex;
   private maxRelevantMemories: number;
 
   constructor(deps: PersonalMemoryServiceDependencies = {}) {
@@ -258,12 +385,16 @@ export class PersonalMemoryService {
       throw new Error("PersonalMemoryService requires a storage implementation");
     }
     this.storage = deps.storage;
+    this.embeddingService = deps.embeddingService;
+    this.vectorIndex = deps.vectorIndex;
     this.maxRelevantMemories = deps.maxRelevantMemories ?? 5;
   }
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
     const parsed = createMemoryInputSchema.parse(input);
-    return this.storage.createMemory(parsed);
+    const memory = await this.storage.createMemory(parsed);
+    await this.indexMemory(memory);
+    return memory;
   }
 
   async listMemories(userId: string): Promise<PersonalMemory[]> {
@@ -279,7 +410,11 @@ export class PersonalMemoryService {
     if (!memory || memory.userId !== userId) {
       return false;
     }
-    return this.storage.deleteMemory(id);
+    const deleted = await this.storage.deleteMemory(id);
+    if (deleted) {
+      await this.vectorIndex?.deleteMemory(id);
+    }
+    return deleted;
   }
 
   async updateMemory(
@@ -287,7 +422,11 @@ export class PersonalMemoryService {
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
     const parsed = updateMemoryInputSchema.parse(input);
-    return this.storage.updateMemory(id, parsed);
+    const memory = await this.storage.updateMemory(id, parsed);
+    if (memory) {
+      await this.indexMemory(memory);
+    }
+    return memory;
   }
 
   async updateMemoryForUser(
@@ -304,12 +443,20 @@ export class PersonalMemoryService {
       content: input.content,
       createdBy: "user",
     });
-    return this.storage.updateMemory(id, userAuthoredUpdate);
+    return this.updateMemory(id, userAuthoredUpdate);
   }
 
   async selectRelevantMemories(input: RelevanceInput): Promise<PersonalMemory[]> {
     if (!input.memoryEnabled) {
       return [];
+    }
+
+    if (this.embeddingService && this.vectorIndex) {
+      return this.selectVectorRelevantMemories(
+        input,
+        this.embeddingService,
+        this.vectorIndex,
+      );
     }
 
     return (await this.storage.listMemoriesByUser(input.userId))
@@ -322,5 +469,48 @@ export class PersonalMemoryService {
       )
       .sort(compareMemoriesByNewestUpdate)
       .slice(0, this.maxRelevantMemories);
+  }
+
+  private async selectVectorRelevantMemories(
+    input: RelevanceInput,
+    embeddingService: PersonalMemoryEmbeddingService,
+    vectorIndex: PersonalMemoryVectorIndex,
+  ): Promise<PersonalMemory[]> {
+    try {
+      const values = await embeddingService.embedText(input.typingContext);
+      const matches = await vectorIndex.queryMemories({
+        values,
+        userId: input.userId,
+        limit: this.maxRelevantMemories,
+      });
+      const memories: PersonalMemory[] = [];
+
+      for (const match of matches) {
+        if (memories.length >= this.maxRelevantMemories) break;
+        const memory = await this.storage.findMemoryById(match.id);
+        if (memory?.userId === input.userId) {
+          memories.push(memory);
+        }
+      }
+
+      return memories;
+    } catch {
+      // Memory retrieval is best-effort on the hot suggestion path.
+      return [];
+    }
+  }
+
+  private async indexMemory(memory: PersonalMemory): Promise<void> {
+    if (!this.embeddingService || !this.vectorIndex) return;
+
+    const values = await this.embeddingService.embedText(memory.content);
+    await this.vectorIndex.upsertMemory({
+      id: memory.id,
+      values,
+      metadata: {
+        userId: memory.userId,
+        createdBy: memory.createdBy,
+      },
+    });
   }
 }

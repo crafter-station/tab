@@ -3,7 +3,16 @@ import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
-import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
+import {
+  InMemoryPersonalMemoryStorage,
+  PersonalMemoryService,
+  type QueryPersonalMemoryVectorsInput,
+  type PersonalMemoryEmbeddingService,
+  type PersonalMemoryVectorIndex,
+  type PersonalMemoryVectorMatch,
+  type PersonalMemoryVectorMetadata,
+  type UpsertPersonalMemoryVectorInput,
+} from "../apps/api/src/personal-memory.ts";
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import {
   ApiResponseSchema,
@@ -19,6 +28,10 @@ import type {
 
 async function createAuthenticatedTestApp(
   generateSuggestion?: SuggestionGenerator,
+  vectorDeps?: {
+    embeddingService: PersonalMemoryEmbeddingService;
+    vectorIndex: PersonalMemoryVectorIndex;
+  },
 ) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
@@ -34,6 +47,7 @@ async function createAuthenticatedTestApp(
     billingService,
     deviceTokenService,
     personalMemoryStorage,
+    ...vectorDeps,
     telemetryStorage: new InMemoryTelemetryStorage(),
   });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
@@ -78,7 +92,82 @@ const validSuggestionRequest = {
   memoryEnabled: true,
 };
 
+class FakeEmbeddingService implements PersonalMemoryEmbeddingService {
+  readonly embeddedTexts: string[] = [];
+
+  async embedText(text: string): Promise<number[]> {
+    this.embeddedTexts.push(text);
+    return [text.length, this.embeddedTexts.length];
+  }
+}
+
+class FakeVectorIndex implements PersonalMemoryVectorIndex {
+  readonly upserts: Array<{
+    id: string;
+    values: number[];
+    metadata: PersonalMemoryVectorMetadata;
+  }> = [];
+  readonly deletes: string[] = [];
+  readonly queries: Array<{ values: number[]; userId: string; limit: number }> =
+    [];
+  matches: PersonalMemoryVectorMatch[] = [];
+  failQueries = false;
+
+  async upsertMemory(input: UpsertPersonalMemoryVectorInput): Promise<void> {
+    this.upserts.push({
+      id: input.id,
+      values: Array.from(input.values),
+      metadata: input.metadata,
+    });
+  }
+
+  async deleteMemory(id: string): Promise<void> {
+    this.deletes.push(id);
+  }
+
+  async queryMemories(
+    input: QueryPersonalMemoryVectorsInput,
+  ): Promise<PersonalMemoryVectorMatch[]> {
+    this.queries.push({
+      values: Array.from(input.values),
+      userId: input.userId,
+      limit: input.limit,
+    });
+    if (this.failQueries) {
+      throw new Error("vector unavailable");
+    }
+    return this.matches;
+  }
+}
+
 describe("Personal Memory API", () => {
+  it("embeds and indexes memory content with generic vector metadata", async () => {
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage: new InMemoryPersonalMemoryStorage(),
+      embeddingService,
+      vectorIndex,
+    });
+
+    const memory = await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Acme prefers Friday status updates",
+      createdBy: "system",
+    });
+
+    expect(embeddingService.embeddedTexts).toEqual([
+      "Acme prefers Friday status updates",
+    ]);
+    expect(vectorIndex.upserts).toEqual([
+      {
+        id: memory.id,
+        values: [34, 1],
+        metadata: { userId: "user-1", createdBy: "system" },
+      },
+    ]);
+  });
+
   it("lists only the authenticated user's memories", async () => {
     const { app, token, personalMemoryStorage } =
       await createAuthenticatedTestApp();
@@ -333,6 +422,85 @@ describe("Personal Memory API", () => {
     expect(capturedInput).not.toBeNull();
     expect(capturedInput?.memories).toHaveLength(1);
     expect(capturedInput?.memories[0].content).toBe("Acme Corp is a customer");
+  });
+
+  it("retrieves suggestion memories through vector IDs resolved from canonical storage", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        async (input) => {
+          capturedInput = input;
+          return { text: " suggestion" };
+        },
+        { embeddingService, vectorIndex },
+      );
+
+    const selected = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Use the blue launch deck for Acme",
+      createdBy: "system",
+    });
+    const otherUser = await personalMemoryStorage.createMemory({
+      userId: "user-2",
+      content: "Private memory from another user",
+      createdBy: "system",
+    });
+    vectorIndex.matches = [
+      { id: otherUser.id, score: 0.99 },
+      { id: "deleted-memory", score: 0.98 },
+      { id: selected.id, score: 0.97 },
+    ];
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        ...validSuggestionRequest,
+        typingContext: "This does not share lexical tokens",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(embeddingService.embeddedTexts).toContain(
+      "This does not share lexical tokens",
+    );
+    expect(vectorIndex.queries).toHaveLength(1);
+    expect(vectorIndex.queries[0]).toMatchObject({ userId: "user-1", limit: 5 });
+    expect(capturedInput?.memories.map((memory) => memory.id)).toEqual([
+      selected.id,
+    ]);
+  });
+
+  it("continues suggestions without memory when vector retrieval fails", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    vectorIndex.failQueries = true;
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        async (input) => {
+          capturedInput = input;
+          return { text: " suggestion" };
+        },
+        { embeddingService, vectorIndex },
+      );
+
+    await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Acme Corp is a customer",
+      createdBy: "system",
+    });
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validSuggestionRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(capturedInput?.memories).toEqual([]);
   });
 
   it("matches relevant memories without requiring exact accent marks", async () => {

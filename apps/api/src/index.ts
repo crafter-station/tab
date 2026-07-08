@@ -15,9 +15,13 @@ import {
   UsageMeterService,
 } from "./billing.ts";
 import {
+  CloudflareVectorizePersonalMemoryIndex,
   D1PersonalMemoryStorage,
   PersonalMemoryService,
+  WorkersAiPersonalMemoryEmbeddingService,
+  type PersonalMemoryEmbeddingService,
   type PersonalMemoryStorage,
+  type PersonalMemoryVectorIndex,
 } from "./personal-memory.ts";
 import {
   BackgroundMemoryAgent,
@@ -70,6 +74,8 @@ export type ApiDependencies = {
   readonly usageMeterService?: UsageMeterService;
   readonly billingCheckoutClient?: BillingCheckoutClient;
   readonly personalMemoryStorage?: PersonalMemoryStorage;
+  readonly embeddingService?: PersonalMemoryEmbeddingService;
+  readonly vectorIndex?: PersonalMemoryVectorIndex;
   readonly memoryJobQueue?: MemoryJobQueue;
   readonly memoryAgent?: BackgroundMemoryAgent;
   readonly telemetryService?: TelemetryService;
@@ -116,6 +122,8 @@ export function createApp(deps: ApiDependencies = {}) {
 
   const personalMemoryService = new PersonalMemoryService({
     storage: personalMemoryStorage,
+    embeddingService: deps.embeddingService,
+    vectorIndex: deps.vectorIndex,
   });
   const memoryJobQueue = deps.memoryJobQueue ?? new InMemoryMemoryJobQueue();
   const memoryAgent =
@@ -201,7 +209,17 @@ function getAppForEnv(env: ApiBindings | undefined) {
   const existing = appsByDatabase.get(env.DB);
   if (existing) return existing;
 
-  const app = createApp({ db: env.DB });
+  const app = createApp({
+    db: env.DB,
+    ...(env.AI && {
+      embeddingService: new WorkersAiPersonalMemoryEmbeddingService(env.AI),
+    }),
+    ...(env.MEMORY_VECTORIZE && {
+      vectorIndex: new CloudflareVectorizePersonalMemoryIndex(
+        env.MEMORY_VECTORIZE,
+      ),
+    }),
+  });
   appsByDatabase.set(env.DB, app);
   return app;
 }
