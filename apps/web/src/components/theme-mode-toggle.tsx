@@ -30,7 +30,7 @@ export function ThemeModeToggle() {
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="secondary" size="icon" aria-label={`Theme selection: ${formatThemeModeLabel(theme)}`}>
-          <ActiveIcon />
+          <ActiveIcon data-icon="only" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
@@ -42,9 +42,9 @@ export function ThemeModeToggle() {
 
             return (
               <DropdownMenuItem key={mode} onClick={() => setTheme(mode)} aria-pressed={selected}>
-                <Icon />
+                <Icon data-icon="inline-start" />
                 {formatThemeModeLabel(mode)}
-                {selected ? <Check className="ml-auto" /> : null}
+                {selected ? <Check data-icon="inline-end" className="ml-auto" /> : null}
               </DropdownMenuItem>
             );
           })}

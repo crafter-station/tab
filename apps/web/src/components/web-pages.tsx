@@ -1,4 +1,5 @@
 import { planQuotas, type PlanId } from "@tab/billing";
+import { DotsThree } from "@phosphor-icons/react";
 import type { ReactNode } from "react";
 import type {
   BillingQuotaResponse,
@@ -6,6 +7,9 @@ import type {
   PersonalMemory,
 } from "@tab/contracts";
 import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
   Badge,
   Button,
   Card,
@@ -15,8 +19,12 @@ import {
   CardHeader,
   CardTitle,
   EmptyState,
+  Field,
+  FieldDescription,
+  FieldGroup,
+  FieldLabel,
   Input,
-  Label,
+  Progress,
   SectionBlock,
   Separator,
   SettingsNav,
@@ -28,6 +36,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Textarea,
   buttonVariants,
   type PatternTone,
 } from "@tab/ui";
@@ -55,7 +64,6 @@ export type DashboardData = {
 export type DashboardSection = "overview" | "account" | "usage" | "devices" | "memories";
 
 const authTitleClassName = "font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]";
-const quotaExhaustedClassName = "rounded-lg border border-warning/30 bg-[var(--tab-warning-tint)] p-3 text-warning";
 const bulkDeleteMemoriesFormId = "bulk-delete-memories";
 
 const homeProofRows = [
@@ -194,6 +202,22 @@ function quotaStatus(quotaExhausted: boolean): StatusPresentation {
   return { value: "Suggestions available", tone: "success" };
 }
 
+function QuotaProgressPanel({ title, usage, quota, resetAt }: { title: string; usage: number; quota: number; resetAt: string }) {
+  const quotaUsed = Math.min(usage, quota);
+  const quotaPercent = quota > 0 ? Math.round((quotaUsed / quota) * 100) : 0;
+
+  return (
+    <div className="grid gap-2 rounded-[var(--radius-media)] border border-border bg-muted/45 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-bold text-foreground">{title}</p>
+        <p className="font-[var(--font-code)] text-sm tabular-nums text-muted-foreground">{formatCount(usage)} / {formatCount(quota)}</p>
+      </div>
+      <Progress value={quotaPercent} aria-label={`${title} progress`} className="bg-border" />
+      <p className="text-xs font-medium text-muted-foreground">Resets {formatDate(resetAt)}</p>
+    </div>
+  );
+}
+
 function deviceStatus(device: DeviceListItem): string {
   if (device.revoked) return "Access removed";
   return "Connected";
@@ -219,7 +243,11 @@ function preserveAuthSearchParams(search: AuthSearch): string {
 
 function ErrorMessage({ message }: { message?: string }) {
   if (!message) return null;
-  return <p className="text-destructive">{message}</p>;
+  return (
+    <Alert variant="destructive">
+      <AlertDescription>{message}</AlertDescription>
+    </Alert>
+  );
 }
 
 function HandoffFields({ search }: { search: AuthSearch }) {
@@ -238,6 +266,28 @@ function hasDesktopHandoff(search: AuthSearch): boolean {
 
 function AuthPageTitle({ children }: { children: ReactNode }) {
   return <h1 className={authTitleClassName}>{children}</h1>;
+}
+
+function TableActionMenu({
+  label,
+  children,
+  panelClassName = "w-[min(24rem,75vw)]",
+}: {
+  label: string;
+  children: ReactNode;
+  panelClassName?: string;
+}) {
+  return (
+    <details className="group ml-auto w-max text-left">
+      <summary className={buttonVariants({ variant: "ghost", size: "icon", className: "cursor-pointer list-none marker:hidden group-open:bg-muted [&::-webkit-details-marker]:hidden" })}>
+        <DotsThree className="size-5" weight="bold" aria-hidden="true" />
+        <span className="sr-only">{label}</span>
+      </summary>
+      <div className={`mt-2 rounded-[var(--radius-card)] border border-border bg-popover p-2 text-popover-foreground shadow-[var(--tab-shadow-soft)] ${panelClassName}`}>
+        {children}
+      </div>
+    </details>
+  );
 }
 
 function PageKicker({ children }: { children: ReactNode }) {
@@ -371,8 +421,16 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
       <form className="flex flex-col gap-4" method="post" action="/login">
         <ErrorMessage message={error} />
         <HandoffFields search={search} />
-        <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
-        <Label>Password<Input type="password" name="password" required autoComplete="current-password" /></Label>
+        <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="login-email">Email</FieldLabel>
+            <Input id="login-email" type="email" name="email" required autoComplete="email" />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="login-password">Password</FieldLabel>
+            <Input id="login-password" type="password" name="password" required autoComplete="current-password" />
+          </Field>
+        </FieldGroup>
         <p><Button type="submit">Sign in</Button></p>
       </form>
       <p className="mt-4 text-muted-foreground"><a className="underline" href="/forgot-password">Forgot your password?</a></p>
@@ -390,7 +448,12 @@ export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boo
       ) : (
         <form className="flex flex-col gap-4" method="post" action="/forgot-password">
           <ErrorMessage message={error} />
-          <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
+          <FieldGroup className="gap-4">
+            <Field>
+              <FieldLabel htmlFor="forgot-password-email">Email</FieldLabel>
+              <Input id="forgot-password-email" type="email" name="email" required autoComplete="email" />
+            </Field>
+          </FieldGroup>
           <p><Button type="submit">Send reset link</Button></p>
         </form>
       )}
@@ -407,7 +470,12 @@ export function ResetPasswordPage({ error, token }: { error?: string; token?: st
         <form className="flex flex-col gap-4" method="post" action="/reset-password">
           <ErrorMessage message={error} />
           <input type="hidden" name="token" value={token} />
-          <Label>New password<Input type="password" name="password" required autoComplete="new-password" minLength={8} /></Label>
+          <FieldGroup className="gap-4">
+            <Field>
+              <FieldLabel htmlFor="reset-password">New password</FieldLabel>
+              <Input id="reset-password" type="password" name="password" required autoComplete="new-password" minLength={8} />
+            </Field>
+          </FieldGroup>
           <p><Button type="submit">Update password</Button></p>
         </form>
       ) : (
@@ -427,9 +495,20 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
       <form className="flex flex-col gap-4" method="post" action="/signup">
         <ErrorMessage message={error} />
         <HandoffFields search={search} />
-        <Label>Name<Input type="text" name="name" required autoComplete="name" /></Label>
-        <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
-        <Label>Password<Input type="password" name="password" required autoComplete="new-password" /></Label>
+        <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="signup-name">Name</FieldLabel>
+            <Input id="signup-name" type="text" name="name" required autoComplete="name" />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="signup-email">Email</FieldLabel>
+            <Input id="signup-email" type="email" name="email" required autoComplete="email" />
+          </Field>
+          <Field>
+            <FieldLabel htmlFor="signup-password">Password</FieldLabel>
+            <Input id="signup-password" type="password" name="password" required autoComplete="new-password" />
+          </Field>
+        </FieldGroup>
         <p><Button type="submit">Sign up</Button></p>
       </form>
       <p className="mt-4 text-muted-foreground">Already have an account? <a className="underline" href={loginHref}>Sign in</a>.</p>
@@ -535,8 +614,6 @@ function DashboardPlaceholder({ section = "overview" }: { section?: DashboardSec
 
 function DashboardOverview({ data }: { data: DashboardData }) {
   const connectedDevices = data.devices.filter((device) => !device.revoked).length;
-  const quotaUsed = Math.min(data.quota.usage, data.quota.quota);
-  const quotaPercent = data.quota.quota > 0 ? Math.round((quotaUsed / data.quota.quota) * 100) : 0;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[minmax(0,1.4fr)_minmax(280px,0.8fr)]">
@@ -552,16 +629,7 @@ function DashboardOverview({ data }: { data: DashboardData }) {
             <StatusRow label="Saved memories" value={formatCount(data.memories.length)} tone="neutral" description="Details available for personalized suggestions." />
             <StatusRow label="Account" value={emailStatus(data.user.emailVerified).value} tone={emailStatus(data.user.emailVerified).tone} description={data.user.email ?? data.user.name ?? data.user.id} />
           </div>
-          <div className="grid gap-2 rounded-[var(--radius-media)] border border-border bg-muted/45 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-sm font-bold text-foreground">Monthly Suggestions</p>
-              <p className="font-[var(--font-code)] text-sm tabular-nums text-muted-foreground">{formatCount(data.quota.usage)} / {formatCount(data.quota.quota)}</p>
-            </div>
-            <div className="h-2 overflow-hidden rounded-full bg-border" role="meter" aria-label="Monthly suggestions used" aria-valuemin={0} aria-valuemax={data.quota.quota} aria-valuenow={quotaUsed}>
-              <div className="h-full rounded-full bg-foreground" style={{ width: `${quotaPercent}%` }} />
-            </div>
-            <p className="text-xs font-medium text-muted-foreground">Resets {formatDate(data.quota.resetAt)}</p>
-          </div>
+          <QuotaProgressPanel title="Monthly Suggestions" usage={data.quota.usage} quota={data.quota.quota} resetAt={data.quota.resetAt} />
         </CardContent>
       </Card>
       <Card>
@@ -612,8 +680,6 @@ function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
   const upgradePlans = getPlanEntries().filter(([planId]) => planId !== quota.planId);
   const quotaExhausted = quota.usage >= quota.quota;
   const accountQuotaStatus = quotaStatus(quotaExhausted);
-  const quotaUsed = Math.min(quota.usage, quota.quota);
-  const quotaPercent = quota.quota > 0 ? Math.round((quotaUsed / quota.quota) * 100) : 0;
 
   return (
     <SectionBlock>
@@ -623,16 +689,7 @@ function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
         description={`${formatPlanName(quota.planId)} plan`}
       />
       <div className="mt-4 grid gap-3">
-        <div className="grid gap-2 rounded-[var(--radius-media)] border border-border bg-muted/45 p-4">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-bold text-foreground">Quota Progress</p>
-            <p className="font-[var(--font-code)] text-sm tabular-nums text-muted-foreground">{formatCount(quota.usage)} / {formatCount(quota.quota)}</p>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-border" role="meter" aria-label="Monthly suggestions used" aria-valuemin={0} aria-valuemax={quota.quota} aria-valuenow={quotaUsed}>
-            <div className="h-full rounded-full bg-foreground" style={{ width: `${quotaPercent}%` }} />
-          </div>
-          <p className="text-xs font-medium text-muted-foreground">Resets {formatDate(quota.resetAt)}</p>
-        </div>
+        <QuotaProgressPanel title="Quota Progress" usage={quota.usage} quota={quota.quota} resetAt={quota.resetAt} />
         <StatusRow
           label="Monthly suggestions"
           value={accountQuotaStatus.value}
@@ -641,9 +698,12 @@ function UsageBillingCard({ quota }: { quota: BillingQuotaResponse["data"] }) {
           meta={`Resets ${formatDate(quota.resetAt)}`}
         />
         {quotaExhausted ? (
-          <div className={quotaExhaustedClassName}>
-            <strong>Monthly suggestions used.</strong> You have used {formatCount(quota.usage)} of {formatCount(quota.quota)} suggestions this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
-          </div>
+          <Alert variant="destructive">
+            <AlertTitle>Monthly suggestions used</AlertTitle>
+            <AlertDescription>
+              You have used {formatCount(quota.usage)} of {formatCount(quota.quota)} suggestions this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
+            </AlertDescription>
+          </Alert>
         ) : null}
         <Separator />
         <div className="grid gap-2">
@@ -694,7 +754,7 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                 <TableHead>Version</TableHead>
                 <TableHead>Added</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead><span className="sr-only">Actions</span></TableHead>
+                <TableHead className="w-16 text-right"><span className="sr-only">Actions</span></TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -707,15 +767,18 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                   <TableCell>
                     <Badge variant={device.revoked ? "secondary" : "default"}>{deviceStatus(device)}</Badge>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-right align-top">
                     {device.revoked ? null : (
-                      <form method="post" action={`/dashboard/devices/${encodeURIComponent(device.deviceId)}/revoke`} className="grid gap-2">
-                        <Label className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
-                          <input type="checkbox" name="confirm" value={device.deviceId} required />
-                          Confirm removal
-                        </Label>
-                        <Button type="submit" size="sm" variant="secondary">Remove access</Button>
-                      </form>
+                      <TableActionMenu label={`Actions for ${device.deviceId}`} panelClassName="w-[min(18rem,75vw)]">
+                        <form method="post" action={`/dashboard/devices/${encodeURIComponent(device.deviceId)}/revoke`} className="grid gap-2">
+                          <p className="text-sm font-bold text-foreground">Remove access</p>
+                          <FieldLabel className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                            <input className="size-4 accent-foreground" type="checkbox" name="confirm" value={device.deviceId} required />
+                            Confirm removal
+                          </FieldLabel>
+                          <Button type="submit" size="sm" variant="secondary" className="w-max">Remove access</Button>
+                        </form>
+                      </TableActionMenu>
                     )}
                   </TableCell>
                 </TableRow>
@@ -758,20 +821,22 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
             <span className="text-xs font-medium text-muted-foreground">500 Character Limit</span>
           </summary>
           <form method="post" action="/dashboard/memories/create" className="mt-3 grid gap-3">
-            <Label htmlFor="memory-content">Memory content</Label>
-            <textarea
-              id="memory-content"
-              name="content"
-              maxLength={500}
-              required
-              rows={3}
-              autoComplete="off"
-              className="min-h-20 rounded-[var(--radius-media)] border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
-              placeholder="Example: I prefer concise morning status summaries…"
-            />
+            <Field>
+              <FieldLabel htmlFor="memory-content">Memory content</FieldLabel>
+              <Textarea
+                id="memory-content"
+                name="content"
+                maxLength={500}
+                required
+                rows={3}
+                autoComplete="off"
+                className="min-h-20"
+                placeholder="Example: I prefer concise morning status summaries…"
+              />
+              <FieldDescription>Only save details you are comfortable reusing.</FieldDescription>
+            </Field>
             <div className="flex flex-wrap items-center gap-2">
               <Button type="submit" size="sm">Save Memory</Button>
-              <span className="text-xs font-medium text-muted-foreground">Only save details you are comfortable reusing.</span>
             </div>
           </form>
         </details>
@@ -792,7 +857,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 <Badge variant="outline" className="w-max">{memoryCountLabel}</Badge>
-                <Label className="flex items-center gap-2 rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-muted">
+                <FieldLabel className="flex items-center gap-2 rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 py-2 text-xs font-bold text-muted-foreground hover:bg-muted">
                   <input
                     form={bulkDeleteMemoriesFormId}
                     type="checkbox"
@@ -802,7 +867,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                     className="size-4 accent-foreground"
                   />
                   Confirm Selection
-                </Label>
+                </FieldLabel>
                 <Button
                   aria-describedby="bulk-memory-delete-guidance"
                   form={bulkDeleteMemoriesFormId}
@@ -823,14 +888,14 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                   <TableHead>Source</TableHead>
                   <TableHead>Created</TableHead>
                   <TableHead>Updated</TableHead>
-                  <TableHead className="min-w-72">Actions</TableHead>
+                  <TableHead className="w-16 text-right"><span className="sr-only">Actions</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {memories.map((memory) => (
                   <TableRow key={memory.id}>
                     <TableCell>
-                      <Label className="flex size-10 items-center justify-center rounded-[var(--radius-control)] border border-border bg-muted/30 hover:bg-muted">
+                      <FieldLabel className="flex size-10 items-center justify-center rounded-[var(--radius-control)] border border-border bg-muted/30 hover:bg-muted">
                         <span className="sr-only">Select memory updated {formatDate(memory.updatedAt)}</span>
                         <input
                           form={bulkDeleteMemoriesFormId}
@@ -839,7 +904,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                           value={memory.id}
                           className="size-4 accent-foreground"
                         />
-                      </Label>
+                      </FieldLabel>
                     </TableCell>
                     <TableCell className="min-w-[18rem] max-w-[36rem]">
                       <p className="whitespace-pre-wrap break-words text-sm font-medium leading-relaxed text-foreground">{memory.content}</p>
@@ -853,43 +918,48 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                     <TableCell className="whitespace-nowrap font-[var(--font-code)] text-xs tabular-nums text-muted-foreground">
                       <MemoryDate value={memory.updatedAt} />
                     </TableCell>
-                    <TableCell>
-                      <div className="flex min-w-72 flex-wrap items-start gap-2">
-                        <details className="rounded-[var(--radius-media)] border border-border bg-card/70 p-1">
-                          <summary className="cursor-pointer list-none rounded-[var(--radius-control)] px-3 py-2 text-xs font-bold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-                            Update
-                          </summary>
-                          <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/edit`} className="mt-2 grid w-full gap-2 sm:w-[min(36rem,75vw)]">
-                            <Label htmlFor={`memory-${memory.id}-content`}>Memory content</Label>
-                            <textarea
-                              id={`memory-${memory.id}-content`}
-                              name="content"
-                              maxLength={500}
-                              required
-                              rows={3}
-                              autoComplete="off"
-                              className="min-h-20 rounded-[var(--radius-media)] border border-input bg-background px-3 py-2 text-sm text-foreground shadow-sm focus-visible:ring-2 focus-visible:ring-ring"
-                              defaultValue={memory.content}
-                            />
-                            <div className="flex flex-wrap items-center gap-2">
-                              <Button type="submit" size="sm">Update Memory</Button>
-                              <a className={buttonVariants({ size: "sm", variant: "secondary" })} href="/dashboard/memories">Cancel</a>
-                            </div>
-                          </form>
-                        </details>
-                        <details className="rounded-[var(--radius-media)] border border-destructive/25 bg-card/70 p-1">
-                          <summary className="cursor-pointer list-none rounded-[var(--radius-control)] px-3 py-2 text-xs font-bold text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-                            Delete
-                          </summary>
-                          <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`} className="mt-2 grid gap-2 sm:w-80">
-                            <p className="rounded-[var(--radius-media)] border border-destructive/25 bg-destructive/5 p-2 text-xs text-muted-foreground">
-                              <strong className="text-foreground">Delete this saved detail?</strong> This cannot be undone.
-                            </p>
-                            <input type="hidden" name="confirm" value="delete-memory" />
-                            <Button type="submit" size="sm" variant="destructive" className="w-max">Delete Memory</Button>
-                          </form>
-                        </details>
-                      </div>
+                    <TableCell className="text-right align-top">
+                      <TableActionMenu label={`Actions for memory updated ${formatDate(memory.updatedAt)}`} panelClassName="w-[min(38rem,80vw)]">
+                        <div className="grid gap-2">
+                          <details className="rounded-[var(--radius-media)] border border-border bg-card/70 p-1">
+                            <summary className="cursor-pointer list-none rounded-[var(--radius-control)] px-3 py-2 text-xs font-bold text-foreground hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                              Update
+                            </summary>
+                            <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/edit`} className="mt-2 grid w-full gap-2">
+                              <Field>
+                                <FieldLabel htmlFor={`memory-${memory.id}-content`}>Memory content</FieldLabel>
+                                <Textarea
+                                  id={`memory-${memory.id}-content`}
+                                  name="content"
+                                  maxLength={500}
+                                  required
+                                  rows={3}
+                                  autoComplete="off"
+                                  className="min-h-20"
+                                  defaultValue={memory.content}
+                                />
+                              </Field>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Button type="submit" size="sm">Update Memory</Button>
+                                <a className={buttonVariants({ size: "sm", variant: "secondary" })} href="/dashboard/memories">Cancel</a>
+                              </div>
+                            </form>
+                          </details>
+                          <details className="rounded-[var(--radius-media)] border border-destructive/25 bg-card/70 p-1">
+                            <summary className="cursor-pointer list-none rounded-[var(--radius-control)] px-3 py-2 text-xs font-bold text-destructive hover:bg-destructive/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                              Delete
+                            </summary>
+                            <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`} className="mt-2 grid gap-2 sm:w-80">
+                              <Alert variant="destructive" className="p-2 text-xs">
+                                <AlertTitle>Delete this saved detail?</AlertTitle>
+                                <AlertDescription>This cannot be undone.</AlertDescription>
+                              </Alert>
+                              <input type="hidden" name="confirm" value="delete-memory" />
+                              <Button type="submit" size="sm" variant="destructive" className="w-max">Delete Memory</Button>
+                            </form>
+                          </details>
+                        </div>
+                      </TableActionMenu>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, PermissionCard, SectionCard, StatusBadge } from "@tab/ui";
+import { Button, PermissionCard, SectionCard, StatusBadge, Textarea } from "@tab/ui";
 import type { DesktopStatus } from "../../../main/status";
 import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 
@@ -339,7 +339,7 @@ export function OnboardingSurface() {
                 <h2>Practice with a sample suggestion.</h2>
                 <p className="lede">This practice step does not contact the suggestion service or type into another app.</p>
               </div>
-              <textarea
+              <Textarea
                 className="practice-input"
                 onChange={(event) => setPracticeText(event.target.value)}
                 rows={4}

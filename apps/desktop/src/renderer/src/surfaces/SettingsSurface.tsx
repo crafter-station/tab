@@ -12,8 +12,15 @@ import {
   SettingsRow,
   StatusBadge,
   StatusRow,
+  Switch,
   SurfaceHeader,
   THEME_MODES,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+  ToggleGroup,
+  ToggleGroupItem,
   getStoredThemePreference,
   setThemePreference,
   type ThemeMode,
@@ -234,18 +241,26 @@ export function SettingsSurface() {
             </CardHeader>
             <CardContent>
               <SettingsRow label="Theme" description="Theme preference is stored locally on this Mac.">
-                <div className="flex flex-wrap justify-end gap-2">
+                <ToggleGroup
+                  aria-label="Theme preference"
+                  className="flex flex-wrap justify-end gap-2"
+                  onValueChange={(value) => {
+                    if (value) handleThemeMode(value as ThemeMode);
+                  }}
+                  type="single"
+                  value={themeMode}
+                  variant="outline"
+                >
                   {THEME_MODES.map((mode) => (
-                    <Button
+                    <ToggleGroupItem
+                      aria-label={`Use ${formatThemeMode(mode)} theme`}
                       key={mode}
-                      onClick={() => handleThemeMode(mode)}
-                      type="button"
-                      variant={themeMode === mode ? "default" : "secondary"}
+                      value={mode}
                     >
                       {formatThemeMode(mode)}
-                    </Button>
+                    </ToggleGroupItem>
                   ))}
-                </div>
+                </ToggleGroup>
               </SettingsRow>
             </CardContent>
           </Card>
@@ -326,13 +341,14 @@ export function SettingsSurface() {
                     : "Tab will ignore saved memories when making suggestions. Your memories stay stored and editable."
                 }
               >
-                <Button
-                  aria-pressed={usePersonalMemory}
-                  variant={usePersonalMemory ? "default" : "secondary"}
-                  onClick={() => handleUsePersonalMemory(!usePersonalMemory)}
-                >
-                  {usePersonalMemory ? "On" : "Off"}
-                </Button>
+                <div className="flex items-center justify-end gap-2">
+                  <StatusBadge tone={usePersonalMemory ? "ok" : "muted"}>{usePersonalMemory ? "On" : "Off"}</StatusBadge>
+                  <Switch
+                    aria-label="Use saved memories in suggestions"
+                    checked={usePersonalMemory}
+                    onCheckedChange={handleUsePersonalMemory}
+                  />
+                </div>
               </SettingsRow>
               <StatusRow label="Nearby app text" value="Not saved as memory" description={APP_CONTEXT_TRUST_COPY.memoryScope} />
               {import.meta.env.DEV ? (
@@ -370,55 +386,52 @@ export function SettingsSurface() {
 
   return (
     <main className="desktop-shell">
-      <SectionCard className="settings-tabs mx-auto grid h-full max-w-5xl overflow-hidden p-0">
-        <aside className="settings-tabs__sidebar drag-region">
-          <div className="settings-tabs__brand">
-            <div className="settings-tabs__mark">T</div>
-            <div>
-              <p className="eyebrow">Tab</p>
-              <h1>Settings</h1>
+      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SettingsTab)} className="h-full">
+        <SectionCard className="settings-tabs mx-auto grid h-full max-w-5xl overflow-hidden p-0">
+          <aside className="settings-tabs__sidebar drag-region">
+            <div className="settings-tabs__brand">
+              <div className="settings-tabs__mark">T</div>
+              <div>
+                <p className="eyebrow">Tab</p>
+                <h1>Settings</h1>
+              </div>
+            </div>
+
+            <TabsList className="settings-tabs__nav no-drag h-auto bg-transparent p-0 text-inherit" aria-label="Settings sections">
+              {SETTINGS_TABS.map((tab) => (
+                <TabsTrigger className="settings-tabs__item" key={tab.value} value={tab.value}>
+                  <span className="settings-tabs__item-label">{tab.label}</span>
+                  <span className="settings-tabs__item-desc">{tab.description}</span>
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </aside>
+
+          <div className="no-drag flex min-h-0 flex-col overflow-hidden">
+            <div className="settings-tabs__header drag-region">
+              <SurfaceHeader
+                eyebrow={activeTabConfig?.label}
+                title="Control Tab for Mac."
+                description="Manage account status, suggestions, macOS permissions, monthly usage, connection, and saved memories from this Mac."
+              />
+            </div>
+
+            <div className="settings-tabs__content">
+              {paused ? (
+                <StatusRow
+                  label="Tab is paused"
+                  value={pauseState.label}
+                  tone="warning"
+                  description={pauseState.description}
+                />
+              ) : null}
+              <TabsContent value={activeTab} forceMount className="m-0">
+                {renderActiveTab()}
+              </TabsContent>
             </div>
           </div>
-
-          <nav className="settings-tabs__nav no-drag" aria-label="Settings sections">
-            {SETTINGS_TABS.map((tab) => (
-              <button
-                aria-current={activeTab === tab.value ? "page" : undefined}
-                className="settings-tabs__item"
-                data-active={activeTab === tab.value}
-                key={tab.value}
-                onClick={() => setActiveTab(tab.value)}
-                type="button"
-              >
-                <span className="settings-tabs__item-label">{tab.label}</span>
-                <span className="settings-tabs__item-desc">{tab.description}</span>
-              </button>
-            ))}
-          </nav>
-        </aside>
-
-        <div className="no-drag flex min-h-0 flex-col overflow-hidden">
-          <div className="settings-tabs__header drag-region">
-            <SurfaceHeader
-              eyebrow={activeTabConfig?.label}
-              title="Control Tab for Mac."
-              description="Manage account status, suggestions, macOS permissions, monthly usage, connection, and saved memories from this Mac."
-            />
-          </div>
-
-          <div className="settings-tabs__content">
-            {paused ? (
-              <StatusRow
-                label="Tab is paused"
-                value={pauseState.label}
-                tone="warning"
-                description={pauseState.description}
-              />
-            ) : null}
-            {renderActiveTab()}
-          </div>
-        </div>
-      </SectionCard>
+        </SectionCard>
+      </Tabs>
     </main>
   );
 }

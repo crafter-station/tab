@@ -181,10 +181,16 @@ summary {
 .settings-tabs__nav {
   display: grid;
   gap: 6px;
+  height: auto;
+  padding: 0;
+  color: inherit;
+  background: transparent;
 }
 
 .settings-tabs__item {
   display: grid;
+  align-items: start;
+  justify-content: stretch;
   gap: 3px;
   width: 100%;
   padding: 10px 12px;
@@ -203,7 +209,7 @@ summary {
   border-color: var(--border);
 }
 
-.settings-tabs__item[data-active="true"] {
+.settings-tabs__item[data-state="active"] {
   color: var(--text);
   background: var(--card);
   border-color: var(--border);
