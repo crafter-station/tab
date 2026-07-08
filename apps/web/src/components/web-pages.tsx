@@ -400,11 +400,22 @@ export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
   );
 }
 
-export function MessagePage({ title, message }: { title: string; message: string }) {
+type MessagePageProps = {
+  title: string;
+  message: string;
+  action?: { href: string; label: string };
+};
+
+export function MessagePage({ title, message, action }: MessagePageProps) {
   return (
     <Card className="max-w-[34rem]">
       <CardHeader><CardTitle>{title}</CardTitle></CardHeader>
-      <CardContent className="text-muted-foreground"><p>{message}</p></CardContent>
+      <CardContent className="flex flex-col gap-4 text-muted-foreground">
+        <p>{message}</p>
+        {action ? (
+          <p><a className={buttonVariants()} href={action.href}>{action.label}</a></p>
+        ) : null}
+      </CardContent>
     </Card>
   );
 }

@@ -26,6 +26,7 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
   readonly planChangeRequests: PlanChangeOptions[] = [];
   readonly portalRequests: Array<{ userId: string; customerId?: string }> = [];
   failPortalRequests = false;
+  failPlanChangeRequests = false;
 
   async createCheckoutUrl(
     planId: PlanId,
@@ -48,6 +49,9 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
 
   async changePlan(options: PlanChangeOptions): Promise<void> {
     this.planChangeRequests.push(options);
+    if (this.failPlanChangeRequests) {
+      throw new Error("plan change unavailable");
+    }
   }
 }
 
@@ -398,6 +402,78 @@ describe("Web account surface", () => {
     expect(response.headers.get("location")).toBe("/dashboard");
     expect(billingCheckoutClient.checkoutRequests).toEqual([]);
     expect(billingCheckoutClient.portalRequests).toEqual([]);
+  });
+
+  it("schedules active Max subscribers downgrading to Pro without reducing current quota", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+      await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activatePaidPlan(billingService, userId, "max");
+
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=pro",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/dashboard");
+    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    expect(billingCheckoutClient.planChangeRequests).toEqual([
+      {
+        subscriptionId: "polar-sub-max",
+        targetPlanId: "pro",
+        prorationBehavior: "next_period",
+      },
+    ]);
+
+    const entitlement = await billingService.getEntitlement(userId);
+    expect(entitlement.planId).toBe("max");
+    expect(entitlement.status).toBe("active");
+    expect(entitlement.polarCustomerId).toBe("polar-customer-max");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-max");
+
+    const quota = await billingService.checkQuota(userId);
+    expect(quota.quota).toBe(1_000_000);
+  });
+
+  it("shows billing management when a paid plan change fails without mutating entitlement", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+      await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activatePaidPlan(billingService, userId, "pro");
+    billingCheckoutClient.failPlanChangeRequests = true;
+
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=max",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude("Billing error");
+    expect(body).toInclude("Manage billing");
+    expect(body).toInclude('href="/billing/portal"');
+    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    expect(billingCheckoutClient.planChangeRequests).toEqual([
+      {
+        subscriptionId: "polar-sub-pro",
+        targetPlanId: "max",
+        prorationBehavior: "prorate",
+      },
+    ]);
+
+    const entitlement = await billingService.getEntitlement(userId);
+    expect(entitlement.planId).toBe("pro");
+    expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
   });
 
   it("sends active paid subscribers choosing Free to billing management", async () => {
