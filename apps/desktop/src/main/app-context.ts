@@ -10,6 +10,7 @@ const ZED_CONTEXT_CONFIDENCE = 0.82;
 const FOCUSED_EDITOR_BEFORE_CARET_RATIO = 0.7;
 const MIN_EDITOR_CONTEXT_LENGTH = 8;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
+const CODE_LIKE_CONTEXT_SUPPRESSION_REASON = "code_like_context";
 
 export type AppContextSnapshot = AppContext;
 
@@ -40,6 +41,10 @@ function createEmptyProviderSnapshot(
   status: AppContextSnapshot["metadata"]["status"],
 ): AppContextSnapshot {
   return { fragments: [], metadata: { provider, status } };
+}
+
+function createSuppressedProviderSnapshot(provider: string, suppressionReason: string): AppContextSnapshot {
+  return { fragments: [], metadata: { provider, status: "suppressed", suppressionReason } };
 }
 
 function sanitizeFragment(fragment: AppContextFragment): AppContextFragment | null {
@@ -115,6 +120,25 @@ function buildBoundedFocusedEditorText(beforeCaret: string, afterCaret: string):
   return [before, after].filter((part) => part.trim().length > 0).join("");
 }
 
+function isProseCommentLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!/^(\/\/|\/\*|\*|#|<!--)/.test(trimmed)) return false;
+
+  const withoutMarker = trimmed.replace(/^(\/\/|\/\*+|\*|#+|<!--)\s*/, "").replace(/\s*(\*\/|-->)$/, "");
+  return /[A-Za-z][A-Za-z\s,'-]{12,}/.test(withoutMarker);
+}
+
+function isCodeLikeFocusedEditorText(text: string): boolean {
+  const meaningfulLines = text.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  if (meaningfulLines.length < 3 || meaningfulLines.some(isProseCommentLine)) return false;
+
+  const codeLikeLines = meaningfulLines.filter((line) =>
+    /[{};]|=>|^\s*(function|const|let|var|return|import|export|class|if|for|while|switch|try|catch)\b/.test(line),
+  );
+
+  return codeLikeLines.length >= 3 && codeLikeLines.length / meaningfulLines.length >= 0.6;
+}
+
 function isZedBundleId(bundleId: string | undefined): boolean {
   return bundleId ? ZED_BUNDLE_IDS.has(bundleId) : false;
 }
@@ -134,6 +158,9 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
     const text = buildBoundedFocusedEditorText(beforeCaret, afterCaret);
     if (text.trim().length < MIN_EDITOR_CONTEXT_LENGTH) {
       return createEmptyProviderSnapshot(ZED_PROVIDER, "empty");
+    }
+    if (isCodeLikeFocusedEditorText(text)) {
+      return createSuppressedProviderSnapshot(ZED_PROVIDER, CODE_LIKE_CONTEXT_SUPPRESSION_REASON);
     }
 
     return sanitizeAppContextSnapshot({

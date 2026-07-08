@@ -997,6 +997,16 @@ describe("desktop native suggestion loop", () => {
         expect(secretLike.fragments).toHaveLength(0);
         expect(secretLike.metadata.status).toBe("suppressed");
         expect(secretLike.metadata.suppressionReason).toBe("secret_like_context");
+
+        const codeLike = providerSnapshot(zedTextSession({
+          surroundingContext: {
+            beforeCaret: "function issueToken(user) {\n  const token = sign(user.id);\n  return token;\n}",
+            afterCaret: "",
+          },
+        }));
+        expect(codeLike.fragments).toHaveLength(0);
+        expect(codeLike.metadata.status).toBe("suppressed");
+        expect(codeLike.metadata.suppressionReason).toBe("code_like_context");
       });
     });
 
