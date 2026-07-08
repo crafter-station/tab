@@ -19,6 +19,7 @@ import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
 
 const SUGGESTION_MODEL_ID = "openai/gpt-oss-20b";
+export const MAX_SUGGESTION_LENGTH = 80;
 const COMMON_SHORT_WORDS = new Set([
   "am",
   "an",
@@ -120,7 +121,7 @@ function formatAppContext(appContext: AppContext | undefined): string {
 }
 
 export function createSuggestionPrompt(input: SuggestionInput): string {
-  return `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. Do not repeat any part of the user draft. If the draft ends mid-word, output only the remaining characters and following words, not the whole word. Preserve the natural boundary: do not add a leading space when completing a partial word, do add one when starting the next word, and never start with whitespace when the draft already ends with whitespace. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
+  return `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words and never more than ${MAX_SUGGESTION_LENGTH} characters. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. Do not repeat any part of the user draft. If the draft ends mid-word, output only the remaining characters and following words, not the whole word. Preserve the natural boundary: do not add a leading space when completing a partial word, do add one when starting the next word, and never start with whitespace when the draft already ends with whitespace. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
 
 Active application: ${input.activeApplication.bundleId}
 Source: ${input.contextSource}${formatAppContext(input.appContext)}
@@ -146,10 +147,17 @@ export function normalizeGeneratedSuggestion(
     isLetterOrNumber(lastContextChar) &&
     isLetterOrNumber(firstSuggestionChar)
   ) {
-    return ` ${text}`;
+    return ` ${truncateSuggestionText(text, MAX_SUGGESTION_LENGTH - 1)}`;
   }
 
-  return text;
+  return truncateSuggestionText(text, MAX_SUGGESTION_LENGTH);
+}
+
+function truncateSuggestionText(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+
+  const truncatedAtWordBoundary = text.slice(0, maxLength + 1).replace(/\s+\S*$/u, "").trimEnd();
+  return truncatedAtWordBoundary || text.slice(0, maxLength).trimEnd();
 }
 
 function normalizeSuggestionBoundary(

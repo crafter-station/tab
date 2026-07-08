@@ -4,6 +4,7 @@ import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
 import {
   createApp,
   createSuggestionPrompt,
+  MAX_SUGGESTION_LENGTH,
   normalizeGeneratedSuggestion,
 } from "../apps/api/src/index.ts";
 import { BillingService, InMemoryBillingStorage, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
@@ -118,6 +119,18 @@ describe("Hono suggestion API", () => {
     expect(normalizeGeneratedSuggestion("The quick br", "brown fox")).toBe("own fox");
     expect(normalizeGeneratedSuggestion("recomm", "recommendations for dinner")).toBe(
       "endations for dinner",
+    );
+  });
+
+  it("caps generated suggestions at the maximum length", () => {
+    const suggestion = normalizeGeneratedSuggestion(
+      "Please analyze",
+      "the debounce behavior and identify why duplicate requests are still being sent after input stops changing",
+    );
+
+    expect(suggestion.length).toBeLessThanOrEqual(MAX_SUGGESTION_LENGTH);
+    expect(suggestion).toBe(
+      " the debounce behavior and identify why duplicate requests are still being sent",
     );
   });
 
@@ -398,6 +411,7 @@ describe("SuggestionUseCase", () => {
     });
 
     expect(prompt).toContain("Continue the user's exact text");
+    expect(prompt).toContain(`never more than ${MAX_SUGGESTION_LENGTH} characters`);
     expect(prompt).toContain("Do not repeat any part of the user draft");
     expect(prompt).toContain("If the draft ends mid-word");
     expect(prompt).toContain("never start with whitespace when the draft already ends with whitespace");
