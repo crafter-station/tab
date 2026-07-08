@@ -11,10 +11,14 @@ export type SuggestionLoopState =
   | { status: "debouncing"; timer: ReturnType<typeof setTimeout>; contextHash: string }
   | { status: "showing"; suggestion: Suggestion; contextHash: string; expiryTimer: ReturnType<typeof setTimeout> };
 
+export type SuggestionSource = (
+  snapshot: RequestableTypingContextSnapshot,
+) => Promise<Suggestion | null> | Suggestion | null;
+
 export type SuggestionLoopDependencies = {
   getContext(): SafeTypingContextSnapshot;
-  getLocalSuggestion?(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null> | Suggestion | null;
-  requestSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null>;
+  getLocalSuggestion?: SuggestionSource;
+  requestSuggestion: SuggestionSource;
   onShowSuggestion(suggestion: Suggestion): void;
   onHideSuggestion(): void;
   onRequestStarted?: (context: string) => void;
@@ -58,7 +62,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     deps.onShowSuggestion(suggestion);
   }
 
-  async function getLocalSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null> {
+  async function requestLocalSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null> {
     if (!deps.getLocalSuggestion) return null;
 
     try {
@@ -128,7 +132,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
           return;
         }
 
-        const localSuggestion = await getLocalSuggestion(latest);
+        const localSuggestion = await requestLocalSuggestion(latest);
         if (!isCurrentDebouncedContext(hash)) {
           return;
         }

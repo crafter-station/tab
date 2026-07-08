@@ -1,18 +1,15 @@
 import type { Suggestion } from "@tabb/contracts";
 
-const FAKE_CONTINUATIONS: Record<string, string> = {
-  hello: " world",
+const CONFIDENT_CONTINUATIONS: Record<string, string> = {
   thank: " you",
   please: " let me know",
   best: " regards",
   see: " you soon",
 };
 
-const LOCAL_CONFIDENT_CONTINUATIONS: Record<string, string> = {
-  thank: " you",
-  please: " let me know",
-  best: " regards",
-  see: " you soon",
+const FAKE_CONTINUATIONS: Record<string, string> = {
+  hello: " world",
+  ...CONFIDENT_CONTINUATIONS,
 };
 
 function lastContextWord(context: string): string | null {
@@ -25,26 +22,26 @@ function lastContextWord(context: string): string | null {
 }
 
 export function generateLocalSuggestion(context: string): Suggestion | null {
-  const lowerLastWord = lastContextWord(context);
-  if (!lowerLastWord) return null;
+  const lastWord = lastContextWord(context);
+  if (!lastWord) return null;
 
-  const text = LOCAL_CONFIDENT_CONTINUATIONS[lowerLastWord];
+  const text = CONFIDENT_CONTINUATIONS[lastWord];
   if (!text) return null;
 
   return {
-    id: `local-${lowerLastWord}`,
+    id: `local-${lastWord}`,
     text,
   };
 }
 
 export function generateFakeSuggestion(context: string): Suggestion | null {
-  const lowerLastWord = lastContextWord(context);
-  if (!lowerLastWord) return null;
+  const lastWord = lastContextWord(context);
+  if (!lastWord) return null;
 
-  const text = FAKE_CONTINUATIONS[lowerLastWord] ?? " continues…";
+  const text = FAKE_CONTINUATIONS[lastWord] ?? " continues…";
 
   return {
-    id: `fake-${lowerLastWord}-${Date.now()}`,
+    id: `fake-${lastWord}-${Date.now()}`,
     text,
   };
 }
