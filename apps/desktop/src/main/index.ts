@@ -241,9 +241,13 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   typingContext: typingContextBuffer,
   requestSuggestion,
   getContextSource: getTypedContextSource,
-  getAppContext: (snapshot) => snapshot.textSession
-    ? createObsidianDocumentAppContext(snapshot.textSession)
-    : { fragments: [], metadata: { status: "unsupported" } },
+  getAppContext: (snapshot) => {
+    if (!snapshot.textSession) {
+      return { fragments: [], metadata: { status: "unsupported" } };
+    }
+
+    return createObsidianDocumentAppContext(snapshot.textSession);
+  },
   outputs: {
     showSuggestion: showOverlay,
     clearSuggestion: clearSuggestionOverlay,

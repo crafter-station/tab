@@ -9,10 +9,20 @@ const MAX_OBSIDIAN_CONTEXT_BEFORE_CARET = 1_000;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
 const OBSIDIAN_PROVIDER = "obsidian-accessibility-editor";
 const OBSIDIAN_BUNDLE_IDS = new Set(["md.obsidian"]);
+const OBSIDIAN_CONTEXT_CONFIDENCE = 0.88;
+const MISSING_OBSIDIAN_EDITOR_SEMANTICS_REASON = "missing_focused_editor_semantics";
+const NOISY_OBSIDIAN_EXTRACTION_REASON = "noisy_extraction";
 
 export type AppContextSnapshot = AppContext;
 
 export type AppContextProvider = () => AppContextSnapshot;
+
+type ExtractableObsidianTextSession = TextSessionSnapshot & {
+  readonly focusedElementId: string;
+  readonly textElementId: string;
+  readonly selectedRange: NonNullable<TextSessionSnapshot["selectedRange"]>;
+  readonly surroundingContext: NonNullable<TextSessionSnapshot["surroundingContext"]>;
+};
 
 export type AppContextManager = {
   setSnapshot(snapshot: AppContextSnapshot): void;
@@ -124,7 +134,20 @@ function isNoisyAccessibilityText(text: string): boolean {
   return replacementCount > 4 && replacementCount / trimmed.length > 0.2;
 }
 
-function sliceBeforeCaret(text: string): string {
+function canExtractObsidianEditorContext(
+  snapshot: TextSessionSnapshot,
+): snapshot is ExtractableObsidianTextSession {
+  return (
+    !snapshot.secureLike &&
+    snapshot.accessibilityReliability === "reliable" &&
+    Boolean(snapshot.focusedElementId) &&
+    Boolean(snapshot.textElementId) &&
+    Boolean(snapshot.selectedRange) &&
+    Boolean(snapshot.surroundingContext)
+  );
+}
+
+function sliceObsidianContextBeforeCaret(text: string): string {
   if (text.length <= MAX_OBSIDIAN_CONTEXT_BEFORE_CARET) return text;
   const sliced = text.slice(-MAX_OBSIDIAN_CONTEXT_BEFORE_CARET);
   const headingMatches = Array.from(sliced.matchAll(/^#{1,6}\s.+$/gm));
@@ -135,7 +158,7 @@ function sliceBeforeCaret(text: string): string {
   return nextLine >= 0 ? sliced.slice(nextLine + 1) : sliced;
 }
 
-function sliceAfterCaret(text: string, remainingLength: number): string {
+function sliceObsidianContextAfterCaret(text: string, remainingLength: number): string {
   const paragraphBreak = text.indexOf("\n\n");
   const lineBreak = text.indexOf("\n");
   const semanticBreak = paragraphBreak >= 0 ? paragraphBreak : lineBreak;
@@ -148,9 +171,9 @@ function sliceAfterCaret(text: string, remainingLength: number): string {
 }
 
 function boundedObsidianContext(beforeCaret: string, afterCaret: string): string {
-  const before = sliceBeforeCaret(beforeCaret);
+  const before = sliceObsidianContextBeforeCaret(beforeCaret);
   const remaining = Math.max(0, MAX_OBSIDIAN_DOCUMENT_CONTEXT_LENGTH - before.length);
-  const after = sliceAfterCaret(afterCaret, remaining);
+  const after = sliceObsidianContextAfterCaret(afterCaret, remaining);
   return cleanAccessibilityText(`${before}${after}`).trim();
 }
 
@@ -159,18 +182,11 @@ export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot):
     return emptyProviderSnapshot(OBSIDIAN_PROVIDER, "unsupported");
   }
 
-  if (
-    snapshot.secureLike ||
-    snapshot.accessibilityReliability !== "reliable" ||
-    !snapshot.focusedElementId ||
-    !snapshot.textElementId ||
-    !snapshot.selectedRange ||
-    !snapshot.surroundingContext
-  ) {
+  if (!canExtractObsidianEditorContext(snapshot)) {
     return emptyProviderSnapshot(
       OBSIDIAN_PROVIDER,
       "empty",
-      "missing_focused_editor_semantics",
+      MISSING_OBSIDIAN_EDITOR_SEMANTICS_REASON,
     );
   }
 
@@ -180,7 +196,7 @@ export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot):
   );
 
   if (isNoisyAccessibilityText(text)) {
-    return emptyProviderSnapshot(OBSIDIAN_PROVIDER, "empty", "noisy_extraction");
+    return emptyProviderSnapshot(OBSIDIAN_PROVIDER, "empty", NOISY_OBSIDIAN_EXTRACTION_REASON);
   }
 
   const fragment: AppContextFragment = {
@@ -194,7 +210,7 @@ export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot):
     provider: OBSIDIAN_PROVIDER,
     kind: "markdown_document",
     text,
-    confidence: 0.88,
+    confidence: OBSIDIAN_CONTEXT_CONFIDENCE,
     redaction: createSafeRedactionSummary(),
     requestable: true,
     memoryEligible: false,
