@@ -24,10 +24,12 @@ import {
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type {
   MemoryAgentModel,
+  MemoryJobQueue,
   ProposedMemoryOperation,
 } from "../apps/api/src/memory-agent.ts";
 import { createTestDatabase } from "./test-db.ts";
 import type {
+  ApiDependencies,
   SuggestionGenerator,
   SuggestionInput,
 } from "../apps/api/src/index.ts";
@@ -39,6 +41,7 @@ async function createAuthenticatedTestApp(
     vectorIndex: PersonalMemoryVectorIndex;
   },
   memoryExtractionModel?: MemoryAgentModel,
+  extraDeps: Pick<ApiDependencies, "memoryJobQueue"> = {},
 ) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
@@ -55,6 +58,7 @@ async function createAuthenticatedTestApp(
     deviceTokenService,
     personalMemoryStorage,
     memoryExtractionModel,
+    ...extraDeps,
     ...vectorDeps,
     telemetryStorage: new InMemoryTelemetryStorage(),
   });
@@ -848,6 +852,31 @@ describe("Personal Memory API", () => {
     expect(response.status).toBe(200);
     expect(extractionModelCalls).toBe(0);
     expect(await personalMemoryStorage.listMemoriesByUser("user-1")).toEqual([]);
+  });
+
+  it("does not enqueue memory jobs during suggestion generation", async () => {
+    let enqueueCalls = 0;
+    const memoryJobQueue: MemoryJobQueue = {
+      async enqueue() {
+        enqueueCalls += 1;
+        throw new Error("suggestions must not enqueue memory jobs");
+      },
+    };
+    const { app, token } = await createAuthenticatedTestApp(
+      async () => ({ text: " suggestion" }),
+      undefined,
+      undefined,
+      { memoryJobQueue },
+    );
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validSuggestionRequest),
+    });
+
+    expect(response.status).toBe(200);
+    expect(enqueueCalls).toBe(0);
   });
 
   it("continues suggestions without memory when vector retrieval fails", async () => {
