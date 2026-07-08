@@ -1,3 +1,4 @@
+import { Resend } from "resend";
 import { env } from "./env.ts";
 
 const resendFromEmail = "Tabb <tabb@cueva.io>";
@@ -20,27 +21,19 @@ export async function sendEmail({
     return;
   }
 
-  const response = await fetch("https://api.resend.com/emails", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${env.RESEND_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      from: resendFromEmail,
-      to,
-      subject,
-      text,
-      html,
-    }),
+  const resend = new Resend(env.RESEND_API_KEY);
+  const { data, error } = await resend.emails.send({
+    from: resendFromEmail,
+    to,
+    subject,
+    text,
+    html,
   });
 
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Resend email failed (${response.status}): ${body}`);
+  if (error) {
+    throw new Error(`Resend email failed: ${error.message}`);
   }
 
-  const data = (await response.json()) as { id?: string } | null;
   console.log(
     `Sent email to ${to} from ${resendFromEmail}, id: ${data?.id ?? "unknown"}`,
   );
