@@ -745,6 +745,7 @@ function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
     isStringOrNull(snapshot.focusedElementId) &&
     isStringOrNull(snapshot.textElementId) &&
     isTextSessionRangeOrNull(snapshot.selectedRange) &&
+    (snapshot.selectedText === undefined || typeof snapshot.selectedText === "string") &&
     isStringOrNull(snapshot.caretIdentity) &&
     typeof snapshot.secureLike === "boolean" &&
     isTextSessionReliability(snapshot.accessibilityReliability) &&

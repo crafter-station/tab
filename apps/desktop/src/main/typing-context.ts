@@ -55,6 +55,7 @@ export type TextSessionSnapshot = {
   readonly focusedElementId: string | null;
   readonly textElementId: string | null;
   readonly selectedRange: TextSessionRange | null;
+  readonly selectedText?: string;
   readonly caretIdentity: string | null;
   readonly secureLike: boolean;
   readonly accessibilityReliability: TextSessionReliability;
