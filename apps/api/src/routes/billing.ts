@@ -88,6 +88,37 @@ export function registerBillingRoutes(
       entitlement.planId !== "free" && hasActivePolarEntitlement(entitlement);
     const requestedPaidPlan = planId !== "free";
 
+    if (hasActivePaidSubscription && planId === entitlement.planId) {
+      return c.json(
+        BillingCheckoutResponseSchema.parse({
+          status: "ok",
+          data: { url: "/dashboard" },
+        }),
+        200,
+      );
+    }
+
+    if (hasActivePaidSubscription && !requestedPaidPlan) {
+      try {
+        const url = await deps.billingCheckoutClient.createPortalUrl(
+          sessionCheck.session.user.id,
+          entitlement.polarCustomerId,
+        );
+        return c.json(
+          BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
+          200,
+        );
+      } catch {
+        return c.json(
+          BillingCheckoutResponseSchema.parse({
+            status: "ok",
+            data: { url: "/billing/portal" },
+          }),
+          200,
+        );
+      }
+    }
+
     if (hasActivePaidSubscription && requestedPaidPlan && planId !== entitlement.planId) {
       return c.json(
         createErrorResponse(
