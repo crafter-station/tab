@@ -22,7 +22,7 @@ import {
 } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
-import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
+import { createNativeAutocompleteRuntime } from "./native-autocomplete-runtime.ts";
 import {
   type AppContextSnapshot,
 } from "./app-context.ts";
@@ -40,8 +40,7 @@ import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createUpdateChecker } from "./release.ts";
-import type { Suggestion, ActiveApplication, SuggestionContextSource, PersonalMemory } from "@tab/contracts";
-import { classifyTypingContextSource } from "@tab/memory-policy";
+import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -261,12 +260,11 @@ type DebugAppContextState = {
   messageCount: number;
 };
 let debugApiState: DebugApiState = { status: "idle" };
-let lastOptionKeyUpAt = 0;
-
-const nativeSuggestionSession = createNativeSuggestionSession({
+const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
   typingContext: typingContextBuffer,
+  appContext: appContextExtractor,
+  memoryExtraction: memoryExtractionDispatcher,
   requestSuggestion,
-  getContextSource: getTypedContextSource,
   outputs: {
     showSuggestion: showOverlay,
     clearSuggestion: clearSuggestionOverlay,
@@ -309,8 +307,6 @@ const nativeSuggestionSession = createNativeSuggestionSession({
   debounceMs: 300,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
-  getAppContext: (snapshot) => appContextExtractor.getSnapshot(snapshot),
-  clearAppContext: () => appContextExtractor.clear(),
 });
 
 const desktopEventIngress = createDesktopEventIngress({
@@ -358,7 +354,7 @@ function updateTray(): void {
 
 function createTrayState(status: DesktopStatus) {
   return {
-    paused: nativeSuggestionSession.isPaused(),
+    paused: nativeAutocompleteRuntime.isPaused(),
     auth: status.auth,
     quotaExhausted: status.quota?.exhausted ?? false,
     updateAvailable,
@@ -366,8 +362,8 @@ function createTrayState(status: DesktopStatus) {
 }
 
 async function togglePause(): Promise<void> {
-  const paused = !nativeSuggestionSession.isPaused();
-  nativeSuggestionSession.setPaused(paused);
+  const paused = !nativeAutocompleteRuntime.isPaused();
+  nativeAutocompleteRuntime.setPaused(paused);
   settingsWindowManager.sendPaused(paused);
   updateTray();
   if (paused) {
@@ -412,10 +408,6 @@ async function showInitialDesktopSurface(): Promise<void> {
   }
 
   showAuthenticatedDesktopSurface();
-}
-
-function getTypedContextSource(): SuggestionContextSource {
-  return classifyTypingContextSource(typingContextBuffer.getState().activeApplication);
 }
 
 function getCurrentDisplay(): Electron.Display {
@@ -668,7 +660,7 @@ function hideDebugTypingOverlay(): void {
 function sendDebugContext(): void {
   if (!SHOW_DEBUG_TYPING_OVERLAY || !isUsableWebContents(debugOverlayWindow)) return;
 
-  const snapshot = nativeSuggestionSession.getCurrentSnapshot();
+  const snapshot = nativeAutocompleteRuntime.getCurrentSnapshot();
   const context = getLastWords(snapshot.sanitizedContext, DEBUG_TYPING_WORD_LIMIT);
   debugOverlayWindow.webContents.send("debug-context", {
     context,
@@ -745,32 +737,23 @@ function showDebugTypingOverlay(): void {
 }
 
 async function acceptCurrentSuggestion(): Promise<void> {
-  await nativeSuggestionSession.acceptCurrentSuggestion();
+  await nativeAutocompleteRuntime.acceptCurrentSuggestion();
 }
 
 async function requestSuggestionNow(): Promise<void> {
-  await nativeSuggestionSession.requestSuggestionNow();
+  await nativeAutocompleteRuntime.requestSuggestionNow();
 }
 
 function handleOptionKeyUp(): void {
-  const now = Date.now();
-  if (now - lastOptionKeyUpAt <= DOUBLE_OPTION_PRESS_MS) {
-    lastOptionKeyUpAt = 0;
+  if (nativeAutocompleteRuntime.handleOptionKeyUp(DOUBLE_OPTION_PRESS_MS)) {
     requestSuggestionNow().catch((error) => {
       console.error("Failed to request suggestion from Option double press:", error);
     });
-    return;
   }
-
-  lastOptionKeyUpAt = now;
-}
-
-function resetOptionDoublePressState(): void {
-  lastOptionKeyUpAt = 0;
 }
 
 function clearContextAndHide(): void {
-  nativeSuggestionSession.clearContext();
+  nativeAutocompleteRuntime.clearContext();
   debugApiState = { status: "idle" };
   if (debugTypingTimer) {
     clearTimeout(debugTypingTimer);
@@ -793,10 +776,7 @@ function handleInputTapMessage(message: unknown): void {
 }
 
 function handleAppContextTree(accessibilityTree: AppContextAccessibilityTree): void {
-  appContextExtractor.ingestAccessibilityTree({
-    activeApplication: typingContextBuffer.getState().activeApplication,
-    accessibilityTree,
-  });
+  nativeAutocompleteRuntime.ingestAppContextTree(accessibilityTree);
 }
 
 function startMacOSInputTap(): void {
@@ -844,7 +824,7 @@ async function bootstrap(): Promise<void> {
     if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
 
     overlayRendererReady = true;
-    const currentSuggestion = nativeSuggestionSession.getCurrentSuggestion();
+    const currentSuggestion = nativeAutocompleteRuntime.getCurrentSuggestion();
     if (currentSuggestion) {
       showOverlay(currentSuggestion);
     }
@@ -940,7 +920,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle("get-initial-state", () => ({
     status: statusService.getCurrentStatus(),
     memories: currentMemories,
-    paused: nativeSuggestionSession.isPaused(),
+    paused: nativeAutocompleteRuntime.isPaused(),
     preferences: preferencesManager.get(),
   }));
 
@@ -1064,55 +1044,37 @@ app.on("activate", () => {
 
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
-  resetOptionDoublePressState();
-  const activeApplication = typingContextBuffer.getState().activeApplication;
-  if (activeApplication) {
-    memoryExtractionDispatcher.append({
-      text,
-      source: getTypedContextSource(),
-      activeApplication,
-    });
-  }
-  nativeSuggestionSession.appendText(text);
+  nativeAutocompleteRuntime.appendText(text);
 }
 
 export function handlePastedText(text: string): void {
-  resetOptionDoublePressState();
-  nativeSuggestionSession.appendPastedText(text);
+  nativeAutocompleteRuntime.appendPastedText(text);
 }
 
 export function handleDeleteBackward(unit: TypingDeletionUnit = "character"): void {
-  resetOptionDoublePressState();
-  nativeSuggestionSession.deleteBackward(unit);
+  nativeAutocompleteRuntime.deleteBackward(unit);
 }
 
 export function handleShortcutOrNavigation(): void {
-  resetOptionDoublePressState();
-  // Shortcuts and navigation keys do not become typing context.
+  nativeAutocompleteRuntime.handleShortcutOrNavigation();
 }
 
 export function handleActiveApplicationChanged(bundleId: string | null, windowId: string | null = null): void {
-  nativeSuggestionSession.setActiveApplication(bundleId, windowId);
+  nativeAutocompleteRuntime.setActiveApplication(bundleId, windowId);
 }
 
 export function handleSecureInputChanged(active: boolean): void {
-  nativeSuggestionSession.setSecureInput(active);
+  nativeAutocompleteRuntime.setSecureInput(active);
 }
 
 export function handleTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
-  if (snapshot.accessibilityReliability === "unavailable") {
-    appContextExtractor.ingestAccessibilityTree({
-      activeApplication: snapshot.activeApplication,
-      accessibilityTree: null,
-    });
-  }
-  nativeSuggestionSession.applyTextSessionSnapshot(snapshot);
+  nativeAutocompleteRuntime.applyTextSessionSnapshot(snapshot);
 }
 
 export function handlePauseChanged(active: boolean): void {
-  nativeSuggestionSession.setPaused(active);
+  nativeAutocompleteRuntime.setPaused(active);
 }
 
 export function getCurrentSuggestionForTest(): Suggestion | null {
-  return nativeSuggestionSession.getCurrentSuggestion();
+  return nativeAutocompleteRuntime.getCurrentSuggestion();
 }

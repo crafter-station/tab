@@ -9,7 +9,7 @@ import {
   type TextSessionSnapshot,
 } from "../apps/desktop/src/main/typing-context.ts";
 import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engine.ts";
-import { createSuggestionLoop } from "../apps/desktop/src/main/suggestion-loop.ts";
+import { createSuggestionLoop, type SuggestionSource } from "../apps/desktop/src/main/suggestion-loop.ts";
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
 import {
@@ -22,6 +22,7 @@ import {
   type AppContextSnapshot,
 } from "../apps/desktop/src/main/app-context.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
+import { createNativeAutocompleteRuntime } from "../apps/desktop/src/main/native-autocomplete-runtime.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
@@ -310,7 +311,7 @@ describe("desktop native suggestion loop", () => {
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     function makeDeps(overrides: {
-      requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+      requestSuggestion?: SuggestionSource;
       getLocalSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null> | Suggestion | null;
       getContext?: () => SafeTypingContextSnapshot;
       maxVisibleMs?: number;
@@ -679,6 +680,52 @@ describe("desktop native suggestion loop", () => {
       expect(events.filter((event) => event.type === "show" && (event.payload as Suggestion).id === "local-thank")).toHaveLength(0);
       expect(cloudCalls).not.toContain("thank");
     });
+
+    it("does not start duplicate requests for unchanged context while a request is in flight", async () => {
+      const calls: string[] = [];
+      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
+      const { events, deps } = makeDeps({
+        requestSuggestion: (snapshot) => {
+          calls.push(snapshot.sanitizedContext);
+          return new Promise((resolve) => {
+            resolves.push(resolve);
+          });
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      loop.onContextChanged();
+      await wait(10);
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(calls).toEqual(["hello"]);
+      resolves[0]?.({ id: "s-1", text: " world" });
+      await wait(1);
+      expect(events.filter((event) => event.type === "show")).toHaveLength(1);
+      expect(events.find((event) => event.type === "show")?.payload).toEqual({ id: "s-1", text: " world" });
+    });
+
+    it("aborts stale cloud requests when context changes", async () => {
+      let context = "hello";
+      const signals: AbortSignal[] = [];
+      const { deps } = makeDeps({
+        getContext: () => makeSnapshot({ context }),
+        requestSuggestion: (_snapshot, options) => {
+          if (options?.signal) signals.push(options.signal);
+          return new Promise(() => {});
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      loop.onContextChanged();
+      await wait(10);
+      context = "hello again";
+      loop.onContextChanged();
+
+      expect(signals).toHaveLength(1);
+      expect(signals[0].aborted).toBe(true);
+    });
   });
 
   describe("acceptance and insertion", () => {
@@ -826,6 +873,63 @@ describe("desktop native suggestion loop", () => {
         restoreClipboard: async () => {},
       });
       expect(result).toBe("no_target_app");
+    });
+  });
+
+  describe("native autocomplete runtime", () => {
+    it("routes desktop input through Typing Context, Memory Extraction Window, App Context, and Suggestion seams", () => {
+      const buffer = createTypingContextBuffer();
+      const memoryAppends: unknown[] = [];
+      const appContextTrees: unknown[] = [];
+      const runtime = createNativeAutocompleteRuntime({
+        typingContext: buffer,
+        appContext: {
+          ingestAccessibilityTree: (input) => appContextTrees.push(input),
+          getSnapshot: () => ({ fragments: [], metadata: { status: "empty" } }),
+          clear: () => appContextTrees.push({ clear: true }),
+        },
+        memoryExtraction: {
+          append: (input) => {
+            memoryAppends.push(input);
+            return true;
+          },
+          flush: async () => {},
+          stop: () => {},
+        },
+        requestSuggestion: () => null,
+        outputs: {
+          showSuggestion: () => {},
+          clearSuggestion: () => {},
+          hideOverlay: () => {},
+          showDebugContext: () => {},
+          resetDebugApiState: () => {},
+        },
+        createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
+          getCurrentSuggestion,
+          getPreviouslyActiveApplication,
+          setClipboard: async () => "",
+          sendPaste: async () => {},
+          restoreClipboard: async () => {},
+        }),
+        debounceMs: 5,
+      });
+
+      runtime.setActiveApplication("com.apple.Terminal", "window:1");
+      runtime.appendText("git status");
+      runtime.ingestAppContextTree({ role: "AXGroup", children: [{ role: "AXStaticText", value: "repo status" }] });
+
+      expect(buffer.getState().context).toBe("git status");
+      expect(memoryAppends).toEqual([
+        {
+          text: "git status",
+          source: "terminal_input",
+          activeApplication: { bundleId: "com.apple.Terminal", windowId: "window:1" },
+        },
+      ]);
+      const ingestedTree = appContextTrees.find((event) => !("clear" in (event as Record<string, unknown>)));
+      expect(ingestedTree).toMatchObject({
+        activeApplication: { bundleId: "com.apple.Terminal", windowId: "window:1" },
+      });
     });
   });
 
@@ -1263,6 +1367,62 @@ describe("desktop native suggestion loop", () => {
       expect(buffer.getState().context).toBe("");
       expect(calls).toContainEqual({ type: "requestSuggestion", value: composedContext });
       expect(calls).not.toContainEqual({ type: "requestSuggestion", value: "i2s" });
+    });
+
+    it("does not request a stale Text Session snapshot when fallback text arrives first", async () => {
+      const { calls, session } = makeSession();
+      const textSession = (beforeCaret: string): TextSessionSnapshot => ({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: beforeCaret.length, length: 0 },
+        caretIdentity: `range:${beforeCaret.length}:0`,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        supportsSemanticInsertion: true,
+        surroundingContext: { beforeCaret, afterCaret: "" },
+      });
+
+      session.applyTextSessionSnapshot(textSession("Alpha"));
+      await wait(10);
+      calls.length = 0;
+
+      session.appendText("!");
+      await wait(10);
+
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(0);
+      expect(session.getCurrentSnapshot().sanitizedContext).toBe("Alpha");
+
+      session.applyTextSessionSnapshot(textSession("Alpha!"));
+      await wait(10);
+
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: "Alpha!" });
+    });
+
+    it("does not clear or request again when only Text Session caret bounds change", async () => {
+      const { calls, session } = makeSession();
+      const textSession = (x: number): TextSessionSnapshot => ({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 5, length: 0 },
+        caretIdentity: "range:5:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        supportsSemanticInsertion: true,
+        surroundingContext: { beforeCaret: "Alpha", afterCaret: "" },
+        caretBounds: { x, y: 20, width: 1, height: 18 },
+      });
+
+      session.applyTextSessionSnapshot(textSession(10));
+      await wait(10);
+      calls.length = 0;
+
+      session.applyTextSessionSnapshot(textSession(11));
+      await wait(10);
+
+      expect(calls).toHaveLength(0);
+      expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
     });
 
     it("clears fallback context and disables memory work for secure Text Session snapshots", async () => {

@@ -1,12 +1,17 @@
 import type { ActiveApplication, RedactionSummary } from "@tab/contracts";
-import { getMemoryEligibility, type MemorySource } from "@tab/memory-policy";
+import {
+  MEMORY_EXTRACTION_WINDOW_POLICY,
+  isMemoryExtractionWindowSource,
+  type MemoryExtractionWindowSource,
+  type MemorySource,
+} from "@tab/memory-policy";
 import { redactSensitiveText } from "@tab/redaction";
 
 export type MemoryExtractionEntry = {
   readonly id: string;
   readonly timestamp: string;
   readonly activeApplication: ActiveApplication;
-  readonly contextSource: Extract<MemorySource, "typed_text" | "terminal_input">;
+  readonly contextSource: MemoryExtractionWindowSource;
   readonly text: string;
   readonly redaction: RedactionSummary;
 };
@@ -31,9 +36,6 @@ export type MemoryExtractionWindowDependencies = {
   readonly createId?: () => string;
 };
 
-const DEFAULT_MAX_AGE_MS = 30 * 60 * 1_000;
-const DEFAULT_MAX_TOTAL_TEXT_BYTES = 8 * 1_024;
-const DEFAULT_MAX_ENTRY_TEXT_BYTES = 1 * 1_024;
 const textEncoder = new TextEncoder();
 
 function getMemoryEnabled(value: MemoryExtractionWindowDependencies["memoryEnabled"]): boolean {
@@ -71,15 +73,18 @@ function textByteLength(text: string): number {
 function isBufferableExtractionSource(
   source: MemoryExtractionAppendSource,
 ): source is MemoryExtractionEntry["contextSource"] {
-  if (source !== "typed_text" && source !== "terminal_input") return false;
-  return getMemoryEligibility(source).eligible;
+  if (source !== "typed_text" && source !== "terminal_input" && source !== "pasted_text" && source !== "terminal_output") {
+    return false;
+  }
+
+  return isMemoryExtractionWindowSource(source);
 }
 
 export function createMemoryExtractionWindow(deps: MemoryExtractionWindowDependencies) {
   const now = deps.now ?? (() => new Date());
-  const maxAgeMs = deps.maxAgeMs ?? DEFAULT_MAX_AGE_MS;
-  const maxTotalTextBytes = deps.maxTotalTextBytes ?? DEFAULT_MAX_TOTAL_TEXT_BYTES;
-  const maxEntryTextBytes = deps.maxEntryTextBytes ?? DEFAULT_MAX_ENTRY_TEXT_BYTES;
+  const maxAgeMs = deps.maxAgeMs ?? MEMORY_EXTRACTION_WINDOW_POLICY.maxAgeMs;
+  const maxTotalTextBytes = deps.maxTotalTextBytes ?? MEMORY_EXTRACTION_WINDOW_POLICY.maxTotalTextBytes;
+  const maxEntryTextBytes = deps.maxEntryTextBytes ?? MEMORY_EXTRACTION_WINDOW_POLICY.maxEntryTextBytes;
   const createId = deps.createId ?? (() => crypto.randomUUID());
   let entries: MemoryExtractionEntry[] = [];
 

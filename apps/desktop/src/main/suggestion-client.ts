@@ -54,6 +54,7 @@ export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies)
 
   return async function requestSuggestion(
     snapshot: RequestableTypingContextSnapshot,
+    options?: { signal?: AbortSignal },
   ): Promise<Suggestion | null> {
     const payload = buildSuggestionRequest(deps, snapshot);
     const parsed = SuggestionRequestSchema.safeParse(payload);
@@ -74,6 +75,7 @@ export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies)
         method: "POST",
         headers,
         body: JSON.stringify(parsed.data),
+        signal: options?.signal,
       });
 
       if (!response.ok) {

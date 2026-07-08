@@ -1,4 +1,4 @@
-import { SUGGESTION_CONTEXT_SOURCES } from "@tab/memory-policy";
+import { MEMORY_EXTRACTION_WINDOW_POLICY, SUGGESTION_CONTEXT_SOURCES } from "@tab/memory-policy";
 import { z } from "zod";
 
 const errorCodes = [
@@ -120,7 +120,7 @@ export const MemoryDeleteResponseSchema = z.object({
 export const MemoryExtractionWindowEntrySchema = z
   .object({
     id: z.string().min(1),
-    text: z.string().trim().min(1).max(1_024),
+    text: z.string().trim().min(1).max(MEMORY_EXTRACTION_WINDOW_POLICY.maxEntryTextBytes),
     timestamp: z.string().datetime(),
     activeApplication: ActiveApplicationSchema,
     contextSource: SuggestionContextSourceSchema,
@@ -131,14 +131,14 @@ export const MemoryExtractionWindowEntrySchema = z
 export const MemoryExtractionRequestSchema = z
   .object({
     batchId: z.string().min(1).max(200),
-    entries: z.array(MemoryExtractionWindowEntrySchema).min(1).max(64),
+    entries: z.array(MemoryExtractionWindowEntrySchema).min(1).max(MEMORY_EXTRACTION_WINDOW_POLICY.maxRequestEntries),
     clientMetadata: ClientMetadataSchema.optional(),
   })
   .strict()
   .refine(
     (request) =>
       request.entries.reduce((total, entry) => total + entry.text.length, 0) <=
-      8_192,
+      MEMORY_EXTRACTION_WINDOW_POLICY.maxTotalTextBytes,
     "Extraction window text must be at most 8 KB.",
   );
 

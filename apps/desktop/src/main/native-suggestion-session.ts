@@ -79,6 +79,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let observationPaused = false;
   let textSessionSnapshot: TextSessionSnapshot | null = null;
   let visibleTextSessionTarget: TextSessionSnapshot | null = null;
+  let lastContextHash: string | null = null;
   const { outputs } = deps;
   const compatibilityStore = deps.compatibilityStore ?? createApplicationCompatibilityStore();
   const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy({ compatibilityStore });
@@ -179,9 +180,15 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     triggerPolicy,
   });
 
-  function contextChanged(): void {
+  function contextChanged(options: { suppressUnchangedTextSession?: boolean } = {}): void {
+    const snapshot = currentSafeSnapshot();
+    if (options.suppressUnchangedTextSession && snapshot.contextHash === lastContextHash) {
+      return;
+    }
+    lastContextHash = snapshot.contextHash;
+
     if (currentSuggestion) {
-      recordDismissal(currentSafeSnapshot());
+      recordDismissal(snapshot);
     }
     outputs.resetDebugApiState();
     clearVisibleSuggestion();
@@ -227,6 +234,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     if (recordDismissed && currentSuggestion) {
       recordDismissal(currentSafeSnapshot());
     }
+    lastContextHash = null;
     clearTextSessionSnapshot();
     deps.clearAppContext?.();
     deps.typingContext.clear();
@@ -239,7 +247,6 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     appendText(text: string): void {
       if (observationPaused) return;
       if (textSessionSnapshot) {
-        contextChanged();
         return;
       }
       clearTextSessionSnapshot();
@@ -295,7 +302,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
           deps.typingContext.clear();
         }
       }
-      contextChanged();
+      contextChanged({ suppressUnchangedTextSession: true });
     },
     setPaused(active: boolean): void {
       observationPaused = active;

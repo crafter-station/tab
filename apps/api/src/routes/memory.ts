@@ -8,6 +8,7 @@ import {
   type MemoryExtractionCounts,
   type TelemetryEvent,
 } from "@tab/contracts";
+import { summarizeMemoryExtractionWindow } from "@tab/memory-policy";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
@@ -145,8 +146,8 @@ export function registerMemoryRoutes(
       );
     }
 
-    const firstEntry = body.entries[0];
-    if (!firstEntry) {
+    const extractionWindow = summarizeMemoryExtractionWindow(body.entries);
+    if (!extractionWindow) {
       return c.json(
         createErrorResponse("invalid_request", "Extraction batch is invalid."),
         400,
@@ -155,11 +156,11 @@ export function registerMemoryRoutes(
     const device = c.get("device");
     const startedAt = performance.now();
     const extractionTelemetry = {
-      activeApplicationBundleId: firstEntry.activeApplication.bundleId,
-      contextSource: firstEntry.contextSource,
+      activeApplicationBundleId: extractionWindow.activeApplication.bundleId,
+      contextSource: extractionWindow.contextSource,
       modelId: MEMORY_EXTRACTION_MODEL_ID,
-      redactionApplied: firstEntry.redaction.applied,
-      redactionCount: firstEntry.redaction.redactionCount,
+      redactionApplied: extractionWindow.redaction.applied,
+      redactionCount: extractionWindow.redaction.redactionCount,
       clientAppVersion: body.clientMetadata?.appVersion,
       clientPlatform: body.clientMetadata?.platform,
     };

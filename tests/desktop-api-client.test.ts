@@ -263,4 +263,28 @@ describe("desktop API suggestion client", () => {
     const suggestion = await requestSuggestion(makeSnapshot());
     expect(suggestion).toBeNull();
   });
+
+  it("passes abort signals through to fetch", async () => {
+    const controller = new AbortController();
+    let capturedSignal: AbortSignal | null | undefined;
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      capturedSignal = init?.signal;
+      return new Response(
+        JSON.stringify({ status: "ok", data: { suggestions: [{ id: "s-1", text: " world" }] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      fetch,
+    });
+
+    await requestSuggestion(makeSnapshot(), { signal: controller.signal });
+
+    expect(capturedSignal).toBe(controller.signal);
+  });
 });

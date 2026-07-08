@@ -50,6 +50,17 @@ export type AppContextExtractor = {
   clear(): void;
 };
 
+type AccessibilityAppContextProvider = {
+  readonly getSnapshot: (input: {
+    readonly activeApplication: ActiveApplication | null;
+    readonly accessibilityTree: AppContextAccessibilityTree | null | undefined;
+  }) => AppContextSnapshot;
+};
+
+type SnapshotProvider = {
+  readonly getSnapshot: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
+};
+
 function isAvailable(snapshot: AppContextSnapshot): boolean {
   return snapshot.metadata.status === "available" && snapshot.fragments.length > 0;
 }
@@ -70,23 +81,43 @@ function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppC
   });
 }
 
-function extractFromAccessibilityTree(
-  activeApplication: ActiveApplication | null,
-  accessibilityTree: AppContextAccessibilityTree | null | undefined,
-): AppContextSnapshot {
-  const chromeContext = createChromeWebWritingContextSnapshot({
-    activeApplication,
-    accessibilityTree: accessibilityTree as ChromeWebAccessibilityNode | null | undefined,
-  });
-  if (isAvailable(chromeContext) || chromeContext.metadata.status === "suppressed") return chromeContext;
+function firstAvailableOrSuppressed(snapshots: readonly AppContextSnapshot[]): AppContextSnapshot | null {
+  return snapshots.find((snapshot) => isAvailable(snapshot) || snapshot.metadata.status === "suppressed") ?? null;
+}
 
-  const whatsAppContext = extractWhatsAppConversationContext({
-    activeApplication,
-    accessibilityTree: accessibilityTree as WhatsAppAccessibilityNode | null | undefined,
-  });
-  if (isAvailable(whatsAppContext) || whatsAppContext.metadata.status === "suppressed") return whatsAppContext;
+function createAccessibilityProviderRegistry(): readonly AccessibilityAppContextProvider[] {
+  return [
+    {
+      getSnapshot: ({ activeApplication, accessibilityTree }) =>
+        createChromeWebWritingContextSnapshot({
+          activeApplication,
+          accessibilityTree: accessibilityTree as ChromeWebAccessibilityNode | null | undefined,
+        }),
+    },
+    {
+      getSnapshot: ({ activeApplication, accessibilityTree }) =>
+        extractWhatsAppConversationContext({
+          activeApplication,
+          accessibilityTree: accessibilityTree as WhatsAppAccessibilityNode | null | undefined,
+        }),
+    },
+    {
+      getSnapshot: ({ activeApplication, accessibilityTree }) =>
+        extractAppContextFromAccessibility(activeApplication, accessibilityTree as AccessibilityTextNode | null),
+    },
+  ];
+}
 
-  return extractAppContextFromAccessibility(activeApplication, accessibilityTree as AccessibilityTextNode | null);
+function createSnapshotProviderRegistry(getZedAppContext: SnapshotAppContextProvider): readonly SnapshotProvider[] {
+  return [
+    {
+      getSnapshot: (snapshot) =>
+        snapshot.textSession ? createObsidianDocumentAppContext(snapshot.textSession) : { fragments: [], metadata: { status: "empty" } },
+    },
+    { getSnapshot: getZedAppContext },
+    { getSnapshot: getAppContextFromTextSession },
+    { getSnapshot: (snapshot) => sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot)) },
+  ];
 }
 
 export function createAppContextExtractor(options: {
@@ -94,27 +125,20 @@ export function createAppContextExtractor(options: {
 } = {}): AppContextExtractor {
   const managedContext = createAppContextManager();
   const getZedAppContext = options.zedProvider ?? createZedFocusedEditorAppContextProvider();
+  const accessibilityProviders = createAccessibilityProviderRegistry();
+  const snapshotProviders = createSnapshotProviderRegistry(getZedAppContext);
 
   return {
     ingestAccessibilityTree(input) {
-      managedContext.setSnapshot(extractFromAccessibilityTree(input.activeApplication, input.accessibilityTree));
+      const snapshots = accessibilityProviders.map((provider) => provider.getSnapshot(input));
+      managedContext.setSnapshot(firstAvailableOrSuppressed(snapshots) ?? { fragments: [], metadata: { status: "unsupported" } });
     },
     getSnapshot(snapshot) {
       const managedSnapshot = managedContext.getSnapshot();
       if (isAvailable(managedSnapshot)) return managedSnapshot;
 
-      if (snapshot.textSession) {
-        const obsidianContext = createObsidianDocumentAppContext(snapshot.textSession);
-        if (isAvailable(obsidianContext)) return obsidianContext;
-      }
-
-      const zedContext = getZedAppContext(snapshot);
-      if (isAvailable(zedContext)) return zedContext;
-
-      const textSessionContext = getAppContextFromTextSession(snapshot);
-      if (isAvailable(textSessionContext)) return textSessionContext;
-
-      return sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot));
+      const snapshots = snapshotProviders.map((provider) => provider.getSnapshot(snapshot));
+      return firstAvailableOrSuppressed(snapshots) ?? snapshots[snapshots.length - 1] ?? { fragments: [], metadata: { status: "empty" } };
     },
     clear() {
       managedContext.clear();

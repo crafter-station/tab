@@ -21,6 +21,19 @@ export const MODEL_PROPOSED_MEMORY_SOURCES = [
   "terminal_input",
 ] as const;
 
+export const MEMORY_EXTRACTION_WINDOW_POLICY = {
+  maxAgeMs: 30 * 60 * 1_000,
+  maxTotalTextBytes: 8 * 1_024,
+  maxEntryTextBytes: 1 * 1_024,
+  idleMs: 60_000,
+  minIdleCharacters: 500,
+  minIdleEntries: 5,
+  maxRetries: 3,
+  initialRetryDelayMs: 1_000,
+  failedBatchTtlMs: 24 * 60 * 60 * 1_000,
+  maxRequestEntries: 64,
+} as const;
+
 export const TERMINAL_BUNDLE_IDS = [
   "com.apple.Terminal",
   "com.googlecode.iterm2",
@@ -39,6 +52,31 @@ export type ModelProposedMemorySource =
 export type MemoryEligibility = {
   eligible: boolean;
   reason: string;
+};
+
+export type MemoryExtractionWindowSource = Extract<MemorySource, "typed_text" | "terminal_input">;
+
+export type MemoryExtractionWindowEntryLike = {
+  readonly text: string;
+  readonly timestamp: string;
+  readonly activeApplication: ActiveApplicationLike & { readonly bundleId: string };
+  readonly contextSource: SuggestionContextSource;
+  readonly redaction: {
+    readonly applied: boolean;
+    readonly redactionCount: number;
+    readonly kinds: readonly string[];
+  };
+};
+
+export type MemoryExtractionWindowSummary<TEntry extends MemoryExtractionWindowEntryLike> = {
+  readonly typingContext: string;
+  readonly contextSource: TEntry["contextSource"];
+  readonly activeApplication: TEntry["activeApplication"];
+  readonly redaction: {
+    readonly applied: boolean;
+    readonly redactionCount: number;
+    readonly kinds: string[];
+  };
 };
 
 export function getMemoryEligibility(source: MemorySource): MemoryEligibility {
@@ -60,6 +98,53 @@ export function getMemoryEligibility(source: MemorySource): MemoryEligibility {
         reason: "terminal output is not user-authored typing context",
       };
   }
+}
+
+export function isMemoryExtractionWindowSource(
+  source: MemorySource,
+): source is MemoryExtractionWindowSource {
+  return source === "typed_text" || source === "terminal_input";
+}
+
+export function totalMemoryExtractionCharacters(
+  entries: readonly Pick<MemoryExtractionWindowEntryLike, "text">[],
+): number {
+  return entries.reduce((total, entry) => total + entry.text.length, 0);
+}
+
+export function getOldestMemoryExtractionTimestampMs(
+  entries: readonly Pick<MemoryExtractionWindowEntryLike, "timestamp">[],
+): number {
+  return Math.min(...entries.map((entry) => Date.parse(entry.timestamp)));
+}
+
+export function summarizeMemoryExtractionWindow<TEntry extends MemoryExtractionWindowEntryLike>(
+  entries: readonly TEntry[],
+): MemoryExtractionWindowSummary<TEntry> | null {
+  const firstEntry = entries[0];
+  if (!firstEntry) return null;
+
+  const redactionKinds = new Set<string>();
+  let redactionCount = 0;
+  let redactionApplied = false;
+  for (const entry of entries) {
+    redactionApplied = redactionApplied || entry.redaction.applied;
+    redactionCount += entry.redaction.redactionCount;
+    for (const kind of entry.redaction.kinds) {
+      redactionKinds.add(kind);
+    }
+  }
+
+  return {
+    typingContext: entries.map((entry) => entry.text).join("\n"),
+    contextSource: firstEntry.contextSource,
+    activeApplication: firstEntry.activeApplication,
+    redaction: {
+      applied: redactionApplied,
+      redactionCount,
+      kinds: [...redactionKinds],
+    },
+  };
 }
 
 export function isEligiblePersonalMemorySource(

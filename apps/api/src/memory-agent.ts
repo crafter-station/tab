@@ -5,6 +5,10 @@ import {
   type MemoryJob,
   type PersonalMemory,
 } from "@tab/contracts";
+import {
+  MEMORY_EXTRACTION_WINDOW_POLICY,
+  summarizeMemoryExtractionWindow,
+} from "@tab/memory-policy";
 import { generateText, Output } from "ai";
 import type { PersonalMemoryService } from "./personal-memory.ts";
 import {
@@ -17,8 +21,6 @@ import { z } from "zod";
 import { and, eq, gt } from "drizzle-orm";
 import type { AppDatabase } from "./db/index.ts";
 import { memoryExtractionIdempotency } from "./db/schema.ts";
-
-const EXTRACTION_IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
 
 export type { MemoryJob };
 export type { ProposedMemoryOperation } from "./personal-memory-policy.ts";
@@ -224,26 +226,25 @@ export class MemoryExtractionService {
     );
     if (prior) return prior;
 
-    const typingContext = parsed.entries.map((entry) => entry.text).join("\n");
-    const firstEntry = parsed.entries[0];
-    if (!firstEntry) {
+    const extractionWindow = summarizeMemoryExtractionWindow(parsed.entries);
+    if (!extractionWindow) {
       throw new Error("Extraction batch must contain at least one entry");
     }
     const memories = await this.personalMemoryService.selectCandidateMemoriesForExtraction({
       userId,
-      typingContext,
-      activeApplication: firstEntry.activeApplication,
+      typingContext: extractionWindow.typingContext,
+      activeApplication: extractionWindow.activeApplication,
       memoryEnabled: true,
     });
     const operations = await this.model.proposeOperations(
       {
         requestId: parsed.batchId,
         userId,
-        typingContext,
-        contextSource: firstEntry.contextSource,
-        activeApplication: firstEntry.activeApplication,
+        typingContext: extractionWindow.typingContext,
+        contextSource: extractionWindow.contextSource,
+        activeApplication: extractionWindow.activeApplication,
         memoryEligible: true,
-        redaction: firstEntry.redaction,
+        redaction: extractionWindow.redaction,
         clientMetadata: parsed.clientMetadata,
       },
       memories,
@@ -255,7 +256,7 @@ export class MemoryExtractionService {
         userId,
         batchIdHash,
         counts,
-        expiresAt: new Date(now.getTime() + EXTRACTION_IDEMPOTENCY_TTL_MS),
+        expiresAt: new Date(now.getTime() + MEMORY_EXTRACTION_WINDOW_POLICY.failedBatchTtlMs),
       });
     }
 
