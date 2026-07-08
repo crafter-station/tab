@@ -222,6 +222,10 @@ describe("Web account surface", () => {
     expect(body).toInclude("1,000,000");
     expect(body).toInclude("$10/mo");
     expect(body).toInclude("$100/mo");
+    expect(body).toInclude("Private Utility Grid pricing");
+    expect(body).toInclude("Quota included");
+    expect(body).toInclude("Muted: Personal Memory included");
+    expect(body).toInclude("Billing path: Sign in required");
     expect(body).toInclude("Start free");
     expect(body).toInclude(
       'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro"',
@@ -330,6 +334,13 @@ describe("Web account surface", () => {
     const body = await accountResponse.text();
     expect(body).toInclude("Monthly usage");
     expect(body).toInclude("Free plan");
+    expect(body).toInclude("Account status");
+    expect(body).toInclude("Success: signed in");
+    expect(body).toInclude("Quota status");
+    expect(body).toInclude("Active: quota available");
+    expect(body).toInclude("Billing actions");
+    expect(body).toInclude("Muted: no linked devices");
+    expect(body).toInclude("Muted: no Personal Memory stored");
     expect(body).toInclude("Upgrade to Pro");
     expect(body).toInclude("Upgrade to Max");
     expect(body).toInclude("Manage billing");
@@ -812,6 +823,8 @@ describe("Web account surface", () => {
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("macbook-pro-1");
     expect(bodyBefore).toInclude("Active");
+    expect(bodyBefore).toInclude("Active: linked device");
+    expect(bodyBefore).toInclude("Warning: revoke access");
 
     const revokeResponse = await webRequest(
       webApp,
@@ -828,5 +841,6 @@ describe("Web account surface", () => {
     expect(accountAfter.status).toBe(200);
     const bodyAfter = await accountAfter.text();
     expect(bodyAfter).toInclude("Revoked");
+    expect(bodyAfter).toInclude("Muted: device revoked");
   });
 });

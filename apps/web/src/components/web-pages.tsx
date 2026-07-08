@@ -13,8 +13,13 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
+  EmptyState,
   Input,
   Label,
+  SectionBlock,
+  Separator,
+  StatusRow,
+  SurfaceHeader,
   Table,
   TableBody,
   TableCell,
@@ -59,6 +64,11 @@ export function formatMonthlyPrice(monthlyPriceUsd: number): string {
 
 function formatPlanName(planId: string): string {
   return planQuotas[planId as PlanId]?.name ?? planId.charAt(0).toUpperCase() + planId.slice(1);
+}
+
+function planCheckoutLabel(authenticated: boolean): string {
+  if (authenticated) return "Billing path: Direct checkout";
+  return "Billing path: Sign in required";
 }
 
 function checkoutAuthHref(planId: PlanId): string {
@@ -127,19 +137,36 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
   }));
 
   return (
-    <>
-      <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Pricing</h1>
-      <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Choose the plan that fits how much you write. Upgrade or downgrade at any time.</p>
-      <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+    <SectionBlock className="pug-grid-surface grid gap-6">
+      <SurfaceHeader
+        eyebrow="Private Utility Grid pricing"
+        title="Pricing"
+        description="Choose the plan that fits how much you write. Upgrade or downgrade at any time without changing entitlement behavior."
+      />
+      <div className="grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         {plans.map((plan) => (
-          <Card key={plan.planId}>
+          <Card key={plan.planId} className="flex flex-col">
             <CardHeader>
-              <CardTitle>{plan.name}</CardTitle>
-              <div className="text-3xl font-black tracking-[-0.06em]">{formatMonthlyPrice(plan.monthlyPriceUsd)}</div>
+              <div className="flex items-start justify-between gap-3">
+                <CardTitle>{plan.name}</CardTitle>
+                <Badge variant="outline">Plan tier</Badge>
+              </div>
+              <div className="font-[var(--font-display)] text-4xl font-black tracking-[-0.07em]">{formatMonthlyPrice(plan.monthlyPriceUsd)}</div>
             </CardHeader>
-            <CardContent className="text-muted-foreground">
-              <p>{plan.monthlyAutocompleteSuggestions.toLocaleString()} autocompletes per month</p>
-              <CardDescription>Personal Memory included</CardDescription>
+            <CardContent className="grid flex-1 gap-3 text-muted-foreground">
+              <StatusRow
+                label="Quota included"
+                value={`${plan.monthlyAutocompleteSuggestions.toLocaleString()} / month`}
+                tone="info"
+                description="Autocomplete suggestions included in this plan."
+              />
+              <StatusRow
+                label="Personal Memory"
+                value="Muted: Personal Memory included"
+                tone="neutral"
+                description="Account-controlled memory remains available from the dashboard."
+              />
+              <p className="text-sm font-bold text-foreground">{planCheckoutLabel(authenticated)}</p>
             </CardContent>
             <CardFooter>
               <a className={buttonVariants()} href={authenticated ? `/billing/checkout?plan=${plan.planId}` : checkoutAuthHref(plan.planId)}>{plan.planId === "free" ? "Start free" : `Choose ${plan.name}`}</a>
@@ -147,7 +174,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
           </Card>
         ))}
       </div>
-    </>
+    </SectionBlock>
   );
 }
 
@@ -241,47 +268,70 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
 
   const upgradePlans = Object.entries(planQuotas).filter(([planId]) => planId !== data.quota.planId);
   const quotaExhausted = data.quota.usage >= data.quota.quota;
+  const accountName = data.user.email ?? data.user.name ?? data.user.id;
 
   return (
-    <>
-      <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Dashboard</h1>
-      <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Manage account configuration, usage, billing, devices, permissions, and Personal Memory.</p>
-      <div className="mt-6 grid gap-4">
-        <Card>
-          <CardHeader><CardTitle>Account configuration</CardTitle></CardHeader>
-          <CardContent className="text-muted-foreground">
-            <p><strong className="text-foreground">{data.user.email ?? data.user.name ?? data.user.id}</strong></p>
-            <p>Identity is managed by Tabb auth. Additional account settings will appear here when supported by the API.</p>
-          </CardContent>
-          <CardFooter>
-            <form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>
-          </CardFooter>
-        </Card>
-        <Card>
-          <CardHeader>
-            <CardTitle>Monthly usage</CardTitle>
-            <CardDescription>{formatPlanName(data.quota.planId)} plan</CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-4 text-muted-foreground">
-            <p>{data.quota.usage.toLocaleString()} / {data.quota.quota.toLocaleString()} autocompletes used this month</p>
-            <p>Resets {formatDate(data.quota.resetAt)}</p>
+    <div className="grid gap-6">
+      <SurfaceHeader
+        eyebrow="Account dashboard"
+        title="Dashboard"
+        description="Manage account configuration, usage, billing, devices, permissions, and Personal Memory."
+      />
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <SectionBlock>
+          <SurfaceHeader
+            eyebrow="Account status"
+            title="Account configuration"
+            description="Identity is managed by Tabb auth. Additional account settings appear here when supported by the API."
+            action={<form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>}
+          />
+          <div className="mt-4 grid gap-3">
+            <StatusRow label="Signed-in account" value="Success: signed in" tone="success" description={accountName} />
+            <StatusRow
+              label="Email status"
+              value={data.user.emailVerified === false ? "Warning: verification needed" : "Active: email verified"}
+              tone={data.user.emailVerified === false ? "warning" : "success"}
+              description="Checkout remains gated by the existing email-verification rules."
+            />
+          </div>
+        </SectionBlock>
+        <SectionBlock>
+          <SurfaceHeader
+            eyebrow="Monthly usage"
+            title="Monthly usage"
+            description={`${formatPlanName(data.quota.planId)} plan`}
+          />
+          <div className="mt-4 grid gap-3">
+            <StatusRow
+              label="Quota status"
+              value={quotaExhausted ? "Warning: quota exhausted" : "Active: quota available"}
+              tone={quotaExhausted ? "warning" : "success"}
+              description={`${data.quota.usage.toLocaleString()} / ${data.quota.quota.toLocaleString()} autocompletes used this month`}
+              meta={`Resets ${formatDate(data.quota.resetAt)}`}
+            />
             {quotaExhausted ? (
               <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-amber-950">
                 <strong>Quota exhausted.</strong> You have used {data.quota.usage.toLocaleString()} of {data.quota.quota.toLocaleString()} autocompletes this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
               </div>
             ) : null}
-            <p className="flex flex-wrap gap-2">
+            <Separator />
+            <div className="grid gap-2">
+              <p className="text-sm font-bold text-foreground">Billing actions</p>
+              <p className="flex flex-wrap gap-2">
               {upgradePlans.map(([planId, plan]) => (
                 <a key={planId} className={buttonVariants()} href={`/billing/checkout?plan=${planId}`}>{plan.monthlyPriceUsd === 0 ? `Switch to ${plan.name}` : `Upgrade to ${plan.name}`}</a>
               ))}
               <a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a>
-            </p>
-          </CardContent>
-        </Card>
+              </p>
+            </div>
+          </div>
+        </SectionBlock>
+      </div>
+      <div className="grid gap-4">
         <DevicesCard devices={data.devices} />
         <MemoriesCard memories={data.memories} />
       </div>
-    </>
+    </div>
   );
 }
 
@@ -291,7 +341,7 @@ function DashboardPlaceholder() {
       <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Dashboard</h1>
       <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Manage account configuration, usage, billing, devices, permissions, and Personal Memory.</p>
       <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-        <Card><CardHeader><CardTitle>Monthly usage</CardTitle></CardHeader><CardContent className="flex flex-col gap-4 text-muted-foreground"><p>Plan, quota, and reset dates load from the Tabb API when you are signed in.</p><p className="flex flex-wrap gap-2"><a className={buttonVariants()} href="/billing/checkout?plan=pro">Upgrade to Pro</a><a className={buttonVariants()} href="/billing/checkout?plan=max">Upgrade to Max</a><a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a></p></CardContent></Card>
+        <Card><CardHeader><CardTitle>Monthly usage</CardTitle></CardHeader><CardContent className="flex flex-col gap-4 text-muted-foreground"><p>Plan, quota, and reset dates load from the Tabb API when you are signed in.</p><p className="font-bold text-foreground">Billing actions</p><p className="flex flex-wrap gap-2"><a className={buttonVariants()} href="/billing/checkout?plan=pro">Upgrade to Pro</a><a className={buttonVariants()} href="/billing/checkout?plan=max">Upgrade to Max</a><a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a></p></CardContent></Card>
         <Card><CardHeader><CardTitle>Account</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Identity and safe account settings appear here without inventing unsupported settings APIs.</p></CardContent></Card>
         <Card id="devices"><CardHeader><CardTitle>Devices</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Linked native devices, versions, status, and revoke controls are powered by the existing device APIs.</p></CardContent></Card>
         <Card id="memories"><CardHeader><CardTitle>Personal Memory</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Review and delete memories collected for autocomplete personalization.</p></CardContent></Card>
@@ -302,10 +352,14 @@ function DashboardPlaceholder() {
 
 function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
   return (
-    <Card id="devices">
-      <CardHeader><CardTitle>Devices</CardTitle></CardHeader>
-      <CardContent>
-        {devices.length === 0 ? <p className="text-muted-foreground">No devices linked to your account.</p> : (
+    <SectionBlock id="devices">
+      <SurfaceHeader
+        eyebrow="Linked devices"
+        title="Devices"
+        description="Native Mac sessions linked to this account, with visible active and revoked states."
+      />
+      <div className="mt-4">
+        {devices.length === 0 ? <EmptyState title="No linked devices" description="Muted: no linked devices. Sign in from the Mac app to link a native device." /> : (
           <Table>
             <TableHeader><TableRow><TableHead>Device</TableHead><TableHead>Platform</TableHead><TableHead>Version</TableHead><TableHead>Added</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
@@ -315,26 +369,27 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                   <TableCell>{device.platform}</TableCell>
                   <TableCell>{device.appVersion}</TableCell>
                   <TableCell>{formatDate(device.createdAt)}</TableCell>
-                  <TableCell><Badge variant={device.revoked ? "secondary" : "default"}>{device.revoked ? "Revoked" : "Active"}</Badge></TableCell>
-                  <TableCell>{device.revoked ? null : <form method="post" action={`/account/devices/${encodeURIComponent(device.deviceId)}/revoke`}><Button type="submit" size="sm" variant="secondary">Revoke</Button></form>}</TableCell>
+                  <TableCell><Badge variant={device.revoked ? "secondary" : "default"}>{device.revoked ? "Muted: device revoked (Revoked)" : "Active: linked device"}</Badge></TableCell>
+                  <TableCell>{device.revoked ? null : <form method="post" action={`/account/devices/${encodeURIComponent(device.deviceId)}/revoke`}><Button type="submit" size="sm" variant="secondary">Warning: revoke access</Button></form>}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionBlock>
   );
 }
 
 function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
   return (
-    <Card id="memories">
-      <CardHeader>
-        <CardTitle>Personal Memory</CardTitle>
-        <CardDescription>Teach, edit, and delete the facts Tabb can use for personalization.</CardDescription>
-      </CardHeader>
-      <CardContent>
+    <SectionBlock id="memories">
+      <SurfaceHeader
+        eyebrow="Personal Memory controls"
+        title="Personal Memory"
+        description="Teach, edit, and delete the facts Tabb can use for personalization."
+      />
+      <div className="mt-4">
         <form method="post" action="/account/memory/create" className="mb-6 grid gap-3 rounded-lg border bg-muted/30 p-4">
           <Label htmlFor="memory-content">Teach Tabb a memory</Label>
           <textarea
@@ -348,7 +403,7 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
           />
           <p><Button type="submit">Save memory</Button></p>
         </form>
-        {memories.length === 0 ? <p className="text-muted-foreground">No memories stored yet.</p> : (
+        {memories.length === 0 ? <EmptyState title="No Personal Memory stored" description="Muted: no Personal Memory stored. Add a memory when you want Tabb to personalize Suggestions." /> : (
           <Table>
             <TableHeader><TableRow><TableHead>Content</TableHead><TableHead>Created by</TableHead><TableHead>Updated</TableHead><TableHead /></TableRow></TableHeader>
             <TableBody>
@@ -367,16 +422,16 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                       <p><Button type="submit" size="sm" variant="secondary">Save edit</Button></p>
                     </form>
                   </TableCell>
-                  <TableCell>{memory.createdBy}</TableCell>
+                  <TableCell><Badge variant="outline">{memory.createdBy === "user" ? "Active: user taught" : "Muted: system learned"}</Badge></TableCell>
                   <TableCell>{formatDate(memory.updatedAt)}</TableCell>
-                  <TableCell><form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/delete`}><Button type="submit" size="sm" variant="secondary">Delete</Button></form></TableCell>
+                  <TableCell><form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/delete`}><Button type="submit" size="sm" variant="destructive">Destructive: delete memory</Button></form></TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SectionBlock>
   );
 }
 
