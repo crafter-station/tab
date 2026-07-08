@@ -26,7 +26,7 @@ import {
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
 import { createNativeSuggestionSession } from "./native-suggestion-session.ts";
-import { createAppContextManager } from "./app-context.ts";
+import { createAppContextManager, createObsidianDocumentAppContext } from "./app-context.ts";
 import { extractWhatsAppConversationContext, type AccessibilityNode } from "./whatsapp-app-context.ts";
 import { createDesktopAuthClient } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
@@ -297,6 +297,13 @@ const nativeSuggestionSession = createNativeSuggestionSession({
     const managedContext = appContextManager.getSnapshot();
     if (managedContext.metadata.status === "available" && managedContext.fragments.length > 0) {
       return managedContext;
+    }
+
+    if (snapshot.textSession) {
+      const obsidianContext = createObsidianDocumentAppContext(snapshot.textSession);
+      if (obsidianContext.metadata.status === "available" && obsidianContext.fragments.length > 0) {
+        return obsidianContext;
+      }
     }
 
     return sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot));
