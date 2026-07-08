@@ -48,6 +48,62 @@ export type DashboardData = {
   memories: readonly PersonalMemory[];
 };
 
+const authTitleClassName = "font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]";
+
+const homeProofRows = [
+  {
+    label: "Typing Context",
+    value: "Private",
+    tone: "success",
+    description: "Writing context is handled by the Mac app and only used to prepare the next Suggestion.",
+  },
+  {
+    label: "Personal Memory",
+    value: "Account controlled",
+    tone: "info",
+    description: "Review and delete memories from your dashboard.",
+  },
+  {
+    label: "Floating Suggestion Overlay",
+    value: "Lightweight",
+    tone: "neutral",
+    description: "The overlay stays out of the way until there is something useful to accept.",
+  },
+] as const;
+
+const homeFeatureBlocks = [
+  {
+    eyebrow: "01",
+    title: "Active Application aware",
+    description: "Use one native assistant across Mail, Slack, Notes, Ghostty, and the apps where you already write.",
+  },
+  {
+    eyebrow: "02",
+    title: "Personal Memory",
+    description: "Keep personalization inspectable with account-level review and delete controls.",
+  },
+  {
+    eyebrow: "03",
+    title: "Usage controls",
+    description: "Track quota, billing, linked devices, and account status without leaving the web control plane.",
+  },
+] as const;
+
+const downloadPermissionRows = [
+  {
+    label: "Accessibility permission",
+    value: "Required",
+    tone: "warning",
+    description: "Tabb needs macOS Accessibility permission to show and accept inline Suggestions.",
+  },
+  {
+    label: "Input Monitoring",
+    value: "Guided",
+    tone: "info",
+    description: "The desktop onboarding explains each permission before you grant it.",
+  },
+] as const;
+
 export function formatDate(iso: string): string {
   const date = new Date(iso);
   return date.toLocaleDateString("en-US", {
@@ -94,8 +150,12 @@ function HandoffFields({ search }: { search: AuthSearch }) {
   );
 }
 
-function hasHandoff(search: AuthSearch): boolean {
+function hasDesktopHandoff(search: AuthSearch): boolean {
   return Boolean(search.device_id || search.callback);
+}
+
+function AuthPageTitle({ children }: { children: ReactNode }) {
+  return <h1 className={authTitleClassName}>{children}</h1>;
 }
 
 function PageKicker({ children }: { children: ReactNode }) {
@@ -153,16 +213,18 @@ export function HomePage() {
             <CardDescription>Clear boundaries for context, memory, and Acceptance.</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 text-muted-foreground">
-            <StatusRow label="Typing Context" value="Private" tone="success" description="Writing context is handled by the Mac app and only used to prepare the next Suggestion." />
-            <StatusRow label="Personal Memory" value="Account controlled" tone="info" description="Review and delete memories from your dashboard." />
-            <StatusRow label="Floating Suggestion Overlay" value="Lightweight" tone="neutral" description="The overlay stays out of the way until there is something useful to accept." />
+            {homeProofRows.map((row) => (
+              <StatusRow key={row.label} {...row} />
+            ))}
           </CardContent>
         </Card>
       </section>
       <section className="mt-6 grid gap-4 md:grid-cols-3">
-        <SectionBlock><SurfaceHeader eyebrow="01" title="Active Application aware" description="Use one native assistant across Mail, Slack, Notes, Ghostty, and the apps where you already write." /></SectionBlock>
-        <SectionBlock><SurfaceHeader eyebrow="02" title="Personal Memory" description="Keep personalization inspectable with account-level review and delete controls." /></SectionBlock>
-        <SectionBlock><SurfaceHeader eyebrow="03" title="Usage controls" description="Track quota, billing, linked devices, and account status without leaving the web control plane." /></SectionBlock>
+        {homeFeatureBlocks.map((feature) => (
+          <SectionBlock key={feature.eyebrow}>
+            <SurfaceHeader {...feature} />
+          </SectionBlock>
+        ))}
       </section>
     </>
   );
@@ -203,17 +265,17 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
   const signupHref = `/signup${preserveAuthSearchParams(search)}`;
 
   return (
-    <AuthShell eyebrow="Account access" title="Sign in" description="Open the Tabb web control plane or complete a trusted desktop handoff." handoff={hasHandoff(search)}>
-        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Sign in</h1>
-        <form className="flex flex-col gap-4" method="post" action="/login">
-          <ErrorMessage message={error} />
-          <HandoffFields search={search} />
-          <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
-          <Label>Password<Input type="password" name="password" required autoComplete="current-password" /></Label>
-          <p><Button type="submit">Sign in</Button></p>
-        </form>
-        <p className="mt-4 text-muted-foreground"><a className="underline" href="/forgot-password">Forgot your password?</a></p>
-        <p className="mt-2 text-muted-foreground">Need an account? <a className="underline" href={signupHref}>Create one</a>.</p>
+    <AuthShell eyebrow="Account access" title="Sign in" description="Open the Tabb web control plane or complete a trusted desktop handoff." handoff={hasDesktopHandoff(search)}>
+      <AuthPageTitle>Sign in</AuthPageTitle>
+      <form className="flex flex-col gap-4" method="post" action="/login">
+        <ErrorMessage message={error} />
+        <HandoffFields search={search} />
+        <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
+        <Label>Password<Input type="password" name="password" required autoComplete="current-password" /></Label>
+        <p><Button type="submit">Sign in</Button></p>
+      </form>
+      <p className="mt-4 text-muted-foreground"><a className="underline" href="/forgot-password">Forgot your password?</a></p>
+      <p className="mt-2 text-muted-foreground">Need an account? <a className="underline" href={signupHref}>Create one</a>.</p>
     </AuthShell>
   );
 }
@@ -221,17 +283,17 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
 export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boolean }) {
   return (
     <AuthShell eyebrow="Account recovery" title="Reset password" description="Request a secure reset link while keeping your desktop app connection unchanged.">
-        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Reset password</h1>
-        {sent ? (
-          <p className="text-muted-foreground">If an account exists for that email, a password reset link is on the way.</p>
-        ) : (
-          <form className="flex flex-col gap-4" method="post" action="/forgot-password">
-            <ErrorMessage message={error} />
-            <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
-            <p><Button type="submit">Send reset link</Button></p>
-          </form>
-        )}
-        <p className="mt-4 text-muted-foreground"><a className="underline" href="/login">Back to sign in</a>.</p>
+      <AuthPageTitle>Reset password</AuthPageTitle>
+      {sent ? (
+        <p className="text-muted-foreground">If an account exists for that email, a password reset link is on the way.</p>
+      ) : (
+        <form className="flex flex-col gap-4" method="post" action="/forgot-password">
+          <ErrorMessage message={error} />
+          <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
+          <p><Button type="submit">Send reset link</Button></p>
+        </form>
+      )}
+      <p className="mt-4 text-muted-foreground"><a className="underline" href="/login">Back to sign in</a>.</p>
     </AuthShell>
   );
 }
@@ -239,18 +301,18 @@ export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boo
 export function ResetPasswordPage({ error, token }: { error?: string; token?: string }) {
   return (
     <AuthShell eyebrow="Account recovery" title="Choose a new password" description="Set a new password for your Tabb account and return to the same web routes.">
-        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Choose a new password</h1>
-        {token ? (
-          <form className="flex flex-col gap-4" method="post" action="/reset-password">
-            <ErrorMessage message={error} />
-            <input type="hidden" name="token" value={token} />
-            <Label>New password<Input type="password" name="password" required autoComplete="new-password" minLength={8} /></Label>
-            <p><Button type="submit">Update password</Button></p>
-          </form>
-        ) : (
-          <p className="text-muted-foreground">This reset link is invalid or expired. Request a new password reset link.</p>
-        )}
-        <p className="mt-4 text-muted-foreground"><a className="underline" href="/forgot-password">Request another link</a>.</p>
+      <AuthPageTitle>Choose a new password</AuthPageTitle>
+      {token ? (
+        <form className="flex flex-col gap-4" method="post" action="/reset-password">
+          <ErrorMessage message={error} />
+          <input type="hidden" name="token" value={token} />
+          <Label>New password<Input type="password" name="password" required autoComplete="new-password" minLength={8} /></Label>
+          <p><Button type="submit">Update password</Button></p>
+        </form>
+      ) : (
+        <p className="text-muted-foreground">This reset link is invalid or expired. Request a new password reset link.</p>
+      )}
+      <p className="mt-4 text-muted-foreground"><a className="underline" href="/forgot-password">Request another link</a>.</p>
     </AuthShell>
   );
 }
@@ -259,17 +321,17 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
   const loginHref = `/login${preserveAuthSearchParams(search)}`;
 
   return (
-    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tabb with a web account for quota, billing, linked devices, and Personal Memory." handoff={hasHandoff(search)}>
-        <h1 className="font-[var(--font-display)] text-4xl font-black tracking-[-0.06em]">Create your account</h1>
-        <form className="flex flex-col gap-4" method="post" action="/signup">
-          <ErrorMessage message={error} />
-          <HandoffFields search={search} />
-          <Label>Name<Input type="text" name="name" required autoComplete="name" /></Label>
-          <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
-          <Label>Password<Input type="password" name="password" required autoComplete="new-password" /></Label>
-          <p><Button type="submit">Sign up</Button></p>
-        </form>
-        <p className="mt-4 text-muted-foreground">Already have an account? <a className="underline" href={loginHref}>Sign in</a>.</p>
+    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tabb with a web account for quota, billing, linked devices, and Personal Memory." handoff={hasDesktopHandoff(search)}>
+      <AuthPageTitle>Create your account</AuthPageTitle>
+      <form className="flex flex-col gap-4" method="post" action="/signup">
+        <ErrorMessage message={error} />
+        <HandoffFields search={search} />
+        <Label>Name<Input type="text" name="name" required autoComplete="name" /></Label>
+        <Label>Email<Input type="email" name="email" required autoComplete="email" /></Label>
+        <Label>Password<Input type="password" name="password" required autoComplete="new-password" /></Label>
+        <p><Button type="submit">Sign up</Button></p>
+      </form>
+      <p className="mt-4 text-muted-foreground">Already have an account? <a className="underline" href={loginHref}>Sign in</a>.</p>
     </AuthShell>
   );
 }
@@ -433,8 +495,9 @@ export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
       <Card className="pug-dot-grid">
         <CardHeader><CardTitle>Before you start</CardTitle></CardHeader>
         <CardContent className="grid gap-3 text-muted-foreground">
-          <StatusRow label="Accessibility permission" value="Required" tone="warning" description="Tabb needs macOS Accessibility permission to show and accept inline Suggestions." />
-          <StatusRow label="Input Monitoring" value="Guided" tone="info" description="The desktop onboarding explains each permission before you grant it." />
+          {downloadPermissionRows.map((row) => (
+            <StatusRow key={row.label} {...row} />
+          ))}
           <p>macOS 14+. Notarization and code signing are handled during release packaging.</p>
         </CardContent>
       </Card>
