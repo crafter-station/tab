@@ -5,7 +5,8 @@ import type {
   SuggestionContextSource,
 } from "@tabb/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
-import { createSuggestionLoop } from "./suggestion-loop.ts";
+import { generateLocalSuggestion } from "./suggestion-engine.ts";
+import { createSuggestionLoop, type SuggestionSource } from "./suggestion-loop.ts";
 import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
 import {
   createSafeTextSessionSnapshot,
@@ -33,7 +34,8 @@ type RecordInteractionTelemetry = (event: RecordTelemetryEventRequest) => void |
 
 export type NativeSuggestionSessionDependencies = {
   readonly typingContext: TypingContextBuffer;
-  readonly requestSuggestion: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+  readonly getLocalSuggestion?: SuggestionSource;
+  readonly requestSuggestion: SuggestionSource;
   readonly getContextSource: () => SuggestionContextSource;
   readonly outputs: NativeSuggestionSessionOutputs;
   readonly createAcceptanceDependencies: (
@@ -124,6 +126,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   const suggestionLoop = createSuggestionLoop({
     getContext: () => currentSafeSnapshot(),
+    getLocalSuggestion: deps.getLocalSuggestion ?? ((snapshot) => generateLocalSuggestion(snapshot.sanitizedContext)),
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
