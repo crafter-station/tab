@@ -39,7 +39,9 @@
 .onboarding-header h1,
 .onboarding-hero h2 {
   max-width: 540px;
+  font-family: var(--font-display);
   font-size: 28px;
+  font-weight: 800;
   line-height: 1.06;
   letter-spacing: -0.04em;
 }
@@ -52,13 +54,13 @@
 
 .onboarding-progress span {
   height: 4px;
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--muted);
   border-radius: 999px;
   transition: background-color 180ms var(--ease-out);
 }
 
 .onboarding-progress span[data-active="true"] {
-  background: var(--signal);
+  background: var(--foreground);
 }
 
 .onboarding-step {
@@ -86,8 +88,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 16px;
-  background: rgba(255, 255, 255, 0.055);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: color-mix(in srgb, var(--muted) 58%, transparent);
+  border: 1px solid var(--border);
 }
 
 .status-card div,
@@ -124,20 +126,20 @@
 
 .privacy-card,
 .tutorial-panel {
-  background: rgba(255, 255, 255, 0.045);
-  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: color-mix(in srgb, var(--muted) 48%, transparent);
+  border: 1px solid var(--border);
 }
 
 .onboarding-status {
-  color: var(--signal);
-  background: var(--signal-tint);
-  border: 1px solid rgba(218, 190, 77, 0.22);
+  color: var(--info);
+  background: var(--tabb-info-tint);
+  border: 1px solid color-mix(in srgb, var(--info) 28%, transparent);
 }
 
 .dev-note {
   color: var(--text-muted);
-  background: rgba(0, 0, 0, 0.18);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: color-mix(in srgb, var(--muted) 44%, transparent);
+  border: 1px solid var(--border);
 }
 
 .dev-note summary {
@@ -150,8 +152,8 @@
 }
 
 .dev-note code {
-  color: var(--signal);
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: var(--foreground);
+  font-family: var(--font-code);
   font-size: 12px;
 }
 
@@ -160,20 +162,20 @@
   resize: none;
   padding: 14px;
   color: var(--text);
-  background: rgba(0, 0, 0, 0.24);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
+  background: color-mix(in srgb, var(--card) 84%, transparent);
+  border: 1px solid var(--input);
+  border-radius: var(--radius-card);
   outline: none;
 }
 
 .practice-input:focus {
-  border-color: rgba(218, 190, 77, 0.46);
-  box-shadow: 0 0 0 3px rgba(218, 190, 77, 0.12);
+  border-color: var(--ring);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent);
 }
 
 .practice-suggestion {
-  border-color: color-mix(in srgb, var(--signal) 26%, rgba(255, 255, 255, 0.08));
-  box-shadow: 0 16px 60px rgba(0, 0, 0, 0.28);
+  border-color: color-mix(in srgb, var(--info) 28%, var(--border));
+  box-shadow: var(--tabb-shadow-soft);
 }
 
 .practice-suggestion__actions,

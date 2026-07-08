@@ -26,6 +26,28 @@ function formatAuth(auth: DesktopStatus["auth"]) {
   return auth.replace(/_/g, " ");
 }
 
+function getPrimaryLabel(
+  step: OnboardingStep,
+  signedIn: boolean,
+  accessibilityGranted: boolean,
+  inputMonitoringOpened: boolean,
+) {
+  switch (step) {
+    case "sign-in":
+      return signedIn ? "Continue" : "Sign In";
+    case "permissions":
+      if (!accessibilityGranted) return "Open Accessibility Settings";
+      if (!inputMonitoringOpened) return "Open Input Monitoring Settings";
+      return "Continue";
+    case "how-it-works":
+      return "Practice Suggestions";
+    case "practice":
+      return "Finish Practice";
+    case "done":
+      return "Open Tab";
+  }
+}
+
 export function OnboardingSurface() {
   const [step, setStep] = useState<OnboardingStep>("sign-in");
   const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
@@ -145,44 +167,43 @@ export function OnboardingSurface() {
   }
 
   async function handlePrimaryAction() {
-    if (step === "sign-in") {
-      if (!signedIn) {
-        window.tab?.signIn?.();
-        setStatusMessage("Complete sign-in in your browser, then return here.");
-        return;
-      }
-      goNext();
-      return;
-    }
-
-    if (step === "permissions") {
-      if (!accessibilityGranted) {
-        await openAccessibility();
-        return;
-      }
-      if (!inputMonitoringOpened) {
-        await openInputMonitoring();
-        return;
-      }
-      goNext();
-      return;
-    }
-
-    if (step === "how-it-works") {
-      goNext();
-      return;
-    }
-
-    if (step === "practice") {
-      if (practiceComplete) {
+    switch (step) {
+      case "sign-in":
+        if (!signedIn) {
+          window.tab?.signIn?.();
+          setStatusMessage("Complete sign-in in your browser, then return here.");
+          return;
+        }
         goNext();
-      } else {
-        setStatusMessage("Accept and reject the mock suggestion once, or use Finish anyway.");
-      }
-      return;
-    }
+        return;
 
-    window.tab?.completeOnboarding?.();
+      case "permissions":
+        if (!accessibilityGranted) {
+          await openAccessibility();
+          return;
+        }
+        if (!inputMonitoringOpened) {
+          await openInputMonitoring();
+          return;
+        }
+        goNext();
+        return;
+
+      case "how-it-works":
+        goNext();
+        return;
+
+      case "practice":
+        if (practiceComplete) {
+          goNext();
+        } else {
+          setStatusMessage("Accept and reject the mock suggestion once, or use Finish anyway.");
+        }
+        return;
+
+      case "done":
+        window.tab?.completeOnboarding?.();
+    }
   }
 
   function approveSuggestion() {
@@ -206,22 +227,7 @@ export function OnboardingSurface() {
     setStatusMessage(null);
   }
 
-  const primaryLabel =
-    step === "sign-in"
-      ? signedIn
-        ? "Continue"
-        : "Sign In"
-      : step === "permissions"
-        ? !accessibilityGranted
-          ? "Open Accessibility Settings"
-          : !inputMonitoringOpened
-            ? "Open Input Monitoring Settings"
-            : "Continue"
-        : step === "how-it-works"
-          ? "Practice Suggestions"
-          : step === "practice"
-            ? "Finish Practice"
-            : "Open Tab";
+  const primaryLabel = getPrimaryLabel(step, signedIn, accessibilityGranted, inputMonitoringOpened);
 
   return (
     <main className="onboarding-shell">

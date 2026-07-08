@@ -1,0 +1,29 @@
+import { describe, expect, it } from "bun:test";
+import { readFileSync } from "node:fs";
+
+describe("desktop renderer setup surfaces", () => {
+  it("renders sign-in and onboarding around the shared Private Utility Grid setup story", () => {
+    const signInSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SignInSurface.tsx", "utf8");
+    const onboardingSource = readFileSync("apps/desktop/src/renderer/src/surfaces/OnboardingSurface.tsx", "utf8");
+
+    expect(signInSource).toInclude("Browser handoff");
+    expect(signInSource).toInclude("Accessibility");
+    expect(signInSource).toInclude("Input Monitoring");
+    expect(signInSource).toInclude("Privacy scope");
+    expect(signInSource).toInclude("Practice Suggestion");
+    expect(signInSource).toInclude("pug-dot-grid");
+    expect(onboardingSource).toInclude("Browser sign-in required");
+  });
+
+  it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {
+    const setupCss = [
+      readFileSync("apps/desktop/src/renderer/src/styles/sign-in.css", "utf8"),
+      readFileSync("apps/desktop/src/renderer/src/styles/onboarding.css", "utf8"),
+    ].join("\n");
+
+    expect(setupCss).not.toContain("tabb-glass");
+    expect(setupCss).not.toContain("glass-bg");
+    expect(setupCss).not.toContain("glass-border");
+    expect(setupCss).not.toContain("glass-shadow");
+  });
+});
