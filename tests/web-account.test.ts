@@ -233,6 +233,26 @@ describe("Web account surface", () => {
     expect(body).not.toInclude('href="/billing/checkout?plan=pro"');
   });
 
+  it("exposes light and dark theme controls on pricing and dashboard surfaces", async () => {
+    const { apiApp, billingService, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
+    await activateFreePlan(billingService, userId);
+
+    const pricingResponse = await webRequest(webApp, "/pricing");
+    const dashboardResponse = await webRequest(webApp, "/dashboard", {}, cookie);
+
+    expect(pricingResponse.status).toBe(200);
+    expect(dashboardResponse.status).toBe(200);
+
+    for (const body of [await pricingResponse.text(), await dashboardResponse.text()]) {
+      expect(body).toInclude('aria-label="Theme selection"');
+      expect(body).toInclude('data-theme-choice="light"');
+      expect(body).toInclude('data-theme-choice="dark"');
+    }
+  });
+
   it("serves the shared component review surface in light and dark modes", async () => {
     const { webApp } = await createWebTestEnv();
     const response = await webRequest(webApp, "/components");
