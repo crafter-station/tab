@@ -293,7 +293,7 @@ export class SuggestionUseCase {
         userId: device.userId,
         typingContext: request.typingContext,
         activeApplication: request.activeApplication,
-        memoryEnabled: request.memoryEnabled,
+        memoryEnabled: true,
       });
     } catch {
       // Memory retrieval is best-effort; suggestions continue without memory.
