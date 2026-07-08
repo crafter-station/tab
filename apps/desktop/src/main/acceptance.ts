@@ -24,22 +24,29 @@ function activeApplicationKey(app: ActiveApplication | null): string {
   return `${app?.bundleId ?? "app-unknown"}:${app?.windowId ?? "window-unknown"}`;
 }
 
+function isSemanticInsertionCandidate(target: TextSessionSnapshot | null): target is TextSessionSnapshot {
+  if (!target) return false;
+  if (!target.supportsSemanticInsertion) return false;
+  if (target.accessibilityReliability !== "reliable") return false;
+  if (target.secureLike) return false;
+  if (!target.focusedElementId || !target.textElementId) return false;
+  if (!target.selectedRange) return false;
+
+  return target.selectedRange.length === 0;
+}
+
 function canUseSemanticInsertion(
   targetApp: ActiveApplication,
   visible: TextSessionSnapshot | null,
   current: TextSessionSnapshot | null,
 ): current is TextSessionSnapshot {
-  if (!visible || !current) return false;
-  if (!visible.supportsSemanticInsertion || !current.supportsSemanticInsertion) return false;
-  if (visible.accessibilityReliability !== "reliable" || current.accessibilityReliability !== "reliable") return false;
-  if (visible.secureLike || current.secureLike) return false;
-  if (!visible.focusedElementId || !visible.textElementId || !current.focusedElementId || !current.textElementId) return false;
-  if (!visible.selectedRange || !current.selectedRange) return false;
-  if (visible.selectedRange.length !== 0 || current.selectedRange.length !== 0) return false;
+  if (!isSemanticInsertionCandidate(visible) || !isSemanticInsertionCandidate(current)) return false;
+
+  const currentAppKey = activeApplicationKey(current.activeApplication);
 
   return (
-    activeApplicationKey(current.activeApplication) === activeApplicationKey(targetApp) &&
-    activeApplicationKey(visible.activeApplication) === activeApplicationKey(current.activeApplication) &&
+    currentAppKey === activeApplicationKey(targetApp) &&
+    activeApplicationKey(visible.activeApplication) === currentAppKey &&
     visible.focusedElementId === current.focusedElementId &&
     visible.textElementId === current.textElementId &&
     rangeKey(visible.selectedRange) === rangeKey(current.selectedRange) &&
