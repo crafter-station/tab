@@ -6,7 +6,6 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Separator } from "../ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "../../lib/utils";
 
 export type PatternTone = "neutral" | "success" | "warning" | "info" | "destructive";
@@ -202,14 +201,12 @@ function ReviewPrimitiveControls({ inputId }: { inputId: string }) {
           <Button size="sm" variant="outline">Outline</Button>
           <Button size="sm" variant="destructive">Destructive</Button>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button size="sm" variant="ghost">Tooltip guidance</Button>
-            </TooltipTrigger>
-            <TooltipContent>Use tooltips for brief interface clarification only.</TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <Button size="sm" variant="ghost" aria-describedby={`${inputId}-guidance`}>
+          Tooltip guidance
+        </Button>
+        <p id={`${inputId}-guidance`} className="text-xs leading-relaxed text-muted-foreground">
+          Use tooltips for brief interface clarification only.
+        </p>
       </div>
       <Table aria-label="Plan table">
         <TableHeader>
