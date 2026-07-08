@@ -43,6 +43,10 @@ function totalCharacters(entries: readonly MemoryExtractionEntry[]): number {
   return entries.reduce((total, entry) => total + entry.text.length, 0);
 }
 
+function getOldestTimestampMs(entries: readonly MemoryExtractionEntry[]): number {
+  return Math.min(...entries.map((entry) => Date.parse(entry.timestamp)));
+}
+
 export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setTimeout>>(
   deps: MemoryExtractionDispatcherDependencies<TTimer>,
 ) {
@@ -80,10 +84,16 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
     deps.window.clearEntries(entryIds(batch.entries));
   }
 
+  function hasExhaustedRetries(batch: PendingBatch): boolean {
+    return batch.attempts >= maxRetries;
+  }
+
+  function hasExpired(batch: PendingBatch): boolean {
+    return now().getTime() - batch.createdAtMs >= failedBatchTtlMs;
+  }
+
   function shouldDropFailedBatch(batch: PendingBatch): boolean {
-    const exhaustedRetries = batch.attempts >= maxRetries;
-    const expired = now().getTime() - batch.createdAtMs >= failedBatchTtlMs;
-    return exhaustedRetries || expired;
+    return hasExhaustedRetries(batch) || hasExpired(batch);
   }
 
   function scheduleRetry(batch: PendingBatch): void {
@@ -95,11 +105,35 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
   }
 
   function buildRequest(batch: PendingBatch): MemoryExtractionRequest {
+    if (deps.clientMetadata) {
+      return {
+        batchId: batch.batchId,
+        entries: [...batch.entries],
+        clientMetadata: deps.clientMetadata,
+      };
+    }
+
     return {
       batchId: batch.batchId,
       entries: [...batch.entries],
-      ...(deps.clientMetadata ? { clientMetadata: deps.clientMetadata } : {}),
     };
+  }
+
+  function scheduleIdleFlush(): void {
+    idleTimer = scheduleTimeout(() => {
+      idleTimer = null;
+      void flush("idle");
+    }, idleMs);
+  }
+
+  function scheduleMaxAgeFlush(entries: readonly MemoryExtractionEntry[]): void {
+    const oldestTimestampMs = getOldestTimestampMs(entries);
+    const delayMs = Math.max(0, oldestTimestampMs + maxWindowAgeMs - now().getTime());
+
+    maxAgeTimer = scheduleTimeout(() => {
+      maxAgeTimer = null;
+      void flush("max_age");
+    }, delayMs);
   }
 
   function scheduleFlush(): void {
@@ -110,19 +144,8 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
     maxAgeTimer = clearTimer(maxAgeTimer);
     if (entries.length === 0) return;
 
-    if (hasIdleThreshold(entries)) {
-      idleTimer = scheduleTimeout(() => {
-        idleTimer = null;
-        void flush("idle");
-      }, idleMs);
-    }
-
-    const oldestTimestamp = Math.min(...entries.map((entry) => Date.parse(entry.timestamp)));
-    const ageDelayMs = Math.max(0, oldestTimestamp + maxWindowAgeMs - now().getTime());
-    maxAgeTimer = scheduleTimeout(() => {
-      maxAgeTimer = null;
-      void flush("max_age");
-    }, ageDelayMs);
+    if (hasIdleThreshold(entries)) scheduleIdleFlush();
+    scheduleMaxAgeFlush(entries);
   }
 
   async function attemptPendingBatch(): Promise<void> {

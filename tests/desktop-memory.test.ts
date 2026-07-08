@@ -23,6 +23,15 @@ function createManualScheduler() {
   let nextId = 1;
   const timers: ScheduledTimer[] = [];
 
+  function findTimerIndex(delayMs?: number): number {
+    return timers.findIndex((timer) => delayMs === undefined || timer.delayMs === delayMs);
+  }
+
+  function missingTimerMessage(delayMs?: number): string {
+    if (delayMs === undefined) return "No timer scheduled";
+    return `No timer scheduled for ${delayMs}ms`;
+  }
+
   return {
     timers,
     setTimeout(callback: () => void, delayMs: number) {
@@ -36,8 +45,8 @@ function createManualScheduler() {
       if (index >= 0) timers.splice(index, 1);
     },
     async run(delayMs?: number) {
-      const index = timers.findIndex((timer) => delayMs === undefined || timer.delayMs === delayMs);
-      if (index < 0) throw new Error(`No timer scheduled${delayMs === undefined ? "" : ` for ${delayMs}ms`}`);
+      const index = findTimerIndex(delayMs);
+      if (index < 0) throw new Error(missingTimerMessage(delayMs));
       const [timer] = timers.splice(index, 1);
       timer.callback();
       await Promise.resolve();
