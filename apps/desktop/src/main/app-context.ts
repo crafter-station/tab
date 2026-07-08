@@ -41,56 +41,69 @@ type AppContextAdapter = {
 };
 
 type SupportedAccessibilityAdapter = {
+  readonly app: string;
   readonly bundleIds: readonly string[];
   readonly adapter: AppContextAdapter;
 };
 
 const SUPPORTED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[] = [
   {
+    app: "WhatsApp",
     bundleIds: ["net.whatsapp.WhatsApp", "com.whatsapp.WhatsApp"],
     adapter: { provider: "whatsapp-accessibility", kind: "conversation", confidence: 0.86 },
   },
   {
+    app: "Ghostty",
     bundleIds: ["com.mitchellh.ghostty"],
     adapter: { provider: "ghostty-accessibility", kind: "terminal_session", confidence: 0.72 },
   },
   {
+    app: "Obsidian",
     bundleIds: ["md.obsidian"],
     adapter: { provider: "obsidian-accessibility", kind: "document", confidence: 0.78 },
   },
   {
+    app: "Zed",
     bundleIds: ["dev.zed.Zed"],
     adapter: { provider: "zed-accessibility", kind: "editor", confidence: 0.74 },
   },
   {
+    app: "Chrome",
     bundleIds: ["com.google.Chrome"],
     adapter: { provider: "chrome-accessibility", kind: "browser_writing_surface", confidence: 0.7 },
   },
   {
+    app: "Apple Notes",
     bundleIds: ["com.apple.Notes"],
     adapter: { provider: "notes-accessibility", kind: "document", confidence: 0.78 },
   },
   {
+    app: "Apple Mail",
     bundleIds: ["com.apple.mail"],
     adapter: { provider: "mail-accessibility", kind: "conversation", confidence: 0.74 },
   },
   {
+    app: "Messages",
     bundleIds: ["com.apple.MobileSMS"],
     adapter: { provider: "messages-accessibility", kind: "conversation", confidence: 0.76 },
   },
   {
+    app: "Slack",
     bundleIds: ["com.tinyspeck.slackmacgap"],
     adapter: { provider: "slack-accessibility", kind: "conversation", confidence: 0.72 },
   },
   {
+    app: "Discord",
     bundleIds: ["com.hnc.Discord"],
     adapter: { provider: "discord-accessibility", kind: "conversation", confidence: 0.7 },
   },
   {
+    app: "VS Code",
     bundleIds: ["com.microsoft.VSCode"],
     adapter: { provider: "vscode-accessibility", kind: "editor", confidence: 0.72 },
   },
   {
+    app: "TextEdit",
     bundleIds: ["com.apple.TextEdit"],
     adapter: { provider: "textedit-accessibility", kind: "document", confidence: 0.8 },
   },
@@ -111,18 +124,12 @@ export const APP_CONTEXT_TRUST_COPY = {
 } as const;
 
 export const APP_CONTEXT_SUPPORTED_APP_MATRIX = [
-  { app: "WhatsApp", provider: "whatsapp-accessibility", allowlisted: true, expectedKind: "conversation" },
-  { app: "Ghostty", provider: "ghostty-accessibility", allowlisted: true, expectedKind: "terminal_session" },
-  { app: "Obsidian", provider: "obsidian-accessibility", allowlisted: true, expectedKind: "document" },
-  { app: "Zed", provider: "zed-accessibility", allowlisted: true, expectedKind: "editor" },
-  { app: "Chrome", provider: "chrome-accessibility", allowlisted: true, expectedKind: "browser_writing_surface" },
-  { app: "Apple Notes", provider: "notes-accessibility", allowlisted: true, expectedKind: "document" },
-  { app: "Apple Mail", provider: "mail-accessibility", allowlisted: true, expectedKind: "conversation" },
-  { app: "Messages", provider: "messages-accessibility", allowlisted: true, expectedKind: "conversation" },
-  { app: "Slack", provider: "slack-accessibility", allowlisted: true, expectedKind: "conversation" },
-  { app: "Discord", provider: "discord-accessibility", allowlisted: true, expectedKind: "conversation" },
-  { app: "VS Code", provider: "vscode-accessibility", allowlisted: true, expectedKind: "editor" },
-  { app: "TextEdit", provider: "textedit-accessibility", allowlisted: true, expectedKind: "document" },
+  ...SUPPORTED_ACCESSIBILITY_ADAPTERS.map((entry) => ({
+    app: entry.app,
+    provider: entry.adapter.provider,
+    allowlisted: true,
+    expectedKind: entry.adapter.kind,
+  })),
 ] as const;
 
 const NORMALIZED_ACCESSIBILITY_ADAPTERS: readonly SupportedAccessibilityAdapter[] =
