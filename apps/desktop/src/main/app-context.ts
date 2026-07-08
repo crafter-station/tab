@@ -50,6 +50,13 @@ function emptyProviderSnapshot(
   };
 }
 
+function emptyObsidianSnapshot(
+  status: AppContextSnapshot["metadata"]["status"],
+  suppressionReason?: string,
+): AppContextSnapshot {
+  return emptyProviderSnapshot(OBSIDIAN_PROVIDER, status, suppressionReason);
+}
+
 function createSafeRedactionSummary(): AppContextFragment["redaction"] {
   return {
     applied: false,
@@ -177,29 +184,8 @@ function boundedObsidianContext(beforeCaret: string, afterCaret: string): string
   return cleanAccessibilityText(`${before}${after}`).trim();
 }
 
-export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot): AppContextSnapshot {
-  if (!isObsidianApplication(snapshot)) {
-    return emptyProviderSnapshot(OBSIDIAN_PROVIDER, "unsupported");
-  }
-
-  if (!canExtractObsidianEditorContext(snapshot)) {
-    return emptyProviderSnapshot(
-      OBSIDIAN_PROVIDER,
-      "empty",
-      MISSING_OBSIDIAN_EDITOR_SEMANTICS_REASON,
-    );
-  }
-
-  const text = boundedObsidianContext(
-    snapshot.surroundingContext.beforeCaret ?? "",
-    snapshot.surroundingContext.afterCaret ?? "",
-  );
-
-  if (isNoisyAccessibilityText(text)) {
-    return emptyProviderSnapshot(OBSIDIAN_PROVIDER, "empty", NOISY_OBSIDIAN_EXTRACTION_REASON);
-  }
-
-  const fragment: AppContextFragment = {
+function createObsidianFragment(snapshot: ExtractableObsidianTextSession, text: string): AppContextFragment {
+  return {
     id: [
       OBSIDIAN_PROVIDER,
       snapshot.activeApplication?.windowId ?? "window-unknown",
@@ -215,6 +201,27 @@ export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot):
     requestable: true,
     memoryEligible: false,
   };
+}
+
+export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot): AppContextSnapshot {
+  if (!isObsidianApplication(snapshot)) {
+    return emptyObsidianSnapshot("unsupported");
+  }
+
+  if (!canExtractObsidianEditorContext(snapshot)) {
+    return emptyObsidianSnapshot("empty", MISSING_OBSIDIAN_EDITOR_SEMANTICS_REASON);
+  }
+
+  const text = boundedObsidianContext(
+    snapshot.surroundingContext.beforeCaret ?? "",
+    snapshot.surroundingContext.afterCaret ?? "",
+  );
+
+  if (isNoisyAccessibilityText(text)) {
+    return emptyObsidianSnapshot("empty", NOISY_OBSIDIAN_EXTRACTION_REASON);
+  }
+
+  const fragment = createObsidianFragment(snapshot, text);
 
   return sanitizeAppContextSnapshot({
     fragments: [fragment],
