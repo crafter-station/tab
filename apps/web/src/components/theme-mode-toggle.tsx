@@ -9,13 +9,13 @@ import {
   THEME_MODES,
   type ThemeMode,
 } from "@tab/ui";
-import { Check, Laptop, Moon, Sun } from "lucide-react";
+import { Check, Desktop, Moon, Sun } from "@phosphor-icons/react";
 import { useTheme } from "./theme-provider.tsx";
 
 const themeIcons: Record<ThemeMode, typeof Sun> = {
   light: Sun,
   dark: Moon,
-  system: Laptop,
+  system: Desktop,
 };
 
 function formatThemeModeLabel(mode: ThemeMode): string {

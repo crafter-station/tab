@@ -17,5 +17,5 @@
     "lib": "@tab/ui/lib",
     "hooks": "@tab/ui/hooks"
   },
-  "iconLibrary": "lucide"
+  "iconLibrary": "phosphor"
 }

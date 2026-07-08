@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { Sparkle } from "@phosphor-icons/react";
 import { cn } from "../../lib/utils";
 
 export type Suggestion = {
@@ -40,7 +40,7 @@ export function FloatingSuggestionBar({ suggestion, onAccept, className }: Float
       >
         <span className={glowClassName} />
         <span className={iconClassName} aria-hidden="true">
-          <Sparkles size={13} strokeWidth={2.2} />
+          <Sparkle size={13} weight="bold" />
         </span>
         <span className="z-10 truncate text-left text-sm font-medium leading-tight">{suggestion?.text}</span>
         <span className={shortcutClassName}>Option+Tab</span>

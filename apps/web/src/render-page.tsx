@@ -10,14 +10,14 @@ import {
   getThemeInitScript,
   type ThemeMode,
 } from "@tab/ui";
-import { Laptop, LogOut, Moon, Settings, Sun, UserRound } from "lucide-react";
+import { Desktop, Gear, Moon, SignOut, Sun, UserCircle } from "@phosphor-icons/react";
 import type { User } from "./components/web-pages.tsx";
 
 const themeInitScript = getThemeInitScript();
 const themeControlScript = getThemeControlScript();
 
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
-  const Icon = mode === "light" ? Sun : mode === "dark" ? Moon : Laptop;
+  const Icon = mode === "light" ? Sun : mode === "dark" ? Moon : Desktop;
   return <Icon />;
 }
 
@@ -74,18 +74,18 @@ function UserMenu({ user }: { user: User }) {
         <div className="max-w-56 truncate px-2 py-1.5 text-sm font-semibold">{userLabel}</div>
         <div>
           <a className="flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground" href="/dashboard">
-            <UserRound />
+            <UserCircle />
             Dashboard
           </a>
           <a className="flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground" href="/dashboard/account">
-            <Settings />
+            <Gear />
             Settings
           </a>
         </div>
         <Separator className="my-1" />
         <form method="post" action="/logout">
           <button className="flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground" type="submit">
-            <LogOut />
+            <SignOut />
             Sign out
           </button>
         </form>
