@@ -105,15 +105,20 @@ describe("desktop onboarding", () => {
 
   it("explains the accessibility-aware permission and privacy model", () => {
     const copy = JSON.stringify(ONBOARDING_PERMISSIONS_COPY).toLowerCase();
+    const requiredPrivacyModelPhrases = [
+      "text session",
+      "accepted suggestion insertion",
+      "typing timing",
+      "acceptance shortcuts",
+      "fallback typing context signals",
+      "typing context",
+      "personal memory",
+      "metadata-only telemetry",
+      "raw logs",
+    ];
 
-    expect(copy).toContain("text session");
-    expect(copy).toContain("accepted suggestion insertion");
-    expect(copy).toContain("typing timing");
-    expect(copy).toContain("acceptance shortcuts");
-    expect(copy).toContain("fallback typing context signals");
-    expect(copy).toContain("typing context");
-    expect(copy).toContain("personal memory");
-    expect(copy).toContain("metadata-only telemetry");
-    expect(copy).toContain("raw logs");
+    for (const phrase of requiredPrivacyModelPhrases) {
+      expect(copy).toContain(phrase);
+    }
   });
 });
