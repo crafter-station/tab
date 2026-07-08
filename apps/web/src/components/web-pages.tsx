@@ -27,6 +27,7 @@ import {
   TableHeader,
   TableRow,
   buttonVariants,
+  type PatternTone,
 } from "@tabb/ui";
 
 export type User = {
@@ -62,8 +63,13 @@ export function formatMonthlyPrice(monthlyPriceUsd: number): string {
   return monthlyPriceUsd === 0 ? "Free" : `$${monthlyPriceUsd}/mo`;
 }
 
+function isPlanId(planId: string): planId is PlanId {
+  return planId in planQuotas;
+}
+
 function formatPlanName(planId: string): string {
-  return planQuotas[planId as PlanId]?.name ?? planId.charAt(0).toUpperCase() + planId.slice(1);
+  if (isPlanId(planId)) return planQuotas[planId].name;
+  return planId.charAt(0).toUpperCase() + planId.slice(1);
 }
 
 function planCheckoutLabel(authenticated: boolean): string {
@@ -74,6 +80,47 @@ function planCheckoutLabel(authenticated: boolean): string {
 function checkoutAuthHref(planId: PlanId): string {
   const next = `/billing/checkout?plan=${encodeURIComponent(planId)}`;
   return `/login?next=${encodeURIComponent(next)}`;
+}
+
+function checkoutHref(planId: PlanId, authenticated: boolean): string {
+  if (authenticated) return `/billing/checkout?plan=${planId}`;
+  return checkoutAuthHref(planId);
+}
+
+function checkoutCtaLabel(planId: PlanId, planName: string): string {
+  if (planId === "free") return "Start free";
+  return `Choose ${planName}`;
+}
+
+function planActionLabel(planName: string, monthlyPriceUsd: number): string {
+  if (monthlyPriceUsd === 0) return `Switch to ${planName}`;
+  return `Upgrade to ${planName}`;
+}
+
+function emailStatus(emailVerified: boolean | undefined): { value: string; tone: PatternTone } {
+  if (emailVerified === false) {
+    return { value: "Warning: verification needed", tone: "warning" };
+  }
+
+  return { value: "Active: email verified", tone: "success" };
+}
+
+function quotaStatus(quotaExhausted: boolean): { value: string; tone: PatternTone } {
+  if (quotaExhausted) {
+    return { value: "Warning: quota exhausted", tone: "warning" };
+  }
+
+  return { value: "Active: quota available", tone: "success" };
+}
+
+function deviceStatus(device: DeviceListItem): string {
+  if (device.revoked) return "Muted: device revoked (Revoked)";
+  return "Active: linked device";
+}
+
+function memorySourceLabel(createdBy: PersonalMemory["createdBy"]): string {
+  if (createdBy === "user") return "Active: user taught";
+  return "Muted: system learned";
 }
 
 function preserveAuthSearchParams(search: AuthSearch): string {
@@ -169,7 +216,9 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
               <p className="text-sm font-bold text-foreground">{planCheckoutLabel(authenticated)}</p>
             </CardContent>
             <CardFooter>
-              <a className={buttonVariants()} href={authenticated ? `/billing/checkout?plan=${plan.planId}` : checkoutAuthHref(plan.planId)}>{plan.planId === "free" ? "Start free" : `Choose ${plan.name}`}</a>
+              <a className={buttonVariants()} href={checkoutHref(plan.planId, authenticated)}>
+                {checkoutCtaLabel(plan.planId, plan.name)}
+              </a>
             </CardFooter>
           </Card>
         ))}
@@ -269,6 +318,8 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
   const upgradePlans = Object.entries(planQuotas).filter(([planId]) => planId !== data.quota.planId);
   const quotaExhausted = data.quota.usage >= data.quota.quota;
   const accountName = data.user.email ?? data.user.name ?? data.user.id;
+  const accountEmailStatus = emailStatus(data.user.emailVerified);
+  const accountQuotaStatus = quotaStatus(quotaExhausted);
 
   return (
     <div className="grid gap-6">
@@ -286,11 +337,16 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
             action={<form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>}
           />
           <div className="mt-4 grid gap-3">
-            <StatusRow label="Signed-in account" value="Success: signed in" tone="success" description={accountName} />
+            <StatusRow
+              label="Signed-in account"
+              value="Success: signed in"
+              tone="success"
+              description={accountName}
+            />
             <StatusRow
               label="Email status"
-              value={data.user.emailVerified === false ? "Warning: verification needed" : "Active: email verified"}
-              tone={data.user.emailVerified === false ? "warning" : "success"}
+              value={accountEmailStatus.value}
+              tone={accountEmailStatus.tone}
               description="Checkout remains gated by the existing email-verification rules."
             />
           </div>
@@ -304,8 +360,8 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
           <div className="mt-4 grid gap-3">
             <StatusRow
               label="Quota status"
-              value={quotaExhausted ? "Warning: quota exhausted" : "Active: quota available"}
-              tone={quotaExhausted ? "warning" : "success"}
+              value={accountQuotaStatus.value}
+              tone={accountQuotaStatus.tone}
               description={`${data.quota.usage.toLocaleString()} / ${data.quota.quota.toLocaleString()} autocompletes used this month`}
               meta={`Resets ${formatDate(data.quota.resetAt)}`}
             />
@@ -318,10 +374,12 @@ export function DashboardPage({ data }: { data?: DashboardData }) {
             <div className="grid gap-2">
               <p className="text-sm font-bold text-foreground">Billing actions</p>
               <p className="flex flex-wrap gap-2">
-              {upgradePlans.map(([planId, plan]) => (
-                <a key={planId} className={buttonVariants()} href={`/billing/checkout?plan=${planId}`}>{plan.monthlyPriceUsd === 0 ? `Switch to ${plan.name}` : `Upgrade to ${plan.name}`}</a>
-              ))}
-              <a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a>
+                {upgradePlans.map(([planId, plan]) => (
+                  <a key={planId} className={buttonVariants()} href={`/billing/checkout?plan=${planId}`}>
+                    {planActionLabel(plan.name, plan.monthlyPriceUsd)}
+                  </a>
+                ))}
+                <a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a>
               </p>
             </div>
           </div>
@@ -341,10 +399,36 @@ function DashboardPlaceholder() {
       <h1 className="mb-4 text-[clamp(2.5rem,8vw,5.75rem)] leading-[0.9] font-black tracking-[-0.08em]">Dashboard</h1>
       <p className="max-w-2xl text-[clamp(1.05rem,2vw,1.35rem)] text-muted-foreground">Manage account configuration, usage, billing, devices, permissions, and Personal Memory.</p>
       <div className="mt-6 grid gap-4 [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
-        <Card><CardHeader><CardTitle>Monthly usage</CardTitle></CardHeader><CardContent className="flex flex-col gap-4 text-muted-foreground"><p>Plan, quota, and reset dates load from the Tabb API when you are signed in.</p><p className="font-bold text-foreground">Billing actions</p><p className="flex flex-wrap gap-2"><a className={buttonVariants()} href="/billing/checkout?plan=pro">Upgrade to Pro</a><a className={buttonVariants()} href="/billing/checkout?plan=max">Upgrade to Max</a><a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a></p></CardContent></Card>
-        <Card><CardHeader><CardTitle>Account</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Identity and safe account settings appear here without inventing unsupported settings APIs.</p></CardContent></Card>
-        <Card id="devices"><CardHeader><CardTitle>Devices</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Linked native devices, versions, status, and revoke controls are powered by the existing device APIs.</p></CardContent></Card>
-        <Card id="memories"><CardHeader><CardTitle>Personal Memory</CardTitle></CardHeader><CardContent className="text-muted-foreground"><p>Review and delete memories collected for autocomplete personalization.</p></CardContent></Card>
+        <Card>
+          <CardHeader><CardTitle>Monthly usage</CardTitle></CardHeader>
+          <CardContent className="flex flex-col gap-4 text-muted-foreground">
+            <p>Plan, quota, and reset dates load from the Tabb API when you are signed in.</p>
+            <p className="font-bold text-foreground">Billing actions</p>
+            <p className="flex flex-wrap gap-2">
+              <a className={buttonVariants()} href="/billing/checkout?plan=pro">Upgrade to Pro</a>
+              <a className={buttonVariants()} href="/billing/checkout?plan=max">Upgrade to Max</a>
+              <a className={buttonVariants({ variant: "secondary" })} href="/billing/portal">Manage billing</a>
+            </p>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle>Account</CardTitle></CardHeader>
+          <CardContent className="text-muted-foreground">
+            <p>Identity and safe account settings appear here without inventing unsupported settings APIs.</p>
+          </CardContent>
+        </Card>
+        <Card id="devices">
+          <CardHeader><CardTitle>Devices</CardTitle></CardHeader>
+          <CardContent className="text-muted-foreground">
+            <p>Linked native devices, versions, status, and revoke controls are powered by the existing device APIs.</p>
+          </CardContent>
+        </Card>
+        <Card id="memories">
+          <CardHeader><CardTitle>Personal Memory</CardTitle></CardHeader>
+          <CardContent className="text-muted-foreground">
+            <p>Review and delete memories collected for autocomplete personalization.</p>
+          </CardContent>
+        </Card>
       </div>
     </>
   );
@@ -359,9 +443,23 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
         description="Native Mac sessions linked to this account, with visible active and revoked states."
       />
       <div className="mt-4">
-        {devices.length === 0 ? <EmptyState title="No linked devices" description="Muted: no linked devices. Sign in from the Mac app to link a native device." /> : (
+        {devices.length === 0 ? (
+          <EmptyState
+            title="No linked devices"
+            description="Muted: no linked devices. Sign in from the Mac app to link a native device."
+          />
+        ) : (
           <Table>
-            <TableHeader><TableRow><TableHead>Device</TableHead><TableHead>Platform</TableHead><TableHead>Version</TableHead><TableHead>Added</TableHead><TableHead>Status</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Device</TableHead>
+                <TableHead>Platform</TableHead>
+                <TableHead>Version</TableHead>
+                <TableHead>Added</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {devices.map((device) => (
                 <TableRow key={device.id}>
@@ -369,8 +467,16 @@ function DevicesCard({ devices }: { devices: readonly DeviceListItem[] }) {
                   <TableCell>{device.platform}</TableCell>
                   <TableCell>{device.appVersion}</TableCell>
                   <TableCell>{formatDate(device.createdAt)}</TableCell>
-                  <TableCell><Badge variant={device.revoked ? "secondary" : "default"}>{device.revoked ? "Muted: device revoked (Revoked)" : "Active: linked device"}</Badge></TableCell>
-                  <TableCell>{device.revoked ? null : <form method="post" action={`/account/devices/${encodeURIComponent(device.deviceId)}/revoke`}><Button type="submit" size="sm" variant="secondary">Warning: revoke access</Button></form>}</TableCell>
+                  <TableCell>
+                    <Badge variant={device.revoked ? "secondary" : "default"}>{deviceStatus(device)}</Badge>
+                  </TableCell>
+                  <TableCell>
+                    {device.revoked ? null : (
+                      <form method="post" action={`/account/devices/${encodeURIComponent(device.deviceId)}/revoke`}>
+                        <Button type="submit" size="sm" variant="secondary">Warning: revoke access</Button>
+                      </form>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -403,9 +509,21 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
           />
           <p><Button type="submit">Save memory</Button></p>
         </form>
-        {memories.length === 0 ? <EmptyState title="No Personal Memory stored" description="Muted: no Personal Memory stored. Add a memory when you want Tabb to personalize Suggestions." /> : (
+        {memories.length === 0 ? (
+          <EmptyState
+            title="No Personal Memory stored"
+            description="Muted: no Personal Memory stored. Add a memory when you want Tabb to personalize Suggestions."
+          />
+        ) : (
           <Table>
-            <TableHeader><TableRow><TableHead>Content</TableHead><TableHead>Created by</TableHead><TableHead>Updated</TableHead><TableHead /></TableRow></TableHeader>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Content</TableHead>
+                <TableHead>Created by</TableHead>
+                <TableHead>Updated</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
             <TableBody>
               {memories.map((memory) => (
                 <TableRow key={memory.id}>
@@ -422,9 +540,13 @@ function MemoriesCard({ memories }: { memories: readonly PersonalMemory[] }) {
                       <p><Button type="submit" size="sm" variant="secondary">Save edit</Button></p>
                     </form>
                   </TableCell>
-                  <TableCell><Badge variant="outline">{memory.createdBy === "user" ? "Active: user taught" : "Muted: system learned"}</Badge></TableCell>
+                  <TableCell><Badge variant="outline">{memorySourceLabel(memory.createdBy)}</Badge></TableCell>
                   <TableCell>{formatDate(memory.updatedAt)}</TableCell>
-                  <TableCell><form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/delete`}><Button type="submit" size="sm" variant="destructive">Destructive: delete memory</Button></form></TableCell>
+                  <TableCell>
+                    <form method="post" action={`/account/memory/${encodeURIComponent(memory.id)}/delete`}>
+                      <Button type="submit" size="sm" variant="destructive">Destructive: delete memory</Button>
+                    </form>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
