@@ -15,12 +15,18 @@ function authorizationObservation(
   return { authorizationHeader, credentialGeneration };
 }
 
+async function acceptCredentialGeneration(): Promise<boolean> {
+  return true;
+}
+
 function createDeferred<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void;
-  const promise = new Promise<T>((resolvePromise) => {
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
     resolve = resolvePromise;
+    reject = rejectPromise;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 function makeFetch(responses: Array<() => Response>) {
@@ -41,6 +47,7 @@ describe("desktop status service", () => {
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation(null),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       onChange: (status) => events.push({ type: "changed", status }),
     });
 
@@ -57,6 +64,7 @@ describe("desktop status service", () => {
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -96,6 +104,7 @@ describe("desktop status service", () => {
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -121,6 +130,7 @@ describe("desktop status service", () => {
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -145,6 +155,7 @@ describe("desktop status service", () => {
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -177,6 +188,7 @@ describe("desktop status service", () => {
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       fetch: makeFetch([
         () => {
           throw new Error("network unreachable");
@@ -197,6 +209,7 @@ describe("desktop status service", () => {
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       fetch: makeFetch([
         () => {
           throw new Error("network unreachable");
@@ -223,6 +236,7 @@ describe("desktop status service", () => {
       getAuthorizationObservation: async () => {
         throw observationError;
       },
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
       onChange: (status, credentialGeneration) => {
         events.push({ status, credentialGeneration });
       },
@@ -242,45 +256,128 @@ describe("desktop status service", () => {
     }
   });
 
-  it("carries the request credential generation separately from renderer status", async () => {
+  it("suppresses delayed results from a replaced credential generation", async () => {
     const requestGeneration = generation(21);
     const replacementGeneration = generation(22);
-    let currentObservation = authorizationObservation("Bearer token-a", requestGeneration);
-    let requestAuthorization: string | null = null;
-    const fetchStarted = createDeferred<void>();
-    const response = createDeferred<Response>();
+    const staleResponses = [
+      () => Response.json(
+        {
+          status: "error",
+          error: { code: "revoked_device", message: "This device has been revoked." },
+        },
+        { status: 401 },
+      ),
+      () => Response.json(
+        {
+          status: "error",
+          error: { code: "unauthenticated", message: "Invalid device token." },
+        },
+        { status: 401 },
+      ),
+      () => new Response("unavailable", { status: 503 }),
+      () => Response.json({
+        status: "ok",
+        data: { authenticated: true, deviceRevoked: false },
+      }),
+    ];
+
+    for (const createResponse of staleResponses) {
+      let currentGeneration = requestGeneration;
+      let requestAuthorization: string | null = null;
+      const fetchStarted = createDeferred<void>();
+      const response = createDeferred<Response>();
+      const events: DesktopStatus[] = [];
+      const service = createDesktopStatusService({
+        apiBaseUrl: "http://localhost:8787",
+        getAuthorizationObservation: async () =>
+          authorizationObservation("Bearer token-a", requestGeneration),
+        isCredentialGenerationCurrent: async (observedGeneration) =>
+          observedGeneration === currentGeneration,
+        fetch: async (_input, init) => {
+          requestAuthorization = new Headers(init?.headers).get("Authorization");
+          fetchStarted.resolve();
+          return response.promise;
+        },
+        onChange: (status) => events.push(status),
+      });
+
+      const refresh = service.refresh();
+      await fetchStarted.promise;
+      currentGeneration = replacementGeneration;
+      response.resolve(createResponse());
+      const status = await refresh;
+
+      expect(requestAuthorization).toBe("Bearer token-a");
+      expect(events).toHaveLength(0);
+      expect(status).toBe(service.getCurrentStatus());
+      expect(status.lastUpdatedAt).toBeNull();
+    }
+  });
+
+  it("keeps a newer same-generation refresh when an older response arrives last", async () => {
+    const credentialGeneration = generation(23);
+    const firstFetchStarted = createDeferred<void>();
+    const secondFetchStarted = createDeferred<void>();
+    const firstResponse = createDeferred<Response>();
+    const secondResponse = createDeferred<Response>();
     const events: Array<{
       status: DesktopStatus;
       credentialGeneration: CredentialGeneration | null;
     }> = [];
+    let fetchCount = 0;
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationObservation: async () => currentObservation,
-      fetch: async (_input, init) => {
-        requestAuthorization = new Headers(init?.headers).get("Authorization");
-        fetchStarted.resolve();
-        return response.promise;
+      getAuthorizationObservation: async () =>
+        authorizationObservation("Bearer token", credentialGeneration),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
+      fetch: async () => {
+        fetchCount += 1;
+        if (fetchCount === 1) {
+          firstFetchStarted.resolve();
+          return firstResponse.promise;
+        }
+        secondFetchStarted.resolve();
+        return secondResponse.promise;
       },
-      onChange: (status, credentialGeneration) => {
-        events.push({ status, credentialGeneration });
+      onChange: (status, observedGeneration) => {
+        events.push({ status, credentialGeneration: observedGeneration });
       },
     });
 
-    const refresh = service.refresh();
-    await fetchStarted.promise;
-    currentObservation = authorizationObservation("Bearer token-b", replacementGeneration);
-    response.resolve(Response.json({
+    const olderRefresh = service.refresh();
+    await firstFetchStarted.promise;
+    const newerRefresh = service.refresh();
+    await secondFetchStarted.promise;
+    secondResponse.resolve(Response.json({
       status: "ok",
       data: {
         authenticated: true,
         deviceRevoked: false,
+        planId: "free",
+        quota: 100,
+        usage: 2,
+        resetAt: "2026-08-01T00:00:00.000Z",
       },
     }));
-    await refresh;
+    const newerStatus = await newerRefresh;
+    firstResponse.resolve(Response.json({
+      status: "ok",
+      data: {
+        authenticated: true,
+        deviceRevoked: false,
+        planId: "free",
+        quota: 100,
+        usage: 1,
+        resetAt: "2026-08-01T00:00:00.000Z",
+      },
+    }));
+    const olderStatus = await olderRefresh;
 
-    expect(requestAuthorization).toBe("Bearer token-a");
     expect(events).toHaveLength(1);
-    expect(events[0].credentialGeneration).toBe(requestGeneration);
+    expect(events[0].credentialGeneration).toBe(credentialGeneration);
+    expect(events[0].status.quota?.usage).toBe(2);
+    expect(olderStatus).toBe(newerStatus);
+    expect(service.getCurrentStatus()).toBe(newerStatus);
     expect(Object.keys(events[0].status).sort()).toEqual([
       "auth",
       "connectivity",
@@ -289,5 +386,37 @@ describe("desktop status service", () => {
       "quota",
       "userId",
     ]);
+  });
+
+  it("does not emit an observation error from a superseded refresh", async () => {
+    const credentialGeneration = generation(24);
+    const firstObservation = createDeferred<ReturnType<typeof authorizationObservation>>();
+    const observationError = new Error("keychain unavailable");
+    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+    const events: DesktopStatus[] = [];
+    let observationCount = 0;
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      getAuthorizationObservation: async () => {
+        observationCount += 1;
+        if (observationCount === 1) return firstObservation.promise;
+        return authorizationObservation(null, credentialGeneration);
+      },
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
+      onChange: (status) => events.push(status),
+    });
+
+    try {
+      const olderRefresh = service.refresh();
+      const newerStatus = await service.refresh();
+      firstObservation.reject(observationError);
+      const olderStatus = await olderRefresh;
+
+      expect(events).toEqual([newerStatus]);
+      expect(olderStatus).toBe(newerStatus);
+      expect(errorLog).not.toHaveBeenCalled();
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 });

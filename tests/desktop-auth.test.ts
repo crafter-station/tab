@@ -10,6 +10,7 @@ import {
   createDesktopAuthClient,
   createDesktopAuthSession,
   type CredentialGeneration,
+  type ObservedCredentialState,
 } from "../apps/desktop/src/main/auth.ts";
 import { createMemoryKeychain } from "../apps/desktop/src/main/keychain.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
@@ -164,6 +165,10 @@ describe("desktop auth client", () => {
     expect(await keychain.get("tab", "device-token")).toBe(token);
     expect(await client.getAuthorizationHeader()).toBe(`Bearer ${token}`);
     expect(await client.isAuthenticated()).toBe(true);
+    const observation = await client.getAuthorizationObservation();
+    expect(await client.getCredentialState(observation.credentialGeneration)).toBe(
+      "current_present",
+    );
   });
 
   it("uses the stored device token when calling the suggestion API", async () => {
@@ -255,6 +260,10 @@ describe("desktop auth client", () => {
 
     expect(await client.isAuthenticated()).toBe(false);
     expect(await client.getAuthorizationHeader()).toBeNull();
+    const observation = await client.getAuthorizationObservation();
+    expect(await client.getCredentialState(observation.credentialGeneration)).toBe(
+      "current_absent",
+    );
   });
 
   it("serializes replacement storage behind a generation-conditional removal", async () => {
@@ -309,8 +318,10 @@ describe("desktop auth session", () => {
     let signedOutCount = 0;
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async (observedGeneration) =>
-          hasToken && observedGeneration === generation(generationValue),
+        getCredentialState: async (observedGeneration) => {
+          if (observedGeneration !== generation(generationValue)) return "stale";
+          return hasToken ? "current_present" : "current_absent";
+        },
         clearTokenForGeneration: async (observedGeneration) => {
           if (!hasToken || observedGeneration !== generation(generationValue)) return false;
           hasToken = false;
@@ -387,8 +398,39 @@ describe("desktop auth session", () => {
     expect(fixture.clearCount).toBe(0);
   });
 
+  it("resets failures when the observed current generation has no credential", async () => {
+    const firstGeneration = generation(5);
+    const restoredGeneration = generation(6);
+    let currentGeneration = firstGeneration;
+    let hasToken = true;
+    let clearCount = 0;
+    const session = createDesktopAuthSession({
+      authClient: {
+        getCredentialState: async (observedGeneration) => {
+          if (observedGeneration !== currentGeneration) return "stale";
+          return hasToken ? "current_present" : "current_absent";
+        },
+        clearTokenForGeneration: async () => {
+          clearCount += 1;
+          return true;
+        },
+      },
+      onSignedOut: () => {},
+    });
+
+    await session.handleStatus("sign_in_required", firstGeneration);
+    await session.handleStatus("sign_in_required", firstGeneration);
+    hasToken = false;
+    await session.handleStatus("sign_in_required", firstGeneration);
+    currentGeneration = restoredGeneration;
+    hasToken = true;
+    await session.handleStatus("sign_in_required", restoredGeneration);
+
+    expect(clearCount).toBe(0);
+  });
+
   it("serializes overlapping failures and clears the current credential once", async () => {
-    const firstRead = createDeferred<boolean>();
+    const firstRead = createDeferred<ObservedCredentialState>();
     const credentialGeneration = generation(7);
     let readCount = 0;
     let hasToken = true;
@@ -396,9 +438,10 @@ describe("desktop auth session", () => {
     let signedOutCount = 0;
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async () => {
+        getCredentialState: async () => {
           readCount += 1;
-          return readCount === 1 ? firstRead.promise : hasToken;
+          if (readCount === 1) return firstRead.promise;
+          return hasToken ? "current_present" : "current_absent";
         },
         clearTokenForGeneration: async (observedGeneration) => {
           if (!hasToken || observedGeneration !== credentialGeneration) return false;
@@ -423,7 +466,7 @@ describe("desktop auth session", () => {
     await Promise.resolve();
     expect(readCount).toBe(1);
     expect(thirdResolved).toBe(false);
-    firstRead.resolve(true);
+    firstRead.resolve("current_present");
     await Promise.all([first, second, third]);
 
     expect(clearCount).toBe(1);
@@ -432,15 +475,15 @@ describe("desktop auth session", () => {
   });
 
   it("applies queued recovery before a later failure while an earlier read is pending", async () => {
-    const firstRead = createDeferred<boolean>();
+    const firstRead = createDeferred<ObservedCredentialState>();
     const credentialGeneration = generation(8);
     let readCount = 0;
     let clearCount = 0;
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async () => {
+        getCredentialState: async () => {
           readCount += 1;
-          return readCount === 1 ? firstRead.promise : true;
+          return readCount === 1 ? firstRead.promise : "current_present";
         },
         clearTokenForGeneration: async () => {
           clearCount += 1;
@@ -456,7 +499,7 @@ describe("desktop auth session", () => {
 
     await Promise.resolve();
     expect(readCount).toBe(1);
-    firstRead.resolve(true);
+    firstRead.resolve("current_present");
     await Promise.all([failure, recovery, laterFailure]);
 
     expect(readCount).toBe(3);
@@ -464,15 +507,15 @@ describe("desktop auth session", () => {
   });
 
   it("applies queued revocation after an earlier credential read completes", async () => {
-    const firstRead = createDeferred<boolean>();
+    const firstRead = createDeferred<ObservedCredentialState>();
     const credentialGeneration = generation(9);
     let readCount = 0;
     let clearCount = 0;
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async () => {
+        getCredentialState: async () => {
           readCount += 1;
-          return readCount === 1 ? firstRead.promise : true;
+          return readCount === 1 ? firstRead.promise : "current_present";
         },
         clearTokenForGeneration: async () => {
           clearCount += 1;
@@ -488,7 +531,7 @@ describe("desktop auth session", () => {
     await Promise.resolve();
     expect(readCount).toBe(1);
     expect(clearCount).toBe(0);
-    firstRead.resolve(true);
+    firstRead.resolve("current_present");
     await Promise.all([failure, revocation]);
 
     expect(clearCount).toBe(1);
@@ -517,6 +560,9 @@ describe("desktop auth session", () => {
       },
     });
 
+    expect(await authClient.getCredentialState(oldObservation.credentialGeneration)).toBe(
+      "stale",
+    );
     await session.handleStatus("sign_in_required", oldObservation.credentialGeneration);
     await session.handleStatus("sign_in_required", oldObservation.credentialGeneration);
     await session.handleStatus("sign_in_required", oldObservation.credentialGeneration);
@@ -533,7 +579,7 @@ describe("desktop auth session", () => {
     let signedOutCount = 0;
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async () => {
+        getCredentialState: async () => {
           throw readError;
         },
         clearTokenForGeneration: async () => true,
@@ -561,7 +607,7 @@ describe("desktop auth session", () => {
     let signedOutCount = 0;
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async () => true,
+        getCredentialState: async () => "current_present",
         clearTokenForGeneration: async () => {
           throw clearError;
         },
@@ -588,7 +634,7 @@ describe("desktop auth session", () => {
     const errorLog = spyOn(console, "error").mockImplementation(() => {});
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async () => true,
+        getCredentialState: async () => "current_present",
         clearTokenForGeneration: async () => true,
       },
       onSignedOut: () => {

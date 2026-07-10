@@ -18,6 +18,11 @@ export type DesktopAuthorizationObservation = {
   readonly credentialGeneration: CredentialGeneration;
 };
 
+export type ObservedCredentialState =
+  | "current_present"
+  | "current_absent"
+  | "stale";
+
 export type DesktopAuthClientDependencies = {
   apiBaseUrl: string;
   webBaseUrl: string;
@@ -129,14 +134,27 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
     });
   }
 
-  async function isAuthenticated(
-    observedGeneration?: CredentialGeneration,
-  ): Promise<boolean> {
+  async function isAuthenticated(): Promise<boolean> {
     return enqueueCredentialOperation(async () => {
       const token = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
-      return token !== null &&
-        (observedGeneration === undefined || credentialGeneration === observedGeneration);
+      return token !== null;
     });
+  }
+
+  async function getCredentialState(
+    observedGeneration: CredentialGeneration,
+  ): Promise<ObservedCredentialState> {
+    return enqueueCredentialOperation(async () => {
+      if (credentialGeneration !== observedGeneration) return "stale";
+      const token = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      return token === null ? "current_absent" : "current_present";
+    });
+  }
+
+  async function isCredentialGenerationCurrent(
+    observedGeneration: CredentialGeneration,
+  ): Promise<boolean> {
+    return enqueueCredentialOperation(async () => credentialGeneration === observedGeneration);
   }
 
   async function getAuthorizationHeader(): Promise<string | null> {
@@ -162,6 +180,8 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
     clearToken,
     clearTokenForGeneration,
     isAuthenticated,
+    getCredentialState,
+    isCredentialGenerationCurrent,
     getAuthorizationHeader,
     getAuthorizationObservation,
   };
@@ -170,7 +190,7 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
 export type DesktopAuthClient = ReturnType<typeof createDesktopAuthClient>;
 
 export type DesktopAuthSessionDependencies = {
-  authClient: Pick<DesktopAuthClient, "clearTokenForGeneration" | "isAuthenticated">;
+  authClient: Pick<DesktopAuthClient, "clearTokenForGeneration" | "getCredentialState">;
   onSignedOut(): void | Promise<void>;
 };
 
@@ -215,7 +235,10 @@ export function createDesktopAuthSession(deps: DesktopAuthSessionDependencies) {
     credentialGeneration: CredentialGeneration,
   ): Promise<void> {
     try {
-      if (!(await deps.authClient.isAuthenticated(credentialGeneration))) {
+      const credentialState = await deps.authClient.getCredentialState(credentialGeneration);
+      if (credentialState === "stale") return;
+      if (credentialState === "current_absent") {
+        resetFailures();
         return;
       }
     } catch (error) {

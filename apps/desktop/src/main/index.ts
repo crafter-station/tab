@@ -186,6 +186,8 @@ const updateChecker = createUpdateChecker({
 const statusService = createDesktopStatusService({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationObservation: () => authClient.getAuthorizationObservation(),
+  isCredentialGenerationCurrent: (credentialGeneration) =>
+    authClient.isCredentialGenerationCurrent(credentialGeneration),
   onChange: (status, credentialGeneration) => {
     settingsWindowManager.sendStatus(status);
     onboardingWindowManager.sendStatus(status);

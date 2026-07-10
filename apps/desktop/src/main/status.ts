@@ -36,6 +36,9 @@ export type DesktopStatus = {
 export type DesktopStatusServiceDependencies = {
   apiBaseUrl: string;
   getAuthorizationObservation(): Promise<DesktopAuthorizationObservation>;
+  isCredentialGenerationCurrent(
+    credentialGeneration: CredentialGeneration,
+  ): Promise<boolean>;
   fetch?: typeof globalThis.fetch;
   onChange?(
     status: DesktopStatus,
@@ -74,6 +77,7 @@ function markUpdated(status: Omit<DesktopStatus, "lastUpdatedAt">): DesktopStatu
 export function createDesktopStatusService(deps: DesktopStatusServiceDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
   let currentStatus: DesktopStatus = createInitialStatus();
+  let refreshSequence = 0;
 
   function emit(
     status: DesktopStatus,
@@ -83,34 +87,50 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
     deps.onChange?.(status, credentialGeneration);
   }
 
+  async function canAccept(
+    sequence: number,
+    credentialGeneration: CredentialGeneration,
+  ): Promise<boolean> {
+    if (sequence !== refreshSequence) return false;
+    const generationIsCurrent = await deps.isCredentialGenerationCurrent(credentialGeneration);
+    return generationIsCurrent && sequence === refreshSequence;
+  }
+
+  async function accept(
+    status: DesktopStatus,
+    sequence: number,
+    credentialGeneration: CredentialGeneration,
+  ): Promise<DesktopStatus> {
+    if (!(await canAccept(sequence, credentialGeneration))) return currentStatus;
+    emit(status, credentialGeneration);
+    return status;
+  }
+
   async function refresh(): Promise<DesktopStatus> {
+    const sequence = ++refreshSequence;
     let authorizationObservation: DesktopAuthorizationObservation;
     try {
       authorizationObservation = await deps.getAuthorizationObservation();
     } catch (error) {
+      if (sequence !== refreshSequence) return currentStatus;
       console.error("Failed to read desktop authorization:", error);
       const status = markUpdated({
         ...currentStatus,
         connectivity: "offline",
         overlay: "hidden",
       });
+      if (sequence !== refreshSequence) return currentStatus;
       emit(status, null);
       return status;
     }
 
     const { authorizationHeader, credentialGeneration } = authorizationObservation;
+    if (!(await canAccept(sequence, credentialGeneration))) return currentStatus;
 
     if (!authorizationHeader) {
       const status = markUpdated(createInitialStatus());
-      emit(status, credentialGeneration);
-      return status;
+      return accept(status, sequence, credentialGeneration);
     }
-
-    // Assume signed_in optimistically while the request is in flight.
-    currentStatus = {
-      ...currentStatus,
-      auth: currentStatus.auth === "sign_in_required" ? "signed_in" : currentStatus.auth,
-    };
 
     try {
       const response = await http(`${deps.apiBaseUrl}/api/status`, {
@@ -120,9 +140,11 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
           Accept: "application/json",
         },
       });
+      if (!(await canAccept(sequence, credentialGeneration))) return currentStatus;
 
       if (response.status === 401) {
         const body = (await response.json()) as unknown;
+        if (!(await canAccept(sequence, credentialGeneration))) return currentStatus;
         if (isRevokedDeviceError(body)) {
           const status = markUpdated({
             ...createInitialStatus(),
@@ -130,8 +152,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
             connectivity: "online",
             overlay: "hidden",
           });
-          emit(status, credentialGeneration);
-          return status;
+          return accept(status, sequence, credentialGeneration);
         }
 
         if (isUnauthenticatedError(body)) {
@@ -140,24 +161,22 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
             connectivity: "online",
             overlay: "hidden",
           });
-          emit(status, credentialGeneration);
-          return status;
+          return accept(status, sequence, credentialGeneration);
         }
       }
 
       if (!response.ok) {
         const status = createOfflineStatus();
-        emit(status, credentialGeneration);
-        return status;
+        return accept(status, sequence, credentialGeneration);
       }
 
       const raw = (await response.json()) as unknown;
+      if (!(await canAccept(sequence, credentialGeneration))) return currentStatus;
       const parsed = DesktopStatusResponseSchema.safeParse(raw);
 
       if (!parsed.success) {
         const status = createOfflineStatus();
-        emit(status, credentialGeneration);
-        return status;
+        return accept(status, sequence, credentialGeneration);
       }
 
       const data = parsed.data.data;
@@ -176,16 +195,15 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
           : null,
         overlay: "hidden",
       });
-      emit(status, credentialGeneration);
-      return status;
+      return accept(status, sequence, credentialGeneration);
     } catch {
+      if (!(await canAccept(sequence, credentialGeneration))) return currentStatus;
       // If we have a stored token but cannot reach the API, preserve the last
       // known auth state; on the first failure assume signed_in because the
       // token exists. Status UI surfaces the connectivity issue separately from
       // the overlay.
       const status = createOfflineStatus();
-      emit(status, credentialGeneration);
-      return status;
+      return accept(status, sequence, credentialGeneration);
     }
   }
 

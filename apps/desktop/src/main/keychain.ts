@@ -71,9 +71,10 @@ export function createMacOSKeychain(
           account,
           "-w",
         ]);
-        return stdout.trim() || null;
-      } catch {
-        return null;
+        return stdout.trim();
+      } catch (error) {
+        if (isMacOSKeychainItemNotFound(error)) return null;
+        throw error;
       }
     },
     async remove(service, account) {
