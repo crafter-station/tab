@@ -3,19 +3,14 @@ import type { ReactNode } from "react";
 import { ApiErrorResponseSchema } from "@tab/contracts";
 import { ComponentReviewSurface } from "@tab/ui";
 import {
-  DashboardPage,
-  DownloadPage,
   ForgotPasswordPage,
-  HomePage,
   LoginPage,
-  MessagePage,
-  PricingPage,
   ResetPasswordPage,
   SignupPage,
-  type AuthSearch,
-  type DashboardSection,
-  type User,
-} from "./components/web-pages.tsx";
+} from "./components/pages/auth.tsx";
+import { DashboardPage, type DashboardSection } from "./components/pages/dashboard.tsx";
+import { DownloadPage, HomePage, PricingPage } from "./components/pages/marketing.tsx";
+import { MessagePage, type AuthSearch, type User } from "./components/pages/shared.tsx";
 import { env } from "./env.ts";
 import { renderPage } from "./render-page.tsx";
 import {

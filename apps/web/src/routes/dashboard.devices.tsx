@@ -1,9 +1,14 @@
 import { createRoute } from "@tanstack/react-router";
-import { DashboardPage } from "../components/web-pages.tsx";
-import { rootRoute } from "./__root.tsx";
+import { DashboardDevicesPage, useDashboardData } from "../components/pages/dashboard.tsx";
+import { Route as DashboardRoute } from "./dashboard.tsx";
+
+function DashboardDevicesRouteComponent() {
+  const data = useDashboardData();
+  return <DashboardDevicesPage data={data} />;
+}
 
 export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "dashboard/devices",
-  component: () => <DashboardPage section="devices" />,
+  getParentRoute: () => DashboardRoute,
+  path: "devices",
+  component: DashboardDevicesRouteComponent,
 });

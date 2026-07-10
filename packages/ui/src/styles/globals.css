@@ -36,38 +36,38 @@
 
 :root,
 .pug-theme-light {
-  --font-display: "Space Grotesk", "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-body: "Geist", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --font-code: "Geist Mono", "SFMono-Regular", Consolas, "Liberation Mono", monospace;
-  --background: #f7f7f2;
+  --font-display: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-code: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  --background: #f5f4f0;
   --foreground: #111315;
-  --card: #ffffff;
+  --card: #fbfaf7;
   --card-foreground: #111315;
-  --popover: #ffffff;
+  --popover: #fbfaf7;
   --popover-foreground: #111315;
   --primary: #111315;
   --primary-foreground: #f7f7f2;
   --secondary: #eceee8;
   --secondary-foreground: #111315;
   --muted: #e4e6df;
-  --muted-foreground: #5f6560;
+  --muted-foreground: #5a5f5b;
   --accent: #dfe8d5;
   --accent-foreground: #151a14;
   --destructive: #b5332f;
   --destructive-foreground: #ffffff;
-  --success: #287a4b;
+  --success: #21633d;
   --success-foreground: #ffffff;
-  --warning: #8f5d0d;
+  --warning: #75500d;
   --warning-foreground: #ffffff;
-  --info: #346f8f;
+  --info: #285f7c;
   --info-foreground: #ffffff;
-  --border: #d8ddd3;
-  --input: #cbd1c7;
+  --border: #d8d7d1;
+  --input: #c9c8c1;
   --ring: #111315;
-  --radius-control: 10px;
-  --radius-media: 12px;
-  --radius-card: 14px;
-  --radius-surface: 20px;
+  --radius-control: 4px;
+  --radius-media: 6px;
+  --radius-card: 8px;
+  --radius-surface: 8px;
   --radius: var(--radius-card);
   --tab-signal: var(--foreground);
   --tab-signal-tint: rgba(17, 19, 21, 0.08);
@@ -77,15 +77,10 @@
   --tab-warning-tint: rgba(143, 93, 13, 0.12);
   --tab-info: var(--info);
   --tab-info-tint: rgba(52, 111, 143, 0.12);
-  --tab-grid-line: rgba(17, 19, 21, 0.08);
-  --tab-grid-strong: rgba(17, 19, 21, 0.14);
-  --tab-page-wash: radial-gradient(circle at 82% 12%, rgba(223, 232, 213, 0.9), transparent 28%), radial-gradient(circle at 18% 0%, rgba(255, 255, 255, 0.92), transparent 30%);
-  --tab-grid-bg: linear-gradient(var(--tab-grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--tab-grid-line) 1px, transparent 1px);
-  --tab-dot-grid-bg: radial-gradient(var(--tab-grid-strong) 1px, transparent 1px);
-  --tab-glass-bg: rgba(255, 255, 255, 0.82);
-  --tab-glass-border: rgba(216, 221, 211, 0.86);
-  --tab-glass-shadow: 0 24px 80px rgba(38, 45, 40, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.76);
-  --tab-shadow-soft: 0 18px 60px rgba(38, 45, 40, 0.1);
+  --tab-glass-bg: var(--card);
+  --tab-glass-border: var(--border);
+  --tab-glass-shadow: none;
+  --tab-shadow-soft: none;
   --tab-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --tab-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   color: var(--foreground);
@@ -99,14 +94,14 @@
 
 .dark,
 .pug-theme-dark {
-  --background: #0e1110;
+  --background: #0d0f0e;
   --foreground: rgba(245, 247, 242, 0.94);
-  --card: #151917;
+  --card: #121513;
   --card-foreground: rgba(245, 247, 242, 0.94);
-  --popover: #151917;
+  --popover: #161917;
   --popover-foreground: rgba(245, 247, 242, 0.94);
   --primary: #f5f7f2;
-  --primary-foreground: #0e1110;
+  --primary-foreground: #0d0f0e;
   --secondary: rgba(245, 247, 242, 0.09);
   --secondary-foreground: rgba(245, 247, 242, 0.94);
   --muted: rgba(245, 247, 242, 0.065);
@@ -132,27 +127,22 @@
   --tab-warning-tint: rgba(243, 201, 105, 0.16);
   --tab-info: var(--info);
   --tab-info-tint: rgba(134, 199, 232, 0.16);
-  --tab-grid-line: rgba(245, 247, 242, 0.07);
-  --tab-grid-strong: rgba(245, 247, 242, 0.13);
-  --tab-page-wash: radial-gradient(circle at 16% 0%, rgba(245, 247, 242, 0.1), transparent 34%), radial-gradient(circle at 90% 8%, rgba(223, 232, 213, 0.08), transparent 26%);
-  --tab-grid-bg: linear-gradient(var(--tab-grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--tab-grid-line) 1px, transparent 1px);
-  --tab-dot-grid-bg: radial-gradient(var(--tab-grid-strong) 1px, transparent 1px);
-  --tab-glass-bg: rgba(21, 25, 23, 0.78);
+  --tab-glass-bg: var(--card);
   --tab-glass-border: rgba(245, 247, 242, 0.14);
-  --tab-glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  --tab-shadow-soft: 0 20px 70px rgba(0, 0, 0, 0.34);
+  --tab-glass-shadow: none;
+  --tab-shadow-soft: none;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --background: #0e1110;
+    --background: #0d0f0e;
     --foreground: rgba(245, 247, 242, 0.94);
-    --card: #151917;
+    --card: #121513;
     --card-foreground: rgba(245, 247, 242, 0.94);
-    --popover: #151917;
+    --popover: #161917;
     --popover-foreground: rgba(245, 247, 242, 0.94);
     --primary: #f5f7f2;
-    --primary-foreground: #0e1110;
+    --primary-foreground: #0d0f0e;
     --secondary: rgba(245, 247, 242, 0.09);
     --secondary-foreground: rgba(245, 247, 242, 0.94);
     --muted: rgba(245, 247, 242, 0.065);
@@ -178,15 +168,10 @@
     --tab-warning-tint: rgba(243, 201, 105, 0.16);
     --tab-info: var(--info);
     --tab-info-tint: rgba(134, 199, 232, 0.16);
-    --tab-grid-line: rgba(245, 247, 242, 0.07);
-    --tab-grid-strong: rgba(245, 247, 242, 0.13);
-    --tab-page-wash: radial-gradient(circle at 16% 0%, rgba(245, 247, 242, 0.1), transparent 34%), radial-gradient(circle at 90% 8%, rgba(223, 232, 213, 0.08), transparent 26%);
-    --tab-grid-bg: linear-gradient(var(--tab-grid-line) 1px, transparent 1px), linear-gradient(90deg, var(--tab-grid-line) 1px, transparent 1px);
-    --tab-dot-grid-bg: radial-gradient(var(--tab-grid-strong) 1px, transparent 1px);
-    --tab-glass-bg: rgba(21, 25, 23, 0.78);
+    --tab-glass-bg: var(--card);
     --tab-glass-border: rgba(245, 247, 242, 0.14);
-    --tab-glass-shadow: 0 24px 80px rgba(0, 0, 0, 0.36), inset 0 1px 0 rgba(255, 255, 255, 0.06);
-    --tab-shadow-soft: 0 20px 70px rgba(0, 0, 0, 0.34);
+    --tab-glass-shadow: none;
+    --tab-shadow-soft: none;
   }
 }
 
@@ -200,16 +185,94 @@ body {
   min-width: 320px;
   color: var(--foreground);
   background: var(--background);
+  font-kerning: normal;
+  line-height: 1.5;
+}
+
+button:focus-visible:active,
+a:focus-visible:active,
+summary:focus-visible:active {
+  scale: 1;
+}
+
+.tab-disclosure-panel,
+.tab-popover-content,
+.tab-tooltip-content {
+  opacity: 1;
+  transform: translate3d(0, 0, 0) scale(1);
+  transition-property: opacity, transform;
+  transition-timing-function: var(--tab-ease-out);
+}
+
+.tab-disclosure-panel {
+  transform-origin: top right;
+  transition-duration: 160ms;
+}
+
+details:not([open]) > .tab-disclosure-panel {
+  opacity: 0;
+  transform: translate3d(0, -4px, 0) scale(0.98);
+}
+
+.tab-disclosure-chevron {
+  transition: transform 160ms var(--tab-ease-out);
+}
+
+details[open] > summary .tab-disclosure-chevron {
+  transform: rotate(180deg);
+}
+
+.tab-popover-content {
+  transform-origin: var(--radix-dropdown-menu-content-transform-origin);
+  transition-duration: 160ms;
+}
+
+.tab-tooltip-content {
+  transform-origin: var(--radix-tooltip-content-transform-origin);
+  transition-duration: 125ms;
+}
+
+.tab-tooltip-content[data-state="instant-open"] {
+  transition-duration: 0ms;
+}
+
+@starting-style {
+  details[open] > .tab-disclosure-panel {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.98);
+  }
+
+  .tab-popover-content[data-state="open"][data-side="bottom"],
+  .tab-tooltip-content[data-state="delayed-open"][data-side="bottom"] {
+    opacity: 0;
+    transform: translate3d(0, -4px, 0) scale(0.98);
+  }
+
+  .tab-popover-content[data-state="open"][data-side="top"],
+  .tab-tooltip-content[data-state="delayed-open"][data-side="top"] {
+    opacity: 0;
+    transform: translate3d(0, 4px, 0) scale(0.98);
+  }
+
+  .tab-popover-content[data-state="open"][data-side="left"],
+  .tab-tooltip-content[data-state="delayed-open"][data-side="left"] {
+    opacity: 0;
+    transform: translate3d(4px, 0, 0) scale(0.98);
+  }
+
+  .tab-popover-content[data-state="open"][data-side="right"],
+  .tab-tooltip-content[data-state="delayed-open"][data-side="right"] {
+    opacity: 0;
+    transform: translate3d(-4px, 0, 0) scale(0.98);
+  }
 }
 
 .pug-grid-surface {
-  background-image: var(--tab-page-wash), var(--tab-grid-bg);
-  background-size: auto, 32px 32px;
+  background: var(--background);
 }
 
 .pug-dot-grid {
-  background-image: var(--tab-dot-grid-bg);
-  background-size: 18px 18px;
+  background: transparent;
 }
 
 button,
@@ -223,13 +286,6 @@ a:not([class]) {
   color: inherit;
 }
 
-h1,
-h2,
-h3,
-p {
-  margin: 0;
-}
-
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -237,5 +293,18 @@ p {
     transition-duration: 1ms !important;
     animation-duration: 1ms !important;
     animation-iteration-count: 1 !important;
+  }
+
+  button:active,
+  a:active,
+  summary:active {
+    scale: 1 !important;
+  }
+
+  .tab-disclosure-panel,
+  .tab-popover-content,
+  .tab-tooltip-content,
+  .tab-disclosure-chevron {
+    transform: none !important;
   }
 }

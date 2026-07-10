@@ -53,7 +53,7 @@ export function SectionBlock({ className, children, id }: SectionBlockProps) {
     <section
       id={id}
       className={cn(
-        "rounded-[var(--radius-surface)] border border-border bg-card/88 p-5 shadow-[var(--tab-shadow-soft)] backdrop-blur sm:p-6",
+        "border-t border-border bg-transparent py-6 sm:py-8",
         className,
       )}
     >
@@ -77,11 +77,11 @@ export function SurfaceHeader({ eyebrow, title, description, action, className, 
   return (
     <div className={cn("flex items-start justify-between gap-4 max-sm:flex-col", className)}>
       <div className="grid gap-2">
-        {eyebrow ? <p className="text-xs font-bold uppercase tracking-[0.14em] text-muted-foreground">{eyebrow}</p> : null}
-        <Heading className="font-[var(--font-display)] text-2xl font-bold leading-tight tracking-[-0.045em] text-foreground">
+        {eyebrow ? <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">{eyebrow}</p> : null}
+        <Heading className={cn("text-balance font-[var(--font-display)] font-bold leading-tight text-foreground", headingLevel === 1 ? "text-3xl" : "text-2xl")}>
           {title}
         </Heading>
-        {description ? <p className="max-w-2xl text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-[65ch] text-pretty text-base leading-relaxed text-muted-foreground">{description}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -99,10 +99,10 @@ type StatusRowProps = {
 
 export function StatusRow({ label, value, tone = "neutral", description, meta, className }: StatusRowProps) {
   return (
-    <div className={cn("grid gap-3 rounded-[var(--radius-media)] border border-border bg-muted/45 p-4 sm:grid-cols-[1fr_auto] sm:items-center", className)}>
+    <div className={cn("grid gap-3 border-t border-border py-4 sm:grid-cols-[1fr_auto] sm:items-center", className)}>
       <div className="grid gap-1">
-        <p className="text-sm font-bold tracking-[-0.01em] text-foreground">{label}</p>
-        {description ? <p className="text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
+        <p className="text-sm font-semibold text-foreground">{label}</p>
+        {description ? <p className="max-w-[65ch] text-pretty text-base leading-relaxed text-muted-foreground">{description}</p> : null}
         {meta ? <div className="text-xs font-medium text-muted-foreground">{meta}</div> : null}
       </div>
       <Badge variant="outline" className={cn("justify-self-start", toneClasses[tone])}>
@@ -121,10 +121,10 @@ type EmptyStateProps = {
 
 export function EmptyState({ title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn("grid place-items-center rounded-[var(--radius-card)] border border-dashed border-border bg-muted/40 p-8 text-center", className)}>
+    <div className={cn("grid place-items-center border-y border-border py-10 text-center", className)}>
       <div className="grid max-w-sm gap-3">
-        <h3 className="font-[var(--font-display)] text-xl font-bold tracking-[-0.04em] text-foreground">{title}</h3>
-        <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
+        <h3 className="text-balance font-[var(--font-display)] text-xl font-bold text-foreground">{title}</h3>
+        <p className="text-pretty text-base leading-relaxed text-muted-foreground">{description}</p>
         {action ? <div className="justify-self-center text-sm font-bold text-foreground">{action}</div> : null}
       </div>
     </div>
@@ -140,9 +140,9 @@ type CommandBlockProps = {
 
 export function CommandBlock({ command, label = "Command", description, className }: CommandBlockProps) {
   return (
-    <div className={cn("rounded-[var(--radius-card)] border border-border bg-foreground p-4 text-background shadow-[var(--tab-shadow-soft)]", className)}>
-      <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-65">{label}</p>
-      <code className="mt-2 block break-words font-[var(--font-code)] text-sm font-bold">{command}</code>
+    <div className={cn("rounded-[var(--radius-media)] border border-border bg-foreground p-4 text-background", className)}>
+      <p className="text-xs font-semibold uppercase tracking-[0.1em] opacity-65">{label}</p>
+      <code className="mt-2 block break-words font-[var(--font-code)] text-sm font-semibold">{command}</code>
       {description ? <p className="mt-2 text-sm opacity-72">{description}</p> : null}
     </div>
   );
@@ -156,15 +156,15 @@ type SettingsNavProps = {
 
 export function SettingsNav({ items, className, "aria-label": ariaLabel = "Settings navigation" }: SettingsNavProps) {
   return (
-    <nav className={cn("flex flex-wrap gap-2 rounded-[var(--radius-card)] border border-border bg-muted/45 p-2", className)} aria-label={ariaLabel}>
+    <nav className={cn("flex w-full flex-nowrap gap-x-5 overflow-x-auto border-b border-border [scrollbar-width:none] [&::-webkit-scrollbar]:hidden", className)} aria-label={ariaLabel}>
       {items.map((item) => (
         <a
           key={item.href}
           href={item.href}
           aria-current={item.active ? "page" : undefined}
           className={cn(
-            "rounded-[var(--radius-control)] px-3 py-2 text-sm font-bold text-muted-foreground no-underline transition-colors hover:bg-card hover:text-foreground",
-            item.active && "bg-card text-foreground shadow-sm",
+            "shrink-0 whitespace-nowrap border-b-2 border-transparent py-3 text-sm font-semibold text-muted-foreground no-underline transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+            item.active && "border-foreground text-foreground",
           )}
         >
           {item.label}
@@ -184,7 +184,7 @@ export function SettingsRow({ label, description, className, children }: Setting
   return (
     <div className={cn("grid gap-3 border-b border-border py-4 last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center", className)}>
       <div className="grid gap-1">
-        <p className="text-sm font-bold tracking-[-0.01em] text-foreground">{label}</p>
+        <p className="text-sm font-semibold text-foreground">{label}</p>
         {description ? <p className="text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
       </div>
       {children ? <div className="text-sm font-medium text-foreground">{children}</div> : null}

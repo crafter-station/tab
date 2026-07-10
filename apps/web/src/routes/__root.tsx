@@ -9,32 +9,32 @@ function RootComponent() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#f7f5f0" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#111111" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#f5f4f0" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#0d0f0e" media="(prefers-color-scheme: dark)" />
         <HeadContent />
       </head>
-      <body>
+      <body className="tab-web">
         <ThemeProvider defaultTheme="system">
-          <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[var(--radius-control)] focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-bold focus:text-foreground focus:shadow-[var(--tab-shadow-soft)]" href="#main-content">Skip to main content</a>
-          <div className="pug-grid-surface min-h-dvh">
-            <div className="mx-auto max-w-6xl border-x border-border/70 bg-background/82 p-5 backdrop-blur-sm">
-              <header className="flex items-center justify-between gap-4 max-md:flex-col max-md:items-start">
-                <a className="text-xl font-black tracking-[-0.04em] no-underline" href="/">
+          <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[var(--radius-control)] focus:border focus:border-border focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground" href="#main-content">Skip to main content</a>
+          <div className="min-h-dvh">
+            <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-5 sm:px-8">
+              <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-4 sm:py-5">
+                <a className="font-[var(--font-display)] text-xl font-bold tracking-[-0.03em] no-underline" href="/">
                   Tab
                 </a>
-                <nav className="flex flex-wrap items-center gap-3 font-bold">
-                  <a className="no-underline" href="/pricing">Pricing</a>
-                  <a className="no-underline" href="/download">Download</a>
+                <nav className="flex flex-wrap items-center justify-end gap-2 text-sm font-semibold sm:gap-3">
+                   <a className="rounded-[var(--radius-control)] px-1.5 py-2 no-underline text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/pricing">Pricing</a>
+                   <a className="rounded-[var(--radius-control)] px-1.5 py-2 no-underline text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/download">Download</a>
                   <ThemeModeToggle />
                   <Button asChild variant="secondary">
                     <a href="/login">Sign in</a>
                   </Button>
                 </nav>
               </header>
-              <main id="main-content" className="py-12">
+              <main id="main-content" className="flex-1 py-8 sm:py-12">
                 <Outlet />
               </main>
-              <footer className="flex items-center justify-between gap-4 border-t py-6 text-muted-foreground max-md:flex-col max-md:items-start">
+              <footer className="flex items-center justify-between gap-4 border-t py-6 text-sm text-muted-foreground max-md:flex-col max-md:items-start">
                 <span>Tab, native autocomplete for macOS.</span>
                 <span>You choose when to add suggestions, and you control saved memories.</span>
               </footer>

@@ -1,5 +1,5 @@
 import { createRoute, useSearch } from "@tanstack/react-router";
-import { SignupPage } from "../components/web-pages.tsx";
+import { SignupPage } from "../components/pages/auth.tsx";
 import { rootRoute } from "./__root.tsx";
 
 function SignupRouteComponent() {

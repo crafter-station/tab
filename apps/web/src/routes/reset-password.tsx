@@ -1,5 +1,5 @@
 import { createRoute, useSearch } from "@tanstack/react-router";
-import { ResetPasswordPage } from "../components/web-pages.tsx";
+import { ResetPasswordPage } from "../components/pages/auth.tsx";
 import { rootRoute } from "./__root.tsx";
 
 function ResetPasswordRouteComponent() {

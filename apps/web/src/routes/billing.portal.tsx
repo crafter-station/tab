@@ -1,5 +1,5 @@
 import { createRoute } from "@tanstack/react-router";
-import { MessagePage } from "../components/web-pages.tsx";
+import { MessagePage } from "../components/pages/shared.tsx";
 import { rootRoute } from "./__root.tsx";
 
 function PortalPage() {
