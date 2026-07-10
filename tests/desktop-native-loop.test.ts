@@ -387,6 +387,27 @@ describe("desktop native suggestion loop", () => {
       expect(events[2].payload).toEqual({ id: "cloud-thank", text: " you very much" });
     });
 
+    it("shares active work between duplicate explicit requests for unchanged context", async () => {
+      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
+      let calls = 0;
+      const { deps } = makeDeps({
+        requestSuggestion: () => {
+          calls += 1;
+          return new Promise((resolve) => {
+            resolves.push(resolve);
+          });
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      const firstRequest = loop.requestCloudSuggestionNow();
+      const secondRequest = loop.requestCloudSuggestionNow();
+
+      expect(calls).toBe(1);
+      resolves[0]?.(null);
+      expect(await Promise.all([firstRequest, secondRequest])).toEqual([undefined, undefined]);
+    });
+
     it("cancels stale debounced requests when context changes", async () => {
       const { events, deps } = makeDeps();
       let context = "hello";
@@ -781,7 +802,7 @@ describe("desktop native suggestion loop", () => {
       }
     });
 
-    it("does not start a duplicate explicit request for unchanged context", async () => {
+    it("suppresses an automatic request while explicit work owns unchanged context", async () => {
       const resolves: Array<(suggestion: Suggestion | null) => void> = [];
       let calls = 0;
       const { deps } = makeDeps({
@@ -814,6 +835,29 @@ describe("desktop native suggestion loop", () => {
       const loop = createSuggestionLoop(deps);
 
       await expect(loop.requestCloudSuggestionNow()).rejects.toThrow("source failed");
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(calls).toBe(2);
+    });
+
+    it("retries unchanged debounced context after a source rejection", async () => {
+      let calls = 0;
+      const { deps } = makeDeps({
+        requestSuggestion: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("source failed");
+          return null;
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(calls).toBe(1);
+      expect(loop.getState().status).toBe("idle");
+
       loop.onContextChanged();
       await wait(10);
 
