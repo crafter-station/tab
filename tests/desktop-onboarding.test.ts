@@ -57,9 +57,9 @@ describe("desktop onboarding", () => {
   });
 
   it("defines the first-run onboarding steps in order", () => {
-    expect(ONBOARDING_STEPS).toEqual(["sign-in", "permissions", "how-it-works", "practice", "done"]);
-    expect(ONBOARDING_STEP_COPY["sign-in"].title.toLowerCase()).toContain("sign in");
-    expect(ONBOARDING_STEP_COPY.practice.subtitle.toLowerCase()).toContain("sample");
+    expect(ONBOARDING_STEPS).toEqual(["try", "permissions", "done"]);
+    expect(ONBOARDING_STEP_COPY.try.title.toLowerCase()).toContain("try");
+    expect(ONBOARDING_STEP_COPY.try.subtitle.toLowerCase()).toContain("sample");
   });
 
   it("explains Accessibility and Input Monitoring permissions in product language", () => {

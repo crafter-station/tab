@@ -12,7 +12,8 @@ describe("desktop renderer setup surfaces", () => {
     expect(signInSource).toInclude("Privacy scope");
     expect(signInSource).toInclude("Practice suggestion");
     expect(signInSource).toInclude("pug-dot-grid");
-    expect(onboardingSource).toInclude("Sign in from your browser");
+    expect(onboardingSource).toInclude("Try Tab before it appears in other apps");
+    expect(onboardingSource).toInclude("I enabled Input Monitoring");
   });
 
   it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {

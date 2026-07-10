@@ -1,71 +1,101 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, PermissionCard, SectionCard, StatusBadge, Textarea } from "@tab/ui";
-import type { DesktopStatus } from "../../../main/status";
+import { Button, Textarea } from "@tab/ui";
 import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
+import { ONBOARDING_STEPS, type OnboardingStep } from "../../../main/onboarding";
 
-type OnboardingStep = "sign-in" | "permissions" | "how-it-works" | "practice" | "done";
+type Feedback = {
+  message: string;
+  tone: "info" | "success" | "warning";
+};
 
-const STEPS: OnboardingStep[] = ["sign-in", "permissions", "how-it-works", "practice", "done"];
+type PermissionState = "complete" | "current" | "upcoming";
+
+const STEP_META: Record<OnboardingStep, { label: string; description: string }> = {
+  try: {
+    label: "Try Tab",
+    description: "See how suggestions feel.",
+  },
+  permissions: {
+    label: "Allow access",
+    description: "Enable two macOS permissions.",
+  },
+  done: {
+    label: "Start writing",
+    description: "Apply access and finish.",
+  },
+};
+
+const INITIAL_DRAFT = "Hi Jordan, quick update on the launch plan:";
 const SAMPLE_SUGGESTIONS = [
-  "Thanks for the update - I can take a look this afternoon and follow up with next steps.",
-  "That works for me. I will send the details once I confirm the timing.",
-  "I appreciate the context. Let me review this and get back to you shortly.",
+  "I can review the final details this afternoon and send next steps.",
+  "Everything is on track for Friday. I will share the final checklist shortly.",
+  "The team has what it needs, and I will follow up after the last review.",
 ];
 
-function createFallbackStatus(): DesktopStatus {
-  return {
-    auth: "sign_in_required",
-    connectivity: "online",
-    userId: null,
-    quota: null,
-    overlay: "hidden",
-    lastUpdatedAt: null,
-  };
+function CheckIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 16 16">
+      <path d="m3.25 8.25 3 3 6.5-6.5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" />
+    </svg>
+  );
 }
 
-function formatAuth(auth: DesktopStatus["auth"]) {
-  return auth.replace(/_/g, " ");
+function LockIcon({ className }: { className?: string }) {
+  return (
+    <svg aria-hidden="true" className={className} fill="none" viewBox="0 0 16 16">
+      <rect height="7.5" rx="2" stroke="currentColor" strokeWidth="1.4" width="10.5" x="2.75" y="6.5" />
+      <path d="M5.25 6.5V4.75a2.75 2.75 0 0 1 5.5 0V6.5" stroke="currentColor" strokeLinecap="round" strokeWidth="1.4" />
+    </svg>
+  );
 }
 
-function getPrimaryLabel(
-  step: OnboardingStep,
-  signedIn: boolean,
-  accessibilityGranted: boolean,
-  inputMonitoringOpened: boolean,
-) {
-  switch (step) {
-    case "sign-in":
-      return signedIn ? "Continue" : "Sign in";
-    case "permissions":
-      if (!accessibilityGranted) return "Open Accessibility Settings";
-      if (!inputMonitoringOpened) return "Open Input Monitoring Settings";
-      return "Continue";
-    case "how-it-works":
-      return "Practice suggestions";
-    case "practice":
-      return "Finish practice";
-    case "done":
-      return "Open Tab";
-  }
+function PermissionRow({
+  description,
+  index,
+  note,
+  state,
+  status,
+  title,
+}: {
+  description: string;
+  index: number;
+  note?: string;
+  state: PermissionState;
+  status: string;
+  title: string;
+}) {
+  return (
+    <article className="permission-row" data-state={state}>
+      <div className="permission-row__marker" aria-hidden="true">
+        {state === "complete" ? <CheckIcon /> : index}
+      </div>
+      <div className="permission-row__content">
+        <div className="permission-row__title">
+          <h2>{title}</h2>
+          <span>{status}</span>
+        </div>
+        <p>{description}</p>
+        {note ? <p className="permission-row__note">{note}</p> : null}
+      </div>
+    </article>
+  );
 }
 
 export function OnboardingSurface() {
-  const [step, setStep] = useState<OnboardingStep>("sign-in");
-  const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
+  const [step, setStep] = useState<OnboardingStep>("try");
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [inputMonitoringOpened, setInputMonitoringOpened] = useState(false);
+  const [inputMonitoringConfirmed, setInputMonitoringConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [statusMessage, setStatusMessage] = useState<string | null>(null);
-  const [practiceText, setPracticeText] = useState("Hi Jordan, quick update on the launch plan:");
+  const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [practiceText, setPracticeText] = useState(INITIAL_DRAFT);
   const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const [suggestionVisible, setSuggestionVisible] = useState(true);
   const [acceptedPractice, setAcceptedPractice] = useState(false);
-  const [dismissedPractice, setDismissedPractice] = useState(false);
   const pollRef = useRef<number | null>(null);
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null);
+  const initialStepRef = useRef(true);
 
-  const currentStepIndex = STEPS.indexOf(step);
-  const signedIn = status.auth === "signed_in";
-  const practiceComplete = acceptedPractice && dismissedPractice;
+  const currentStepIndex = ONBOARDING_STEPS.indexOf(step);
 
   const stopAccessibilityPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -74,64 +104,66 @@ export function OnboardingSurface() {
     }
   }, []);
 
-  const setAccessibilityState = useCallback(
-    (granted: boolean) => {
-      setAccessibilityGranted(granted);
-      if (granted) {
-        setStatusMessage("Accessibility is enabled. Next, add Tab to Input Monitoring.");
-        stopAccessibilityPolling();
-      }
-    },
-    [stopAccessibilityPolling],
-  );
-
   const refreshAccessibilityStatus = useCallback(async () => {
     if (!window.tab?.checkAccessibilityPermission) {
-      setAccessibilityState(false);
+      setAccessibilityGranted(false);
       return false;
     }
 
     const granted = Boolean(await window.tab.checkAccessibilityPermission());
-    setAccessibilityState(granted);
+    if (granted && !accessibilityGranted && step === "permissions") {
+      setFeedback({
+        message: "Accessibility is enabled. Next, open Input Monitoring.",
+        tone: "success",
+      });
+    }
+    setAccessibilityGranted(granted);
+    if (granted) stopAccessibilityPolling();
     return granted;
-  }, [setAccessibilityState]);
+  }, [accessibilityGranted, step, stopAccessibilityPolling]);
 
   const startAccessibilityPolling = useCallback(() => {
     stopAccessibilityPolling();
     pollRef.current = window.setInterval(() => {
       refreshAccessibilityStatus().catch(() => {});
-    }, 1500);
+    }, 1200);
   }, [refreshAccessibilityStatus, stopAccessibilityPolling]);
 
   useEffect(() => {
-    if (!window.tab) return;
-
-    window.tab.onStatusChanged((nextStatus) => setStatus(nextStatus));
-    window.tab
-      .getInitialState()
-      .then((initialState) => setStatus(initialState.status))
-      .catch(() => {});
-  }, []);
-
-  useEffect(() => {
-    refreshAccessibilityStatus().catch(() => {
-      setAccessibilityGranted(false);
-    });
-
+    refreshAccessibilityStatus().catch(() => setAccessibilityGranted(false));
     return stopAccessibilityPolling;
   }, [refreshAccessibilityStatus, stopAccessibilityPolling]);
 
+  useEffect(() => {
+    if (initialStepRef.current) {
+      initialStepRef.current = false;
+      return;
+    }
+
+    const frame = window.requestAnimationFrame(() => stepHeadingRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [step]);
+
   async function openAccessibility() {
     setBusy(true);
+    setFeedback(null);
     try {
       const alreadyGranted = Boolean(await window.tab?.openAccessibilitySettings?.());
-      setAccessibilityState(alreadyGranted);
-      if (!alreadyGranted) {
-        setStatusMessage(
-          "System Settings opened to Accessibility. Turn on Tab; this window will continue once macOS reports it is enabled.",
-        );
+      setAccessibilityGranted(alreadyGranted);
+      if (alreadyGranted) {
+        setFeedback({ message: "Accessibility is already enabled.", tone: "success" });
+      } else {
+        setFeedback({
+          message: "Turn on Tab in Accessibility. This window will update automatically.",
+          tone: "info",
+        });
         startAccessibilityPolling();
       }
+    } catch {
+      setFeedback({
+        message: "System Settings did not open. Open Privacy & Security, then Accessibility, and turn on Tab.",
+        tone: "warning",
+      });
     } finally {
       setBusy(false);
     }
@@ -139,40 +171,59 @@ export function OnboardingSurface() {
 
   async function openInputMonitoring() {
     setBusy(true);
+    setFeedback(null);
     try {
       await window.tab?.openInputMonitoringSettings?.();
       await window.tab?.revealAppInFinder?.();
       setInputMonitoringOpened(true);
-      setStatusMessage(
-        "System Settings opened to Input Monitoring. Enable Tab there, then relaunch Tab if macOS does not reopen it.",
-      );
+      setFeedback({
+        message: "Turn on Tab in Input Monitoring, then return here and confirm below.",
+        tone: "info",
+      });
+    } catch {
+      setFeedback({
+        message: "System Settings did not open. Open Privacy & Security, then Input Monitoring, and turn on Tab.",
+        tone: "warning",
+      });
     } finally {
       setBusy(false);
     }
   }
 
   function goNext() {
-    const nextStep = STEPS[currentStepIndex + 1];
+    const nextStep = ONBOARDING_STEPS[currentStepIndex + 1];
     if (nextStep) {
-      setStatusMessage(null);
+      setFeedback(null);
       setStep(nextStep);
     }
   }
 
   function goBack() {
-    const previousStep = STEPS[currentStepIndex - 1];
+    const previousStep = ONBOARDING_STEPS[currentStepIndex - 1];
     if (previousStep) {
-      setStatusMessage(null);
+      setFeedback(null);
       setStep(previousStep);
     }
   }
 
+  function acceptPracticeSuggestion() {
+    if (acceptedPractice) return;
+    setPracticeText((value) => `${value.trimEnd()} ${SAMPLE_SUGGESTIONS[suggestionIndex]}`);
+    setAcceptedPractice(true);
+  }
+
+  function resetPractice() {
+    setSuggestionIndex((index) => (index + 1) % SAMPLE_SUGGESTIONS.length);
+    setPracticeText(INITIAL_DRAFT);
+    setAcceptedPractice(false);
+    setFeedback(null);
+  }
+
   async function handlePrimaryAction() {
     switch (step) {
-      case "sign-in":
-        if (!signedIn) {
-          window.tab?.signIn?.();
-          setStatusMessage("Complete sign-in in your browser, then return here.");
+      case "try":
+        if (!acceptedPractice) {
+          acceptPracticeSuggestion();
           return;
         }
         goNext();
@@ -187,243 +238,281 @@ export function OnboardingSurface() {
           await openInputMonitoring();
           return;
         }
-        goNext();
-        return;
-
-      case "how-it-works":
-        goNext();
-        return;
-
-      case "practice":
-        if (practiceComplete) {
-          goNext();
-        } else {
-          setStatusMessage("Accept and dismiss the sample suggestion once, or use Finish anyway.");
+        if (!inputMonitoringConfirmed) {
+          setInputMonitoringConfirmed(true);
         }
+        goNext();
         return;
 
       case "done":
-        window.tab?.completeOnboarding?.();
+        window.tab?.completeOnboardingAndRelaunch?.();
     }
   }
 
-  function approveSuggestion() {
-    if (!suggestionVisible) return;
-    setPracticeText((value) => `${value} ${SAMPLE_SUGGESTIONS[suggestionIndex]}`);
-    setAcceptedPractice(true);
-    setSuggestionVisible(false);
-    setStatusMessage("Accepted. This is what Option+Tab or clicking a suggestion does in the real overlay.");
+  function getPrimaryLabel() {
+    if (busy) return "Opening System Settings...";
+    if (step === "try") return acceptedPractice ? "Continue to permissions" : "Accept sample suggestion";
+    if (step === "done") return "Relaunch Tab";
+    if (!accessibilityGranted) return "Open Accessibility Settings";
+    if (!inputMonitoringOpened) return "Open Input Monitoring";
+    if (!inputMonitoringConfirmed) return "I enabled Input Monitoring";
+    return "Continue";
   }
-
-  function rejectSuggestion() {
-    setDismissedPractice(true);
-    setSuggestionVisible(false);
-    setSuggestionIndex((index) => (index + 1) % SAMPLE_SUGGESTIONS.length);
-    setStatusMessage("Dismissed. In normal use, you can ignore stale suggestions or keep typing.");
-  }
-
-  function tryAgain() {
-    setSuggestionIndex((index) => (index + 1) % SAMPLE_SUGGESTIONS.length);
-    setSuggestionVisible(true);
-    setStatusMessage(null);
-  }
-
-  const primaryLabel = getPrimaryLabel(step, signedIn, accessibilityGranted, inputMonitoringOpened);
 
   return (
-    <main className="onboarding-shell">
-      <SectionCard className="onboarding-card">
-        <div className="onboarding-card__chrome drag-region" aria-hidden="true" />
-        <header className="onboarding-header drag-region">
-          <div>
-            <p className="eyebrow">Welcome to Tab</p>
-             <h1>Set up autocomplete for your Mac.</h1>
+    <main className="onboarding-shell" aria-busy={busy}>
+      <aside className="onboarding-sidebar drag-region">
+        <div className="onboarding-sidebar__chrome" aria-hidden="true" />
+        <div className="onboarding-brand">
+          <div className="onboarding-brand__mark" aria-hidden="true">
+            T
           </div>
-          <Button className="no-drag" onClick={() => window.tab?.skipOnboarding?.()} variant="ghost">
-            Skip setup
-          </Button>
-        </header>
-
-        <div className="onboarding-progress" aria-label="Setup progress">
-          {STEPS.map((item, index) => (
-            <span data-active={index <= currentStepIndex} key={item} />
-          ))}
+          <div>
+            <strong>Tab</strong>
+            <span>Setup for this Mac</span>
+          </div>
         </div>
 
-        <section className="onboarding-step no-drag">
-          {step === "sign-in" ? (
-            <>
-              <div className="onboarding-hero">
-                <h2>Sign in to connect this Mac.</h2>
-                <p className="lede">
-                  Tab connects this Mac to your account before requesting suggestions. After sign-in, you will return here
-                  to review permissions.
-                </p>
-              </div>
-              <div className="status-card">
-                <div>
-                  <strong>Account status</strong>
-                  <span>{signedIn ? "Ready to continue" : "Sign in from your browser"}</span>
-                </div>
-                <StatusBadge tone={signedIn ? "ok" : "warning"}>{formatAuth(status.auth)}</StatusBadge>
-              </div>
-            </>
-          ) : null}
+        <nav className="onboarding-progress" aria-label="Setup progress">
+          <ol>
+            {ONBOARDING_STEPS.map((item, index) => {
+              const itemState = index < currentStepIndex ? "complete" : index === currentStepIndex ? "current" : "upcoming";
+              return (
+                <li aria-current={item === step ? "step" : undefined} data-state={itemState} key={item}>
+                  <span className="onboarding-progress__marker" aria-hidden="true">
+                    {itemState === "complete" ? <CheckIcon /> : index + 1}
+                  </span>
+                  <span className="onboarding-progress__copy">
+                    <strong>{STEP_META[item].label}</strong>
+                    <small>{STEP_META[item].description}</small>
+                  </span>
+                </li>
+              );
+            })}
+          </ol>
+        </nav>
 
-          {step === "permissions" ? (
-            <>
-              <div className="onboarding-hero">
-                <h2>Two permissions, no screen or file access.</h2>
-                <p className="lede">
-                  Accessibility lets Tab read the text field you are using and add suggestions you accept. Input Monitoring
-                  helps Tab notice typing and make Option+Tab work.
-                </p>
-              </div>
-              <div className="onboarding-permissions">
-                <PermissionCard
-                  title="Accessibility"
-                  description="Lets Tab read the text field you are using, avoid sensitive fields, and add suggestions you accept."
-                  status={accessibilityGranted ? "Enabled" : "Needs access"}
-                  state={accessibilityGranted ? "granted" : "pending"}
-                />
-                <PermissionCard
-                  title="Input Monitoring"
-                  description="Lets Tab notice typing activity and make Option+Tab work when you accept a suggestion."
-                  status={inputMonitoringOpened ? "Confirm in System Settings" : "Relaunch may be required"}
-                  state={inputMonitoringOpened ? "pending" : "manual"}
-                />
-              </div>
-              <div className="privacy-card">
-                <strong>Privacy scope</strong>
-                <span>
-                  Recent typing is used to make suggestions. Saved memories stay visible and controlled by you. Tab does
-                  not request Screen Recording or Full Disk Access.
-                </span>
-                <span>{APP_CONTEXT_TRUST_COPY.summary}</span>
-              </div>
-            </>
-          ) : null}
+        <div className="onboarding-sidebar__footer no-drag">
+          <div className="onboarding-trust-note">
+            <LockIcon />
+            <div>
+              <strong>No screen or file access</strong>
+              <span>Tab asks only for what autocomplete needs.</span>
+            </div>
+          </div>
+          <Button className="onboarding-later" onClick={() => window.tab?.skipOnboarding?.()} variant="ghost">
+            Set up later
+          </Button>
+          <span className="onboarding-later__hint">Finish anytime from Settings.</span>
+        </div>
+      </aside>
 
-          {step === "how-it-works" ? (
-            <>
-              <div className="onboarding-hero">
-                <h2>How Tab suggestions work.</h2>
-                <p className="lede">
-                  Tab looks at your recent typing, asks for a helpful continuation, and shows it near the bottom of your screen.
-                </p>
-              </div>
-              <div className="tutorial-grid">
-                <div className="tutorial-panel">
-                  <strong>Accept</strong>
-                  <span>Press Option+Tab or click the suggestion to add it to the app you were using.</span>
-                </div>
-                <div className="tutorial-panel">
-                  <strong>Dismiss</strong>
-                  <span>Ignore it, press Escape when available, or keep typing so the suggestion becomes stale.</span>
-                </div>
-                <div className="tutorial-panel">
-                  <strong>Stay focused</strong>
-                  <span>The real suggestion overlay remains separate from this onboarding window.</span>
-                </div>
-                <div className="tutorial-panel">
-                  <strong>Trust controls</strong>
-                  <span>{APP_CONTEXT_TRUST_COPY.clearingScope}</span>
-                </div>
-              </div>
-            </>
-          ) : null}
+      <section className="onboarding-main">
+        <div className="onboarding-main__drag drag-region" aria-hidden="true" />
+        <div className="onboarding-content no-drag">
+          <p className="onboarding-step-count">
+            Step {currentStepIndex + 1} of {ONBOARDING_STEPS.length}
+          </p>
 
-          {step === "practice" ? (
-            <>
-              <div className="onboarding-hero">
-                <h2>Practice with a sample suggestion.</h2>
-                <p className="lede">This practice step does not contact the suggestion service or type into another app.</p>
-              </div>
-              <Textarea
-                className="practice-input"
-                onChange={(event) => setPracticeText(event.target.value)}
-                rows={4}
-                value={practiceText}
-              />
-              {suggestionVisible ? (
-                <div className="practice-suggestion">
+          <section className="onboarding-step" key={step} aria-labelledby="onboarding-step-title">
+            {step === "try" ? (
+              <>
+                <header className="onboarding-hero">
+                  <p className="eyebrow">Private autocomplete</p>
+                  <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                    Try Tab before it appears in other apps.
+                  </h1>
+                  <p className="lede">
+                    Tab offers a short continuation from the text you are writing. Nothing is added until you accept it.
+                  </p>
+                </header>
+
+                <div className="practice-demo">
+                  <div className="practice-demo__header">
+                    <span>Interactive preview</span>
+                    <span>Runs locally</span>
+                  </div>
+                  <div className="practice-demo__body">
+                    <label htmlFor="practice-draft">Your draft</label>
+                    <Textarea
+                      className="practice-input"
+                      id="practice-draft"
+                      onChange={(event) => {
+                        setPracticeText(event.target.value);
+                        if (acceptedPractice) setAcceptedPractice(false);
+                      }}
+                      rows={4}
+                      value={practiceText}
+                    />
+
+                    {acceptedPractice ? (
+                      <div className="practice-result">
+                        <div className="practice-result__icon">
+                          <CheckIcon />
+                        </div>
+                        <div>
+                          <strong>Suggestion added</strong>
+                          <span>That is exactly how Tab accepts a continuation in another app.</span>
+                        </div>
+                        <Button onClick={resetPractice} size="sm" variant="ghost">
+                          Try another
+                        </Button>
+                      </div>
+                    ) : (
+                      <button className="practice-suggestion" onClick={acceptPracticeSuggestion} type="button">
+                        <span className="practice-suggestion__mark" aria-hidden="true">
+                          T
+                        </span>
+                        <span>{SAMPLE_SUGGESTIONS[suggestionIndex]}</span>
+                        <kbd>Option + Tab</kbd>
+                      </button>
+                    )}
+
+                    <p className="practice-demo__hint">
+                      Click the suggestion here. In other apps, press Option + Tab. Ignore a suggestion and it disappears as you keep typing.
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
+            {step === "permissions" ? (
+              <>
+                <header className="onboarding-hero">
+                  <p className="eyebrow">macOS permissions</p>
+                  <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                    Allow Tab to work in your apps.
+                  </h1>
+                  <p className="lede">
+                    Enable these in order. Tab uses them to understand the active text field and insert only suggestions you accept.
+                  </p>
+                </header>
+
+                <div className="permission-list">
+                  <PermissionRow
+                    description="Lets Tab read the text field you are using and add an accepted suggestion."
+                    index={1}
+                    note={
+                      accessibilityGranted
+                        ? undefined
+                        : "Turn on Tab in the Accessibility list. This window checks the result automatically."
+                    }
+                    state={accessibilityGranted ? "complete" : "current"}
+                    status={accessibilityGranted ? "Enabled" : "Not enabled"}
+                    title="Accessibility"
+                  />
+                  <PermissionRow
+                    description="Lets Tab notice typing and recognize the Option + Tab shortcut."
+                    index={2}
+                    note={
+                      inputMonitoringOpened
+                        ? "Turn on Tab in System Settings, then return here and confirm with the button below."
+                        : accessibilityGranted
+                          ? "System Settings and Finder will open so you can locate Tab if macOS does not list it."
+                          : undefined
+                    }
+                    state={inputMonitoringConfirmed ? "complete" : accessibilityGranted ? "current" : "upcoming"}
+                    status={
+                      inputMonitoringConfirmed
+                        ? "Enabled"
+                        : inputMonitoringOpened
+                          ? "Finish in Settings"
+                          : accessibilityGranted
+                            ? "Next"
+                            : "Waiting"
+                    }
+                    title="Input Monitoring"
+                  />
+                </div>
+
+                <details className="onboarding-privacy">
+                  <summary>
+                    <LockIcon />
+                    <span>
+                      <strong>No Screen Recording or Full Disk Access</strong>
+                      <small>Review exactly what Tab can use.</small>
+                    </span>
+                    <span className="onboarding-privacy__chevron" aria-hidden="true" />
+                  </summary>
+                  <div className="onboarding-privacy__panel">
+                    <p>
+                      Recent typing is used to make suggestions. Saved memories remain visible and controlled by you.
+                    </p>
+                    <p>{APP_CONTEXT_TRUST_COPY.summary}</p>
+                  </div>
+                </details>
+
+                {import.meta.env.DEV ? (
+                  <details className="dev-note">
+                    <summary>Running from source?</summary>
+                    <p>
+                      macOS permissions belong to the exact app bundle. If Tab is not listed, run <code>bun run desktop:permissions</code> and enable the packaged app.
+                    </p>
+                  </details>
+                ) : null}
+              </>
+            ) : null}
+
+            {step === "done" ? (
+              <div className="onboarding-ready">
+                <div className="onboarding-ready__mark" aria-hidden="true">
+                  <CheckIcon />
+                </div>
+                <header className="onboarding-hero">
+                  <p className="eyebrow">All set</p>
+                  <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                    You are ready to write with Tab.
+                  </h1>
+                  <p className="lede">
+                    Relaunch once so macOS applies Input Monitoring. After that, Tab runs quietly from your menu bar.
+                  </p>
+                </header>
+
+                <div className="ready-list">
                   <div>
-                    <span>Suggested completion</span>
-                    <strong>{SAMPLE_SUGGESTIONS[suggestionIndex]}</strong>
+                    <span>01</span>
+                    <p>
+                      <strong>Type naturally</strong>
+                      <small>Suggestions appear only when Tab has a useful continuation.</small>
+                    </p>
                   </div>
-                  <div className="practice-suggestion__actions">
-                    <Button onClick={approveSuggestion}>Accept</Button>
-                    <Button onClick={rejectSuggestion} variant="secondary">
-                      Dismiss
-                    </Button>
+                  <div>
+                    <span>02</span>
+                    <p>
+                      <strong>Accept with Option + Tab</strong>
+                      <small>The suggestion is inserted into the app you are already using.</small>
+                    </p>
+                  </div>
+                  <div>
+                    <span>03</span>
+                    <p>
+                      <strong>Stay in control</strong>
+                      <small>Pause suggestions or review memories anytime in Settings.</small>
+                    </p>
                   </div>
                 </div>
-              ) : (
-                <Button onClick={tryAgain} variant="secondary">
-                  Try another suggestion
-                </Button>
-              )}
-              <div className="practice-checks">
-                <StatusBadge tone={acceptedPractice ? "ok" : "muted"}>Accept practiced</StatusBadge>
-                <StatusBadge tone={dismissedPractice ? "ok" : "muted"}>Dismiss practiced</StatusBadge>
               </div>
-            </>
-          ) : null}
+            ) : null}
+          </section>
 
-          {step === "done" ? (
-            <>
-              <div className="onboarding-hero">
-                <h2>Tab is ready.</h2>
-                <p className="lede">
-                  Finish setup to open Tab. You can revisit account, permissions, pause, and memory controls in Settings.
-                </p>
-              </div>
-              <div className="privacy-card">
-                <strong>Running in the background</strong>
-                <span>Tab keeps the overlay hidden until there is a suggestion to show.</span>
-              </div>
-            </>
-          ) : null}
-        </section>
-
-        {statusMessage ? <div className="onboarding-status no-drag">{statusMessage}</div> : null}
-
-        {step === "permissions" ? (
-          <details className="dev-note no-drag">
-            <summary>Developer note</summary>
-            <p>
-              macOS permission entries are tied to the exact app bundle. If Tab is not listed while running from source,
-              use <code>bun run desktop:permissions</code> and enable the packaged Tab app.
-            </p>
-          </details>
-        ) : null}
+          <div className="onboarding-feedback" data-tone={feedback?.tone ?? "info"} data-visible={Boolean(feedback)} role="status" aria-live="polite">
+            {feedback ? <span>{feedback.message}</span> : null}
+          </div>
+        </div>
 
         <footer className="onboarding-actions no-drag">
-          {step !== "sign-in" ? (
-            <Button disabled={busy || currentStepIndex === 0} onClick={goBack} variant="secondary">
-              Back
-            </Button>
-          ) : null}
-          <Button className={step === "sign-in" ? "col-span-full" : undefined} disabled={busy} onClick={handlePrimaryAction}>
-            {primaryLabel}
+          <div>
+            {currentStepIndex > 0 ? (
+              <Button disabled={busy} onClick={goBack} variant="secondary">
+                Back
+              </Button>
+            ) : null}
+          </div>
+          <Button className="onboarding-primary" disabled={busy} onClick={handlePrimaryAction} size="lg">
+            {getPrimaryLabel()}
           </Button>
-          {step === "permissions" ? (
-            <Button disabled={busy} onClick={() => refreshAccessibilityStatus().catch(() => {})} variant="secondary">
-              Refresh Permission Status
-            </Button>
-          ) : null}
-          {step === "permissions" && inputMonitoringOpened ? (
-            <Button disabled={busy} onClick={() => window.tab?.relaunchForPermissions?.()} variant="ghost">
-              Relaunch Tab
-            </Button>
-          ) : null}
-          {step === "practice" && !practiceComplete ? (
-            <Button disabled={busy} onClick={goNext} variant="ghost">
-              Finish anyway
-            </Button>
-          ) : null}
         </footer>
-      </SectionCard>
+      </section>
     </main>
   );
 }

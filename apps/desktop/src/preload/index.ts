@@ -42,6 +42,7 @@ export type TabPreloadApi = {
   revealAppInFinder: () => Promise<void>;
   relaunchForPermissions: () => Promise<void>;
   completeOnboarding: () => void;
+  completeOnboardingAndRelaunch: () => void;
   skipOnboarding: () => void;
 
   // Settings / status
@@ -87,6 +88,9 @@ contextBridge.exposeInMainWorld("tab", {
   relaunchForPermissions: () => ipcRenderer.invoke("relaunch-for-permissions"),
   completeOnboarding: () => {
     ipcRenderer.send("complete-onboarding");
+  },
+  completeOnboardingAndRelaunch: () => {
+    ipcRenderer.send("complete-onboarding-and-relaunch");
   },
   skipOnboarding: () => {
     ipcRenderer.send("complete-onboarding");

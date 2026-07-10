@@ -858,10 +858,15 @@ async function bootstrap(): Promise<void> {
     settingsWindowManager.show();
   });
 
+  ipcMain.on("complete-onboarding-and-relaunch", () => {
+    onboardingManager.completeOnboarding();
+    relaunchAfterPermissionQuit = true;
+    app.quit();
+  });
+
   ipcMain.handle("open-accessibility-settings", async () => {
     if (process.platform !== "darwin") return false;
 
-    relaunchAfterPermissionQuit = true;
     const trusted = systemPreferences.isTrustedAccessibilityClient(true);
     if (!trusted) {
       await shell.openExternal(MACOS_PERMISSION_SETTINGS_URLS.accessibility);
@@ -876,7 +881,6 @@ async function bootstrap(): Promise<void> {
 
   ipcMain.handle("open-input-monitoring-settings", async () => {
     if (process.platform === "darwin") {
-      relaunchAfterPermissionQuit = true;
       await shell.openExternal(MACOS_PERMISSION_SETTINGS_URLS.inputMonitoring);
     }
   });
