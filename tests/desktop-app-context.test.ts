@@ -352,6 +352,34 @@ describe("App Context privacy normalization", () => {
     expect(snapshot.fragments[0]).not.toHaveProperty("requestPayloadPolicy");
   });
 
+  it("normalizes malformed candidate request payload limits before slicing", () => {
+    const sourceText = "ordinary context ".repeat(180);
+    const normalizeWithMaxLength = (maxLength: number) => normalizeAppContext({
+      fragments: [{
+        id: `fragment-${maxLength}`,
+        provider: "test-provider",
+        kind: "visible_text",
+        text: sourceText,
+        confidence: 0.9,
+        requestPayloadPolicy: { maxLength },
+      }],
+      metadata: { provider: "test-provider", status: "available", confidence: 0.9 },
+    });
+    const snapshots = [-1, Number.NaN, Number.POSITIVE_INFINITY, 12.9, 20_000]
+      .map(normalizeWithMaxLength);
+
+    expect(snapshots.map((snapshot) => snapshot.fragments[0]?.text.length ?? 0)).toEqual([
+      0,
+      2_000,
+      2_000,
+      12,
+      2_000,
+    ]);
+    expect(snapshots.every((snapshot) =>
+      snapshot.fragments.every((fragment) => fragment.text.length <= 2_000)
+    )).toBe(true);
+  });
+
   it("owns requestability, memory eligibility, bounds, and secret suppression", () => {
     const clean = normalizeAppContext({
       fragments: [{

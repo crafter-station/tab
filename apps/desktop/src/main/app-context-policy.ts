@@ -35,7 +35,10 @@ function boundFragmentText(
   text: string,
   requestPayloadPolicy: AppContextCandidateRequestPayloadPolicy | undefined,
 ): string {
-  const limit = Math.min(requestPayloadPolicy?.maxLength ?? MAX_FRAGMENT_LENGTH, MAX_FRAGMENT_LENGTH);
+  const candidateLimit = requestPayloadPolicy?.maxLength ?? MAX_FRAGMENT_LENGTH;
+  const limit = Number.isFinite(candidateLimit)
+    ? Math.min(Math.max(Math.floor(candidateLimit), 0), MAX_FRAGMENT_LENGTH)
+    : MAX_FRAGMENT_LENGTH;
   if (text.length <= limit) return text;
 
   const bounded = text.slice(0, limit);
