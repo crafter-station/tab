@@ -342,8 +342,9 @@ export class SuggestionUseCase {
       const suggestions: Suggestion[] = generated?.text
         ? [{ id: `sg-${request.requestId}`, text: generated.text }]
         : [];
+      const shouldConsume = shouldCountSuggestionResponse(suggestions.length);
 
-      if (shouldCountSuggestionResponse(suggestions.length)) {
+      if (shouldConsume) {
         const consumption = await this.deps.billingService.consumeSuggestion(
           device.userId,
         );
@@ -367,7 +368,7 @@ export class SuggestionUseCase {
         clientPlatform: request.clientMetadata?.platform,
       });
 
-      if (shouldCountSuggestionResponse(suggestions.length)) {
+      if (shouldConsume) {
         const usageMeterPromise = this.deps.usageMeterService
           .recordUsage({
             userId: device.userId,

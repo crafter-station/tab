@@ -1,5 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
@@ -445,36 +448,53 @@ describe("Billing and quota enforcement", () => {
   });
 
   it("stores entitlements and usage in D1-compatible storage", async () => {
-    const db = new Database(":memory:");
-    bootstrapBillingTestSchema(db);
-    insertBillingTestUser(db, "user-d1");
-    const storage = new D1BillingStorage(createTestDatabase(db));
-
-    await storage.setEntitlement({
-      userId: "user-d1",
-      planId: "max",
-      status: "active",
-      cachedAt: new Date(),
-    });
-
-    const entitlement = await storage.getEntitlement("user-d1");
-    expect(entitlement?.planId).toBe("max");
-
-    const first = await storage.consumeUsageWithinLimit(
-      "user-d1",
-      currentMonth(),
-      2,
+    const databasePath = join(
+      tmpdir(),
+      `tab-billing-${crypto.randomUUID()}.sqlite`,
     );
-    const contenders = await Promise.all([
-      storage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
-      storage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
-    ]);
-    expect(first).toBe(1);
-    expect(contenders).toContain(2);
-    expect(contenders).toContain(null);
+    const firstConnection = new Database(databasePath, { create: true });
+    const secondConnection = new Database(databasePath);
 
-    const usage = await storage.getUsage("user-d1", currentMonth());
-    expect(usage).toBe(2);
+    try {
+      bootstrapBillingTestSchema(firstConnection);
+      insertBillingTestUser(firstConnection, "user-d1");
+      const firstStorage = new D1BillingStorage(
+        createTestDatabase(firstConnection),
+      );
+      const secondStorage = new D1BillingStorage(
+        createTestDatabase(secondConnection),
+      );
+
+      await firstStorage.setEntitlement({
+        userId: "user-d1",
+        planId: "max",
+        status: "active",
+        cachedAt: new Date(),
+      });
+
+      const entitlement = await secondStorage.getEntitlement("user-d1");
+      expect(entitlement?.planId).toBe("max");
+
+      const first = await firstStorage.consumeUsageWithinLimit(
+        "user-d1",
+        currentMonth(),
+        2,
+      );
+      const contenders = await Promise.all([
+        firstStorage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
+        secondStorage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
+      ]);
+      expect(first).toBe(1);
+      expect(contenders).toContain(2);
+      expect(contenders).toContain(null);
+
+      const usage = await secondStorage.getUsage("user-d1", currentMonth());
+      expect(usage).toBe(2);
+    } finally {
+      firstConnection.close();
+      secondConnection.close();
+      rmSync(databasePath, { force: true });
+    }
   });
 
   it("ignores Polar webhook entitlement updates for unknown D1 users", async () => {

@@ -476,7 +476,10 @@ describe("SuggestionUseCase", () => {
     releaseGeneration();
     const results = await resultsPromise;
 
-    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const successful = results.find((result) => result.ok);
+    expect(successful?.suggestions).toHaveLength(1);
+    if (!successful?.ok) throw new Error("Expected one successful suggestion");
+    const winningRequestId = successful.suggestions[0].id.replace(/^sg-/, "");
     const rejected = results.find((result) => !result.ok);
     expect(rejected).toMatchObject({
       ok: false,
@@ -485,12 +488,15 @@ describe("SuggestionUseCase", () => {
       details: { quota: 100, usage: 100 },
     });
     expect((await billingService.checkQuota("user-1")).usage).toBe(100);
-    expect(usageMeterClient.getEvents()).toHaveLength(1);
-    expect(
-      (await telemetryService.listEvents()).filter(
-        (event) => event.eventType === "suggestion_shown",
-      ),
-    ).toHaveLength(1);
+    expect(usageMeterClient.getEvents()).toEqual([
+      expect.objectContaining({ requestId: winningRequestId }),
+    ]);
+    const shownEvents = (await telemetryService.listEvents()).filter(
+      (event) => event.eventType === "suggestion_shown",
+    );
+    expect(shownEvents).toEqual([
+      expect.objectContaining({ requestId: winningRequestId }),
+    ]);
   });
 
   it("records provider failures without enqueueing memory jobs", async () => {
