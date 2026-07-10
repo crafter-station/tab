@@ -455,11 +455,7 @@ describe("Billing and quota enforcement", () => {
     });
 
     try {
-      await platform.env.DB.batch(
-        billingTestSchemaStatements.map((statement) =>
-          platform.env.DB.prepare(statement),
-        ),
-      );
+      await applyGeneratedMigrations(platform.env.DB);
       const now = Date.now();
       await platform.env.DB.prepare(
         "INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -569,8 +565,11 @@ describe("PolarUsageMeterClient", () => {
   });
 });
 
-const billingTestSchemaStatements = [
-  `CREATE TABLE user (
+function bootstrapBillingTestSchema(db: Database): void {
+  db.exec(`
+    PRAGMA foreign_keys = ON;
+
+    CREATE TABLE user (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
@@ -578,8 +577,9 @@ const billingTestSchemaStatements = [
       image TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
-    )`,
-  `CREATE TABLE user_entitlements (
+    );
+
+    CREATE TABLE user_entitlements (
       user_id TEXT PRIMARY KEY,
       plan_id TEXT NOT NULL,
       polar_customer_id TEXT,
@@ -588,24 +588,32 @@ const billingTestSchemaStatements = [
       current_period_end TEXT,
       cached_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
-    )`,
-  `CREATE TABLE usage_records (
+    );
+
+    CREATE TABLE usage_records (
       user_id TEXT NOT NULL,
       month TEXT NOT NULL,
       count INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, month),
       FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
-    )`,
-];
+    );
+  `);
+}
 
-const billingTestSchemaSql = `
-  PRAGMA foreign_keys = ON;
-  ${billingTestSchemaStatements.join(";\n")};
-`;
+async function applyGeneratedMigrations(db: D1Database): Promise<void> {
+  const journal = (await Bun.file(
+    "apps/api/drizzle/meta/_journal.json",
+  ).json()) as { entries: { tag: string }[] };
 
-function bootstrapBillingTestSchema(db: Database): void {
-  db.exec(billingTestSchemaSql);
+  for (const { tag } of journal.entries) {
+    const sql = await Bun.file(`apps/api/drizzle/${tag}.sql`).text();
+    const statements = sql
+      .split("--> statement-breakpoint")
+      .map((statement) => statement.trim())
+      .filter(Boolean);
+    await db.batch(statements.map((statement) => db.prepare(statement)));
+  }
 }
 
 function insertBillingTestUser(db: Database, userId: string): void {
