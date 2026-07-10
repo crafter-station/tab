@@ -8,7 +8,7 @@ Use the neutral palette from `packages/ui/src/styles/globals.css`: `--background
 
 ## Typography
 
-Use `--font-display` for hero, page, and section headings; `--font-body` for interface and prose; and `--font-code` for shortcuts, commands, debug metadata, and technical identifiers. Desktop must rely on the bundled/shared fallback stack and must not require network font loading at runtime.
+Use `--font-display` for hero, page, and section headings; `--font-body` for interface and prose; and `--font-code` for shortcuts, commands, debug metadata, and technical identifiers. Use the shared `Eyebrow` recipe for section kickers and `TabMark` for the compact brand glyph rather than recreating either in app CSS. Desktop keeps a compact 11/12/13/14px interface scale, while web marketing may use larger display sizes. Both runtimes rely on the shared system stack and must not require network font loading.
 
 ## Theme Modes
 
@@ -32,7 +32,7 @@ Use `--tab-ease-out` for direct feedback and entrances and `--tab-ease-in-out` o
 
 ## Semantic Statuses
 
-Use `success`, `warning`, `info`, `destructive`, `muted`, and active text labels through shared components such as `StatusRow`, `Badge`, and `StatusChip` patterns. Status meaning must appear in text, not color alone. Warning states should use `--warning` and `--tab-warning-tint`, not amber utility classes.
+Use the shared `SemanticTone` vocabulary: `neutral`, `success`, `warning`, `info`, and `destructive`. Apply it through `StatusRow`, `StatusBadge`, and related shared patterns so web and desktop represent equivalent states the same way. Status meaning must appear in text, not color alone. Warning states use `--warning` and `--tab-warning-tint`, not amber utility classes.
 
 ## Review Surface
 
@@ -40,4 +40,4 @@ Use `ComponentReviewSurface` when checking or changing the shared design system.
 
 ## Component Usage Rules
 
-Start with primitives from `@tab/ui`: `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`. Build product pages with app patterns such as `SectionBlock`, `SectionCard`, `SurfaceHeader`, `StatusRow`, `SettingsRow`, `SettingsGroup`, `SummaryMetric`, `SettingsNav`, `CommandBlock`, `EmptyState`, and `FloatingSuggestionBar`. Preserve native Electron behavior by keeping drag regions, transparent overlay roots, pointer-event rules, and acceptance handlers outside visual abstractions.
+Start with primitives from `@tab/ui`: `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`. Build product pages with app patterns such as `SectionBlock`, `SectionCard`, `SurfaceHeader`, `StatusRow`, `SettingsRow`, `SettingsGroup`, `SummaryMetric`, `SettingsNav`, `CommandBlock`, and `EmptyState`. Use `SuggestionCommand` for embedded product examples and `FloatingSuggestionBar` for the native overlay wrapper so the landing demo, onboarding practice, and real overlay share one command surface. Preserve native Electron behavior by keeping drag regions, transparent overlay roots, pointer-event rules, and acceptance handlers outside visual abstractions.

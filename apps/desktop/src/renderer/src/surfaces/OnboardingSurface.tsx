@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Button, Textarea } from "@tab/ui";
+import { Button, Eyebrow, SuggestionCommand, TabMark, Textarea } from "@tab/ui";
 import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 import { ONBOARDING_STEPS, type OnboardingStep } from "../../../main/onboarding";
 
@@ -264,9 +264,7 @@ export function OnboardingSurface() {
       <aside className="onboarding-sidebar drag-region">
         <div className="onboarding-sidebar__chrome" aria-hidden="true" />
         <div className="onboarding-brand">
-          <div className="onboarding-brand__mark" aria-hidden="true">
-            T
-          </div>
+          <TabMark />
           <div>
             <strong>Tab</strong>
             <span>Setup for this Mac</span>
@@ -318,7 +316,7 @@ export function OnboardingSurface() {
             {step === "try" ? (
               <>
                 <header className="onboarding-hero">
-                  <p className="eyebrow">Private autocomplete</p>
+                  <Eyebrow>Private autocomplete</Eyebrow>
                   <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
                     Try Tab before it appears in other apps.
                   </h1>
@@ -359,13 +357,11 @@ export function OnboardingSurface() {
                         </Button>
                       </div>
                     ) : (
-                      <button className="practice-suggestion" onClick={acceptPracticeSuggestion} type="button">
-                        <span className="practice-suggestion__mark" aria-hidden="true">
-                          T
-                        </span>
-                        <span>{SAMPLE_SUGGESTIONS[suggestionIndex]}</span>
-                        <kbd>Option + Tab</kbd>
-                      </button>
+                      <SuggestionCommand
+                        aria-label={`Accept sample suggestion: ${SAMPLE_SUGGESTIONS[suggestionIndex]}`}
+                        onClick={acceptPracticeSuggestion}
+                        suggestion={SAMPLE_SUGGESTIONS[suggestionIndex]}
+                      />
                     )}
 
                     <p className="practice-demo__hint">
@@ -379,7 +375,7 @@ export function OnboardingSurface() {
             {step === "permissions" ? (
               <>
                 <header className="onboarding-hero">
-                  <p className="eyebrow">macOS permissions</p>
+                  <Eyebrow>macOS permissions</Eyebrow>
                   <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
                     Allow Tab to work in your apps.
                   </h1>
@@ -459,7 +455,7 @@ export function OnboardingSurface() {
                   <CheckIcon />
                 </div>
                 <header className="onboarding-hero">
-                  <p className="eyebrow">All set</p>
+                  <Eyebrow>All set</Eyebrow>
                   <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
                     You are ready to write with Tab.
                   </h1>

@@ -79,6 +79,20 @@ export function setThemePreference(mode: ThemeMode): AppliedThemeMode | undefine
   return applyThemePreference({ element: document.documentElement, mode, storage: window.localStorage });
 }
 
+export function subscribeToSystemThemeChanges(onChange?: (mode: AppliedThemeMode) => void): () => void {
+  if (typeof window === "undefined" || typeof document === "undefined" || !window.matchMedia) return () => {};
+
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const handleChange = () => {
+    if ((getStoredThemePreference(window.localStorage) ?? "system") !== "system") return;
+    const mode = applyThemePreference({ element: document.documentElement, mode: "system", storage: null });
+    onChange?.(mode);
+  };
+
+  media.addEventListener("change", handleChange);
+  return () => media.removeEventListener("change", handleChange);
+}
+
 export function getThemeInitScript(): string {
   return `(() => { try { var mode = localStorage.getItem('${THEME_STORAGE_KEY}'); if (mode !== 'light' && mode !== 'dark' && mode !== 'system') mode = 'system'; var resolved = mode === 'system' ? (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : mode; var root = document.documentElement; root.dataset.theme = resolved; root.classList.remove('light', 'dark'); root.classList.add(resolved); root.style.colorScheme = resolved; } catch (_) {} })();`;
 }

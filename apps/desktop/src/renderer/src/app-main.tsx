@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "@tab/ui/styles.css";
-import { initializeThemePreference } from "@tab/ui";
+import { initializeThemePreference, subscribeToSystemThemeChanges } from "@tab/ui";
 import { App } from "./App";
 import "./styles/base.css";
 import "./styles/layout.css";
@@ -15,6 +15,8 @@ if (!root) {
 }
 
 initializeThemePreference();
+const unsubscribeFromSystemTheme = subscribeToSystemThemeChanges();
+window.addEventListener("beforeunload", unsubscribeFromSystemTheme, { once: true });
 
 createRoot(root).render(
   <React.StrictMode>

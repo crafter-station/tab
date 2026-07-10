@@ -10,7 +10,7 @@ export function SectionCard({ className, children }: SectionCardProps) {
   return (
     <Card
       className={cn(
-        "border-[var(--tab-glass-border)] bg-[var(--tab-surface-raised)] text-card-foreground shadow-[var(--tab-shadow-window)]",
+        "border-border bg-[var(--tab-surface-raised)] text-card-foreground shadow-[var(--tab-shadow-window)]",
         className,
       )}
     >

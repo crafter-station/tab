@@ -20,11 +20,22 @@
     announce(demo, "Suggestion accepted and added to the example.");
   }
 
-  function visibleDemo() {
-    return [...document.querySelectorAll("[data-tab-demo]")].find((demo) => {
-      const bounds = demo.getBoundingClientRect();
-      return bounds.top < window.innerHeight && bounds.bottom > 0;
+  function activateTab(demo, button, moveFocus = false) {
+    const target = button.getAttribute("data-demo-target");
+    if (!target) return;
+
+    demo.dataset.active = target;
+    demo.querySelectorAll("[data-demo-target]").forEach((tab) => {
+      const selected = tab === button;
+      tab.setAttribute("aria-selected", String(selected));
+      tab.tabIndex = selected ? 0 : -1;
     });
+    demo.querySelectorAll("[data-demo-scene]").forEach((panel) => {
+      panel.hidden = panel.getAttribute("data-demo-scene") !== target;
+    });
+    if (moveFocus) button.focus();
+    replay(demo);
+    announce(demo, `${button.textContent.trim()} example selected. Suggestion ready. Press Option plus Tab to accept.`);
   }
 
   document.addEventListener("click", (event) => {
@@ -42,22 +53,40 @@
 
     const target = control.getAttribute("data-demo-target");
     if (target) {
-      demo.dataset.active = target;
-      demo.querySelectorAll("[data-demo-target]").forEach((button) => {
-        button.setAttribute("aria-selected", String(button.getAttribute("data-demo-target") === target));
-      });
+      activateTab(demo, control);
+      return;
     }
 
     replay(demo);
   });
 
   document.addEventListener("keydown", (event) => {
-    if (!event.altKey || event.key !== "Tab") return;
     const focusedDemo = document.activeElement?.closest?.("[data-tab-demo]");
-    const demo = focusedDemo ?? visibleDemo();
-    if (!demo) return;
+    if (event.altKey && event.key === "Tab" && focusedDemo) {
+      event.preventDefault();
+      accept(focusedDemo);
+      return;
+    }
+
+    const currentTab = document.activeElement?.closest?.("[data-demo-target]");
+    if (!currentTab || !focusedDemo) return;
+
+    const tabs = [...focusedDemo.querySelectorAll("[data-demo-target]")];
+    const currentIndex = tabs.indexOf(currentTab);
+    let nextIndex;
+
+    if (event.key === "ArrowRight") nextIndex = (currentIndex + 1) % tabs.length;
+    else if (event.key === "ArrowLeft") nextIndex = (currentIndex - 1 + tabs.length) % tabs.length;
+    else if (event.key === "Home") nextIndex = 0;
+    else if (event.key === "End") nextIndex = tabs.length - 1;
+    else return;
 
     event.preventDefault();
-    accept(demo);
+    activateTab(focusedDemo, tabs[nextIndex], true);
+  });
+
+  document.querySelectorAll("[data-tab-demo]").forEach((demo) => {
+    const active = demo.querySelector('[data-demo-target][aria-selected="true"]');
+    if (active) activateTab(demo, active);
   });
 })();

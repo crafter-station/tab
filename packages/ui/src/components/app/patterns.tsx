@@ -7,8 +7,8 @@ import { Label } from "../ui/label";
 import { Separator } from "../ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { cn } from "../../lib/utils";
+import { semanticToneClasses, type SemanticTone } from "./semantic-tone";
 
-export type PatternTone = "neutral" | "success" | "warning" | "info" | "destructive";
 export type SettingsNavItem = {
   label: string;
   href: string;
@@ -16,14 +16,6 @@ export type SettingsNavItem = {
 };
 
 type ThemeMode = "light" | "dark";
-
-const toneClasses: Record<PatternTone, string> = {
-  neutral: "border-border bg-[var(--tab-surface-sunken)] text-muted-foreground",
-  success: "border-[color-mix(in_srgb,var(--success)_26%,transparent)] bg-[var(--tab-success-tint)] text-[var(--success)]",
-  warning: "border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-[var(--tab-warning-tint)] text-[var(--warning)]",
-  info: "border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--tab-info-tint)] text-[var(--info)]",
-  destructive: "border-[color-mix(in_srgb,var(--destructive)_28%,transparent)] bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] text-[var(--destructive)]",
-};
 
 const reviewThemeClasses: Record<ThemeMode, string> = {
   light: "pug-theme-light",
@@ -71,13 +63,39 @@ type SurfaceHeaderProps = {
   headingLevel?: 1 | 2 | 3;
 };
 
+type EyebrowProps = PropsWithChildren<{
+  className?: string;
+}>;
+
+export function Eyebrow({ className, children }: EyebrowProps) {
+  return (
+    <p className={cn("font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground", className)}>
+      {children}
+    </p>
+  );
+}
+
+export function TabMark({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "grid size-8 shrink-0 place-items-center rounded-[var(--radius-media)] border border-primary bg-primary font-mono text-xs font-bold text-primary-foreground shadow-[var(--tab-shadow-control)]",
+        className,
+      )}
+    >
+      T
+    </span>
+  );
+}
+
 export function SurfaceHeader({ eyebrow, title, description, action, className, headingLevel = 2 }: SurfaceHeaderProps) {
   const Heading = `h${headingLevel}` as const;
 
   return (
     <div className={cn("flex items-start justify-between gap-4 max-sm:flex-col", className)}>
       <div className="grid gap-2">
-        {eyebrow ? <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">{eyebrow}</p> : null}
+        {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
         <Heading className={cn("text-balance font-[var(--font-display)] font-semibold leading-tight tracking-[-0.035em] text-foreground", headingLevel === 1 ? "text-3xl" : "text-2xl")}>
           {title}
         </Heading>
@@ -91,7 +109,7 @@ export function SurfaceHeader({ eyebrow, title, description, action, className, 
 type StatusRowProps = {
   label: string;
   value: string;
-  tone?: PatternTone;
+  tone?: SemanticTone;
   description?: string;
   meta?: ReactNode;
   className?: string;
@@ -105,7 +123,7 @@ export function StatusRow({ label, value, tone = "neutral", description, meta, c
         {description ? <p className="max-w-[65ch] text-pretty text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
         {meta ? <div className="text-xs font-medium text-muted-foreground">{meta}</div> : null}
       </div>
-      <Badge variant="outline" className={cn("justify-self-start", toneClasses[tone])}>
+      <Badge variant="outline" className={cn("justify-self-start", semanticToneClasses[tone])}>
         {value}
       </Badge>
     </div>

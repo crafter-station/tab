@@ -12,8 +12,10 @@ describe("desktop renderer setup surfaces", () => {
     expect(signInSource).toInclude("Privacy scope");
     expect(signInSource).toInclude("Practice suggestion");
     expect(signInSource).toInclude("pug-dot-grid");
+    expect(signInSource).toInclude("<TabMark />");
     expect(onboardingSource).toInclude("Try Tab before it appears in other apps");
     expect(onboardingSource).toInclude("I enabled Input Monitoring");
+    expect(onboardingSource).toInclude("<SuggestionCommand");
   });
 
   it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {
@@ -26,5 +28,7 @@ describe("desktop renderer setup surfaces", () => {
     expect(setupCss).not.toContain("glass-bg");
     expect(setupCss).not.toContain("glass-border");
     expect(setupCss).not.toContain("glass-shadow");
+    expect(setupCss).not.toContain("--text-muted");
+    expect(setupCss).not.toContain("--text-subtle");
   });
 });

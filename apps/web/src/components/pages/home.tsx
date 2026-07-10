@@ -13,10 +13,9 @@ import {
   LockKey,
   Plus,
   ShieldCheck,
-  Sparkle,
 } from "@phosphor-icons/react";
 import { planQuotas } from "@tab/billing";
-import { buttonVariants } from "@tab/ui";
+import { SuggestionCommand, buttonVariants } from "@tab/ui";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
 const appLogos = [
@@ -118,21 +117,24 @@ function DemoScene({
   return (
     <div className="min-h-[19rem] content-between gap-8 p-5 sm:min-h-[22rem] sm:p-7" data-demo-scene={name} id={`demo-panel-${name}`} role="tabpanel" aria-labelledby={`demo-tab-${name}`}>
       {children}
-      <button className="tab-demo-overlay flex w-full cursor-pointer items-center justify-between gap-3 rounded-[var(--radius-media)] border border-foreground/15 bg-foreground px-3 py-2.5 text-left text-background shadow-[0_16px_40px_rgba(0,0,0,0.18)] transition-[background-color,border-color,transform] duration-200 ease-[var(--tab-ease-out)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-card sm:px-4" type="button" data-demo-accept aria-label="Accept this suggestion with Option plus Tab">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <Sparkle className="shrink-0" aria-hidden="true" />
-          <span className="tab-demo-ready-label truncate text-sm font-medium">Suggestion ready</span>
-          <span className="tab-demo-accepted-label hidden truncate text-sm font-medium">Suggestion added</span>
-        </div>
-        <kbd className="shrink-0 rounded-[var(--radius-control)] border border-background/25 bg-background/10 px-2 py-1 font-[var(--font-code)] text-[0.6875rem] font-semibold">Option + Tab</kbd>
-      </button>
+      <SuggestionCommand
+        aria-label="Accept this suggestion with Option plus Tab"
+        className="tab-demo-overlay"
+        data-demo-accept
+        suggestion={(
+          <>
+            <span className="tab-demo-ready-label">Suggestion ready</span>
+            <span className="tab-demo-accepted-label hidden">Suggestion added</span>
+          </>
+        )}
+      />
     </div>
   );
 }
 
 function AutocompleteDemo() {
   return (
-    <div className="tab-demo overflow-hidden rounded-[calc(var(--radius-card)+0.35rem)] border border-border bg-card text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-tab-demo data-active="mail" data-accepted="false" aria-label="Interactive Tab autocomplete demonstration" tabIndex={0}>
+    <div className="tab-demo overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-tab-demo data-active="mail" data-accepted="false" aria-label="Interactive Tab autocomplete demonstration" role="region" tabIndex={0}>
       <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-1.5" aria-hidden="true">
           <span className="size-2.5 rounded-full bg-foreground/20" />
@@ -147,7 +149,7 @@ function AutocompleteDemo() {
       </div>
       <div className="flex gap-2 border-b border-border p-3" role="tablist" aria-label="Choose an app example">
         {(["mail", "slack", "notes"] as const).map((app, index) => (
-          <button className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border border-border bg-background px-3 py-1.5 text-xs font-semibold capitalize transition-[background-color,border-color,color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-demo-target={app} id={`demo-tab-${app}`} key={app} type="button" role="tab" aria-controls={`demo-panel-${app}`} aria-selected={index === 0}>
+          <button className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border border-border bg-background px-3 py-1.5 text-xs font-semibold capitalize transition-[background-color,border-color,color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-demo-target={app} id={`demo-tab-${app}`} key={app} tabIndex={index === 0 ? 0 : -1} type="button" role="tab" aria-controls={`demo-panel-${app}`} aria-selected={index === 0}>
             <span className="grid size-5 place-items-center rounded-sm bg-white" aria-hidden="true"><img className="size-3" src={app === "slack" ? "/logos/slack.svg" : "/logos/apple.svg"} alt="" /></span>
             {app}
           </button>
@@ -196,12 +198,11 @@ function AutocompleteDemo() {
 }
 
 function AppMarquee() {
-  const apps = [...appLogos, ...appLogos];
   return (
-    <div className="marketing-marquee overflow-hidden border-y border-border py-4" aria-label="Autocomplete that works anywhere you write on your Mac">
-      <div className="marketing-marquee-track flex items-center" aria-hidden="true">
-        {apps.map((app, index) => (
-          <span className="flex items-center gap-3 whitespace-nowrap px-5 text-sm font-semibold text-muted-foreground sm:px-7" key={`${app.name}-${index}`}>
+    <div className="border-y border-border py-4" aria-label="Autocomplete that works anywhere you write on your Mac" role="region">
+      <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-3">
+        {appLogos.map((app) => (
+          <span className="flex items-center gap-3 whitespace-nowrap text-sm font-semibold text-muted-foreground" key={app.name}>
             <span className="grid size-8 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src={app.src} alt="" /></span>
             {app.name}
           </span>
@@ -231,7 +232,7 @@ export function HomePage() {
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> macOS 14+</span>
-            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> 100 suggestions free</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> {formatCount(planQuotas.free.monthlyAutocompleteSuggestions)} suggestions free</span>
             <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> You approve every insertion</span>
           </div>
         </div>
@@ -275,7 +276,7 @@ export function HomePage() {
             </div>
           </div>
           <div className="border-t border-border bg-muted/30 p-5 lg:border-l lg:border-t-0 lg:p-8">
-            <div className="rounded-[var(--radius-card)] border border-border bg-background shadow-[0_18px_50px_rgba(0,0,0,0.08)]">
+            <div className="rounded-[var(--radius-card)] border border-border bg-background shadow-[var(--tab-shadow-card)]">
               <div className="flex items-center justify-between border-b border-border px-4 py-3">
                 <div><p className="text-sm font-bold">Personal Memory</p><p className="text-xs text-muted-foreground">Saved memories · 3 details</p></div>
                 <span className="grid size-8 place-items-center rounded-[var(--radius-control)] border border-border bg-secondary text-muted-foreground" aria-hidden="true"><Plus /></span>
@@ -324,7 +325,7 @@ export function HomePage() {
           {useCases.map((example) => (
             <article className="group border-b border-border py-7 last:border-b-0 lg:border-b-0 lg:border-l lg:px-7 lg:first:border-l-0 lg:first:pl-0 lg:last:pr-0" key={example.context}>
               <div className="flex items-center justify-between gap-3 text-xs font-semibold text-muted-foreground"><span>{example.context}</span><span>{example.app}</span></div>
-              <p className="mt-12 text-lg leading-8">{example.lead} <span className="text-muted-foreground transition-colors duration-200 ease-[var(--tab-ease-out)] group-hover:text-foreground">{example.suggestion}</span></p>
+              <p className="mt-12 text-lg leading-8">{example.lead} <span className="text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] group-hover:text-foreground">{example.suggestion}</span></p>
               <p className="mt-6 inline-flex items-center gap-2 font-[var(--font-code)] text-[0.6875rem] font-semibold text-muted-foreground"><Command aria-hidden="true" /> Option + Tab to accept</p>
             </article>
           ))}
@@ -346,7 +347,7 @@ export function HomePage() {
               <a className={buttonVariants({ variant: "secondary", size: "lg" })} href="https://github.com/crafter-station/tab/issues" target="_blank" rel="noreferrer">View issues</a>
             </div>
           </div>
-          <a className="group block overflow-hidden rounded-[var(--radius-card)] border border-border bg-card no-underline shadow-[0_24px_70px_rgba(0,0,0,0.1)] transition-transform duration-200 ease-[var(--tab-ease-out)] active:scale-[0.99]" href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer" aria-label="Open the crafter-station/tab GitHub repository">
+          <a className="group block overflow-hidden rounded-[var(--radius-card)] border border-border bg-card no-underline shadow-[var(--tab-shadow-card)] transition-transform duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99]" href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer" aria-label="Open the crafter-station/tab GitHub repository">
             <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
               <div className="flex items-center gap-3">
                 <span className="grid size-9 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-5" src="/logos/github.svg" alt="" /></span>
@@ -376,7 +377,7 @@ export function HomePage() {
       <section className="-mx-5 bg-foreground px-5 py-20 text-background sm:-mx-8 sm:px-8 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.82fr)] lg:items-center lg:gap-20">
           <div>
-            <p className="font-[var(--font-code)] text-xs font-semibold uppercase tracking-[0.12em] text-background/60">Clear boundaries by design</p>
+            <p className="font-[var(--font-code)] text-xs font-semibold uppercase tracking-[0.12em] text-background/70">Clear boundaries by design</p>
             <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.05em]">Your writing is not a black box.</h2>
             <p className="mt-6 max-w-[36rem] text-pretty text-lg leading-relaxed text-background/70">Tab asks for only the macOS permissions needed to read the current typing context, show a suggestion, and insert it when you accept. It does not need screenshots, your clipboard, or full documents.</p>
             <a className="mt-8 inline-flex items-center gap-2 border-b border-background/35 pb-1 text-sm font-semibold no-underline transition-colors duration-150 hover:border-background" href="/privacy">Read the privacy policy <ArrowRight aria-hidden="true" /></a>
@@ -391,7 +392,7 @@ export function HomePage() {
               return (
                 <div className="flex gap-4 bg-foreground p-5 sm:p-6" key={item.title}>
                   <Icon className="mt-0.5 shrink-0" aria-hidden="true" />
-                  <div><h3 className="font-bold">{item.title}</h3><p className="mt-1 text-sm leading-relaxed text-background/60">{item.note}</p></div>
+                  <div><h3 className="font-bold">{item.title}</h3><p className="mt-1 text-sm leading-relaxed text-background/70">{item.note}</p></div>
                 </div>
               );
             })}
@@ -422,7 +423,7 @@ export function HomePage() {
                   <li className="flex items-center gap-2"><Check aria-hidden="true" /> Personal Memory controls</li>
                   <li className="flex items-center gap-2"><Check aria-hidden="true" /> Change plans from your account</li>
                 </ul>
-                <a className={buttonVariants({ variant: featured ? "secondary" : "default", size: "lg", className: "mt-8 w-full" })} href={planId === "free" ? "/signup" : "/billing/checkout?plan=pro"}>{planId === "free" ? "Start with 100 free suggestions" : "Choose Pro"}</a>
+                <a className={buttonVariants({ variant: featured ? "secondary" : "default", size: "lg", className: "mt-8 w-full" })} href={planId === "free" ? "/signup" : "/billing/checkout?plan=pro"}>{planId === "free" ? `Start with ${formatCount(plan.monthlyAutocompleteSuggestions)} free suggestions` : "Choose Pro"}</a>
               </article>
             );
           })}
@@ -441,7 +442,7 @@ export function HomePage() {
               <details className="marketing-detail group border-b border-border" key={faq.question}>
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-5 py-5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                   {faq.question}
-                  <Plus className="marketing-detail-icon shrink-0 transition-transform duration-200 ease-[var(--tab-ease-out)]" aria-hidden="true" />
+                  <Plus className="marketing-detail-icon shrink-0 transition-transform duration-150 ease-[var(--tab-ease-out)]" aria-hidden="true" />
                 </summary>
                 <div className="tab-disclosure-panel origin-top-left pb-6 pr-10">
                   <p className="max-w-[42rem] text-pretty leading-relaxed text-muted-foreground">{faq.answer}</p>

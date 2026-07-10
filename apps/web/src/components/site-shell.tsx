@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowUpRight, List, X } from "@phosphor-icons/react";
+import { TabMark } from "@tab/ui";
 
 const primaryLinks = [
   { href: "/#features", label: "Features" },
@@ -45,7 +46,7 @@ function footerGroups(authenticated: boolean) {
 function Brand() {
   return (
     <a className="group inline-flex items-center gap-2.5 no-underline" href="/" aria-label="Tab home">
-      <span className="grid size-8 place-items-center rounded-[var(--radius-media)] border border-foreground bg-foreground font-[var(--font-code)] text-sm font-bold text-background transition-transform duration-150 ease-[var(--tab-ease-out)] group-active:scale-[0.97]" aria-hidden="true">T</span>
+      <TabMark className="transition-transform duration-150 ease-[var(--tab-ease-out)] group-active:scale-[0.97]" />
       <span className="font-[var(--font-display)] text-lg font-bold tracking-[-0.035em]">Tab</span>
     </a>
   );
@@ -73,7 +74,7 @@ export function SiteHeader({
               <List className="group-open:hidden" aria-hidden="true" />
               <X className="hidden group-open:block" aria-hidden="true" />
             </summary>
-            <nav className="tab-disclosure-panel absolute right-0 mt-2 grid min-w-52 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-sm font-semibold text-popover-foreground shadow-[0_18px_50px_rgba(0,0,0,0.12)]" aria-label="Mobile navigation">
+            <nav className="tab-disclosure-panel absolute right-0 mt-2 grid min-w-52 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-sm font-semibold text-popover-foreground shadow-[var(--tab-shadow-card)]" aria-label="Mobile navigation">
               {primaryLinks.map((link) => (
                 <a className="rounded-[var(--radius-control)] px-3 py-2.5 no-underline transition-colors duration-150 ease-[var(--tab-ease-out)] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={link.href} key={link.href}>{link.label}</a>
               ))}

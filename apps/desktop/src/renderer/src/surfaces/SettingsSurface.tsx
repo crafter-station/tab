@@ -3,6 +3,7 @@ import {
   Button,
   CommandBlock,
   EmptyState,
+  Eyebrow,
   SectionCard,
   SettingsGroup,
   SettingsRow,
@@ -10,6 +11,7 @@ import {
   StatusRow,
   SummaryMetric,
   Switch,
+  TabMark,
   THEME_MODES,
   Tabs,
   TabsContent,
@@ -20,6 +22,7 @@ import {
   getStoredThemePreference,
   setThemePreference,
   type ThemeMode,
+  type SemanticTone,
 } from "@tab/ui";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
@@ -28,6 +31,7 @@ import { describePauseState, describePersonalMemorySource } from "./settingsCopy
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitialState"]>>;
 type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
+type SidebarStatus = { label: string; detail: string; tone: SemanticTone };
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
   { value: "account", label: "Account", description: "Plan, usage, and connection for this Mac." },
@@ -63,6 +67,20 @@ function formatThemeMode(mode: ThemeMode) {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
+function formatPlanName(planId: string) {
+  return planId.charAt(0).toUpperCase() + planId.slice(1);
+}
+
+function getSidebarStatus(status: DesktopStatus, paused: boolean, loaded: boolean): SidebarStatus {
+  if (!loaded) return { label: "Checking Tab...", detail: "Loading current status", tone: "neutral" };
+  if (status.connectivity !== "online") return { label: "Tab is offline", detail: "Waiting for a connection", tone: "warning" };
+  if (status.auth === "revoked_device") return { label: "Reconnect Tab", detail: "Access was removed", tone: "destructive" };
+  if (status.auth !== "signed_in") return { label: "Sign in required", detail: "Connect this Mac", tone: "warning" };
+  if (status.quota?.exhausted) return { label: "Monthly limit reached", detail: "Suggestions are unavailable", tone: "warning" };
+  if (paused) return { label: "Suggestions paused", detail: "Resume from Controls", tone: "warning" };
+  return { label: "Tab is ready", detail: "Suggestions are active", tone: "success" };
+}
+
 function createFallbackStatus(): DesktopStatus {
   return {
     auth: "sign_in_required",
@@ -80,6 +98,7 @@ export function SettingsSurface() {
     () => getStoredThemePreference(window.localStorage) ?? "system",
   );
   const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
+  const [statusLoaded, setStatusLoaded] = useState(false);
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
   const [usePersonalMemory, setUsePersonalMemory] = useState(false);
@@ -87,6 +106,7 @@ export function SettingsSurface() {
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
   const activeTabConfig = SETTINGS_TABS.find((tab) => tab.value === activeTab);
   const pauseState = describePauseState(paused);
+  const sidebarStatus = getSidebarStatus(status, paused, statusLoaded);
 
   const refreshAccessibility = useCallback(async () => {
     if (!window.tab?.checkAccessibilityPermission) return false;
@@ -98,10 +118,13 @@ export function SettingsSurface() {
   useEffect(() => {
     if (!window.tab) return;
 
-    window.tab.onStatusChanged((nextStatus) => setStatus(nextStatus));
-    window.tab.onMemoriesChanged((nextMemories) => setMemories(nextMemories));
-    window.tab.onPauseChanged((nextPaused) => setPaused(nextPaused));
-    window.tab.onPreferencesChanged((nextPreferences) => {
+    const unsubscribeStatus = window.tab.onStatusChanged((nextStatus) => {
+      setStatus(nextStatus);
+      setStatusLoaded(true);
+    });
+    const unsubscribeMemories = window.tab.onMemoriesChanged((nextMemories) => setMemories(nextMemories));
+    const unsubscribePause = window.tab.onPauseChanged((nextPaused) => setPaused(nextPaused));
+    const unsubscribePreferences = window.tab.onPreferencesChanged((nextPreferences) => {
       setUsePersonalMemory(nextPreferences.suggestions.usePersonalMemory);
     });
 
@@ -109,6 +132,7 @@ export function SettingsSurface() {
       .getInitialState()
       .then((initialState: InitialState) => {
         setStatus(initialState.status);
+        setStatusLoaded(true);
         setMemories(initialState.memories);
         setPaused(initialState.paused);
         setUsePersonalMemory(initialState.preferences.suggestions.usePersonalMemory);
@@ -116,6 +140,12 @@ export function SettingsSurface() {
       .catch(() => {});
 
     refreshAccessibility().catch(() => setAccessibilityGranted(false));
+    return () => {
+      unsubscribeStatus();
+      unsubscribeMemories();
+      unsubscribePause();
+      unsubscribePreferences();
+    };
   }, [refreshAccessibility]);
 
   async function handleAccessibility() {
@@ -164,7 +194,7 @@ export function SettingsSurface() {
                 value={status.auth === "signed_in" ? "Connected" : formatAuth(status.auth)}
                 detail="This Mac"
               />
-              <SummaryMetric label="Plan" value={status.quota?.planId ?? "Not available"} detail="Current tier" />
+              <SummaryMetric label="Plan" value={status.quota ? formatPlanName(status.quota.planId) : "Not available"} detail="Current tier" />
               <SummaryMetric
                 label="Monthly suggestions"
                 value={formatQuota(status)}
@@ -202,7 +232,7 @@ export function SettingsSurface() {
           <SettingsGroup title="Suggestions" description="Pause autocomplete without disconnecting your account.">
             <SettingsRow label="Pause suggestions" description={pauseState.description}>
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge tone={paused ? "warning" : "ok"}>{pauseState.label}</StatusBadge>
+                <StatusBadge tone={paused ? "warning" : "success"}>{pauseState.label}</StatusBadge>
                 <Switch
                   aria-label="Pause suggestions"
                   checked={paused}
@@ -258,7 +288,7 @@ export function SettingsSurface() {
                 description="Required to read the text field you are using and add suggestions you accept."
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <StatusBadge tone={accessibilityGranted ? "ok" : "warning"}>
+                  <StatusBadge tone={accessibilityGranted ? "success" : "warning"}>
                     {accessibilityGranted ? "Enabled" : "Needs access"}
                   </StatusBadge>
                   <Button disabled={permissionBusy === "accessibility"} onClick={handleAccessibility}>
@@ -318,7 +348,7 @@ export function SettingsSurface() {
                 }
               >
                 <div className="flex items-center justify-end gap-2">
-                  <StatusBadge tone={usePersonalMemory ? "ok" : "muted"}>{usePersonalMemory ? "On" : "Off"}</StatusBadge>
+                  <StatusBadge tone={usePersonalMemory ? "success" : "neutral"}>{usePersonalMemory ? "On" : "Off"}</StatusBadge>
                   <Switch
                     aria-label="Use saved memories in suggestions"
                     checked={usePersonalMemory}
@@ -367,11 +397,11 @@ export function SettingsSurface() {
 
   return (
     <main className="desktop-shell">
-      <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as SettingsTab)} className="h-full">
+      <Tabs orientation="vertical" value={activeTab} onValueChange={(value) => setActiveTab(value as SettingsTab)} className="h-full">
         <SectionCard className="settings-tabs mx-auto grid h-full max-w-5xl overflow-hidden p-0">
           <aside className="settings-tabs__sidebar drag-region">
             <div className="settings-tabs__brand">
-              <div className="settings-tabs__mark">T</div>
+              <TabMark />
               <div>
                 <strong>Tab</strong>
                 <span>Autocomplete for Mac</span>
@@ -388,22 +418,21 @@ export function SettingsSurface() {
 
             <div
               className="settings-tabs__status no-drag"
-              data-offline={status.connectivity !== "online"}
-              data-paused={paused}
+              data-tone={sidebarStatus.tone}
             >
               <span className="settings-tabs__status-dot" aria-hidden="true" />
               <div>
                 <strong>
-                  {paused ? "Suggestions paused" : status.connectivity === "online" ? "Tab is ready" : "Tab is offline"}
+                  {sidebarStatus.label}
                 </strong>
-                <span>{status.connectivity === "online" ? "Connected" : "Waiting for a connection"}</span>
+                <span>{sidebarStatus.detail}</span>
               </div>
             </div>
           </aside>
 
           <section className="settings-tabs__main no-drag">
             <header className="settings-tabs__header drag-region">
-              <p className="eyebrow">Settings</p>
+              <Eyebrow>Settings</Eyebrow>
               <h1>{activeTabConfig?.label}</h1>
               <p>{activeTabConfig?.description}</p>
             </header>

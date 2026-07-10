@@ -25,17 +25,9 @@ summary {
   -webkit-app-region: no-drag;
 }
 
-.eyebrow {
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 650;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
 .lede {
   max-width: 62ch;
-  color: var(--text-subtle);
+  color: var(--muted-foreground);
   font-size: 14px;
   line-height: 1.6;
   text-wrap: pretty;
@@ -71,30 +63,17 @@ summary {
 
 .settings-tabs__brand strong {
   font-size: 14px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.015em;
 }
 
-.settings-tabs__brand span,
+.settings-tabs__brand > div:last-child span,
 .settings-tabs__status span {
   overflow: hidden;
-  color: var(--text-muted);
+  color: var(--muted-foreground);
   font-size: 11px;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.settings-tabs__mark {
-  display: grid;
-  width: 30px;
-  height: 30px;
-  place-items: center;
-  color: var(--on-signal);
-  font-size: 12px;
-  font-weight: 750;
-  background: var(--foreground);
-  border-radius: var(--radius-media);
-  box-shadow: var(--tab-shadow-control);
 }
 
 .settings-tabs__nav {
@@ -110,25 +89,25 @@ summary {
   height: 36px;
   justify-content: flex-start;
   padding: 0 10px;
-  color: var(--text-subtle);
+  color: var(--muted-foreground);
   text-align: left;
   background: transparent;
   border: 0;
   border-radius: var(--radius-control);
   box-shadow: none;
   cursor: pointer;
-  transition: background-color 140ms ease, color 140ms ease, transform 120ms var(--ease-out);
+  transition: background-color 140ms ease, color 140ms ease, transform 120ms var(--tab-ease-out);
 }
 
 .settings-tabs__item[data-state="active"] {
-  color: var(--text);
+  color: var(--foreground);
   background: var(--tab-active);
   box-shadow: none;
 }
 
 .settings-tabs__item-label {
   font-size: 13px;
-  font-weight: 560;
+  font-weight: 600;
 }
 
 .settings-tabs__status {
@@ -152,15 +131,24 @@ summary {
 .settings-tabs__status-dot {
   width: 7px;
   height: 7px;
-  background: var(--success);
+  background: var(--muted-foreground);
   border-radius: 50%;
+  box-shadow: 0 0 0 3px var(--muted);
+}
+
+.settings-tabs__status[data-tone="success"] .settings-tabs__status-dot {
+  background: var(--success);
   box-shadow: 0 0 0 3px var(--tab-success-tint);
 }
 
-.settings-tabs__status[data-paused="true"] .settings-tabs__status-dot,
-.settings-tabs__status[data-offline="true"] .settings-tabs__status-dot {
+.settings-tabs__status[data-tone="warning"] .settings-tabs__status-dot {
   background: var(--warning);
   box-shadow: 0 0 0 3px var(--tab-warning-tint);
+}
+
+.settings-tabs__status[data-tone="destructive"] .settings-tabs__status-dot {
+  background: var(--destructive);
+  box-shadow: 0 0 0 3px var(--tab-destructive-tint);
 }
 
 .settings-tabs__main {
@@ -182,7 +170,7 @@ summary {
 .settings-tabs__header h1 {
   font-family: var(--font-display);
   font-size: 27px;
-  font-weight: 650;
+  font-weight: 600;
   letter-spacing: -0.045em;
   line-height: 1.08;
   text-wrap: balance;
@@ -190,7 +178,7 @@ summary {
 
 .settings-tabs__header > p:last-child {
   max-width: 58ch;
-  color: var(--text-subtle);
+  color: var(--muted-foreground);
   font-size: 13px;
   line-height: 1.5;
   text-wrap: pretty;
@@ -257,11 +245,11 @@ summary {
 
 .settings-paused strong {
   font-size: 13px;
-  font-weight: 620;
+  font-weight: 600;
 }
 
 .settings-paused span {
-  color: var(--text-subtle);
+  color: var(--muted-foreground);
   font-size: 12px;
 }
 
@@ -282,7 +270,7 @@ summary {
 
 @media (hover: hover) and (pointer: fine) {
   .settings-tabs__item:hover {
-    color: var(--text);
+    color: var(--foreground);
     background: var(--tab-hover);
   }
 }

@@ -28,7 +28,7 @@ import {
   TableRow,
   Textarea,
   buttonVariants,
-  type PatternTone,
+  type SemanticTone,
 } from "@tab/ui";
 import { formatCount, formatDate, type User } from "./shared.tsx";
 
@@ -42,7 +42,7 @@ export type DashboardData = {
 export type DashboardSection = "overview" | "account" | "usage" | "devices" | "memories";
 
 type PlanEntry = [PlanId, (typeof planQuotas)[PlanId]];
-type StatusPresentation = { value: string; tone: PatternTone };
+type StatusPresentation = { value: string; tone: SemanticTone };
 
 const bulkDeleteMemoriesFormId = "bulk-delete-memories";
 const DashboardDataContext = createContext<DashboardData | undefined>(undefined);
@@ -82,7 +82,7 @@ const dashboardDescriptions: Record<DashboardSection, string> = {
   memories: "Review the details Tab can reuse when personalizing suggestions.",
 };
 
-const metricToneClasses: Record<PatternTone, string> = {
+const metricToneClasses: Record<SemanticTone, string> = {
   neutral: "bg-muted-foreground",
   success: "bg-[var(--success)]",
   warning: "bg-[var(--warning)]",
@@ -137,7 +137,7 @@ function DashboardMetric({
   label: string;
   value: string;
   description?: string;
-  tone?: PatternTone;
+  tone?: SemanticTone;
 }) {
   return (
     <div className="min-w-0 py-5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
@@ -507,7 +507,7 @@ export function DashboardMemoriesPage({ data }: { data: DashboardData }) {
               </div>
               <details className="group relative w-max">
                 <summary className={buttonVariants({ variant: "secondary", size: "sm", className: "cursor-pointer list-none marker:hidden [&::-webkit-details-marker]:hidden" })}>Delete selected...</summary>
-                <div className="tab-disclosure-panel absolute right-0 z-20 mt-2 grid w-[min(20rem,80vw)] gap-3 rounded-[var(--radius-card)] border border-border bg-popover p-3 text-popover-foreground shadow-[0_16px_40px_rgba(0,0,0,0.14)]">
+                <div className="tab-disclosure-panel absolute right-0 z-20 mt-2 grid w-[min(20rem,80vw)] gap-3 rounded-[var(--radius-card)] border border-border bg-popover p-3 text-popover-foreground shadow-[var(--tab-shadow-card)]">
                   <div>
                     <p className="text-sm font-semibold">Delete selected memories?</p>
                     <p className="mt-1 text-xs leading-relaxed text-muted-foreground">This cannot be undone. If nothing is selected, no changes are made.</p>

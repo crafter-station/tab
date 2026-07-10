@@ -81,11 +81,11 @@ export function ContactPage() {
     <>
       <PageIntro eyebrow="Contact" title="Talk to a person." description="Questions about setup, privacy, billing, or the product are welcome. Choose the channel that fits the conversation." />
       <section className="grid gap-4 py-12 sm:py-20 md:grid-cols-2">
-        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-200 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="mailto:tab@cueva.io">
+        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="mailto:tab@cueva.io">
           <div className="flex items-center justify-between"><EnvelopeSimple aria-hidden="true" /><ArrowUpRight className="text-muted-foreground" aria-hidden="true" /></div>
           <div><p className="text-sm font-semibold text-muted-foreground">Email</p><h2 className="mt-2 text-2xl font-bold tracking-[-0.03em]">tab@cueva.io</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for account, billing, privacy, and general product questions.</p></div>
         </a>
-        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-200 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="https://github.com/crafter-station/tab/issues" target="_blank" rel="noreferrer">
+        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="https://github.com/crafter-station/tab/issues" target="_blank" rel="noreferrer">
           <div className="flex items-center justify-between"><GithubLogo aria-hidden="true" /><ArrowUpRight className="text-muted-foreground" aria-hidden="true" /></div>
           <div><p className="text-sm font-semibold text-muted-foreground">GitHub</p><h2 className="mt-2 text-2xl font-bold tracking-[-0.03em]">Report an issue</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for reproducible bugs and technical product feedback.</p></div>
         </a>

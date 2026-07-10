@@ -10,8 +10,8 @@ function RootComponent() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#f5f4f0" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#0d0f0e" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content="#f2f3f0" media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content="#171917" media="(prefers-color-scheme: dark)" />
         <HeadContent />
       </head>
       <body className="tab-web">
