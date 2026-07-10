@@ -128,6 +128,43 @@ func boundedContext(from value: String?, selectedRange: CFRange?) -> [String: St
   ]
 }
 
+func rectPayload(_ bounds: CGRect) -> [String: Double]? {
+  guard bounds.width > 0, bounds.height > 0 else { return nil }
+  return [
+    "x": bounds.origin.x,
+    "y": bounds.origin.y,
+    "width": bounds.size.width,
+    "height": bounds.size.height,
+  ]
+}
+
+func caretBoundsForTextMarkerRange(from element: AXUIElement) -> [String: Double]? {
+  guard let markerRange = copyAXAttribute(element, "AXSelectedTextMarkerRange") else { return nil }
+
+  var boundsValue: CFTypeRef?
+  guard AXUIElementCopyParameterizedAttributeValue(
+    element,
+    "AXBoundsForTextMarkerRange" as CFString,
+    markerRange as CFTypeRef,
+    &boundsValue
+  ) == .success else {
+    return nil
+  }
+
+  guard let axValue = axValue(boundsValue), AXValueGetType(axValue) == .cgRect else { return nil }
+  var bounds = CGRect.zero
+  guard AXValueGetValue(axValue, .cgRect, &bounds) else { return nil }
+  guard bounds.height > 0 else { return nil }
+  // Chromium exposes the zero-length marker's remaining line width. Its origin
+  // is the caret, so collapse that rectangle back to a caret-width anchor.
+  return [
+    "x": bounds.origin.x,
+    "y": bounds.origin.y,
+    "width": 1,
+    "height": bounds.size.height,
+  ]
+}
+
 func caretBounds(from element: AXUIElement, selectedRange: CFRange?) -> [String: Double]? {
   guard var range = selectedRange else { return nil }
   range.length = 0
@@ -140,20 +177,18 @@ func caretBounds(from element: AXUIElement, selectedRange: CFRange?) -> [String:
     rangeValue,
     &boundsValue
   ) == .success else {
-    return nil
+    return caretBoundsForTextMarkerRange(from: element)
   }
 
-  guard let axValue = axValue(boundsValue) else { return nil }
-  guard AXValueGetType(axValue) == .cgRect else { return nil }
+  guard let axValue = axValue(boundsValue), AXValueGetType(axValue) == .cgRect else {
+    return caretBoundsForTextMarkerRange(from: element)
+  }
 
   var bounds = CGRect.zero
-  guard AXValueGetValue(axValue, .cgRect, &bounds) else { return nil }
-  return [
-    "x": bounds.origin.x,
-    "y": bounds.origin.y,
-    "width": bounds.size.width,
-    "height": bounds.size.height,
-  ]
+  guard AXValueGetValue(axValue, .cgRect, &bounds) else {
+    return caretBoundsForTextMarkerRange(from: element)
+  }
+  return rectPayload(bounds) ?? caretBoundsForTextMarkerRange(from: element)
 }
 
 func elementIdentity(_ element: AXUIElement, bundleId: String) -> String? {

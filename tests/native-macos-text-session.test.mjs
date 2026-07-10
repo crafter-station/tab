@@ -12,6 +12,8 @@ test("macOS helper emits Accessibility Text Session snapshots accepted by deskto
   assert.match(nativeHelper, /kAXSelectedTextRangeAttribute/);
   assert.match(nativeHelper, /kAXSelectedTextAttribute/);
   assert.match(nativeHelper, /kAXBoundsForRangeParameterizedAttribute/);
+  assert.match(nativeHelper, /AXSelectedTextMarkerRange/);
+  assert.match(nativeHelper, /AXBoundsForTextMarkerRange/);
   assert.match(nativeHelper, /"type": "text-session"/);
   assert.match(nativeHelper, /"accessibilityReliability"/);
   assert.match(nativeHelper, /"selectedText"/);

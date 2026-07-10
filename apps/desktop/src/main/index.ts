@@ -116,6 +116,7 @@ const DEBUG_TYPING_WORD_LIMIT = 100;
 const CLIPBOARD_RESTORE_DELAY_MS = 250;
 const OVERLAY_WIDTH = 560;
 const OVERLAY_SUGGESTION_HEIGHT = 64;
+const INLINE_OVERLAY_LEFT_BLEED = 4;
 const OVERLAY_DEBUG_WIDTH = 540;
 const OVERLAY_DEBUG_HEIGHT = 220;
 const OVERLAY_BOTTOM_MARGIN = 8;
@@ -123,6 +124,8 @@ const OVERLAY_POSITION_CHECK_MS = 400;
 const OVERLAY_HIT_TEST_MS = 50;
 const SUGGESTION_VISIBLE_MS = 4_000;
 const DOUBLE_OPTION_PRESS_MS = 500;
+const OBSIDIAN_BUNDLE_ID = "md.obsidian";
+const OBSIDIAN_ACCEPTANCE_SHORTCUT = "Tab";
 
 const authClient = createDesktopAuthClient({
   apiBaseUrl: API_BASE_URL,
@@ -383,6 +386,30 @@ function getSuggestionOverlayBounds(height = OVERLAY_SUGGESTION_HEIGHT): Electro
   };
 }
 
+function getInlineSuggestionOverlayBounds(caretBounds: NonNullable<TextSessionSnapshot["caretBounds"]>): Electron.Rectangle {
+  const display = screen.getDisplayNearestPoint({ x: Math.round(caretBounds.x), y: Math.round(caretBounds.y) });
+  const textX = Math.round(caretBounds.x + Math.max(caretBounds.width, 1));
+  const x = textX - INLINE_OVERLAY_LEFT_BLEED;
+  const height = Math.max(1, Math.round(caretBounds.height));
+  const y = Math.round(caretBounds.y);
+  const availableWidth = display.workArea.x + display.workArea.width - x;
+
+  return {
+    x,
+    y,
+    width: Math.max(1, Math.min(OVERLAY_WIDTH, availableWidth)),
+    height,
+  };
+}
+
+function getCurrentOverlayBounds(): Electron.Rectangle {
+  const snapshot = nativeAutocompleteRuntime.getCurrentSnapshot();
+  if (nativeAutocompleteRuntime.getCurrentSuggestion() && isObsidianInlineTarget(snapshot)) {
+    return getInlineSuggestionOverlayBounds(snapshot.textSession!.caretBounds!);
+  }
+  return getSuggestionOverlayBounds(isUsableWindow(overlayWindow) ? overlayWindow.getBounds().height : undefined);
+}
+
 function getDebugOverlayBounds(): Electron.Rectangle {
   const display = getCurrentDisplay();
   const { x, y, width } = display.workArea;
@@ -516,7 +543,7 @@ function createOverlayWindow(): BrowserWindow {
   });
 
   configureFloatingPanel(win);
-  installOverlayPositionTracking(win, () => getSuggestionOverlayBounds(win.getBounds().height));
+  installOverlayPositionTracking(win, getCurrentOverlayBounds);
   installAlphaClickThrough(win);
   win.on("closed", () => {
     if (overlayWindow === win) {
@@ -577,14 +604,57 @@ function resizeOverlayWindow(height: number): void {
   overlayWindow.setBounds(getSuggestionOverlayBounds(height), false);
 }
 
+function isObsidianInlineTarget(snapshot: ReturnType<typeof nativeAutocompleteRuntime.getCurrentSnapshot>): boolean {
+  return snapshot.activeApplication?.bundleId === OBSIDIAN_BUNDLE_ID
+    && snapshot.textSession?.accessibilityReliability === "reliable"
+    && snapshot.textSession.selectedRange?.length === 0
+    && snapshot.textSession.caretBounds !== undefined;
+}
+
+function unregisterObsidianTabAcceptance(): void {
+  if (globalShortcut.isRegistered(OBSIDIAN_ACCEPTANCE_SHORTCUT)) {
+    globalShortcut.unregister(OBSIDIAN_ACCEPTANCE_SHORTCUT);
+  }
+}
+
+function registerObsidianTabAcceptance(): void {
+  unregisterObsidianTabAcceptance();
+  const registered = globalShortcut.register(OBSIDIAN_ACCEPTANCE_SHORTCUT, () => {
+    acceptCurrentSuggestion().catch((error) => {
+      console.error("Failed to accept Obsidian suggestion:", error);
+    });
+  });
+  if (!registered) {
+    console.error("Failed to register Tab acceptance shortcut for Obsidian");
+  }
+}
+
 function showOverlay(suggestion: Suggestion): void {
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
-  resizeOverlayWindow(OVERLAY_SUGGESTION_HEIGHT);
-  overlayWindow.webContents.send("suggestion", suggestion);
+  const snapshot = nativeAutocompleteRuntime.getCurrentSnapshot();
+  const inline = isObsidianInlineTarget(snapshot);
+  if (inline) {
+    overlayWindow.setBounds(getInlineSuggestionOverlayBounds(snapshot.textSession!.caretBounds!), false);
+    registerObsidianTabAcceptance();
+  } else {
+    unregisterObsidianTabAcceptance();
+    resizeOverlayWindow(OVERLAY_SUGGESTION_HEIGHT);
+  }
+  overlayWindow.webContents.send("suggestion", {
+    ...suggestion,
+    presentation: inline ? "inline" : "floating",
+    ...(inline ? {
+      inlineMetrics: {
+        fontSize: Math.max(11, Math.round(snapshot.textSession!.caretBounds!.height * 0.82)),
+        lineHeight: Math.max(1, Math.round(snapshot.textSession!.caretBounds!.height)),
+      },
+    } : {}),
+  });
   overlayWindow.showInactive();
 }
 
 function clearSuggestionOverlay(): void {
+  unregisterObsidianTabAcceptance();
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   overlayWindow.webContents.send("hide");
   overlayWindow.hide();
@@ -1030,6 +1100,13 @@ export function handleSecureInputChanged(active: boolean): void {
 
 export function handleTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
   nativeAutocompleteRuntime.applyTextSessionSnapshot(snapshot);
+  if (
+    nativeAutocompleteRuntime.getCurrentSuggestion()
+    && isObsidianInlineTarget(nativeAutocompleteRuntime.getCurrentSnapshot())
+    && isUsableWindow(overlayWindow)
+  ) {
+    overlayWindow.setBounds(getInlineSuggestionOverlayBounds(snapshot.caretBounds!), false);
+  }
 }
 
 export function handlePauseChanged(active: boolean): void {
