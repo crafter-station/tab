@@ -474,6 +474,18 @@ describe("Billing and quota enforcement", () => {
       const entitlement = await storage.getEntitlement("user-d1");
       expect(entitlement?.planId).toBe("max");
 
+      const initialContenders = await Promise.all([
+        storage.consumeUsageWithinLimit("user-d1", currentMonth(), 1),
+        storage.consumeUsageWithinLimit("user-d1", currentMonth(), 1),
+      ]);
+      expect(initialContenders).toContain(1);
+      expect(initialContenders).toContain(null);
+      await platform.env.DB.prepare(
+        "DELETE FROM usage_records WHERE user_id = ? AND month = ?",
+      )
+        .bind("user-d1", currentMonth())
+        .run();
+
       const first = await storage.consumeUsageWithinLimit(
         "user-d1",
         currentMonth(),
