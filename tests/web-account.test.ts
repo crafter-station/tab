@@ -383,11 +383,11 @@ describe("Web account surface", () => {
     const usageResponse = await webRequest(webApp, "/dashboard/usage", {}, setCookie!);
     expect(usageResponse.status).toBe(200);
     const usageBody = await usageResponse.text();
-    expect(usageBody).toInclude("Monthly usage");
-    expect(usageBody).toInclude("Free plan");
-    expect(usageBody).toInclude("Monthly suggestions");
+    expect(usageBody).toInclude("Usage and billing");
+    expect(usageBody).toInclude("Current plan");
+    expect(usageBody).toInclude("Suggestions this month");
     expect(usageBody).toInclude("Suggestions available");
-    expect(usageBody).toInclude("Billing actions");
+    expect(usageBody).toInclude("Change plan");
     expect(usageBody).toInclude("Upgrade to Pro");
     expect(usageBody).toInclude("Upgrade to Max");
     expect(usageBody).toInclude("Manage billing");
@@ -395,8 +395,8 @@ describe("Web account surface", () => {
     const configResponse = await webRequest(webApp, "/dashboard/account", {}, setCookie!);
     expect(configResponse.status).toBe(200);
     const configBody = await configResponse.text();
-    expect(configBody).toInclude("Account status");
-    expect(configBody).toInclude("Signed in");
+    expect(configBody).toInclude("Signed-in account");
+    expect(configBody).toInclude("Email verified");
     expect(configBody).toInclude('action="/logout"');
     expect(configBody).toInclude("Sign out");
 
@@ -731,8 +731,8 @@ describe("Web account surface", () => {
     expect(accountBefore.status).toBe(200);
     const bodyBefore = await accountBefore.text();
     expect(bodyBefore).toInclude("Lives in Portland");
-    expect(bodyBefore).toInclude("Memory Library");
-    expect(bodyBefore).toInclude("Delete Selected");
+    expect(bodyBefore).toInclude("Memory library");
+    expect(bodyBefore).toInclude("Delete selected");
     expect(bodyBefore).toInclude("Actions for memory updated");
     expect(bodyBefore).toInclude("Update Memory");
     expect(bodyBefore).toInclude("Delete Memory");
@@ -828,7 +828,7 @@ describe("Web account surface", () => {
     const body = await accountPage.text();
     expect(body).toInclude("Prefers concise summaries");
     expect(body).toInclude("Works at Acme Robotics");
-    expect(body).toInclude("Add a Memory");
+    expect(body).toInclude("Add a memory");
   });
 
   it("deletes selected Personal Memories from the dashboard table", async () => {

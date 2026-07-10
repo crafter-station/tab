@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Button, StatusBadge } from "@tab/ui";
+import { Button, Eyebrow, StatusBadge, TabMark } from "@tab/ui";
 import type { StatusBadgeTone } from "@tab/ui";
 
 type SetupStep = {
@@ -20,25 +20,25 @@ const setupSteps: SetupStep[] = [
     title: "Accessibility",
     description: "Lets Tab read the text field you are using and add suggestions you accept.",
     badgeLabel: "Setup step",
-    badgeTone: "muted",
+    badgeTone: "neutral",
   },
   {
     title: "Input Monitoring",
     description: "Helps Tab notice typing and make Option+Tab work.",
     badgeLabel: "Setup step",
-    badgeTone: "muted",
+    badgeTone: "neutral",
   },
   {
     title: "Privacy scope",
     description: "Tab does not request Screen Recording or Full Disk Access.",
     badgeLabel: "Visible",
-    badgeTone: "ok",
+    badgeTone: "success",
   },
   {
     title: "Practice suggestion",
     description: "Try accepting and dismissing a sample suggestion before Tab runs in another app.",
     badgeLabel: "Practice",
-    badgeTone: "ok",
+    badgeTone: "success",
   },
 ];
 
@@ -54,8 +54,8 @@ export function SignInSurface() {
     <main className="sign-in-shell">
       <section className="sign-in-hero drag-region" aria-label="Tab setup preview">
         <div className="sign-in-proof pug-dot-grid">
-          <p className="eyebrow">Tab for Mac</p>
-          <h2>Connect this Mac, then review setup step by step.</h2>
+          <Eyebrow>Tab for Mac</Eyebrow>
+          <h1 className="sign-in-proof__title">Connect this Mac, then review setup step by step.</h1>
           <div className="sign-in-proof__steps">
             {setupSteps.map((setupStep) => (
               <article className="sign-in-proof__step" key={setupStep.title}>
@@ -74,26 +74,26 @@ export function SignInSurface() {
         <div className="sign-in-panel__drag drag-region" aria-hidden="true" />
         <div className="sign-in-panel__content no-drag">
           <div className="sign-in-brand">
-            <div className="sign-in-brand__mark">T</div>
+            <TabMark />
             <div>
-              <p className="eyebrow">Tab for Mac</p>
+              <Eyebrow>Tab for Mac</Eyebrow>
               <strong>Private autocomplete for your Mac</strong>
             </div>
           </div>
 
           <div className="sign-in-copy">
-            <h1>Sign in to continue.</h1>
+            <h2>Sign in to continue.</h2>
             <p className="lede">
               Tab opens your browser to connect this Mac. After sign-in, new users continue through onboarding;
               returning users go straight to settings.
             </p>
           </div>
 
-          <Button className="sign-in-cta" onClick={handleSignIn}>
+          <Button aria-busy={opened} className="sign-in-cta" disabled={opened} onClick={handleSignIn}>
             {opened ? "Waiting for browser sign-in..." : "Sign in"}
           </Button>
 
-          {opened ? <p className="sign-in-hint">Complete sign-in in your browser, then return to Tab.</p> : null}
+          {opened ? <p className="sign-in-hint" role="status">Complete sign-in in your browser, then return to Tab.</p> : null}
         </div>
       </section>
     </main>

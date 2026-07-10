@@ -3,23 +3,8 @@
 }
 
 :root {
-  --bg: var(--background);
-  --bg-elevated: var(--card);
-  --surface: var(--muted);
-  --surface-strong: var(--secondary);
-  --border-strong: color-mix(in srgb, var(--border) 70%, var(--foreground));
-  --text: var(--foreground);
-  --text-subtle: var(--muted-foreground);
-  --text-muted: color-mix(in srgb, var(--muted-foreground) 72%, transparent);
-  --signal: var(--tab-signal);
-  --signal-dim: var(--muted-foreground);
-  --signal-tint: var(--tab-signal-tint);
-  --on-signal: var(--primary-foreground);
-  --success-tint: var(--tab-success-tint);
-  --ease-out: var(--tab-ease-out);
-  --ease-in-out: var(--tab-ease-in-out);
   font-family: var(--font-body);
-  color: var(--text);
+  color: var(--foreground);
   background: transparent;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -36,17 +21,14 @@ body,
 }
 
 body {
-  color: var(--text);
+  color: var(--foreground);
   background: transparent;
 }
 
 body[data-surface="settings"],
 body[data-surface="onboarding"],
 body[data-surface="sign-in"] {
-  background:
-    var(--tab-page-wash),
-    var(--tab-grid-bg),
-    var(--bg);
+  background: var(--tab-page-wash), var(--tab-grid-bg), var(--tab-canvas);
   background-size: auto, 32px 32px, auto;
   pointer-events: auto;
 }

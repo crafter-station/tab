@@ -1,14 +1,14 @@
 import type { PropsWithChildren, ReactNode } from "react";
 import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { Card, CardContent } from "../ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import { Separator } from "../ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { cn } from "../../lib/utils";
+import { semanticToneClasses, type SemanticTone } from "./semantic-tone";
 
-export type PatternTone = "neutral" | "success" | "warning" | "info" | "destructive";
 export type SettingsNavItem = {
   label: string;
   href: string;
@@ -16,14 +16,6 @@ export type SettingsNavItem = {
 };
 
 type ThemeMode = "light" | "dark";
-
-const toneClasses: Record<PatternTone, string> = {
-  neutral: "border-border bg-muted text-muted-foreground",
-  success: "border-[color-mix(in_srgb,var(--success)_26%,transparent)] bg-[var(--tab-success-tint)] text-[var(--success)]",
-  warning: "border-[color-mix(in_srgb,var(--warning)_30%,transparent)] bg-[var(--tab-warning-tint)] text-[var(--warning)]",
-  info: "border-[color-mix(in_srgb,var(--info)_28%,transparent)] bg-[var(--tab-info-tint)] text-[var(--info)]",
-  destructive: "border-[color-mix(in_srgb,var(--destructive)_28%,transparent)] bg-[color-mix(in_srgb,var(--destructive)_12%,transparent)] text-[var(--destructive)]",
-};
 
 const reviewThemeClasses: Record<ThemeMode, string> = {
   light: "pug-theme-light",
@@ -71,17 +63,43 @@ type SurfaceHeaderProps = {
   headingLevel?: 1 | 2 | 3;
 };
 
+type EyebrowProps = PropsWithChildren<{
+  className?: string;
+}>;
+
+export function Eyebrow({ className, children }: EyebrowProps) {
+  return (
+    <p className={cn("font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground", className)}>
+      {children}
+    </p>
+  );
+}
+
+export function TabMark({ className }: { className?: string }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={cn(
+        "grid size-8 shrink-0 place-items-center rounded-[var(--radius-media)] border border-primary bg-primary font-mono text-xs font-bold text-primary-foreground shadow-[var(--tab-shadow-control)]",
+        className,
+      )}
+    >
+      T
+    </span>
+  );
+}
+
 export function SurfaceHeader({ eyebrow, title, description, action, className, headingLevel = 2 }: SurfaceHeaderProps) {
   const Heading = `h${headingLevel}` as const;
 
   return (
     <div className={cn("flex items-start justify-between gap-4 max-sm:flex-col", className)}>
       <div className="grid gap-2">
-        {eyebrow ? <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">{eyebrow}</p> : null}
-        <Heading className={cn("text-balance font-[var(--font-display)] font-bold leading-tight text-foreground", headingLevel === 1 ? "text-3xl" : "text-2xl")}>
+        {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
+        <Heading className={cn("text-balance font-[var(--font-display)] font-semibold leading-tight tracking-[-0.035em] text-foreground", headingLevel === 1 ? "text-3xl" : "text-2xl")}>
           {title}
         </Heading>
-        {description ? <p className="max-w-[65ch] text-pretty text-base leading-relaxed text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-[65ch] text-pretty text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
       </div>
       {action ? <div className="shrink-0">{action}</div> : null}
     </div>
@@ -91,7 +109,7 @@ export function SurfaceHeader({ eyebrow, title, description, action, className, 
 type StatusRowProps = {
   label: string;
   value: string;
-  tone?: PatternTone;
+  tone?: SemanticTone;
   description?: string;
   meta?: ReactNode;
   className?: string;
@@ -99,13 +117,13 @@ type StatusRowProps = {
 
 export function StatusRow({ label, value, tone = "neutral", description, meta, className }: StatusRowProps) {
   return (
-    <div className={cn("grid gap-3 border-t border-border py-4 sm:grid-cols-[1fr_auto] sm:items-center", className)}>
+    <div className={cn("grid gap-3 border-b border-border py-4 last:border-b-0 sm:grid-cols-[1fr_auto] sm:items-center", className)}>
       <div className="grid gap-1">
         <p className="text-sm font-semibold text-foreground">{label}</p>
-        {description ? <p className="max-w-[65ch] text-pretty text-base leading-relaxed text-muted-foreground">{description}</p> : null}
+        {description ? <p className="max-w-[65ch] text-pretty text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
         {meta ? <div className="text-xs font-medium text-muted-foreground">{meta}</div> : null}
       </div>
-      <Badge variant="outline" className={cn("justify-self-start", toneClasses[tone])}>
+      <Badge variant="outline" className={cn("justify-self-start", semanticToneClasses[tone])}>
         {value}
       </Badge>
     </div>
@@ -121,10 +139,10 @@ type EmptyStateProps = {
 
 export function EmptyState({ title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn("grid place-items-center border-y border-border py-10 text-center", className)}>
+    <div className={cn("grid place-items-center rounded-[var(--radius-card)] border border-dashed border-border bg-[var(--tab-surface-sunken)] px-6 py-10 text-center", className)}>
       <div className="grid max-w-sm gap-3">
-        <h3 className="text-balance font-[var(--font-display)] text-xl font-bold text-foreground">{title}</h3>
-        <p className="text-pretty text-base leading-relaxed text-muted-foreground">{description}</p>
+        <h3 className="text-balance font-[var(--font-display)] text-lg font-semibold text-foreground">{title}</h3>
+        <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{description}</p>
         {action ? <div className="justify-self-center text-sm font-bold text-foreground">{action}</div> : null}
       </div>
     </div>
@@ -188,6 +206,41 @@ export function SettingsRow({ label, description, className, children }: Setting
         {description ? <p className="text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
       </div>
       {children ? <div className="text-sm font-medium text-foreground">{children}</div> : null}
+    </div>
+  );
+}
+
+type SettingsGroupProps = PropsWithChildren<{
+  title: string;
+  description?: string;
+  className?: string;
+}>;
+
+export function SettingsGroup({ title, description, className, children }: SettingsGroupProps) {
+  return (
+    <Card className={cn("overflow-hidden", className)}>
+      <CardHeader className="border-b border-border bg-[var(--tab-surface-sunken)]/55">
+        <CardTitle headingLevel={2}>{title}</CardTitle>
+        {description ? <CardDescription>{description}</CardDescription> : null}
+      </CardHeader>
+      <CardContent>{children}</CardContent>
+    </Card>
+  );
+}
+
+type SummaryMetricProps = {
+  label: string;
+  value: string;
+  detail?: string;
+  className?: string;
+};
+
+export function SummaryMetric({ label, value, detail, className }: SummaryMetricProps) {
+  return (
+    <div className={cn("grid min-w-0 gap-1 rounded-[var(--radius-card)] border border-border bg-[var(--tab-surface-raised)] p-4 shadow-[var(--tab-shadow-control)]", className)}>
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="truncate text-xl font-semibold tracking-[-0.03em] text-foreground tabular-nums">{value}</p>
+      {detail ? <p className="truncate text-xs text-muted-foreground">{detail}</p> : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import {
   Alert,
   AlertDescription,
+  Eyebrow,
   SurfaceHeader,
   buttonVariants,
 } from "@tab/ui";
@@ -73,7 +74,7 @@ export function hasDesktopHandoff(search: AuthSearch): boolean {
 }
 
 export function PageKicker({ children }: { children: ReactNode }) {
-  return <p className="text-xs font-semibold uppercase tracking-[0.1em] text-muted-foreground">{children}</p>;
+  return <Eyebrow>{children}</Eyebrow>;
 }
 
 export function AuthShell({

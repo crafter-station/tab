@@ -1,6 +1,6 @@
 import { ScriptOnce } from "@tanstack/react-router";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { getStoredThemePreference, getThemeInitScript, setThemePreference, type ThemeMode } from "@tab/ui";
+import { getStoredThemePreference, getThemeInitScript, setThemePreference, subscribeToSystemThemeChanges, type ThemeMode } from "@tab/ui";
 
 type ThemeProviderProps = {
   children: ReactNode;
@@ -37,11 +37,7 @@ export function ThemeProvider({
 
   useEffect(() => {
     if (!mounted || theme !== "system") return;
-
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => applyTheme("system");
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
+    return subscribeToSystemThemeChanges();
   }, [theme, mounted]);
 
   const setTheme = (nextTheme: ThemeMode) => {

@@ -7,93 +7,81 @@
 }
 
 .debug-card {
-  --debug-bg: rgba(14, 17, 16, 0.92);
-  --debug-bg-raised: rgba(21, 25, 23, 0.84);
-  --debug-border: color-mix(in srgb, var(--border) 82%, rgba(245, 247, 242, 0.08));
-  --debug-text: rgba(245, 247, 242, 0.9);
-  --debug-muted: rgba(245, 247, 242, 0.58);
-  --debug-subtle: rgba(245, 247, 242, 0.42);
   position: absolute;
   inset: 8px 10px auto;
   display: grid;
-  gap: 8px;
+  gap: 9px;
   max-height: calc(100% - 16px);
-  padding: 11px 12px;
+  padding: 12px;
   overflow: hidden;
-  color: var(--debug-text);
-  background:
-    linear-gradient(135deg, var(--debug-bg), var(--debug-bg-raised)),
-    var(--tab-grid-bg);
-  background-size: auto, 24px 24px;
-  border: 1px solid var(--debug-border);
+  color: var(--tab-overlay-text);
+  background: var(--tab-overlay-bg);
+  border: 1px solid var(--tab-overlay-border);
   border-radius: var(--radius-card);
-  box-shadow: var(--tab-glass-shadow);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
+  box-shadow: var(--tab-overlay-shadow);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
   opacity: 0;
-  transform: translateY(-8px) scale(0.985);
   pointer-events: none;
-  transition: opacity 180ms ease, transform 220ms var(--ease-out);
 }
 
 .debug-card--visible {
   opacity: 1;
-  transform: translateY(0) scale(1);
 }
 
 .debug-card__label,
 .debug-card__section-label {
-  font-size: 8px;
-  font-weight: 750;
-  letter-spacing: 0.1em;
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .debug-card__label {
-  color: var(--debug-text);
+  color: var(--tab-overlay-text);
 }
 
 .debug-card__section-label {
   margin-bottom: 4px;
-  color: var(--debug-subtle);
+  color: var(--tab-overlay-muted);
 }
 
 .debug-card__grid {
   display: grid;
-  gap: 7px;
+  gap: 8px;
 }
 
 .debug-card__body,
 .debug-card__api {
   overflow: hidden;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-family: var(--font-code);
   font-size: 11px;
-  line-height: 1.35;
+  line-height: 1.4;
   white-space: pre-wrap;
   word-break: break-word;
 }
 
 .debug-card__body {
   max-height: 112px;
-  color: var(--debug-text);
+  color: var(--tab-overlay-text);
 }
 
 .debug-card__api {
-  max-height: 36px;
+  max-height: 38px;
   padding: 6px 8px;
-  color: var(--debug-text);
-  background: color-mix(in srgb, var(--debug-text) 9%, transparent);
-  border: 1px solid color-mix(in srgb, var(--debug-text) 15%, transparent);
+  color: var(--tab-overlay-text);
+  background: var(--tab-overlay-key-bg);
+  border: 1px solid var(--tab-overlay-divider);
   border-radius: var(--radius-control);
 }
 
-.debug-card__api--muted {
-  color: var(--debug-muted);
+.debug-card__api--muted,
+.debug-card__meta {
+  color: var(--tab-overlay-muted);
 }
 
 .debug-card__meta {
   overflow: hidden;
-  color: var(--debug-muted);
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;

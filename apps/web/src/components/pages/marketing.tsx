@@ -4,23 +4,7 @@ import {
 } from "@tab/ui";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
-const homeFeatureBlocks = [
-  {
-    eyebrow: "01",
-    title: "Works where you write",
-    description: "Use one Mac app across Mail, Slack, Notes, Ghostty, and the places you already type.",
-  },
-  {
-    eyebrow: "02",
-    title: "Saved details you can see",
-    description: "Keep personalization transparent with review and delete controls in your account.",
-  },
-  {
-    eyebrow: "03",
-    title: "Simple account controls",
-    description: "Track monthly suggestions, billing, connected Macs, and account status from the web dashboard.",
-  },
-] as const;
+export { HomePage } from "./home.tsx";
 
 const downloadSteps = [
   {
@@ -76,72 +60,6 @@ function planDescription(planId: PlanId): string {
   return "For the heaviest writing workflows.";
 }
 
-function ProductPreview() {
-  return (
-    <div className="overflow-hidden rounded-[calc(var(--radius-card)+4px)] border border-border bg-card text-card-foreground shadow-[0_24px_70px_rgba(0,0,0,0.12)]">
-      <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
-        <span className="size-2.5 rounded-full bg-foreground/20" />
-        <span className="size-2.5 rounded-full bg-foreground/[0.12]" />
-        <span className="size-2.5 rounded-full bg-foreground/[0.08]" />
-        <span className="ml-2 text-xs font-semibold text-muted-foreground">New message</span>
-      </div>
-      <div className="p-5 sm:p-7">
-        <div className="grid gap-3 border-b border-border pb-4 text-sm">
-          <p className="flex gap-4"><span className="w-12 text-muted-foreground">To</span><span>Maya Chen</span></p>
-          <p className="flex gap-4"><span className="w-12 text-muted-foreground">Subject</span><span>Tuesday review</span></p>
-        </div>
-        <div className="min-h-48 pt-7 text-[1.05rem] leading-8 sm:min-h-56">
-          <p>Hi Maya,</p>
-          <p className="mt-5">I finished the latest pass. Would Tuesday afternoon <span className="text-muted-foreground">work for you?</span></p>
-          <div className="mt-5 flex items-center justify-between gap-4 border-l-2 border-foreground bg-muted/45 px-4 py-3">
-            <span className="font-medium">work for you?</span>
-            <kbd className="shrink-0 rounded-[var(--radius-control)] border border-border bg-background px-2 py-1 font-[var(--font-code)] text-[0.6875rem] font-semibold text-muted-foreground shadow-[0_1px_0_var(--border)]">Option + Tab</kbd>
-          </div>
-        </div>
-        <div className="flex items-center justify-between border-t border-border pt-4 text-xs text-muted-foreground">
-          <span>Tab is ready</span>
-          <span>You choose what gets added</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-export function HomePage() {
-  return (
-    <>
-      <section className="grid gap-12 py-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(440px,1.1fr)] lg:items-center lg:gap-16 lg:py-14">
-        <div className="grid content-center gap-5">
-          <PageKicker>Autocomplete for your Mac</PageKicker>
-          <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,7vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.045em]">Finish the thought. Stay in the app.</h1>
-          <p className="max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Tab completes the next few words wherever you write on your Mac. Accept with Option+Tab, or keep typing and it gets out of the way.</p>
-          <div className="mt-2 flex flex-wrap gap-3">
-            <a className={buttonVariants()} href="/download">Download for macOS</a>
-            <a className={buttonVariants({ variant: "secondary" })} href="/pricing">See pricing</a>
-          </div>
-          <p className="text-sm text-muted-foreground">macOS 14 or newer. Your suggestion is never added without you.</p>
-        </div>
-        <ProductPreview />
-      </section>
-      <section className="border-y border-border py-8 sm:py-10">
-        <div className="mb-8 max-w-xl">
-          <PageKicker>Designed to stay quiet</PageKicker>
-          <h2 className="mt-3 text-balance font-[var(--font-display)] text-2xl font-bold tracking-[-0.025em]">Useful in the moment. Clear after it.</h2>
-        </div>
-        <div className="grid gap-8 md:grid-cols-3 md:gap-0">
-          {homeFeatureBlocks.map((feature) => (
-            <article key={feature.eyebrow} className="md:border-l md:px-7 md:first:border-l-0 md:first:pl-0 md:last:pr-0">
-              <p className="font-[var(--font-code)] text-xs text-muted-foreground">{feature.eyebrow}</p>
-              <h3 className="mt-4 text-lg font-bold tracking-[-0.015em]">{feature.title}</h3>
-              <p className="mt-2 max-w-[34ch] text-pretty leading-relaxed text-muted-foreground">{feature.description}</p>
-            </article>
-          ))}
-        </div>
-      </section>
-    </>
-  );
-}
-
 export function PricingPage({ authenticated = false }: { authenticated?: boolean }) {
   const plans = getPlanEntries().map(([planId, plan]) => ({
     planId,
@@ -172,7 +90,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
               <p className="mt-2 text-2xl font-bold tabular-nums">{formatCount(plan.monthlyAutocompleteSuggestions)}</p>
               <ul className="mt-5 grid gap-3 text-sm text-muted-foreground">
                 <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Use Tab across supported Mac apps</span></li>
-                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Review and delete saved memories</span></li>
+                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Saved memories you can review and delete</span></li>
                 <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Change plans whenever you need</span></li>
               </ul>
             </div>

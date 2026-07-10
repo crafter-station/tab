@@ -22,5 +22,6 @@ export * from "./components/ui/tooltip";
 export * from "./components/app/floating-suggestion-bar";
 export * from "./components/app/patterns";
 export * from "./components/app/permission-card";
+export * from "./components/app/semantic-tone";
 export * from "./components/app/section-card";
 export * from "./components/app/status-badge";

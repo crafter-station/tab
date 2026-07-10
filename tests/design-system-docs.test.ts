@@ -53,10 +53,12 @@ describe("Private Utility Grid documentation and styling contract", () => {
 
   it("keeps migrated surfaces on canonical shared tokens instead of legacy aliases", () => {
     const desktopCss = migratedDesktopStylePaths.map((path) => readFileSync(path, "utf8")).join("\n");
-    const dashboardSource = readFileSync("apps/web/src/components/web-pages.tsx", "utf8");
+    const dashboardSource = readFileSync("apps/web/src/components/pages/dashboard.tsx", "utf8");
 
     expect(desktopCss).not.toContain("--glass-");
     expect(desktopCss).not.toContain("--tabb-");
+    expect(desktopCss).not.toContain("--text-muted");
+    expect(desktopCss).not.toContain("--text-subtle");
     expect(dashboardSource).not.toContain("amber-");
     expect(desktopCss).toInclude("--tab-grid-bg");
     expect(desktopCss).toInclude("--tab-shadow-soft");

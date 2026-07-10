@@ -1,1 +1,125 @@
-@import "../../../packages/ui/src/styles/globals.css";
+@import "@tab/ui/styles.css";
+
+.tab-web {
+  background: var(--background);
+}
+
+.marketing-intro > * {
+  animation: marketing-intro 420ms var(--tab-ease-out) both;
+}
+
+.marketing-intro > :nth-child(2) {
+  animation-delay: 40ms;
+}
+
+.marketing-intro > :nth-child(3) {
+  animation-delay: 70ms;
+}
+
+.marketing-intro > :nth-child(4) {
+  animation-delay: 100ms;
+}
+
+.marketing-intro > :nth-child(5) {
+  animation-delay: 130ms;
+}
+
+.tab-demo {
+  box-shadow: var(--tab-shadow-window);
+}
+
+.tab-demo [data-demo-scene] {
+  display: none;
+}
+
+.tab-demo[data-active="mail"] [data-demo-scene="mail"],
+.tab-demo[data-active="slack"] [data-demo-scene="slack"],
+.tab-demo[data-active="notes"] [data-demo-scene="notes"] {
+  display: grid;
+  animation: tab-demo-scene 180ms var(--tab-ease-out) both;
+}
+
+.tab-demo[data-active="mail"] [data-demo-target="mail"],
+.tab-demo[data-active="slack"] [data-demo-target="slack"],
+.tab-demo[data-active="notes"] [data-demo-target="notes"] {
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.tab-demo-suggestion {
+  display: inline;
+  animation: tab-demo-suggestion 300ms var(--tab-ease-out) 280ms both;
+  transition: color 150ms var(--tab-ease-out);
+}
+
+.tab-demo-overlay {
+  animation: tab-demo-overlay 220ms var(--tab-ease-out) 520ms both;
+}
+
+.tab-demo[data-restarting="true"] .tab-demo-suggestion,
+.tab-demo[data-restarting="true"] .tab-demo-overlay {
+  animation: none;
+  opacity: 0;
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-suggestion {
+  animation: none;
+  opacity: 1;
+  color: var(--foreground);
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-overlay {
+  animation: none;
+  opacity: 1;
+  transform: none;
+  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
+  background: var(--success);
+  color: var(--success-foreground);
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-ready-label {
+  display: none;
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-accepted-label {
+  display: inline;
+}
+
+.marketing-detail > summary::-webkit-details-marker {
+  display: none;
+}
+
+.marketing-detail[open] .marketing-detail-icon {
+  transform: rotate(45deg);
+}
+
+@keyframes marketing-intro {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.75rem, 0);
+  }
+}
+
+@keyframes tab-demo-scene {
+  from {
+    opacity: 0;
+    transform: translate3d(0.5rem, 0, 0);
+  }
+}
+
+@keyframes tab-demo-suggestion {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tab-demo-overlay {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.5rem, 0) scale(0.97);
+  }
+}

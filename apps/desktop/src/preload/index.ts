@@ -42,13 +42,14 @@ export type TabPreloadApi = {
   revealAppInFinder: () => Promise<void>;
   relaunchForPermissions: () => Promise<void>;
   completeOnboarding: () => void;
+  completeOnboardingAndRelaunch: () => void;
   skipOnboarding: () => void;
 
   // Settings / status
-  onStatusChanged: (callback: (status: DesktopStatus) => void) => void;
-  onMemoriesChanged: (callback: (memories: PersonalMemory[]) => void) => void;
-  onPauseChanged: (callback: (paused: boolean) => void) => void;
-  onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => void;
+  onStatusChanged: (callback: (status: DesktopStatus) => void) => () => void;
+  onMemoriesChanged: (callback: (memories: PersonalMemory[]) => void) => () => void;
+  onPauseChanged: (callback: (paused: boolean) => void) => () => void;
+  onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => () => void;
   getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences }>;
   signIn: () => void;
   signOut: () => void;
@@ -88,21 +89,32 @@ contextBridge.exposeInMainWorld("tab", {
   completeOnboarding: () => {
     ipcRenderer.send("complete-onboarding");
   },
+  completeOnboardingAndRelaunch: () => {
+    ipcRenderer.send("complete-onboarding-and-relaunch");
+  },
   skipOnboarding: () => {
     ipcRenderer.send("complete-onboarding");
   },
 
   onStatusChanged: (callback: (status: DesktopStatus) => void) => {
-    ipcRenderer.on("status-changed", (_event, status) => callback(status));
+    const listener = (_event: Electron.IpcRendererEvent, status: DesktopStatus) => callback(status);
+    ipcRenderer.on("status-changed", listener);
+    return () => ipcRenderer.off("status-changed", listener);
   },
   onMemoriesChanged: (callback: (memories: PersonalMemory[]) => void) => {
-    ipcRenderer.on("memories-changed", (_event, memories) => callback(memories));
+    const listener = (_event: Electron.IpcRendererEvent, memories: PersonalMemory[]) => callback(memories);
+    ipcRenderer.on("memories-changed", listener);
+    return () => ipcRenderer.off("memories-changed", listener);
   },
   onPauseChanged: (callback: (paused: boolean) => void) => {
-    ipcRenderer.on("pause-changed", (_event, paused) => callback(paused));
+    const listener = (_event: Electron.IpcRendererEvent, paused: boolean) => callback(paused);
+    ipcRenderer.on("pause-changed", listener);
+    return () => ipcRenderer.off("pause-changed", listener);
   },
   onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => {
-    ipcRenderer.on("preferences-changed", (_event, preferences) => callback(preferences));
+    const listener = (_event: Electron.IpcRendererEvent, preferences: DesktopPreferences) => callback(preferences);
+    ipcRenderer.on("preferences-changed", listener);
+    return () => ipcRenderer.off("preferences-changed", listener);
   },
   getInitialState: () => ipcRenderer.invoke("get-initial-state"),
   signIn: () => {

@@ -7,30 +7,22 @@ export type OnboardingManagerDependencies = {
   setPreferences(prefs: Partial<OnboardingPreferences>): void;
 };
 
-export const ONBOARDING_STEPS = ["sign-in", "permissions", "how-it-works", "practice", "done"] as const;
+export const ONBOARDING_STEPS = ["try", "permissions", "done"] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subtitle: string }> = {
-  "sign-in": {
-    title: "Sign in to start Tab",
-    subtitle: "Connect this Mac before Tab can request suggestions for your account.",
+  try: {
+    title: "Try Tab",
+    subtitle: "Accept a sample suggestion before Tab appears in other apps.",
   },
   permissions: {
-    title: "Enable two macOS permissions",
-    subtitle: "Accessibility and Input Monitoring let Tab read the text field you use, add suggestions you accept, and notice typing activity.",
-  },
-  "how-it-works": {
-    title: "Learn the flow",
-    subtitle: "Tab uses recent typing to ask for a helpful suggestion, then shows it in a small bar.",
-  },
-  practice: {
-    title: "Practice suggestions",
-    subtitle: "Try accepting and dismissing a sample suggestion before Tab appears in other apps.",
+    title: "Allow Tab to work in your apps",
+    subtitle: "Enable Accessibility and Input Monitoring in order, with a clear explanation of each permission.",
   },
   done: {
-    title: "You are ready",
-    subtitle: "Tab will keep running from the tray and show suggestions when context is available.",
+    title: "Start writing with Tab",
+    subtitle: "Relaunch once to apply Input Monitoring, then Tab will run quietly from the menu bar.",
   },
 };
 

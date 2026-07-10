@@ -4,12 +4,15 @@ import {
   CommandBlock,
   ComponentReviewSurface,
   EmptyState,
+  Eyebrow,
   FloatingSuggestionBar,
   SectionBlock,
   SettingsNav,
   SettingsRow,
   StatusRow,
+  SuggestionCommand,
   SurfaceHeader,
+  TabMark,
 } from "../packages/ui/src/index.ts";
 import { DebugContextCard } from "../apps/desktop/src/renderer/src/components/DebugContextCard.tsx";
 
@@ -64,5 +67,20 @@ describe("shared app patterns", () => {
     expect(suggestionMarkup).toInclude("Option+Tab");
     expect(suggestionMarkup).toInclude("type=\"button\"");
     expect(suggestionMarkup).toInclude("aria-hidden=\"true\"");
+  });
+
+  it("shares identity and suggestion recipes across embedded and native surfaces", () => {
+    const markup = renderToStaticMarkup(
+      <div>
+        <TabMark />
+        <Eyebrow>Native autocomplete</Eyebrow>
+        <SuggestionCommand suggestion="Finish the thought." aria-label="Accept sample suggestion" />
+      </div>,
+    );
+
+    expect(markup).toInclude("Native autocomplete");
+    expect(markup).toInclude("Finish the thought.");
+    expect(markup).toInclude("data-suggestion-command");
+    expect(markup).toInclude("Option+Tab");
   });
 });

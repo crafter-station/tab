@@ -16,9 +16,10 @@ import {
 
 export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?: string }) {
   const signupHref = `/signup${preserveAuthSearchParams(search)}`;
+  const handoff = hasDesktopHandoff(search);
 
   return (
-    <AuthShell eyebrow="Account access" title="Sign in" description="Open your Tab account or finish connecting this Mac." handoff={hasDesktopHandoff(search)}>
+    <AuthShell eyebrow={handoff ? "Mac sign-in" : "Account access"} title="Sign in" description="Open your Tab account or finish connecting this Mac." handoff={handoff}>
       <form className="flex flex-col gap-4" method="post" action="/login">
         <ErrorMessage message={error} />
         <HandoffFields search={search} />
