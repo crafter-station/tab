@@ -26,6 +26,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Check Worker binding types
+        run: bun run worker:types:check
+
       - name: Lint
         run: bun run lint
 
