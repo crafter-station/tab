@@ -24,7 +24,7 @@ const glowClassName =
 const iconClassName =
   "z-10 inline-flex size-[22px] items-center justify-center rounded-full border border-border bg-secondary text-foreground";
 const shortcutClassName =
-  "z-10 rounded-full border border-border bg-secondary px-2 py-1 font-mono text-[10px] font-bold tracking-wide text-muted-foreground whitespace-nowrap";
+  "z-10 rounded-full border border-border bg-secondary px-2 py-1 font-mono text-xs font-bold tracking-wide text-muted-foreground whitespace-nowrap";
 
 export function FloatingSuggestionBar({ suggestion, onAccept, className }: FloatingSuggestionBarProps) {
   return (
