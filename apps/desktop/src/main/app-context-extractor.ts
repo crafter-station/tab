@@ -135,7 +135,9 @@ export function createAppContextExtractor(options: {
     },
     getSnapshot(snapshot) {
       const managedSnapshot = managedContext.getSnapshot();
-      if (isAvailable(managedSnapshot)) return managedSnapshot;
+      if (isAvailable(managedSnapshot) || managedSnapshot.metadata.status === "suppressed") {
+        return managedSnapshot;
+      }
 
       const candidates = snapshotProviders.map((provider) => provider.getCandidate(snapshot));
       return normalizeAppContext(

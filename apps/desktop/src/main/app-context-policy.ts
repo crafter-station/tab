@@ -3,15 +3,19 @@ import { redactSensitiveText } from "@tab/redaction";
 
 const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
-const CHROME_WEB_PROVIDER = "chrome-web-writing-context";
-const CHROME_FOCUSED_EDITABLE_LENGTH = 1_000;
-const CHROME_NEARBY_VISIBLE_TEXT_LENGTH = 1_500;
 const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
+
+export type AppContextCandidateRequestPayloadPolicy = {
+  readonly maxLength: number;
+  readonly preserveWholeWords?: boolean;
+};
 
 export type AppContextCandidateFragment = Omit<
   AppContextFragment,
   "redaction" | "requestable" | "memoryEligible"
->;
+> & {
+  readonly requestPayloadPolicy?: AppContextCandidateRequestPayloadPolicy;
+};
 
 export type AppContextCandidate = Omit<AppContext, "fragments"> & {
   fragments: AppContextCandidateFragment[];
@@ -27,19 +31,15 @@ type NormalizedFragmentResult = {
   readonly sensitive: boolean;
 };
 
-function fragmentLengthLimit(fragment: AppContextCandidateFragment): number {
-  if (fragment.provider !== CHROME_WEB_PROVIDER) return MAX_FRAGMENT_LENGTH;
-  if (fragment.kind === "focused_editable") return CHROME_FOCUSED_EDITABLE_LENGTH;
-  if (fragment.kind === "nearby_visible_text") return CHROME_NEARBY_VISIBLE_TEXT_LENGTH;
-  return MAX_FRAGMENT_LENGTH;
-}
-
-function boundFragmentText(fragment: AppContextCandidateFragment, text: string): string {
-  const limit = fragmentLengthLimit(fragment);
+function boundFragmentText(
+  text: string,
+  requestPayloadPolicy: AppContextCandidateRequestPayloadPolicy | undefined,
+): string {
+  const limit = Math.min(requestPayloadPolicy?.maxLength ?? MAX_FRAGMENT_LENGTH, MAX_FRAGMENT_LENGTH);
   if (text.length <= limit) return text;
 
   const bounded = text.slice(0, limit);
-  if (fragment.provider !== CHROME_WEB_PROVIDER) return bounded;
+  if (!requestPayloadPolicy?.preserveWholeWords) return bounded;
 
   return bounded.replace(/\s+\S*$/, "").trim();
 }
@@ -49,13 +49,14 @@ function normalizeFragment(fragment: NormalizableAppContextFragment): Normalized
     redaction: _redaction,
     requestable: _requestable,
     memoryEligible: _memoryEligible,
+    requestPayloadPolicy,
     ...candidateFragment
   } = fragment;
   const redacted = redactSensitiveText(candidateFragment.text);
   if (redacted.redactions.length > 0) return { fragment: null, sensitive: true };
   if (candidateFragment.confidence <= 0) return { fragment: null, sensitive: false };
 
-  const text = boundFragmentText(candidateFragment, redacted.text);
+  const text = boundFragmentText(redacted.text, requestPayloadPolicy);
   if (text.trim().length === 0) return { fragment: null, sensitive: false };
 
   return {

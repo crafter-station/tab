@@ -3,6 +3,7 @@ import {
   normalizeAppContext,
   type AppContextCandidate,
   type AppContextCandidateFragment,
+  type AppContextCandidateRequestPayloadPolicy,
 } from "./app-context-policy.ts";
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
 
@@ -41,6 +42,14 @@ const CODE_LIKE_LINE_PATTERN = /[{};]|=>|^(function|const|let|var|return|import|
 const CHROME_WEB_PROVIDER = "chrome-web-writing-context";
 const CHROME_WEB_FOCUSED_EDITABLE_FRAGMENT_ID = "chrome-web-focused-editable";
 const CHROME_WEB_NEARBY_VISIBLE_TEXT_FRAGMENT_ID = "chrome-web-nearby-visible-text";
+const CHROME_WEB_FOCUSED_EDITABLE_REQUEST_PAYLOAD_POLICY = {
+  maxLength: 1_000,
+  preserveWholeWords: true,
+} satisfies AppContextCandidateRequestPayloadPolicy;
+const CHROME_WEB_NEARBY_VISIBLE_TEXT_REQUEST_PAYLOAD_POLICY = {
+  maxLength: 1_500,
+  preserveWholeWords: true,
+} satisfies AppContextCandidateRequestPayloadPolicy;
 const CHROME_BUNDLE_IDS = new Set([
   "com.google.Chrome",
   "com.google.Chrome.beta",
@@ -670,6 +679,7 @@ function createChromeWebFragment(
   kind: AppContextFragment["kind"],
   text: string,
   confidence: number,
+  requestPayloadPolicy: AppContextCandidateRequestPayloadPolicy,
 ): AppContextCandidateFragment | null {
   if (!text) return null;
 
@@ -679,6 +689,7 @@ function createChromeWebFragment(
     kind,
     text,
     confidence,
+    requestPayloadPolicy,
   };
 }
 
@@ -700,6 +711,7 @@ export function createChromeWebWritingContextCandidate(input: {
     "focused_editable",
     focusedText,
     FOCUSED_EDITABLE_CONFIDENCE,
+    CHROME_WEB_FOCUSED_EDITABLE_REQUEST_PAYLOAD_POLICY,
   );
   if (focusedFragment) fragments.push(focusedFragment);
 
@@ -710,6 +722,7 @@ export function createChromeWebWritingContextCandidate(input: {
     "nearby_visible_text",
     nearbyText.join(" "),
     nearbyText.length > 0 ? NEARBY_VISIBLE_TEXT_CONFIDENCE : 0,
+    CHROME_WEB_NEARBY_VISIBLE_TEXT_REQUEST_PAYLOAD_POLICY,
   );
   if (nearbyFragment) fragments.push(nearbyFragment);
 

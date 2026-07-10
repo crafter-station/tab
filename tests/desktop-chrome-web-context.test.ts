@@ -27,7 +27,7 @@ function editable(value: string, y = 520): ChromeWebAccessibilityNode {
 }
 
 describe("Chrome web writing context adapter", () => {
-  it("emits semantic candidates without final privacy policy fields", () => {
+  it("emits semantic candidates with adapter-owned request payload policies", () => {
     const candidate = createChromeWebWritingContextCandidate({
       activeApplication: chrome,
       accessibilityTree: {
@@ -37,10 +37,22 @@ describe("Chrome web writing context adapter", () => {
     });
 
     expect(candidate.fragments).toHaveLength(2);
+    expect(candidate.fragments.map((fragment) => [
+      fragment.kind,
+      fragment.requestPayloadPolicy,
+    ])).toEqual([
+      ["focused_editable", { maxLength: 1_000, preserveWholeWords: true }],
+      ["nearby_visible_text", { maxLength: 1_500, preserveWholeWords: true }],
+    ]);
     for (const fragment of candidate.fragments) {
       expect(fragment).not.toHaveProperty("redaction");
       expect(fragment).not.toHaveProperty("requestable");
       expect(fragment).not.toHaveProperty("memoryEligible");
+    }
+
+    const snapshot = normalizeAppContext(candidate);
+    for (const fragment of snapshot.fragments) {
+      expect(fragment).not.toHaveProperty("requestPayloadPolicy");
     }
   });
 

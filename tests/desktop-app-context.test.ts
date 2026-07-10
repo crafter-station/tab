@@ -333,6 +333,25 @@ describe("App Context privacy normalization", () => {
     expect(snapshot.fragments.every((fragment) => fragment.text.length === 2_000)).toBe(true);
   });
 
+  it("uses and strips candidate-only request payload policies", () => {
+    const sourceText = "Useful nearby conversation context ".repeat(10);
+    const snapshot = normalizeAppContext({
+      fragments: [{
+        id: "provider-bounded-fragment",
+        provider: "test-provider",
+        kind: "visible_text",
+        text: sourceText,
+        confidence: 0.9,
+        requestPayloadPolicy: { maxLength: 80, preserveWholeWords: true },
+      }],
+      metadata: { provider: "test-provider", status: "available", confidence: 0.9 },
+    });
+
+    expect(snapshot.fragments[0]?.text.length).toBeLessThanOrEqual(80);
+    expect(snapshot.fragments[0]?.text).not.toBe(sourceText);
+    expect(snapshot.fragments[0]).not.toHaveProperty("requestPayloadPolicy");
+  });
+
   it("owns requestability, memory eligibility, bounds, and secret suppression", () => {
     const clean = normalizeAppContext({
       fragments: [{
@@ -399,6 +418,41 @@ describe("App Context extraction module", () => {
       "focused_editable",
       "nearby_visible_text",
     ]);
+  });
+
+  it("keeps managed secret suppression terminal across source tiers", () => {
+    const extractor = createAppContextExtractor();
+    const activeApplication = {
+      bundleId: "com.tinyspeck.slackmacgap",
+      name: "Slack",
+      windowId: "window:incident-response",
+    };
+    extractor.ingestAccessibilityTree({
+      activeApplication,
+      accessibilityTree: tree([
+        "Morgan: The deployment is ready for the incident channel.",
+        "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9",
+      ]),
+    });
+    const textSession = makeTextSession({
+      activeApplication,
+      surroundingContext: {
+        beforeCaret: "I will post the clean deployment summary in the channel now.",
+        afterCaret: " Let me know if any details should change.",
+      },
+    });
+
+    const snapshot = extractor.getSnapshot(makeSnapshot({ activeApplication, textSession }));
+
+    expect(snapshot).toEqual({
+      fragments: [],
+      metadata: {
+        provider: "slack-accessibility",
+        status: "suppressed",
+        confidence: 0.82,
+        suppressionReason: "secret_like_context",
+      },
+    });
   });
 
   it("keeps fallback order behind the extraction interface", () => {
