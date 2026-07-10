@@ -918,6 +918,69 @@ describe("desktop native suggestion loop", () => {
       expect(calls[3].value).toBe("previous-clipboard");
     });
 
+    it("restores the clipboard when paste dispatch fails", async () => {
+      const calls: string[] = [];
+      const insertion = acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit" }),
+        setClipboard: async () => {
+          calls.push("setClipboard");
+          return "previous-clipboard";
+        },
+        sendPaste: async () => {
+          calls.push("sendPaste");
+          throw new Error("paste failed");
+        },
+        restoreClipboard: async () => {
+          calls.push("restoreClipboard");
+        },
+      });
+
+      await expect(insertion).rejects.toThrow("paste failed");
+      expect(calls).toEqual(["setClipboard", "sendPaste", "restoreClipboard"]);
+    });
+
+    it("restores the clipboard when waiting for paste fails", async () => {
+      const calls: string[] = [];
+      const insertion = acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit" }),
+        setClipboard: async () => {
+          calls.push("setClipboard");
+          return "previous-clipboard";
+        },
+        sendPaste: async () => {
+          calls.push("sendPaste");
+        },
+        waitForPaste: async () => {
+          calls.push("waitForPaste");
+          throw new Error("paste did not settle");
+        },
+        restoreClipboard: async () => {
+          calls.push("restoreClipboard");
+        },
+      });
+
+      await expect(insertion).rejects.toThrow("paste did not settle");
+      expect(calls).toEqual(["setClipboard", "sendPaste", "waitForPaste", "restoreClipboard"]);
+    });
+
+    it("preserves the insertion failure when clipboard restoration also fails", async () => {
+      const insertion = acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit" }),
+        setClipboard: async () => "previous-clipboard",
+        sendPaste: async () => {
+          throw new Error("paste failed");
+        },
+        restoreClipboard: async () => {
+          throw new Error("restore failed");
+        },
+      });
+
+      await expect(insertion).rejects.toThrow("paste failed");
+    });
+
     it("prefers semantic insertion when the visible Text Session target is still compatible", async () => {
       const calls: Array<{ type: string; value?: unknown }> = [];
       const result = await acceptAndInsertSuggestion({
