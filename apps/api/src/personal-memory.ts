@@ -947,7 +947,7 @@ export class PersonalMemoryService {
   }
 
   async listMemories(userId: string): Promise<PersonalMemory[]> {
-    await this.cleanupPendingVectorDeletions(userId);
+    await this.reconcilePendingVectorMutationsForRead(userId);
     return this.storage.listMemoriesByUser(userId);
   }
 
@@ -955,6 +955,7 @@ export class PersonalMemoryService {
     userId: string,
     id: string,
   ): Promise<PersonalMemory | null> {
+    await this.reconcilePendingVectorMutationsForRead(userId, id);
     return this.storage.findMemoryById(userId, id);
   }
 
@@ -1069,7 +1070,7 @@ export class PersonalMemoryService {
       return [];
     }
 
-    await this.cleanupPendingVectorDeletions(input.userId);
+    await this.reconcilePendingVectorMutationsForRead(input.userId);
 
     if (this.embeddingService && this.vectorIndex) {
       return this.selectVectorRelevantMemories(
@@ -1088,17 +1089,13 @@ export class PersonalMemoryService {
 
   async selectCandidateMemoriesForExtraction(
     input: RelevanceInput,
-    beforeMutation?: PersonalMemoryMutationGuard,
+    _beforeMutation?: PersonalMemoryMutationGuard,
   ): Promise<PersonalMemory[]> {
     if (!input.memoryEnabled) {
       return [];
     }
 
-    await this.cleanupPendingVectorDeletions(
-      input.userId,
-      undefined,
-      beforeMutation,
-    );
+    await this.reconcilePendingVectorMutationsForRead(input.userId);
 
     if (this.embeddingService && this.vectorIndex) {
       return this.selectVectorMemories(
@@ -1177,10 +1174,20 @@ export class PersonalMemoryService {
       for (const upsert of pending) {
         await this.reconcileVectorUpsert(upsert, this.embeddingService);
       }
-      if (pending.length > 0) return;
     }
 
     await this.cleanupPendingVectorDeletions(userId, memoryId);
+  }
+
+  private async reconcilePendingVectorMutationsForRead(
+    userId: string,
+    memoryId?: string,
+  ): Promise<void> {
+    try {
+      await this.reconcilePendingVectorMutations(userId, memoryId);
+    } catch {
+      // Read paths leave durable mutations pending when vector storage is down.
+    }
   }
 
   private async reconcileVectorUpsert(

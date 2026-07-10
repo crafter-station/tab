@@ -132,6 +132,7 @@ export function createApp(deps: ApiDependencies = {}) {
   });
   const memoryExtractionIdempotencyStorage =
     deps.memoryExtractionIdempotencyStorage ??
+    d1Deps.memoryExtractionIdempotencyStorage ??
     new InMemoryMemoryExtractionIdempotencyStorage();
   const memoryExtractionService = new MemoryExtractionService({
     personalMemoryService,

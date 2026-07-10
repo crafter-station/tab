@@ -51,6 +51,7 @@ const MEMORY_EXTRACTION_CLAIM_LEASE_MS = 5 * 60 * 1_000;
 const MEMORY_EXTRACTION_CLAIM_HEARTBEAT_MS = 60 * 1_000;
 const MEMORY_EXTRACTION_RESULT_POLL_MS = 25;
 const MEMORY_EXTRACTION_NO_OP_RESULT_TTL_MS = 5 * 1_000;
+const MEMORY_EXTRACTION_ABANDONED_CLAIM_RETENTION_MS = 24 * 60 * 60 * 1_000;
 
 const MemoryOperationOutputSchema = z.object({
   operations: z.array(
@@ -253,6 +254,44 @@ type InMemoryExtractionIdempotencyRecord = {
   operations: Map<number, ExtractionOperationOutcome>;
 };
 
+function serializePlannedMemoryOperation(
+  operation: PlannedMemoryOperation,
+): string {
+  if (operation.type === "delete") {
+    return JSON.stringify({
+      type: operation.type,
+      memoryId: operation.memoryId,
+      eligible: operation.eligible,
+    });
+  }
+  return JSON.stringify({
+    type: operation.type,
+    memoryId: operation.memoryId,
+    content: operation.content,
+    eligible: operation.eligible,
+  });
+}
+
+function serializeMemoryExtractionPlan(plan: MemoryExtractionPlan): string {
+  return `{"version":1,"operations":[${plan.operations
+    .map(serializePlannedMemoryOperation)
+    .join(",")}]}`;
+}
+
+function operationMatchesPlan(
+  plan: MemoryExtractionPlan,
+  operationIndex: number,
+  operation: PlannedMemoryOperation,
+): boolean {
+  if (!Number.isSafeInteger(operationIndex) || operationIndex < 0) return false;
+  const planned = plan.operations[operationIndex];
+  return (
+    planned !== undefined &&
+    serializePlannedMemoryOperation(planned) ===
+      serializePlannedMemoryOperation(operation)
+  );
+}
+
 function extractionCountsFromRow(row: {
   readonly created: number;
   readonly updated: number;
@@ -286,12 +325,9 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     readonly now: Date;
     readonly leaseExpiresAt: Date;
   }): Promise<MemoryExtractionClaim> {
+    this.pruneExpiredRecords(input.now);
     const key = `${input.userId}:${input.batchIdHash}`;
     let existing = this.records.get(key);
-    if (existing && !existing.claimId && existing.expiresAt <= input.now) {
-      this.records.delete(key);
-      existing = undefined;
-    }
     if (
       existing?.claimId &&
       existing.leaseExpiresAt &&
@@ -306,15 +342,21 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     const claimId = crypto.randomUUID();
     if (existing?.claimId) {
       existing.claimId = claimId;
-      existing.leaseExpiresAt = input.leaseExpiresAt;
-      existing.expiresAt = input.leaseExpiresAt;
+      existing.leaseExpiresAt = new Date(
+        Math.min(input.leaseExpiresAt.getTime(), existing.expiresAt.getTime()),
+      );
       return { status: "claimed", claimId };
     }
+    const recoveryExpiresAt = new Date(
+      input.now.getTime() + MEMORY_EXTRACTION_ABANDONED_CLAIM_RETENTION_MS,
+    );
     this.records.set(key, {
       claimId,
-      leaseExpiresAt: input.leaseExpiresAt,
+      leaseExpiresAt: new Date(
+        Math.min(input.leaseExpiresAt.getTime(), recoveryExpiresAt.getTime()),
+      ),
       counts: { created: 0, updated: 0, deleted: 0, rejected: 0 },
-      expiresAt: input.leaseExpiresAt,
+      expiresAt: recoveryExpiresAt,
       plan: null,
       operations: new Map(),
     });
@@ -345,8 +387,8 @@ export class InMemoryMemoryExtractionIdempotencyStorage
       leaseExpiresAt: null,
       counts: existing.counts,
       expiresAt: input.expiresAt,
-      plan: existing.plan,
-      operations: existing.operations,
+      plan: null,
+      operations: new Map(),
     });
     return existing.counts;
   }
@@ -362,13 +404,15 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     if (
       record?.claimId !== input.claimId ||
       !record.leaseExpiresAt ||
-      record.leaseExpiresAt <= input.now
+      record.leaseExpiresAt <= input.now ||
+      record.expiresAt <= input.now
     ) {
       return false;
     }
 
-    record.leaseExpiresAt = input.leaseExpiresAt;
-    record.expiresAt = input.leaseExpiresAt;
+    record.leaseExpiresAt = new Date(
+      Math.min(input.leaseExpiresAt.getTime(), record.expiresAt.getTime()),
+    );
     return true;
   }
 
@@ -387,7 +431,10 @@ export class InMemoryMemoryExtractionIdempotencyStorage
         this.records.delete(key);
         return null;
       }
-      if (!record.leaseExpiresAt || record.leaseExpiresAt <= now) return null;
+      if (!record.leaseExpiresAt || record.leaseExpiresAt <= now) {
+        if (record.expiresAt <= now) this.records.delete(key);
+        return null;
+      }
       await this.clock.sleep(
         Math.min(
           this.resultPollMs,
@@ -425,7 +472,9 @@ export class InMemoryMemoryExtractionIdempotencyStorage
   ): Promise<boolean> {
     const record = this.getOwnedRecord(input);
     if (!record || record.plan) return false;
-    record.plan = MemoryExtractionPlanSchema.parse(input.plan);
+    record.plan = MemoryExtractionPlanSchema.parse(
+      JSON.parse(serializeMemoryExtractionPlan(input.plan)),
+    );
     return true;
   }
 
@@ -440,15 +489,13 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     const record = this.getOwnedRecord(input);
     if (!record) return { status: "claim_lost" };
     const existing = record.operations.get(input.operationIndex);
-    if (existing) return { status: "applied", outcome: existing };
     if (
       !record.plan ||
-      input.operationIndex >= record.plan.operations.length ||
-      JSON.stringify(record.plan.operations[input.operationIndex]) !==
-        JSON.stringify(input.operation)
+      !operationMatchesPlan(record.plan, input.operationIndex, input.operation)
     ) {
       throw new Error("Extraction operation does not match its durable plan");
     }
+    if (existing) return { status: "applied", outcome: existing };
     const applyAtomically =
       input.personalMemoryStorage.applyExtractionOperationAtomically;
     if (!applyAtomically) {
@@ -487,6 +534,18 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     }
     return record;
   }
+
+  private pruneExpiredRecords(now: Date): void {
+    for (const [key, record] of this.records) {
+      const completedExpired = !record.claimId && record.expiresAt <= now;
+      const abandonedExpired =
+        record.claimId !== null &&
+        !!record.leaseExpiresAt &&
+        record.leaseExpiresAt <= now &&
+        record.expiresAt <= now;
+      if (completedExpired || abandonedExpired) this.records.delete(key);
+    }
+  }
 }
 
 function incrementExtractionCount(
@@ -517,6 +576,11 @@ export class D1MemoryExtractionIdempotencyStorage
     const claimId = crypto.randomUUID();
     const now = input.now.toISOString();
     const leaseExpiresAt = input.leaseExpiresAt.toISOString();
+    const recoveryExpiresAt = new Date(
+      input.now.getTime() + MEMORY_EXTRACTION_ABANDONED_CLAIM_RETENTION_MS,
+    ).toISOString();
+    const boundedLeaseExpiresAt =
+      leaseExpiresAt < recoveryExpiresAt ? leaseExpiresAt : recoveryExpiresAt;
     const pruneOperations = this.db
       .delete(memoryExtractionOperations)
       .where(
@@ -534,8 +598,17 @@ export class D1MemoryExtractionIdempotencyStorage
                   memoryExtractionIdempotency.batchIdHash,
                   memoryExtractionOperations.batchIdHash,
                 ),
-                isNull(memoryExtractionIdempotency.claimId),
-                lte(memoryExtractionIdempotency.expiresAt, now),
+                or(
+                  and(
+                    isNull(memoryExtractionIdempotency.claimId),
+                    lte(memoryExtractionIdempotency.expiresAt, now),
+                  ),
+                  and(
+                    isNotNull(memoryExtractionIdempotency.claimId),
+                    lte(memoryExtractionIdempotency.leaseExpiresAt, now),
+                    lte(memoryExtractionIdempotency.expiresAt, now),
+                  ),
+                ),
               ),
             ),
         ),
@@ -543,9 +616,16 @@ export class D1MemoryExtractionIdempotencyStorage
     const pruneClaims = this.db
       .delete(memoryExtractionIdempotency)
       .where(
-        and(
-          isNull(memoryExtractionIdempotency.claimId),
-          lte(memoryExtractionIdempotency.expiresAt, now),
+        or(
+          and(
+            isNull(memoryExtractionIdempotency.claimId),
+            lte(memoryExtractionIdempotency.expiresAt, now),
+          ),
+          and(
+            isNotNull(memoryExtractionIdempotency.claimId),
+            lte(memoryExtractionIdempotency.leaseExpiresAt, now),
+            lte(memoryExtractionIdempotency.expiresAt, now),
+          ),
         ),
       );
     const claimBatch = this.db
@@ -558,11 +638,11 @@ export class D1MemoryExtractionIdempotencyStorage
         deleted: 0,
         rejected: 0,
         claimId,
-        leaseExpiresAt,
+        leaseExpiresAt: boundedLeaseExpiresAt,
         operationPlan: null,
         operationCount: 0,
         createdAt: now,
-        expiresAt: leaseExpiresAt,
+        expiresAt: recoveryExpiresAt,
       })
       .onConflictDoUpdate({
         target: [
@@ -571,14 +651,12 @@ export class D1MemoryExtractionIdempotencyStorage
         ],
         set: {
           claimId,
-          leaseExpiresAt,
-          expiresAt: leaseExpiresAt,
+          leaseExpiresAt: sql`min(${leaseExpiresAt}, ${memoryExtractionIdempotency.expiresAt})`,
         },
-        setWhere: or(
-          and(
-            isNotNull(memoryExtractionIdempotency.claimId),
-            lte(memoryExtractionIdempotency.leaseExpiresAt, now),
-          ),
+        setWhere: and(
+          isNotNull(memoryExtractionIdempotency.claimId),
+          lte(memoryExtractionIdempotency.leaseExpiresAt, now),
+          gt(memoryExtractionIdempotency.expiresAt, now),
         ),
       })
       .returning({ claimId: memoryExtractionIdempotency.claimId });
@@ -612,11 +690,13 @@ export class D1MemoryExtractionIdempotencyStorage
     readonly now: Date;
     readonly expiresAt: Date;
   }): Promise<MemoryExtractionCounts | null> {
-    const completed = await this.db
+    const completeClaim = this.db
       .update(memoryExtractionIdempotency)
       .set({
         claimId: null,
         leaseExpiresAt: null,
+        operationPlan: null,
+        operationCount: 0,
         expiresAt: input.expiresAt.toISOString(),
       })
       .where(
@@ -628,10 +708,23 @@ export class D1MemoryExtractionIdempotencyStorage
             memoryExtractionIdempotency.leaseExpiresAt,
             input.now.toISOString(),
           ),
+          isNotNull(memoryExtractionIdempotency.operationPlan),
+          sql`${memoryExtractionIdempotency.operationCount} = json_array_length(
+            ${memoryExtractionIdempotency.operationPlan}, '$.operations'
+          )`,
           sql`${memoryExtractionIdempotency.operationCount} = (
             select count(*) from ${memoryExtractionOperations}
             where ${memoryExtractionOperations.userId} = ${input.userId}
               and ${memoryExtractionOperations.batchIdHash} = ${input.batchIdHash}
+          )`,
+          sql`not exists (
+            select 1 from ${memoryExtractionOperations}
+            where ${memoryExtractionOperations.userId} = ${input.userId}
+              and ${memoryExtractionOperations.batchIdHash} = ${input.batchIdHash}
+              and (
+                ${memoryExtractionOperations.operationIndex} < 0
+                or ${memoryExtractionOperations.operationIndex} >= ${memoryExtractionIdempotency.operationCount}
+              )
           )`,
         ),
       )
@@ -641,6 +734,39 @@ export class D1MemoryExtractionIdempotencyStorage
         deleted: memoryExtractionIdempotency.deleted,
         rejected: memoryExtractionIdempotency.rejected,
       });
+    const deleteJournal = this.db
+      .delete(memoryExtractionOperations)
+      .where(
+        and(
+          eq(memoryExtractionOperations.userId, input.userId),
+          eq(memoryExtractionOperations.batchIdHash, input.batchIdHash),
+          exists(
+            this.db
+              .select({ userId: memoryExtractionIdempotency.userId })
+              .from(memoryExtractionIdempotency)
+              .where(
+                and(
+                  eq(memoryExtractionIdempotency.userId, input.userId),
+                  eq(
+                    memoryExtractionIdempotency.batchIdHash,
+                    input.batchIdHash,
+                  ),
+                  isNull(memoryExtractionIdempotency.claimId),
+                  isNull(memoryExtractionIdempotency.operationPlan),
+                  eq(memoryExtractionIdempotency.operationCount, 0),
+                  eq(
+                    memoryExtractionIdempotency.expiresAt,
+                    input.expiresAt.toISOString(),
+                  ),
+                ),
+              ),
+          ),
+        ),
+      );
+    const [completed] = await this.db.batch([
+      completeClaim,
+      deleteJournal,
+    ] as const);
     return completed[0] ? extractionCountsFromRow(completed[0]) : null;
   }
 
@@ -654,8 +780,7 @@ export class D1MemoryExtractionIdempotencyStorage
     const renewed = await this.db
       .update(memoryExtractionIdempotency)
       .set({
-        leaseExpiresAt: input.leaseExpiresAt.toISOString(),
-        expiresAt: input.leaseExpiresAt.toISOString(),
+        leaseExpiresAt: sql`min(${input.leaseExpiresAt.toISOString()}, ${memoryExtractionIdempotency.expiresAt})`,
       })
       .where(
         and(
@@ -666,6 +791,7 @@ export class D1MemoryExtractionIdempotencyStorage
             memoryExtractionIdempotency.leaseExpiresAt,
             input.now.toISOString(),
           ),
+          gt(memoryExtractionIdempotency.expiresAt, input.now.toISOString()),
         ),
       )
       .returning({ claimId: memoryExtractionIdempotency.claimId });
@@ -685,10 +811,13 @@ export class D1MemoryExtractionIdempotencyStorage
         if (row.expiresAt > now.toISOString()) {
           return extractionCountsFromRow(row);
         }
-        await this.pruneExpiredCompleted(now);
+        await this.pruneExpiredRecords(now);
         return null;
       }
       if (!row.leaseExpiresAt || row.leaseExpiresAt <= now.toISOString()) {
+        if (row.expiresAt <= now.toISOString()) {
+          await this.pruneExpiredRecords(now);
+        }
         return null;
       }
       await this.clock.sleep(
@@ -741,7 +870,7 @@ export class D1MemoryExtractionIdempotencyStorage
     const saved = await this.db
       .update(memoryExtractionIdempotency)
       .set({
-        operationPlan: JSON.stringify(plan),
+        operationPlan: serializeMemoryExtractionPlan(plan),
         operationCount: plan.operations.length,
       })
       .where(
@@ -763,6 +892,9 @@ export class D1MemoryExtractionIdempotencyStorage
     },
   ): Promise<MemoryExtractionOperationApplyResult> {
     const operation = PlannedMemoryOperationSchema.parse(input.operation);
+    if (!Number.isSafeInteger(input.operationIndex) || input.operationIndex < 0) {
+      throw new Error("Extraction operation does not match its durable plan");
+    }
     const outcome = this.operationOutcome(input, operation);
     const journal = this.db
       .insert(memoryExtractionOperations)
@@ -782,7 +914,7 @@ export class D1MemoryExtractionIdempotencyStorage
           .from(memoryExtractionIdempotency)
           .where(
             and(
-              this.ownedClaim(input),
+              this.ownedPlannedOperation(input, operation),
               notExists(
                 this.db
                   .select({
@@ -831,7 +963,7 @@ export class D1MemoryExtractionIdempotencyStorage
             and ${memoryExtractionOperations.counted} = 0
         ) then 1 else 0 end`,
       })
-      .where(this.ownedClaim(input));
+      .where(this.ownedPlannedOperation(input, operation));
     const markCounted = this.db
       .update(memoryExtractionOperations)
       .set({ counted: true })
@@ -842,7 +974,7 @@ export class D1MemoryExtractionIdempotencyStorage
             this.db
               .select({ claimId: memoryExtractionIdempotency.claimId })
               .from(memoryExtractionIdempotency)
-              .where(this.ownedClaim(input)),
+              .where(this.ownedPlannedOperation(input, operation)),
           ),
         ),
       );
@@ -856,7 +988,7 @@ export class D1MemoryExtractionIdempotencyStorage
             this.db
               .select({ claimId: memoryExtractionIdempotency.claimId })
               .from(memoryExtractionIdempotency)
-              .where(this.ownedClaim(input)),
+              .where(this.ownedPlannedOperation(input, operation)),
           ),
         ),
       );
@@ -886,13 +1018,14 @@ export class D1MemoryExtractionIdempotencyStorage
                   this.db
                     .select({ claimId: memoryExtractionIdempotency.claimId })
                     .from(memoryExtractionIdempotency)
-                    .where(this.ownedClaim(input)),
+                    .where(this.ownedPlannedOperation(input, operation)),
                 ),
               ),
             ),
         );
       const enqueueUpsert = this.enqueueExtractionVectorUpsert(
         input,
+        operation,
         vectorMutationId,
       );
       const [, , , , , rows] = await this.db.batch([
@@ -931,12 +1064,13 @@ export class D1MemoryExtractionIdempotencyStorage
               this.db
                 .select({ claimId: memoryExtractionIdempotency.claimId })
                 .from(memoryExtractionIdempotency)
-                .where(this.ownedClaim(input)),
+                .where(this.ownedPlannedOperation(input, operation)),
             ),
           ),
         );
       const enqueueUpsert = this.enqueueExtractionVectorUpsert(
         input,
+        operation,
         vectorMutationId,
       );
       const [, , , , , rows] = await this.db.batch([
@@ -984,7 +1118,7 @@ export class D1MemoryExtractionIdempotencyStorage
                   this.db
                     .select({ claimId: memoryExtractionIdempotency.claimId })
                     .from(memoryExtractionIdempotency)
-                    .where(this.ownedClaim(input)),
+                    .where(this.ownedPlannedOperation(input, operation)),
                 ),
               ),
             ),
@@ -1015,7 +1149,7 @@ export class D1MemoryExtractionIdempotencyStorage
               this.db
                 .select({ claimId: memoryExtractionIdempotency.claimId })
                 .from(memoryExtractionIdempotency)
-                .where(this.ownedClaim(input)),
+                .where(this.ownedPlannedOperation(input, operation)),
             ),
           ),
         );
@@ -1037,6 +1171,13 @@ export class D1MemoryExtractionIdempotencyStorage
       observedOutcome !== "deleted" &&
       observedOutcome !== "rejected"
     ) {
+      const planRead = await this.readPlan(input);
+      if (
+        planRead.status === "ready" &&
+        !operationMatchesPlan(planRead.plan, input.operationIndex, operation)
+      ) {
+        throw new Error("Extraction operation does not match its durable plan");
+      }
       return { status: "claim_lost" };
     }
     return { status: "applied", outcome: observedOutcome };
@@ -1084,6 +1225,7 @@ export class D1MemoryExtractionIdempotencyStorage
 
   private enqueueExtractionVectorUpsert(
     input: MemoryExtractionClaimInput & { readonly operationIndex: number },
+    operation: PlannedMemoryOperation,
     mutationId: string,
   ) {
     return this.db
@@ -1125,7 +1267,7 @@ export class D1MemoryExtractionIdempotencyStorage
                 this.db
                   .select({ claimId: memoryExtractionIdempotency.claimId })
                   .from(memoryExtractionIdempotency)
-                  .where(this.ownedClaim(input)),
+                  .where(this.ownedPlannedOperation(input, operation)),
               ),
             ),
           ),
@@ -1148,6 +1290,19 @@ export class D1MemoryExtractionIdempotencyStorage
     );
   }
 
+  private ownedPlannedOperation(
+    input: MemoryExtractionClaimInput & { readonly operationIndex: number },
+    operation: PlannedMemoryOperation,
+  ) {
+    const operationPath = `$.operations[${input.operationIndex}]`;
+    const serializedOperation = serializePlannedMemoryOperation(operation);
+    return and(
+      this.ownedClaim(input),
+      gt(memoryExtractionIdempotency.operationCount, input.operationIndex),
+      sql`json_extract(${memoryExtractionIdempotency.operationPlan}, ${operationPath}) = json(${serializedOperation})`,
+    );
+  }
+
   private operationKey(
     input: Pick<
       MemoryExtractionClaimInput,
@@ -1161,7 +1316,7 @@ export class D1MemoryExtractionIdempotencyStorage
     );
   }
 
-  private async pruneExpiredCompleted(now: Date): Promise<void> {
+  private async pruneExpiredRecords(now: Date): Promise<void> {
     const timestamp = now.toISOString();
     const pruneOperations = this.db
       .delete(memoryExtractionOperations)
@@ -1180,8 +1335,20 @@ export class D1MemoryExtractionIdempotencyStorage
                   memoryExtractionIdempotency.batchIdHash,
                   memoryExtractionOperations.batchIdHash,
                 ),
-                isNull(memoryExtractionIdempotency.claimId),
-                lte(memoryExtractionIdempotency.expiresAt, timestamp),
+                or(
+                  and(
+                    isNull(memoryExtractionIdempotency.claimId),
+                    lte(memoryExtractionIdempotency.expiresAt, timestamp),
+                  ),
+                  and(
+                    isNotNull(memoryExtractionIdempotency.claimId),
+                    lte(
+                      memoryExtractionIdempotency.leaseExpiresAt,
+                      timestamp,
+                    ),
+                    lte(memoryExtractionIdempotency.expiresAt, timestamp),
+                  ),
+                ),
               ),
             ),
         ),
@@ -1189,9 +1356,16 @@ export class D1MemoryExtractionIdempotencyStorage
     const pruneClaims = this.db
       .delete(memoryExtractionIdempotency)
       .where(
-        and(
-          isNull(memoryExtractionIdempotency.claimId),
-          lte(memoryExtractionIdempotency.expiresAt, timestamp),
+        or(
+          and(
+            isNull(memoryExtractionIdempotency.claimId),
+            lte(memoryExtractionIdempotency.expiresAt, timestamp),
+          ),
+          and(
+            isNotNull(memoryExtractionIdempotency.claimId),
+            lte(memoryExtractionIdempotency.leaseExpiresAt, timestamp),
+            lte(memoryExtractionIdempotency.expiresAt, timestamp),
+          ),
         ),
       );
     await this.db.batch([pruneOperations, pruneClaims] as const);
