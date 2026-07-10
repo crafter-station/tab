@@ -1,10 +1,10 @@
-# Private Utility Grid Design System
+# Native Utility Design System
 
-Tabb uses the shared `@tab/ui` package as the source of truth for visual tokens, theme behavior, primitives, and app-level patterns. Web and Electron surfaces should consume these tokens instead of defining local brand palettes or legacy glass-era aliases.
+Tab uses the shared `@tab/ui` package as the source of truth for visual tokens, theme behavior, primitives, and app-level patterns. Web and Electron surfaces should consume these tokens instead of defining local brand palettes or legacy glass-era aliases. The visual direction is a quiet native utility: compact, legible, warm-neutral, and deliberately layered without decorative effects.
 
 ## Palette
 
-Use the neutral Private Utility Grid palette from `packages/ui/src/styles/globals.css`: `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--accent`, `--border`, `--input`, and `--ring`. Keep `--primary` monochrome and reserve semantic color for status or evidence. Do not reintroduce amber brand blocks, one-off hex values, or local duplicate variables when a shared token exists.
+Use the neutral palette from `packages/ui/src/styles/globals.css`: `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--accent`, `--border`, `--input`, and `--ring`. Keep `--primary` monochrome and reserve semantic color for status or evidence. Do not reintroduce amber brand blocks, one-off hex values, or local duplicate variables when a shared token exists.
 
 ## Typography
 
@@ -20,11 +20,15 @@ Prefer the established grid rhythm: compact controls at 8-12px gaps, card interi
 
 ## Radius
 
-Use shared radius tokens: `--radius-control` for buttons and inputs, `--radius-media` for compact media/control surfaces, `--radius-card` for cards and rows, and `--radius-surface` for large panes and feature blocks. Use full pills only for chips, badges, and the Floating Suggestion Overlay control.
+Use shared radius tokens: `--radius-control` for buttons and inputs, `--radius-media` for compact media/control surfaces, `--radius-card` for cards and rows, and `--radius-surface` for large panes and window-level blocks. Use full pills only for true chips and badges. The Floating Suggestion Overlay uses `--radius-card` so it reads as a native command surface rather than a promotional pill.
 
 ## Grid And Surface Treatments
 
-Use `--tab-page-wash`, `--tab-grid-bg`, `--tab-dot-grid-bg`, `--tab-grid-line`, `--tab-grid-strong`, and utilities such as `.pug-grid-surface` and `.pug-dot-grid` for grid-backed layouts. Use `--tab-shadow-soft` and constrained `--tab-glass-*` tokens only for shared translucent surfaces such as `SectionCard` and the Floating Suggestion Overlay where blur is part of the native treatment.
+Use `--tab-canvas`, `--tab-sidebar`, `--tab-surface-raised`, and `--tab-surface-sunken` to establish hierarchy before adding borders or shadows. Use `--tab-hover` and `--tab-active` for interactive states, and the shared control, card, and window shadows only at their corresponding elevation. Large app surfaces remain opaque; reserve blur for the small Floating Suggestion Overlay, which uses the dedicated `--tab-overlay-*` tokens for reliable contrast over third-party applications.
+
+## Motion
+
+Use `--tab-ease-out` for direct feedback and entrances and `--tab-ease-in-out` only for movement between visible positions. Keep interaction feedback at 150ms or less and animate only opacity or transforms. Frequently used surfaces, including the suggestion overlay and settings tab changes, appear immediately; they do not replay decorative entrance motion. Pressable controls use a subtle `scale(0.97)` response and must honor reduced motion.
 
 ## Semantic Statuses
 
@@ -32,8 +36,8 @@ Use `success`, `warning`, `info`, `destructive`, `muted`, and active text labels
 
 ## Review Surface
 
-Use `ComponentReviewSurface` when checking or changing the shared design system. It renders the canonical light and dark Private Utility Grid treatments for `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`, plus app-level patterns for status rows, settings navigation, command/debug blocks, and empty states. Keep this surface small and reviewable so contributors can validate token and primitive changes without navigating billing, auth, desktop onboarding, or native Suggestion flows.
+Use `ComponentReviewSurface` when checking or changing the shared design system. It renders the canonical light and dark Native Utility treatments for `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`, plus app-level patterns for status rows, settings navigation, command/debug blocks, and empty states. Keep this surface small and reviewable so contributors can validate token and primitive changes without navigating billing, auth, desktop onboarding, or native suggestion flows.
 
 ## Component Usage Rules
 
-Start with primitives from `@tab/ui`: `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`. Build product pages with app patterns such as `SectionBlock`, `SectionCard`, `SurfaceHeader`, `StatusRow`, `SettingsRow`, `SettingsNav`, `CommandBlock`, `EmptyState`, `HeroProofPanel`, and `FloatingSuggestionBar`. Preserve native Electron behavior by keeping drag regions, transparent overlay roots, pointer-event rules, and Acceptance handlers outside visual abstractions.
+Start with primitives from `@tab/ui`: `Button`, `Card`, `Badge`, `Input`, `Label`, `Table`, `Tooltip`, and `Separator`. Build product pages with app patterns such as `SectionBlock`, `SectionCard`, `SurfaceHeader`, `StatusRow`, `SettingsRow`, `SettingsGroup`, `SummaryMetric`, `SettingsNav`, `CommandBlock`, `EmptyState`, and `FloatingSuggestionBar`. Preserve native Electron behavior by keeping drag regions, transparent overlay roots, pointer-event rules, and acceptance handlers outside visual abstractions.

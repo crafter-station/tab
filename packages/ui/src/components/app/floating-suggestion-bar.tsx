@@ -1,4 +1,3 @@
-import { Sparkle } from "@phosphor-icons/react";
 import { cn } from "../../lib/utils";
 
 export type Suggestion = {
@@ -13,18 +12,16 @@ type FloatingSuggestionBarProps = {
 };
 
 const shellClassName =
-  "absolute inset-0 flex items-center justify-center px-4 py-2.5 opacity-0 transition-[opacity,transform] duration-200 ease-[var(--tab-ease-out)]";
-const visibleShellClassName = "translate-y-0 scale-100 opacity-100";
-const hiddenShellClassName = "translate-y-2.5 scale-[0.985]";
+  "absolute inset-0 flex items-center justify-center px-3 py-2 opacity-0";
+const visibleShellClassName = "opacity-100";
+const hiddenShellClassName = "opacity-0";
 
 const buttonClassName =
-  "pointer-events-auto relative grid min-h-[38px] w-[min(100%,520px)] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-full border border-border bg-popover/92 py-2 pr-2.5 pl-3 text-popover-foreground shadow-[var(--tab-glass-shadow)] backdrop-blur-2xl transition-[background-color,border-color,box-shadow,transform] duration-150 hover:-translate-y-0.5 hover:border-ring/35 hover:bg-popover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:pointer-events-none";
-const glowClassName =
-  "pointer-events-none absolute inset-x-10 -top-10 h-14 bg-[radial-gradient(ellipse_at_center,color-mix(in_srgb,var(--tab-signal)_14%,transparent),transparent_70%)] opacity-70";
+  "pointer-events-auto grid min-h-11 w-[min(100%,536px)] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] py-2 pr-2 pl-2.5 text-[var(--tab-overlay-text)] shadow-[var(--tab-overlay-shadow)] backdrop-blur-xl transition-transform duration-100 ease-[var(--tab-ease-out)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:pointer-events-none disabled:scale-100";
 const iconClassName =
-  "z-10 inline-flex size-[22px] items-center justify-center rounded-full border border-border bg-secondary text-foreground";
+  "inline-flex size-6 items-center justify-center rounded-[var(--radius-control)] bg-[var(--tab-overlay-key-bg)] text-[11px] font-bold text-[var(--tab-overlay-text)]";
 const shortcutClassName =
-  "z-10 rounded-full border border-border bg-secondary px-2 py-1 font-mono text-xs font-bold tracking-wide text-muted-foreground whitespace-nowrap";
+  "rounded-[var(--radius-control)] border border-[var(--tab-overlay-divider)] bg-[var(--tab-overlay-key-bg)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--tab-overlay-muted)] whitespace-nowrap";
 
 export function FloatingSuggestionBar({ suggestion, onAccept, className }: FloatingSuggestionBarProps) {
   return (
@@ -37,13 +34,16 @@ export function FloatingSuggestionBar({ suggestion, onAccept, className }: Float
         type="button"
         onClick={onAccept}
         disabled={!suggestion}
+        aria-label={suggestion ? `Accept suggestion: ${suggestion.text}` : "No suggestion available"}
       >
-        <span className={glowClassName} />
         <span className={iconClassName} aria-hidden="true">
-          <Sparkle size={13} weight="bold" />
+          T
         </span>
-        <span className="z-10 truncate text-left text-sm font-medium leading-tight">{suggestion?.text}</span>
-        <span className={shortcutClassName}>Option+Tab</span>
+        <span className="truncate text-left text-[13px] font-medium leading-tight">{suggestion?.text}</span>
+        <kbd aria-label="Option plus Tab" className={shortcutClassName}>
+          <span aria-hidden="true">⌥ Tab</span>
+          <span className="sr-only">Option+Tab</span>
+        </kbd>
       </button>
     </section>
   );

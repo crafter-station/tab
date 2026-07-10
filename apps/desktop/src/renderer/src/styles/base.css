@@ -4,8 +4,8 @@
 
 :root {
   --bg: var(--background);
-  --bg-elevated: var(--card);
-  --surface: var(--muted);
+  --bg-elevated: var(--tab-surface-raised);
+  --surface: var(--tab-surface-sunken);
   --surface-strong: var(--secondary);
   --border-strong: color-mix(in srgb, var(--border) 70%, var(--foreground));
   --text: var(--foreground);
@@ -43,10 +43,7 @@ body {
 body[data-surface="settings"],
 body[data-surface="onboarding"],
 body[data-surface="sign-in"] {
-  background:
-    var(--tab-page-wash),
-    var(--tab-grid-bg),
-    var(--bg);
+  background: var(--tab-page-wash), var(--tab-grid-bg), var(--tab-canvas);
   background-size: auto, 32px 32px, auto;
   pointer-events: auto;
 }

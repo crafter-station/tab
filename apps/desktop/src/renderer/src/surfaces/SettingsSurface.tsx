@@ -1,19 +1,15 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Button,
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
   CommandBlock,
   EmptyState,
   SectionCard,
+  SettingsGroup,
   SettingsRow,
   StatusBadge,
   StatusRow,
+  SummaryMetric,
   Switch,
-  SurfaceHeader,
   THEME_MODES,
   Tabs,
   TabsContent,
@@ -34,11 +30,11 @@ type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitia
 type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
-  { value: "account", label: "Account", description: "Sign-in, usage, and connection" },
-  { value: "controls", label: "Controls", description: "Pause or resume Tab" },
-  { value: "appearance", label: "Appearance", description: "Theme follows this Mac by default" },
-  { value: "permissions", label: "Permissions", description: "macOS access required by Tab" },
-  { value: "memory", label: "Memory", description: "Saved details" },
+  { value: "account", label: "Account", description: "Plan, usage, and connection for this Mac." },
+  { value: "controls", label: "Controls", description: "Choose when Tab can offer suggestions." },
+  { value: "appearance", label: "Appearance", description: "Set how Tab looks on this Mac." },
+  { value: "permissions", label: "Permissions", description: "Review the macOS access Tab needs." },
+  { value: "memory", label: "Memory", description: "Control personal context used in suggestions." },
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
@@ -48,7 +44,10 @@ function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
 }
 
 function formatAuth(auth: DesktopStatus["auth"]) {
-  return auth.replace(/_/g, " ");
+  return auth
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }
 
 function formatDate(value: string) {
@@ -58,15 +57,6 @@ function formatDate(value: string) {
 function formatQuota(status: DesktopStatus) {
   if (!status.quota) return "Not available";
   return `${status.quota.usage.toLocaleString()} / ${status.quota.quota.toLocaleString()}`;
-}
-
-function describeQuota(status: DesktopStatus) {
-  if (!status.quota) return "Monthly usage appears after sign-in.";
-  return `Monthly suggestions reset ${formatDate(status.quota.resetAt)}.`;
-}
-
-function getQuotaStatusRowTone(status: DesktopStatus) {
-  return status.quota?.exhausted ? "warning" : "neutral";
 }
 
 function formatThemeMode(mode: ThemeMode) {
@@ -167,12 +157,21 @@ export function SettingsSurface() {
     switch (activeTab) {
       case "account":
         return (
-          <Card className="settings-pane shadow-none">
-            <CardHeader>
-              <CardTitle>Account</CardTitle>
-              <CardDescription>Sign-in, monthly suggestions, and connection status for this Mac.</CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
+          <>
+            <div className="settings-summary">
+              <SummaryMetric
+                label="Account"
+                value={status.auth === "signed_in" ? "Connected" : formatAuth(status.auth)}
+                detail="This Mac"
+              />
+              <SummaryMetric label="Plan" value={status.quota?.planId ?? "Not available"} detail="Current tier" />
+              <SummaryMetric
+                label="Monthly suggestions"
+                value={formatQuota(status)}
+                detail={status.quota ? `Resets ${formatDate(status.quota.resetAt)}` : "Available after sign-in"}
+              />
+            </div>
+            <SettingsGroup title="Connection" description="Account and network state for this installation of Tab.">
               <StatusRow
                 label="Account status"
                 value={formatAuth(status.auth)}
@@ -180,23 +179,12 @@ export function SettingsSurface() {
                 description="Whether this Mac is connected to your Tab account."
               />
               <StatusRow
-                label="Plan"
-                value={status.quota?.planId ?? "Not available"}
-                description="The plan used for suggestions on this Mac."
-              />
-              <StatusRow
-                label="Monthly suggestions"
-                value={formatQuota(status)}
-                tone={getQuotaStatusRowTone(status)}
-                description={describeQuota(status)}
-              />
-              <StatusRow
                 label="Connectivity"
-                value={status.connectivity}
+                value={status.connectivity === "online" ? "Online" : "Offline"}
                 tone={status.connectivity === "online" ? "success" : "warning"}
                 description="Whether Tab can reach your account and sync saved memories."
               />
-              <div className="pt-4">
+              <div className="settings-group__actions">
                 {status.auth === "signed_in" ? (
                   <Button variant="secondary" onClick={() => window.tab?.signOut?.()}>
                     Sign out
@@ -205,78 +193,66 @@ export function SettingsSurface() {
                   <Button onClick={() => window.tab?.signIn?.()}>Sign in</Button>
                 )}
               </div>
-            </CardContent>
-          </Card>
+            </SettingsGroup>
+          </>
         );
 
       case "controls":
         return (
-          <Card className="settings-pane shadow-none">
-            <CardHeader>
-              <CardTitle>Controls</CardTitle>
-              <CardDescription>Pause suggestions without signing out.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SettingsRow label="Suggestions" description={pauseState.description}>
-                <div className="flex flex-wrap items-center justify-end gap-2">
-                  <StatusBadge tone={paused ? "warning" : "ok"}>{pauseState.label}</StatusBadge>
-                  <Button variant={paused ? "default" : "secondary"} onClick={() => window.tab?.togglePause?.()}>
-                    {pauseState.action}
-                  </Button>
-                </div>
-              </SettingsRow>
-              <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
-                Pause keeps your account connected while stopping recent typing checks and suggestion bar updates.
-              </p>
-            </CardContent>
-          </Card>
+          <SettingsGroup title="Suggestions" description="Pause autocomplete without disconnecting your account.">
+            <SettingsRow label="Pause suggestions" description={pauseState.description}>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <StatusBadge tone={paused ? "warning" : "ok"}>{pauseState.label}</StatusBadge>
+                <Switch
+                  aria-label="Pause suggestions"
+                  checked={paused}
+                  onCheckedChange={(nextPaused) => {
+                    if (nextPaused !== paused) window.tab?.togglePause?.();
+                  }}
+                />
+              </div>
+            </SettingsRow>
+            <StatusRow
+              label="While paused"
+              value={paused ? "No suggestions" : "Autocomplete active"}
+              tone={paused ? "warning" : "success"}
+              description="Your account stays connected. Tab stops checking recent typing and hides the suggestion bar."
+            />
+          </SettingsGroup>
         );
 
       case "appearance":
         return (
-          <Card className="settings-pane shadow-none">
-            <CardHeader>
-              <CardTitle>Appearance</CardTitle>
-              <CardDescription>Use your macOS theme by default, or keep Tab pinned to light or dark.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <SettingsRow label="Theme" description="Theme preference is stored locally on this Mac.">
-                <ToggleGroup
-                  aria-label="Theme preference"
-                  className="flex flex-wrap justify-end gap-2"
-                  onValueChange={(value) => {
-                    if (value) handleThemeMode(value as ThemeMode);
-                  }}
-                  type="single"
-                  value={themeMode}
-                  variant="outline"
-                >
-                  {THEME_MODES.map((mode) => (
-                    <ToggleGroupItem
-                      aria-label={`Use ${formatThemeMode(mode)} theme`}
-                      key={mode}
-                      value={mode}
-                    >
-                      {formatThemeMode(mode)}
-                    </ToggleGroupItem>
-                  ))}
-                </ToggleGroup>
-              </SettingsRow>
-            </CardContent>
-          </Card>
+          <SettingsGroup title="Theme" description="Use the system appearance or keep Tab pinned to one theme.">
+            <SettingsRow label="Appearance" description="Theme preference is stored locally on this Mac.">
+              <ToggleGroup
+                aria-label="Theme preference"
+                className="settings-theme-toggle"
+                onValueChange={(value) => {
+                  if (value) handleThemeMode(value as ThemeMode);
+                }}
+                type="single"
+                value={themeMode}
+              >
+                {THEME_MODES.map((mode) => (
+                  <ToggleGroupItem aria-label={`Use ${formatThemeMode(mode)} theme`} key={mode} value={mode}>
+                    {formatThemeMode(mode)}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            </SettingsRow>
+            <StatusRow
+              label="Current preference"
+              value={formatThemeMode(themeMode)}
+              description={themeMode === "system" ? "Tab changes with macOS appearance." : `Tab stays in ${themeMode} mode.`}
+            />
+          </SettingsGroup>
         );
 
       case "permissions":
         return (
-          <Card className="settings-pane shadow-none">
-            <CardHeader>
-              <CardTitle>Permissions</CardTitle>
-              <CardDescription>
-                Accessibility lets Tab read the text field you are using and add suggestions you accept. Input Monitoring
-                helps Tab notice typing and make Option+Tab work.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="grid gap-3">
+          <>
+            <SettingsGroup title="macOS access" description="Tab only asks for access needed to observe typing and insert accepted suggestions.">
               <SettingsRow
                 label="Accessibility"
                 description="Required to read the text field you are using and add suggestions you accept."
@@ -299,14 +275,18 @@ export function SettingsSurface() {
                   <Button disabled={permissionBusy === "input-monitoring"} onClick={handleInputMonitoring}>
                     Open Settings
                   </Button>
-                  <Button variant="secondary" onClick={() => window.tab?.relaunchForPermissions?.()}>
-                    Relaunch Tab
-                  </Button>
                 </div>
               </SettingsRow>
+              <div className="settings-group__actions">
+                <Button variant="secondary" onClick={() => window.tab?.relaunchForPermissions?.()}>
+                  Relaunch after permission changes
+                </Button>
+              </div>
+            </SettingsGroup>
+            <SettingsGroup title="Privacy boundary" description="The permissions Tab does not request matter just as much.">
               <StatusRow
-                label="Privacy boundary"
-                value="You stay in control"
+                label="Screen and file access"
+                value="Not requested"
                 description="Tab does not request Screen Recording or Full Disk Access. Recent typing is used to make suggestions, and saved memories stay visible and controlled by you."
               />
               <StatusRow
@@ -314,25 +294,21 @@ export function SettingsSurface() {
                 value="Suggestion-only"
                 description={`${APP_CONTEXT_TRUST_COPY.summary} ${APP_CONTEXT_TRUST_COPY.permissionScope}`}
               />
-              {import.meta.env.DEV ? (
-                <CommandBlock
-                  command="bun run desktop:permissions"
-                  label="Developer permission reset"
-                  description="If macOS shows Electron in dev mode, enable Tab with this helper, then relaunch."
-                />
-              ) : null}
-            </CardContent>
-          </Card>
+            </SettingsGroup>
+            {import.meta.env.DEV ? (
+              <CommandBlock
+                command="bun run desktop:permissions"
+                label="Developer permission reset"
+                description="If macOS shows Electron in dev mode, enable Tab with this helper, then relaunch."
+              />
+            ) : null}
+          </>
         );
 
       case "memory":
         return (
-          <Card className="settings-pane shadow-none">
-            <CardHeader>
-              <CardTitle>Saved memories</CardTitle>
-              <CardDescription>Turn saved memories on or off for suggestions on this Mac.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3">
+          <>
+            <SettingsGroup title="Personalization" description="Choose whether saved details can inform suggestions on this Mac.">
               <SettingsRow
                 label="Use saved memories in suggestions"
                 description={
@@ -358,6 +334,11 @@ export function SettingsSurface() {
                   description={APP_CONTEXT_TRUST_COPY.debugScope}
                 />
               ) : null}
+            </SettingsGroup>
+            <SettingsGroup
+              title="Saved details"
+              description={`${memories.length.toLocaleString()} ${memories.length === 1 ? "memory" : "memories"} available to this account.`}
+            >
               {memories.length === 0 ? (
                 <EmptyState
                   title="No saved memories yet"
@@ -368,18 +349,18 @@ export function SettingsSurface() {
                   <div className="memory-row" key={memory.id}>
                     <div className="min-w-0">
                       <p className="text-sm leading-relaxed">{memory.content}</p>
-                      <p className="mt-1 text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
-                        Saved memory - {describePersonalMemorySource(memory.createdBy)}
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Saved by {describePersonalMemorySource(memory.createdBy)}
                       </p>
                     </div>
-                    <Button variant="secondary" size="sm" onClick={() => window.tab?.deleteMemory?.(memory.id)}>
+                    <Button variant="ghost" size="sm" onClick={() => window.tab?.deleteMemory?.(memory.id)}>
                       Delete
                     </Button>
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </SettingsGroup>
+          </>
         );
     }
   }
@@ -392,44 +373,60 @@ export function SettingsSurface() {
             <div className="settings-tabs__brand">
               <div className="settings-tabs__mark">T</div>
               <div>
-                <p className="eyebrow">Tab</p>
-                <h1>Settings</h1>
+                <strong>Tab</strong>
+                <span>Autocomplete for Mac</span>
               </div>
             </div>
 
-            <TabsList className="settings-tabs__nav no-drag h-auto bg-transparent p-0 text-inherit" aria-label="Settings sections">
+            <TabsList className="settings-tabs__nav no-drag h-auto rounded-none border-0 bg-transparent p-0 text-inherit" aria-label="Settings sections">
               {SETTINGS_TABS.map((tab) => (
                 <TabsTrigger className="settings-tabs__item" key={tab.value} value={tab.value}>
                   <span className="settings-tabs__item-label">{tab.label}</span>
-                  <span className="settings-tabs__item-desc">{tab.description}</span>
                 </TabsTrigger>
               ))}
             </TabsList>
+
+            <div
+              className="settings-tabs__status no-drag"
+              data-offline={status.connectivity !== "online"}
+              data-paused={paused}
+            >
+              <span className="settings-tabs__status-dot" aria-hidden="true" />
+              <div>
+                <strong>
+                  {paused ? "Suggestions paused" : status.connectivity === "online" ? "Tab is ready" : "Tab is offline"}
+                </strong>
+                <span>{status.connectivity === "online" ? "Connected" : "Waiting for a connection"}</span>
+              </div>
+            </div>
           </aside>
 
-          <div className="no-drag flex min-h-0 flex-col overflow-hidden">
-            <div className="settings-tabs__header drag-region">
-              <SurfaceHeader
-                eyebrow={activeTabConfig?.label}
-                title="Control Tab for Mac."
-                description="Manage account status, suggestions, macOS permissions, monthly usage, connection, and saved memories from this Mac."
-              />
-            </div>
+          <section className="settings-tabs__main no-drag">
+            <header className="settings-tabs__header drag-region">
+              <p className="eyebrow">Settings</p>
+              <h1>{activeTabConfig?.label}</h1>
+              <p>{activeTabConfig?.description}</p>
+            </header>
 
             <div className="settings-tabs__content">
-              {paused ? (
-                <StatusRow
-                  label="Tab is paused"
-                  value={pauseState.label}
-                  tone="warning"
-                  description={pauseState.description}
-                />
+              {paused && activeTab !== "controls" ? (
+                <div className="settings-paused">
+                  <div>
+                    <strong>Suggestions are paused</strong>
+                    <span>{pauseState.description}</span>
+                  </div>
+                  <Button size="sm" onClick={() => window.tab?.togglePause?.()}>
+                    Resume
+                  </Button>
+                </div>
               ) : null}
-              <TabsContent value={activeTab} forceMount className="m-0">
-                {renderActiveTab()}
-              </TabsContent>
+              {SETTINGS_TABS.map((tab) => (
+                <TabsContent className="settings-tabs__panel" key={tab.value} value={tab.value}>
+                  {activeTab === tab.value ? renderActiveTab() : null}
+                </TabsContent>
+              ))}
             </div>
-          </div>
+          </section>
         </SectionCard>
       </Tabs>
     </main>

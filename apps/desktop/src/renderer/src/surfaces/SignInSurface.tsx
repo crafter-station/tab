@@ -55,7 +55,7 @@ export function SignInSurface() {
       <section className="sign-in-hero drag-region" aria-label="Tab setup preview">
         <div className="sign-in-proof pug-dot-grid">
           <p className="eyebrow">Tab for Mac</p>
-          <h2>Connect this Mac, then review setup step by step.</h2>
+          <p className="sign-in-proof__title">Connect this Mac, then review setup step by step.</p>
           <div className="sign-in-proof__steps">
             {setupSteps.map((setupStep) => (
               <article className="sign-in-proof__step" key={setupStep.title}>
