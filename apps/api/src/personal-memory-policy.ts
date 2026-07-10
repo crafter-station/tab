@@ -27,6 +27,25 @@ export type ProposedMemoryOperation =
   | ProposedUpdateMemory
   | ProposedDeleteMemory;
 
+export type PlannedMemoryOperation =
+  | {
+      readonly type: "create";
+      readonly memoryId: string;
+      readonly content: string;
+      readonly eligible: boolean;
+    }
+  | {
+      readonly type: "update";
+      readonly memoryId: string;
+      readonly content: string;
+      readonly eligible: boolean;
+    }
+  | {
+      readonly type: "delete";
+      readonly memoryId: string;
+      readonly eligible: boolean;
+    };
+
 export type PersonalMemoryPolicyPort = {
   listMemories(userId: string): Promise<PersonalMemory[]>;
   findMemoryById(userId: string, id: string): Promise<PersonalMemory | null>;
@@ -57,6 +76,44 @@ export class PersonalMemoryPolicy {
     private readonly memory: PersonalMemoryPolicyPort,
     private readonly maxMemoriesPerUser = DEFAULT_MAX_MEMORIES_PER_USER,
   ) {}
+
+  get memoryLimit(): number {
+    return this.maxMemoriesPerUser;
+  }
+
+  planExtractionOperations(
+    operations: readonly ProposedMemoryOperation[],
+    createMemoryId: () => string = () => crypto.randomUUID(),
+  ): PlannedMemoryOperation[] {
+    return operations.map((operation) => {
+      switch (operation.type) {
+        case "create": {
+          const createEligible = this.isSafeMemoryText(operation.content);
+          return {
+            type: "create",
+            memoryId: createMemoryId(),
+            content: createEligible ? operation.content : "",
+            eligible: createEligible,
+          };
+        }
+        case "update": {
+          const updateEligible = this.isSafeMemoryText(operation.content);
+          return {
+            type: "update",
+            memoryId: operation.id,
+            content: updateEligible ? operation.content : "",
+            eligible: updateEligible,
+          };
+        }
+        case "delete":
+          return {
+            type: "delete",
+            memoryId: operation.id,
+            eligible: Boolean(operation.reason?.trim()),
+          };
+      }
+    });
+  }
 
   async applyExtractionOperations(
     userId: string,

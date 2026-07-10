@@ -135,6 +135,7 @@ export function createApp(deps: ApiDependencies = {}) {
     new InMemoryMemoryExtractionIdempotencyStorage();
   const memoryExtractionService = new MemoryExtractionService({
     personalMemoryService,
+    personalMemoryStorage,
     idempotencyStorage: memoryExtractionIdempotencyStorage,
     model: deps.memoryExtractionModel,
   });

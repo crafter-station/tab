@@ -9,9 +9,11 @@ import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";
 import {
   pendingPersonalMemoryVectorDeletions,
+  pendingPersonalMemoryVectorUpserts,
   personalMemories,
 } from "./db/schema.ts";
 import type { VectorizeBinding, WorkersAiBinding } from "./api-types.ts";
+import type { PlannedMemoryOperation } from "./personal-memory-policy.ts";
 
 const MEMORY_EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
 const DEFAULT_MAX_RELEVANT_MEMORIES = 10;
@@ -37,6 +39,26 @@ export type PendingPersonalMemoryVectorDeletion = {
   readonly createdAt: string;
 };
 
+export type PendingPersonalMemoryVectorUpsert = {
+  readonly userId: string;
+  readonly memoryId: string;
+  readonly mutationId: string;
+  readonly createdAt: string;
+};
+
+export type ExtractionOperationOutcome =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "rejected";
+
+export type AtomicExtractionOperationInput = {
+  readonly userId: string;
+  readonly operation: PlannedMemoryOperation;
+  readonly maxMemoriesPerUser: number;
+  readonly now: string;
+};
+
 export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
@@ -59,6 +81,23 @@ export interface PersonalMemoryStorage {
   ): Promise<PendingPersonalMemoryVectorDeletion[]>;
   enqueueVectorDeletion(userId: string, memoryId: string): Promise<void>;
   acknowledgeVectorDeletion(userId: string, memoryId: string): Promise<void>;
+  listPendingVectorUpserts(
+    userId: string,
+    memoryId?: string,
+  ): Promise<PendingPersonalMemoryVectorUpsert[]>;
+  enqueueVectorUpsert(
+    userId: string,
+    memoryId: string,
+    mutationId: string,
+  ): Promise<void>;
+  acknowledgeVectorUpsert(
+    userId: string,
+    memoryId: string,
+    mutationId: string,
+  ): Promise<void>;
+  applyExtractionOperationAtomically?(
+    input: AtomicExtractionOperationInput,
+  ): ExtractionOperationOutcome;
 }
 
 export type PersonalMemoryVectorMetadata = {
@@ -210,10 +249,15 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     string,
     PendingPersonalMemoryVectorDeletion
   >();
+  private pendingVectorUpserts = new Map<
+    string,
+    PendingPersonalMemoryVectorUpsert
+  >();
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
     const memory = createMemoryRecord(input);
     this.memories.set(memory.id, memory);
+    this.enqueueVectorUpsertRecord(memory);
     return memory;
   }
 
@@ -246,6 +290,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
       updatedAt: toISOTimestamp(new Date()),
     };
     this.memories.set(id, updated);
+    this.enqueueVectorUpsertRecord(updated);
     return updated;
   }
 
@@ -276,6 +321,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
       updatedAt: toISOTimestamp(new Date()),
     };
     this.memories.set(id, updated);
+    this.enqueueVectorUpsertRecord(updated);
     return updated;
   }
 
@@ -322,6 +368,114 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
       createdAt: toISOTimestamp(new Date()),
     });
   }
+
+  async listPendingVectorUpserts(
+    userId: string,
+    memoryId?: string,
+  ): Promise<PendingPersonalMemoryVectorUpsert[]> {
+    return Array.from(this.pendingVectorUpserts.values()).filter(
+      (upsert) =>
+        upsert.userId === userId &&
+        (memoryId === undefined || upsert.memoryId === memoryId),
+    );
+  }
+
+  async enqueueVectorUpsert(
+    userId: string,
+    memoryId: string,
+    mutationId: string,
+  ): Promise<void> {
+    this.pendingVectorUpserts.set(`${userId}:${memoryId}`, {
+      userId,
+      memoryId,
+      mutationId,
+      createdAt: toISOTimestamp(new Date()),
+    });
+  }
+
+  async acknowledgeVectorUpsert(
+    userId: string,
+    memoryId: string,
+    mutationId: string,
+  ): Promise<void> {
+    const key = `${userId}:${memoryId}`;
+    if (this.pendingVectorUpserts.get(key)?.mutationId === mutationId) {
+      this.pendingVectorUpserts.delete(key);
+    }
+  }
+
+  applyExtractionOperationAtomically(
+    input: AtomicExtractionOperationInput,
+  ): ExtractionOperationOutcome {
+    const { operation } = input;
+    if (!operation.eligible) return "rejected";
+
+    if (operation.type === "create") {
+      const memoryCount = Array.from(this.memories.values()).filter(
+        (memory) => memory.userId === input.userId,
+      ).length;
+      if (
+        memoryCount >= input.maxMemoriesPerUser ||
+        this.memories.has(operation.memoryId)
+      ) {
+        return "rejected";
+      }
+      const memory: PersonalMemory = {
+        id: operation.memoryId,
+        userId: input.userId,
+        content: operation.content,
+        createdBy: "system",
+        createdAt: input.now,
+        updatedAt: input.now,
+      };
+      this.memories.set(memory.id, memory);
+      this.enqueueVectorUpsertRecord(memory);
+      return "created";
+    }
+
+    const existing = this.memories.get(operation.memoryId);
+    if (
+      !existing ||
+      existing.userId !== input.userId ||
+      existing.createdBy !== "system"
+    ) {
+      return "rejected";
+    }
+
+    if (operation.type === "update") {
+      const updated = {
+        ...existing,
+        content: operation.content,
+        updatedAt: input.now,
+      };
+      this.memories.set(existing.id, updated);
+      this.enqueueVectorUpsertRecord(updated);
+      return "updated";
+    }
+
+    this.enqueueVectorDeletionRecord(input.userId, existing.id, input.now);
+    this.memories.delete(existing.id);
+    return "deleted";
+  }
+
+  private enqueueVectorUpsertRecord(memory: PersonalMemory): void {
+    this.pendingVectorUpserts.set(`${memory.userId}:${memory.id}`, {
+      userId: memory.userId,
+      memoryId: memory.id,
+      mutationId: crypto.randomUUID(),
+      createdAt: toISOTimestamp(new Date()),
+    });
+  }
+
+  private enqueueVectorDeletionRecord(
+    userId: string,
+    memoryId: string,
+    createdAt: string,
+  ): void {
+    const key = `${userId}:${memoryId}`;
+    if (this.pendingVectorDeletions.has(key)) return;
+    this.pendingVectorDeletions.set(key, { userId, memoryId, createdAt });
+  }
 }
 
 function rowToMemory(row: typeof personalMemories.$inferSelect): PersonalMemory {
@@ -348,8 +502,9 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
     const memory = createMemoryRecord(input);
+    const vectorMutationId = crypto.randomUUID();
 
-    await this.db.insert(personalMemories).values({
+    const insertCanonical = this.db.insert(personalMemories).values({
       id: memory.id,
       userId: memory.userId,
       content: memory.content,
@@ -357,6 +512,25 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
       createdAt: memory.createdAt,
       updatedAt: memory.updatedAt,
     });
+    const enqueueVectorUpsert = this.db
+      .insert(pendingPersonalMemoryVectorUpserts)
+      .values({
+        userId: memory.userId,
+        memoryId: memory.id,
+        mutationId: vectorMutationId,
+        createdAt: memory.updatedAt,
+      })
+      .onConflictDoUpdate({
+        target: [
+          pendingPersonalMemoryVectorUpserts.userId,
+          pendingPersonalMemoryVectorUpserts.memoryId,
+        ],
+        set: {
+          mutationId: vectorMutationId,
+          createdAt: memory.updatedAt,
+        },
+      });
+    await this.db.batch([insertCanonical, enqueueVectorUpsert] as const);
 
     return memory;
   }
@@ -389,7 +563,8 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
     const updatedAt = toISOTimestamp(new Date());
-    const rows = await this.db
+    const vectorMutationId = crypto.randomUUID();
+    const updateCanonical = this.db
       .update(personalMemories)
       .set({
         ...(input.content !== undefined && { content: input.content }),
@@ -403,6 +578,36 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
         ),
       )
       .returning();
+    const enqueueVectorUpsert = this.db
+      .insert(pendingPersonalMemoryVectorUpserts)
+      .select(
+        this.db
+          .select({
+            userId: personalMemories.userId,
+            memoryId: personalMemories.id,
+            mutationId: sql<string>`${vectorMutationId}`.as("mutation_id"),
+            createdAt: personalMemories.updatedAt,
+          })
+          .from(personalMemories)
+          .where(
+            and(
+              eq(personalMemories.userId, userId),
+              eq(personalMemories.id, id),
+              eq(personalMemories.updatedAt, updatedAt),
+            ),
+          ),
+      )
+      .onConflictDoUpdate({
+        target: [
+          pendingPersonalMemoryVectorUpserts.userId,
+          pendingPersonalMemoryVectorUpserts.memoryId,
+        ],
+        set: { mutationId: vectorMutationId, createdAt: updatedAt },
+      });
+    const [rows] = await this.db.batch([
+      updateCanonical,
+      enqueueVectorUpsert,
+    ] as const);
 
     return rows[0] ? rowToMemory(rows[0]) : null;
   }
@@ -416,11 +621,13 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     id: string,
     input: UpdateExtractedPersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
-    const rows = await this.db
+    const updatedAt = toISOTimestamp(new Date());
+    const vectorMutationId = crypto.randomUUID();
+    const updateCanonical = this.db
       .update(personalMemories)
       .set({
         content: input.content,
-        updatedAt: toISOTimestamp(new Date()),
+        updatedAt,
       })
       .where(
         and(
@@ -430,6 +637,37 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
         ),
       )
       .returning();
+    const enqueueVectorUpsert = this.db
+      .insert(pendingPersonalMemoryVectorUpserts)
+      .select(
+        this.db
+          .select({
+            userId: personalMemories.userId,
+            memoryId: personalMemories.id,
+            mutationId: sql<string>`${vectorMutationId}`.as("mutation_id"),
+            createdAt: personalMemories.updatedAt,
+          })
+          .from(personalMemories)
+          .where(
+            and(
+              eq(personalMemories.userId, userId),
+              eq(personalMemories.id, id),
+              eq(personalMemories.createdBy, "system"),
+              eq(personalMemories.updatedAt, updatedAt),
+            ),
+          ),
+      )
+      .onConflictDoUpdate({
+        target: [
+          pendingPersonalMemoryVectorUpserts.userId,
+          pendingPersonalMemoryVectorUpserts.memoryId,
+        ],
+        set: { mutationId: vectorMutationId, createdAt: updatedAt },
+      });
+    const [rows] = await this.db.batch([
+      updateCanonical,
+      enqueueVectorUpsert,
+    ] as const);
 
     return rows[0] ? rowToMemory(rows[0]) : null;
   }
@@ -481,6 +719,60 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
         createdAt: toISOTimestamp(new Date()),
       })
       .onConflictDoNothing();
+  }
+
+  async listPendingVectorUpserts(
+    userId: string,
+    memoryId?: string,
+  ): Promise<PendingPersonalMemoryVectorUpsert[]> {
+    return this.db
+      .select()
+      .from(pendingPersonalMemoryVectorUpserts)
+      .where(
+        and(
+          eq(pendingPersonalMemoryVectorUpserts.userId, userId),
+          memoryId === undefined
+            ? undefined
+            : eq(pendingPersonalMemoryVectorUpserts.memoryId, memoryId),
+        ),
+      );
+  }
+
+  async enqueueVectorUpsert(
+    userId: string,
+    memoryId: string,
+    mutationId: string,
+  ): Promise<void> {
+    const createdAt = toISOTimestamp(new Date());
+    await this.db
+      .insert(pendingPersonalMemoryVectorUpserts)
+      .values({ userId, memoryId, mutationId, createdAt })
+      .onConflictDoUpdate({
+        target: [
+          pendingPersonalMemoryVectorUpserts.userId,
+          pendingPersonalMemoryVectorUpserts.memoryId,
+        ],
+        set: { mutationId, createdAt },
+      });
+  }
+
+  async acknowledgeVectorUpsert(
+    userId: string,
+    memoryId: string,
+    mutationId: string,
+  ): Promise<void> {
+    await this.db
+      .delete(pendingPersonalMemoryVectorUpserts)
+      .where(
+        and(
+          eq(pendingPersonalMemoryVectorUpserts.userId, userId),
+          eq(pendingPersonalMemoryVectorUpserts.memoryId, memoryId),
+          eq(
+            pendingPersonalMemoryVectorUpserts.mutationId,
+            mutationId,
+          ),
+        ),
+      );
   }
 
   private async deleteMemoryAndEnqueueVectorCleanup(
@@ -650,7 +942,7 @@ export class PersonalMemoryService {
     const parsed = createMemoryInputSchema.parse(input);
     await beforeMutation?.();
     const memory = await this.storage.createMemory(parsed);
-    await this.indexMemory(memory, beforeMutation);
+    await this.reconcilePendingVectorMutations(memory.userId, memory.id);
     return memory;
   }
 
@@ -668,7 +960,7 @@ export class PersonalMemoryService {
 
   async deleteMemory(userId: string, id: string): Promise<boolean> {
     const deleted = await this.storage.deleteMemory(userId, id);
-    await this.cleanupPendingVectorDeletions(userId, id);
+    await this.reconcilePendingVectorMutations(userId, id);
     return deleted;
   }
 
@@ -680,7 +972,7 @@ export class PersonalMemoryService {
     const parsed = updateMemoryInputSchema.parse(input);
     const memory = await this.storage.updateMemory(userId, id, parsed);
     if (memory) {
-      await this.indexMemory(memory);
+      await this.reconcilePendingVectorMutations(userId, id);
     }
     return memory;
   }
@@ -711,7 +1003,7 @@ export class PersonalMemoryService {
       parsed,
     );
     if (memory) {
-      await this.indexMemory(memory, beforeMutation);
+      await this.reconcilePendingVectorMutations(userId, id);
     }
     return memory;
   }
@@ -723,14 +1015,14 @@ export class PersonalMemoryService {
   ): Promise<boolean> {
     await beforeMutation?.();
     const deleted = await this.storage.deleteMemoryForExtraction(userId, id);
-    await this.cleanupPendingVectorDeletions(userId, id, beforeMutation);
+    await this.reconcilePendingVectorMutations(userId, id);
     return deleted;
   }
 
   async cleanupPendingVectorDeletions(
     userId: string,
     memoryId?: string,
-    beforeMutation?: PersonalMemoryMutationGuard,
+    _beforeMutation?: PersonalMemoryMutationGuard,
   ): Promise<void> {
     if (!this.vectorIndex) return;
 
@@ -742,7 +1034,6 @@ export class PersonalMemoryService {
     }
 
     for (const deletion of pending) {
-      await beforeMutation?.();
       try {
         await this.vectorIndex.deleteMemory(deletion.memoryId);
       } catch {
@@ -750,7 +1041,6 @@ export class PersonalMemoryService {
         continue;
       }
 
-      await beforeMutation?.();
       try {
         await this.storage.acknowledgeVectorDeletion(
           deletion.userId,
@@ -769,8 +1059,9 @@ export class PersonalMemoryService {
     const memory = await this.storage.findMemoryById(userId, id);
     if (!memory) return null;
 
-    await this.indexMemory(memory);
-    return memory;
+    await this.storage.enqueueVectorUpsert(userId, id, crypto.randomUUID());
+    await this.reconcilePendingVectorMutations(userId, id);
+    return this.storage.findMemoryById(userId, id);
   }
 
   async selectRelevantMemories(input: RelevanceInput): Promise<PersonalMemory[]> {
@@ -872,51 +1163,126 @@ export class PersonalMemoryService {
     return memories;
   }
 
-  private async indexMemory(
-    memory: PersonalMemory,
-    beforeMutation?: PersonalMemoryMutationGuard,
+  async reconcilePendingVectorMutations(
+    userId: string,
+    memoryId?: string,
   ): Promise<void> {
-    if (!this.embeddingService || !this.vectorIndex) return;
+    if (!this.vectorIndex) return;
 
-    let indexedMemory = memory;
+    if (this.embeddingService) {
+      const pending = await this.storage.listPendingVectorUpserts(
+        userId,
+        memoryId,
+      );
+      for (const upsert of pending) {
+        await this.reconcileVectorUpsert(upsert, this.embeddingService);
+      }
+      if (pending.length > 0) return;
+    }
+
+    await this.cleanupPendingVectorDeletions(userId, memoryId);
+  }
+
+  private async reconcileVectorUpsert(
+    pending: PendingPersonalMemoryVectorUpsert,
+    embeddingService: PersonalMemoryEmbeddingService,
+  ): Promise<void> {
+    if (!this.vectorIndex) return;
+
+    let expectedMutationId = pending.mutationId;
     while (true) {
-      const values = await this.embeddingService.embedText(indexedMemory.content);
-      await beforeMutation?.();
+      const canonical = await this.storage.findMemoryById(
+        pending.userId,
+        pending.memoryId,
+      );
+      if (!canonical) {
+        await this.storage.enqueueVectorDeletion(
+          pending.userId,
+          pending.memoryId,
+        );
+        await this.cleanupPendingVectorDeletions(
+          pending.userId,
+          pending.memoryId,
+        );
+        const deletionStillPending = (
+          await this.storage.listPendingVectorDeletions(
+            pending.userId,
+            pending.memoryId,
+          )
+        ).length > 0;
+        if (!deletionStillPending) {
+          await this.storage.acknowledgeVectorUpsert(
+            pending.userId,
+            pending.memoryId,
+            expectedMutationId,
+          );
+        }
+        return;
+      }
+
+      const values = await embeddingService.embedText(canonical.content);
       await this.vectorIndex.upsertMemory({
-        id: indexedMemory.id,
+        id: canonical.id,
         values,
         metadata: {
-          userId: indexedMemory.userId,
-          createdBy: indexedMemory.createdBy,
+          userId: canonical.userId,
+          createdBy: canonical.createdBy,
         },
       });
 
-      const canonical = await this.storage.findMemoryById(
-        indexedMemory.userId,
-        indexedMemory.id,
+      // This reconciliation is deliberately independent of extraction claim
+      // ownership once the external upsert has started.
+      const current = await this.storage.findMemoryById(
+        canonical.userId,
+        canonical.id,
       );
-      if (!canonical) {
-        await beforeMutation?.();
-        await this.storage.enqueueVectorDeletion(
-          indexedMemory.userId,
-          indexedMemory.id,
-        );
-        await this.cleanupPendingVectorDeletions(
-          indexedMemory.userId,
-          indexedMemory.id,
-          beforeMutation,
-        );
+      if (!current) {
+        await this.storage.enqueueVectorDeletion(canonical.userId, canonical.id);
+        await this.cleanupPendingVectorDeletions(canonical.userId, canonical.id);
+        const deletionStillPending = (
+          await this.storage.listPendingVectorDeletions(
+            canonical.userId,
+            canonical.id,
+          )
+        ).length > 0;
+        if (!deletionStillPending) {
+          await this.storage.acknowledgeVectorUpsert(
+            canonical.userId,
+            canonical.id,
+            expectedMutationId,
+          );
+        }
         return;
       }
-      // A newer canonical update won while this embedding/upsert was in flight.
       if (
-        canonical.content === indexedMemory.content &&
-        canonical.createdBy === indexedMemory.createdBy
+        current.content !== canonical.content ||
+        current.createdBy !== canonical.createdBy
       ) {
-        return;
+        continue;
       }
 
-      indexedMemory = canonical;
+      const latestPending = (
+        await this.storage.listPendingVectorUpserts(current.userId, current.id)
+      )[0];
+      if (!latestPending) return;
+      expectedMutationId = latestPending.mutationId;
+      const latestCanonical = await this.storage.findMemoryById(
+        current.userId,
+        current.id,
+      );
+      if (
+        !latestCanonical ||
+        latestCanonical.content !== current.content ||
+        latestCanonical.createdBy !== current.createdBy
+      ) {
+        continue;
+      }
+      await this.storage.acknowledgeVectorUpsert(
+        current.userId,
+        current.id,
+        expectedMutationId,
+      );
+      return;
     }
   }
 }

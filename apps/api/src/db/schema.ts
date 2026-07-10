@@ -116,6 +116,17 @@ export const pendingPersonalMemoryVectorDeletions = sqliteTable(
   (table) => [primaryKey({ columns: [table.userId, table.memoryId] })],
 );
 
+export const pendingPersonalMemoryVectorUpserts = sqliteTable(
+  "pending_personal_memory_vector_upserts",
+  {
+    userId: text("user_id").notNull(),
+    memoryId: text("memory_id").notNull(),
+    mutationId: text("mutation_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.memoryId] })],
+);
+
 export const memoryExtractionIdempotency = sqliteTable(
   "memory_extraction_idempotency",
   {
@@ -129,12 +140,36 @@ export const memoryExtractionIdempotency = sqliteTable(
     rejected: integer("rejected").notNull(),
     claimId: text("claim_id"),
     leaseExpiresAt: text("lease_expires_at"),
+    operationPlan: text("operation_plan"),
+    operationCount: integer("operation_count").notNull().default(0),
     createdAt: text("created_at").notNull(),
     expiresAt: text("expires_at").notNull(),
   },
   (table) => [
     primaryKey({ columns: [table.userId, table.batchIdHash] }),
     index("idx_memory_extraction_idempotency_expires").on(table.expiresAt),
+  ],
+);
+
+export const memoryExtractionOperations = sqliteTable(
+  "memory_extraction_operations",
+  {
+    userId: text("user_id").notNull(),
+    batchIdHash: text("batch_id_hash").notNull(),
+    operationIndex: integer("operation_index").notNull(),
+    outcome: text("outcome").notNull(),
+    memoryId: text("memory_id"),
+    counted: integer("counted", { mode: "boolean" }).notNull().default(false),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.userId, table.batchIdHash, table.operationIndex],
+    }),
+    index("idx_memory_extraction_operations_batch").on(
+      table.userId,
+      table.batchIdHash,
+    ),
   ],
 );
 

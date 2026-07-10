@@ -7,6 +7,8 @@ import {
   D1PersonalMemoryStorage,
   InMemoryPersonalMemoryStorage,
   PersonalMemoryService,
+  type AtomicExtractionOperationInput,
+  type ExtractionOperationOutcome,
   type PersonalMemoryStorage,
   type QueryPersonalMemoryVectorsInput,
   type PersonalMemoryEmbeddingService,
@@ -289,6 +291,19 @@ function extractionBatch(batchId: string, text: string) {
   };
 }
 
+async function hashBatchIdForTest(
+  userId: string,
+  batchId: string,
+): Promise<string> {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(`${userId}:${batchId}`),
+  );
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, "0"),
+  ).join("");
+}
+
 function extractionModel(
   operations: readonly ProposedMemoryOperation[],
 ): MemoryAgentModel {
@@ -324,6 +339,15 @@ function createD1MemoryStorage(options?: {
       );
     `);
   }
+  sqlite.exec(`
+    CREATE TABLE pending_personal_memory_vector_upserts (
+      user_id text NOT NULL,
+      memory_id text NOT NULL,
+      mutation_id text NOT NULL,
+      created_at text NOT NULL,
+      PRIMARY KEY (user_id, memory_id)
+    );
+  `);
   return new D1PersonalMemoryStorage(createTestDatabase(sqlite));
 }
 
@@ -339,12 +363,48 @@ function createExtractionIdempotencyDatabase(): Database {
       rejected integer NOT NULL,
       claim_id text,
       lease_expires_at text,
+      operation_plan text,
+      operation_count integer DEFAULT 0 NOT NULL,
       created_at text NOT NULL,
       expires_at text NOT NULL,
       PRIMARY KEY (user_id, batch_id_hash)
     );
     CREATE INDEX idx_memory_extraction_idempotency_expires
       ON memory_extraction_idempotency (expires_at);
+    CREATE TABLE memory_extraction_operations (
+      user_id text NOT NULL,
+      batch_id_hash text NOT NULL,
+      operation_index integer NOT NULL,
+      outcome text NOT NULL,
+      memory_id text,
+      counted integer DEFAULT 0 NOT NULL,
+      created_at text NOT NULL,
+      PRIMARY KEY (user_id, batch_id_hash, operation_index)
+    );
+    CREATE INDEX idx_memory_extraction_operations_batch
+      ON memory_extraction_operations (user_id, batch_id_hash);
+    CREATE TABLE personal_memories (
+      id text PRIMARY KEY NOT NULL,
+      user_id text NOT NULL,
+      content text NOT NULL,
+      created_by text DEFAULT 'system' NOT NULL,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    );
+    CREATE INDEX idx_personal_memories_user ON personal_memories (user_id);
+    CREATE TABLE pending_personal_memory_vector_deletions (
+      user_id text NOT NULL,
+      memory_id text NOT NULL,
+      created_at text NOT NULL,
+      PRIMARY KEY (user_id, memory_id)
+    );
+    CREATE TABLE pending_personal_memory_vector_upserts (
+      user_id text NOT NULL,
+      memory_id text NOT NULL,
+      mutation_id text NOT NULL,
+      created_at text NOT NULL,
+      PRIMARY KEY (user_id, memory_id)
+    );
   `);
   return sqlite;
 }
@@ -368,6 +428,30 @@ class CountingPersonalMemoryStorage extends InMemoryPersonalMemoryStorage {
   ): Promise<boolean> {
     this.extractionDeletes += 1;
     return super.deleteMemoryForExtraction(userId, id);
+  }
+
+  override applyExtractionOperationAtomically(
+    input: AtomicExtractionOperationInput,
+  ): ExtractionOperationOutcome {
+    const outcome = super.applyExtractionOperationAtomically(input);
+    if (outcome === "deleted") this.extractionDeletes += 1;
+    return outcome;
+  }
+}
+
+class EffectCountingPersonalMemoryStorage extends InMemoryPersonalMemoryStorage {
+  readonly extractionEffects = {
+    created: 0,
+    updated: 0,
+    deleted: 0,
+  };
+
+  override applyExtractionOperationAtomically(
+    input: AtomicExtractionOperationInput,
+  ): ExtractionOperationOutcome {
+    const outcome = super.applyExtractionOperationAtomically(input);
+    if (outcome !== "rejected") this.extractionEffects[outcome] += 1;
+    return outcome;
   }
 }
 
@@ -478,6 +562,147 @@ describe("Personal Memory API", () => {
   it("atomically protects memories whose authorship changes after an extraction candidate read", async () => {
     await expectExtractionScopedStorage(new InMemoryPersonalMemoryStorage());
     await expectExtractionScopedStorage(createD1MemoryStorage());
+  });
+
+  it("keeps D1 and in-memory extraction journals replay-safe with identical outcomes", async () => {
+    async function runScenario(adapter: "d1" | "memory") {
+      const clock = new ManualMemoryExtractionClock();
+      const sqlite = adapter === "d1" ? createExtractionIdempotencyDatabase() : null;
+      const database = sqlite ? createTestDatabase(sqlite) : null;
+      const personalMemoryStorage = database
+        ? new D1PersonalMemoryStorage(database)
+        : new InMemoryPersonalMemoryStorage();
+      const extractionStorage = database
+        ? new D1MemoryExtractionIdempotencyStorage(database, clock)
+        : new InMemoryMemoryExtractionIdempotencyStorage(clock);
+      const updateTarget = await personalMemoryStorage.createMemory({
+        userId: "user-1",
+        content: "Old update target",
+        createdBy: "system",
+      });
+      const deleteTarget = await personalMemoryStorage.createMemory({
+        userId: "user-1",
+        content: "Delete target",
+        createdBy: "system",
+      });
+      const protectedTarget = await personalMemoryStorage.createMemory({
+        userId: "user-1",
+        content: "Protected user memory",
+        createdBy: "user",
+      });
+      const now = clock.now();
+      const claim = await extractionStorage.claim({
+        userId: "user-1",
+        batchIdHash: "journal-parity",
+        now,
+        leaseExpiresAt: new Date(now.getTime() + 1_000),
+      });
+      if (claim.status !== "claimed") throw new Error("Expected extraction claim");
+      const operations = [
+        {
+          type: "create",
+          memoryId: "journal-created-memory",
+          content: "Created exactly once",
+          eligible: true,
+        },
+        {
+          type: "update",
+          memoryId: updateTarget.id,
+          content: "Updated exactly once",
+          eligible: true,
+        },
+        {
+          type: "delete",
+          memoryId: deleteTarget.id,
+          eligible: true,
+        },
+        {
+          type: "update",
+          memoryId: protectedTarget.id,
+          content: "Must remain protected",
+          eligible: true,
+        },
+      ] as const;
+      const claimInput = {
+        userId: "user-1",
+        batchIdHash: "journal-parity",
+        claimId: claim.claimId,
+        now,
+      };
+      expect(
+        await extractionStorage.savePlan({
+          ...claimInput,
+          plan: { version: 1, operations: Array.from(operations) },
+        }),
+      ).toBe(true);
+
+      const firstOutcomes = [];
+      const replayOutcomes = [];
+      for (const [operationIndex, operation] of operations.entries()) {
+        firstOutcomes.push(
+          await extractionStorage.applyOperation({
+            ...claimInput,
+            operationIndex,
+            operation,
+            maxMemoriesPerUser: 500,
+            personalMemoryStorage,
+          }),
+        );
+      }
+      for (const [operationIndex, operation] of operations.entries()) {
+        replayOutcomes.push(
+          await extractionStorage.applyOperation({
+            ...claimInput,
+            operationIndex,
+            operation,
+            maxMemoriesPerUser: 500,
+            personalMemoryStorage,
+          }),
+        );
+      }
+      const progress = await extractionStorage.readProgress(claimInput);
+      const memories = await personalMemoryStorage.listMemoriesByUser("user-1");
+
+      return {
+        firstOutcomes,
+        replayOutcomes,
+        progress,
+        contents: memories.map((memory) => memory.content).sort(),
+        d1JournalRows: sqlite
+          ? (
+              sqlite
+                .query(
+                  "select operation_index, outcome, counted from memory_extraction_operations order by operation_index",
+                )
+                .all() as Array<Record<string, unknown>>
+            )
+          : null,
+      };
+    }
+
+    const inMemory = await runScenario("memory");
+    const d1 = await runScenario("d1");
+    expect(d1.firstOutcomes).toEqual(inMemory.firstOutcomes);
+    expect(d1.replayOutcomes).toEqual(inMemory.replayOutcomes);
+    expect(d1.progress).toEqual({
+      created: 1,
+      updated: 1,
+      deleted: 1,
+      rejected: 1,
+    });
+    expect(d1.progress).toEqual(inMemory.progress);
+    expect(d1.contents).toEqual(inMemory.contents);
+    expect(d1.contents).toEqual([
+      "Created exactly once",
+      "Protected user memory",
+      "Updated exactly once",
+    ]);
+    expect(d1.d1JournalRows).toEqual([
+      { operation_index: 0, outcome: "created", counted: 1 },
+      { operation_index: 1, outcome: "updated", counted: 1 },
+      { operation_index: 2, outcome: "deleted", counted: 1 },
+      { operation_index: 3, outcome: "rejected", counted: 1 },
+    ]);
   });
 
   it("processes synchronous extraction operations and returns final counts", async () => {
@@ -676,7 +901,7 @@ describe("Personal Memory API", () => {
       leaseExpiresAt,
     });
     if (claim.status !== "claimed") throw new Error("Expected extraction claim");
-    const counts = { created: 1, updated: 2, deleted: 3, rejected: 4 };
+    const counts = { created: 0, updated: 0, deleted: 0, rejected: 0 };
     const waiting = waiterStorage.waitForResult({
       userId: "user-1",
       batchIdHash: "completed-batch",
@@ -684,25 +909,32 @@ describe("Personal Memory API", () => {
     });
 
     expect(
-      await ownerStorage.complete({
+      await ownerStorage.savePlan({
         userId: "user-2",
         batchIdHash: "completed-batch",
         claimId: claim.claimId,
-        counts,
         now,
-        expiresAt: new Date(now.getTime() + 60_000),
+        plan: { version: 1, operations: [] },
       }),
     ).toBe(false);
+    expect(
+      await ownerStorage.savePlan({
+        userId: "user-1",
+        batchIdHash: "completed-batch",
+        claimId: claim.claimId,
+        now,
+        plan: { version: 1, operations: [] },
+      }),
+    ).toBe(true);
     expect(
       await ownerStorage.complete({
         userId: "user-1",
         batchIdHash: "completed-batch",
         claimId: claim.claimId,
-        counts,
         now,
         expiresAt: new Date(now.getTime() + 60_000),
       }),
-    ).toBe(true);
+    ).toEqual(counts);
     expect(await waiting).toEqual(counts);
     expect(
       await waiterStorage.claim({
@@ -754,11 +986,103 @@ describe("Personal Memory API", () => {
         userId: "user-1",
         batchIdHash: "expired-batch",
         claimId: first.claimId,
-        counts: { created: 1, updated: 0, deleted: 0, rejected: 0 },
         now: new Date("2026-07-10T10:00:01.001Z"),
         expiresAt: new Date("2026-07-11T10:00:00.000Z"),
       }),
-    ).toBe(false);
+    ).toBeNull();
+  });
+
+  it("makes a stale D1 claimant physically unable to mutate after its final guard", async () => {
+    const sqlite = createExtractionIdempotencyDatabase();
+    const database = createTestDatabase(sqlite);
+    const staleStorage = new D1MemoryExtractionIdempotencyStorage(database);
+    const replacementStorage = new D1MemoryExtractionIdempotencyStorage(database);
+    const personalMemoryStorage = new D1PersonalMemoryStorage(database);
+    const startedAt = new Date("2026-07-10T10:00:00.000Z");
+    const staleClaim = await staleStorage.claim({
+      userId: "user-1",
+      batchIdHash: "statement-fence",
+      now: startedAt,
+      leaseExpiresAt: new Date("2026-07-10T10:00:01.000Z"),
+    });
+    if (staleClaim.status !== "claimed") throw new Error("Expected stale claim");
+    const operation = {
+      type: "create" as const,
+      memoryId: "statement-fenced-memory",
+      content: "Must be created by the replacement",
+      eligible: true,
+    };
+    expect(
+      await staleStorage.savePlan({
+        userId: "user-1",
+        batchIdHash: "statement-fence",
+        claimId: staleClaim.claimId,
+        now: startedAt,
+        plan: { version: 1, operations: [operation] },
+      }),
+    ).toBe(true);
+    expect(
+      await staleStorage.renew({
+        userId: "user-1",
+        batchIdHash: "statement-fence",
+        claimId: staleClaim.claimId,
+        now: new Date("2026-07-10T10:00:00.500Z"),
+        leaseExpiresAt: new Date("2026-07-10T10:00:01.500Z"),
+      }),
+    ).toBe(true);
+
+    const takeoverAt = new Date("2026-07-10T10:00:01.501Z");
+    const replacementClaim = await replacementStorage.claim({
+      userId: "user-1",
+      batchIdHash: "statement-fence",
+      now: takeoverAt,
+      leaseExpiresAt: new Date("2026-07-10T10:00:02.501Z"),
+    });
+    if (replacementClaim.status !== "claimed") {
+      throw new Error("Expected replacement claim");
+    }
+    await expect(
+      staleStorage.applyOperation({
+        userId: "user-1",
+        batchIdHash: "statement-fence",
+        claimId: staleClaim.claimId,
+        now: takeoverAt,
+        operationIndex: 0,
+        operation,
+        maxMemoriesPerUser: 500,
+        personalMemoryStorage,
+      }),
+    ).resolves.toEqual({ status: "claim_lost" });
+    expect(
+      await personalMemoryStorage.findMemoryById(
+        "user-1",
+        operation.memoryId,
+      ),
+    ).toBeNull();
+    expect(
+      sqlite
+        .query("select * from memory_extraction_operations")
+        .all(),
+    ).toEqual([]);
+
+    await expect(
+      replacementStorage.applyOperation({
+        userId: "user-1",
+        batchIdHash: "statement-fence",
+        claimId: replacementClaim.claimId,
+        now: takeoverAt,
+        operationIndex: 0,
+        operation,
+        maxMemoriesPerUser: 500,
+        personalMemoryStorage,
+      }),
+    ).resolves.toEqual({ status: "applied", outcome: "created" });
+    expect(
+      await personalMemoryStorage.findMemoryById(
+        "user-1",
+        operation.memoryId,
+      ),
+    ).toMatchObject({ content: operation.content, createdBy: "system" });
   });
 
   it("renews a live extraction claim while the model is running", async () => {
@@ -773,6 +1097,7 @@ describe("Personal Memory API", () => {
       personalMemoryService: new PersonalMemoryService({
         storage: personalMemoryStorage,
       }),
+      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -830,6 +1155,7 @@ describe("Personal Memory API", () => {
         embeddingService,
         vectorIndex,
       }),
+      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -876,10 +1202,174 @@ describe("Personal Memory API", () => {
     expect(clock.pendingSleeps).toBe(0);
   });
 
+  it("fences takeover in the final guard-to-canonical-statement gap", async () => {
+    const clock = new ManualMemoryExtractionClock();
+    const idempotencyStorage =
+      new InMemoryMemoryExtractionIdempotencyStorage(clock);
+    const personalMemoryStorage = new EffectCountingPersonalMemoryStorage();
+    const personalMemoryService = new PersonalMemoryService({
+      storage: personalMemoryStorage,
+    });
+    let modelCalls = 0;
+    const model = extractionModel([
+      { type: "create", content: "Only the replacement may commit this" },
+    ]);
+    const replacement = new MemoryExtractionService({
+      personalMemoryService,
+      personalMemoryStorage,
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      model: {
+        async proposeOperations(job, memories) {
+          modelCalls += 1;
+          return model.proposeOperations(job, memories);
+        },
+      },
+    });
+    const replacementFinished = deferred<MemoryExtractionCounts>();
+    let injected = false;
+    const stale = new MemoryExtractionService({
+      personalMemoryService,
+      personalMemoryStorage,
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      model: {
+        async proposeOperations(job, memories) {
+          modelCalls += 1;
+          return model.proposeOperations(job, memories);
+        },
+      },
+      async beforeOperationCommit() {
+        if (injected) return;
+        injected = true;
+        clock.advance(101, false);
+        replacementFinished.resolve(
+          await replacement.extract(
+            "user-1",
+            extractionBatch("batch-guard-gap", "Guard gap"),
+          ),
+        );
+      },
+    });
+    const request = extractionBatch("batch-guard-gap", "Guard gap");
+
+    const staleResult = stale.extract("user-1", request);
+    const winnerCounts = await replacementFinished.promise;
+
+    await expect(staleResult).resolves.toEqual(winnerCounts);
+    expect(winnerCounts).toEqual({
+      created: 1,
+      updated: 0,
+      deleted: 0,
+      rejected: 0,
+    });
+    expect(modelCalls).toBe(1);
+    expect(personalMemoryStorage.extractionEffects).toEqual({
+      created: 1,
+      updated: 0,
+      deleted: 0,
+    });
+    expect(
+      await personalMemoryStorage.listMemoriesByUser("user-1"),
+    ).toHaveLength(1);
+  });
+
+  it("resumes a durable plan after operation zero without duplicate effects or counts", async () => {
+    const clock = new ManualMemoryExtractionClock();
+    const idempotencyStorage =
+      new InMemoryMemoryExtractionIdempotencyStorage(clock);
+    const personalMemoryStorage = new EffectCountingPersonalMemoryStorage();
+    const updateTarget = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Before takeover update",
+      createdBy: "system",
+    });
+    const deleteTarget = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Before takeover delete",
+      createdBy: "system",
+    });
+    const personalMemoryService = new PersonalMemoryService({
+      storage: personalMemoryStorage,
+    });
+    let modelCalls = 0;
+    const model: MemoryAgentModel = {
+      async proposeOperations() {
+        modelCalls += 1;
+        return [
+          { type: "create", content: "Created before takeover" },
+          {
+            type: "update",
+            id: updateTarget.id,
+            content: "Updated after takeover",
+          },
+          { type: "delete", id: deleteTarget.id, reason: "Contradicted" },
+        ];
+      },
+    };
+    const request = extractionBatch("batch-operation-resume", "Resume plan");
+    const replacement = new MemoryExtractionService({
+      personalMemoryService,
+      personalMemoryStorage,
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      model,
+    });
+    const replacementFinished = deferred<MemoryExtractionCounts>();
+    let injected = false;
+    const stale = new MemoryExtractionService({
+      personalMemoryService,
+      personalMemoryStorage,
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      model,
+      async beforeOperationCommit({ operationIndex }) {
+        if (injected || operationIndex !== 1) return;
+        injected = true;
+        clock.advance(101, false);
+        replacementFinished.resolve(
+          await replacement.extract("user-1", request),
+        );
+      },
+    });
+
+    const staleResult = stale.extract("user-1", request);
+    const winnerCounts = await replacementFinished.promise;
+
+    await expect(staleResult).resolves.toEqual(winnerCounts);
+    expect(winnerCounts).toEqual({
+      created: 1,
+      updated: 1,
+      deleted: 1,
+      rejected: 0,
+    });
+    expect(modelCalls).toBe(1);
+    expect(personalMemoryStorage.extractionEffects).toEqual({
+      created: 1,
+      updated: 1,
+      deleted: 1,
+    });
+    expect(
+      (await personalMemoryStorage.listMemoriesByUser("user-1"))
+        .map((memory) => memory.content)
+        .sort(),
+    ).toEqual(["Created before takeover", "Updated after takeover"]);
+  });
+
   it("shares no-op completion with active waiters but expires its coordination result quickly", async () => {
     const clock = new ManualMemoryExtractionClock();
+    const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+    const sqlite = createExtractionIdempotencyDatabase();
     const idempotencyStorage = new D1MemoryExtractionIdempotencyStorage(
-      createTestDatabase(createExtractionIdempotencyDatabase()),
+      createTestDatabase(sqlite),
       clock,
     );
     const firstModelStarted = deferred<void>();
@@ -887,8 +1377,9 @@ describe("Personal Memory API", () => {
     let modelCalls = 0;
     const service = new MemoryExtractionService({
       personalMemoryService: new PersonalMemoryService({
-        storage: new InMemoryPersonalMemoryStorage(),
+        storage: personalMemoryStorage,
       }),
+      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -923,6 +1414,20 @@ describe("Personal Memory API", () => {
     expect(modelCalls).toBe(1);
 
     clock.advance(51, false);
+    await expect(
+      idempotencyStorage.waitForResult({
+        userId: "user-1",
+        batchIdHash: await hashBatchIdForTest("user-1", "batch-no-op"),
+        waitUntil: new Date(clock.now().getTime() + 1),
+      }),
+    ).resolves.toBeNull();
+    expect(
+      (
+        sqlite
+          .query("select count(*) as count from memory_extraction_idempotency")
+          .get() as { count: number }
+      ).count,
+    ).toBe(0);
     await expect(service.extract("user-1", request)).resolves.toEqual(
       firstCounts,
     );
@@ -938,13 +1443,15 @@ describe("Personal Memory API", () => {
 
   it("stops the claim heartbeat and releases the lease when extraction fails", async () => {
     const clock = new ManualMemoryExtractionClock();
+    const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
     const idempotencyStorage =
       new InMemoryMemoryExtractionIdempotencyStorage(clock);
     let modelCalls = 0;
     const service = new MemoryExtractionService({
       personalMemoryService: new PersonalMemoryService({
-        storage: new InMemoryPersonalMemoryStorage(),
+        storage: personalMemoryStorage,
       }),
+      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1268,6 +1775,78 @@ describe("Personal Memory API", () => {
     expect(vectorIndex.deletes).toEqual([delayedUpsert.id, delayedUpsert.id]);
   });
 
+  it("reconciles a delayed extraction upsert after lease loss and canonical deletion", async () => {
+    const clock = new ManualMemoryExtractionClock();
+    const idempotencyStorage =
+      new InMemoryMemoryExtractionIdempotencyStorage(clock);
+    const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+    const vectorIndex = new DeferredUpsertVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage: personalMemoryStorage,
+      embeddingService: new FakeEmbeddingService(),
+      vectorIndex,
+    });
+    let modelCalls = 0;
+    const model: MemoryAgentModel = {
+      async proposeOperations() {
+        modelCalls += 1;
+        return [{ type: "create", content: "Deleted while vector is delayed" }];
+      },
+    };
+    const createService = (beforeOperationCommit?: () => Promise<void>) =>
+      new MemoryExtractionService({
+        personalMemoryService,
+        personalMemoryStorage,
+        idempotencyStorage,
+        clock,
+        claimLeaseMs: 100,
+        claimHeartbeatMs: 25,
+        model,
+        beforeOperationCommit,
+      });
+    const request = extractionBatch(
+      "batch-delayed-extraction-vector",
+      "Delayed vector fact",
+    );
+
+    const stale = createService().extract("user-1", request);
+    const delayedUpsert = await vectorIndex.upsertStarted.promise;
+    clock.advance(101, false);
+    const replacementResumed = deferred<void>();
+    const replacement = createService(async () => {
+      replacementResumed.resolve();
+    }).extract("user-1", request);
+    await replacementResumed.promise;
+    await personalMemoryStorage.deleteMemory("user-1", delayedUpsert.id);
+    vectorIndex.continueUpsert.resolve();
+
+    const replacementCounts = await replacement;
+    await expect(stale).resolves.toEqual(replacementCounts);
+    expect(replacementCounts).toEqual({
+      created: 1,
+      updated: 0,
+      deleted: 0,
+      rejected: 0,
+    });
+    expect(modelCalls).toBe(1);
+    expect(
+      await personalMemoryStorage.findMemoryById("user-1", delayedUpsert.id),
+    ).toBeNull();
+    expect(vectorIndex.vectors.has(delayedUpsert.id)).toBe(false);
+    expect(
+      await personalMemoryStorage.listPendingVectorUpserts(
+        "user-1",
+        delayedUpsert.id,
+      ),
+    ).toEqual([]);
+    expect(
+      await personalMemoryStorage.listPendingVectorDeletions(
+        "user-1",
+        delayedUpsert.id,
+      ),
+    ).toEqual([]);
+  });
+
   it("reindexes the current canonical content after an older update resumes", async () => {
     const delayedContent = "Outdated concurrent content";
     const currentContent = "Current canonical content";
@@ -1442,7 +2021,6 @@ describe("Personal Memory API", () => {
     const continueModel = deferred<void>();
     const storage = new CountingPersonalMemoryStorage();
     const vectorIndex = new FakeVectorIndex();
-    const sqlite = createExtractionIdempotencyDatabase();
     let modelCalls = 0;
     const { app, token } = await createAuthenticatedTestApp(
       undefined,
@@ -1459,8 +2037,6 @@ describe("Personal Memory API", () => {
       },
       {
         personalMemoryStorage: storage,
-        memoryExtractionIdempotencyStorage:
-          new D1MemoryExtractionIdempotencyStorage(createTestDatabase(sqlite)),
       },
     );
     const memory = await storage.createMemory({
