@@ -9,7 +9,6 @@ import type { TriggerPolicy } from "./trigger-policy.ts";
 export type SuggestionLoopState =
   | { status: "idle" }
   | { status: "debouncing"; timer: ReturnType<typeof setTimeout>; contextHash: string }
-  | { status: "requesting"; contextHash: string }
   | { status: "showing"; suggestion: Suggestion; contextHash: string; expiryTimer: ReturnType<typeof setTimeout> };
 
 export type SuggestionSource = (
@@ -35,10 +34,10 @@ export type SuggestionLoopDependencies = {
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   let state: SuggestionLoopState = { status: "idle" };
   let requestVersion = 0;
-  let activeCloudController: AbortController | null = null;
+  let activeCloudRequest: { contextHash: string; controller: AbortController } | null = null;
 
-  function isCurrentContext(hash: string): boolean {
-    return state.status !== "idle" && state.contextHash === hash;
+  function isCurrentDebouncedContext(hash: string): boolean {
+    return state.status === "debouncing" && state.contextHash === hash;
   }
 
   function tryShowSuggestion(
@@ -89,8 +88,8 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
 
   function invalidate(): void {
     requestVersion += 1;
-    activeCloudController?.abort();
-    activeCloudController = null;
+    activeCloudRequest?.controller.abort();
+    activeCloudRequest = null;
     if (state.status === "debouncing") {
       clearTimeout(state.timer);
     }
@@ -103,16 +102,19 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     version: number,
   ): Promise<void> {
     const hash = snapshot.contextHash;
-    state = { status: "requesting", contextHash: hash };
     deps.onRequestStarted?.(snapshot.sanitizedContext);
     const controller = new AbortController();
-    activeCloudController = controller;
-    const suggestion = await deps.requestSuggestion(snapshot, { signal: controller.signal });
-    if (activeCloudController === controller) {
-      activeCloudController = null;
+    activeCloudRequest = { contextHash: hash, controller };
+    let suggestion: Suggestion | null;
+    try {
+      suggestion = await deps.requestSuggestion(snapshot, { signal: controller.signal });
+    } finally {
+      if (activeCloudRequest?.controller === controller) {
+        activeCloudRequest = null;
+      }
     }
 
-    if (requestVersion !== version || !isCurrentContext(hash)) {
+    if (requestVersion !== version) {
       return;
     }
 
@@ -158,7 +160,10 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
       return;
     }
 
-    if (state.status !== "idle" && state.contextHash === hash) {
+    if (
+      (state.status !== "idle" && state.contextHash === hash) ||
+      activeCloudRequest?.contextHash === hash
+    ) {
       return;
     }
 
@@ -175,8 +180,8 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     if (state.status === "debouncing") {
       clearTimeout(state.timer);
     }
-    activeCloudController?.abort();
-    activeCloudController = null;
+    activeCloudRequest?.controller.abort();
+    activeCloudRequest = null;
 
     requestVersion += 1;
 
@@ -185,7 +190,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
       contextHash: hash,
       timer: setTimeout(async () => {
         const version = requestVersion;
-        if (!isCurrentContext(hash)) {
+        if (!isCurrentDebouncedContext(hash)) {
           return;
         }
 
@@ -201,7 +206,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
         }
 
         const localSuggestion = await requestLocalSuggestion(latest);
-        if (requestVersion !== version || !isCurrentContext(hash)) {
+        if (requestVersion !== version || !isCurrentDebouncedContext(hash)) {
           return;
         }
 

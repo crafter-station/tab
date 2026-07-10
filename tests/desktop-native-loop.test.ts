@@ -781,6 +781,45 @@ describe("desktop native suggestion loop", () => {
       }
     });
 
+    it("does not start a duplicate explicit request for unchanged context", async () => {
+      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
+      let calls = 0;
+      const { deps } = makeDeps({
+        requestSuggestion: () => {
+          calls += 1;
+          return new Promise((resolve) => {
+            resolves.push(resolve);
+          });
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      const request = loop.requestCloudSuggestionNow();
+      loop.onContextChanged();
+
+      expect(calls).toBe(1);
+      resolves[0]?.(null);
+      await request;
+    });
+
+    it("releases explicit request ownership when the source rejects", async () => {
+      let calls = 0;
+      const { deps } = makeDeps({
+        requestSuggestion: async () => {
+          calls += 1;
+          if (calls === 1) throw new Error("source failed");
+          return null;
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      await expect(loop.requestCloudSuggestionNow()).rejects.toThrow("source failed");
+      loop.onContextChanged();
+      await wait(10);
+
+      expect(calls).toBe(2);
+    });
+
     it("aborts stale cloud requests when context changes", async () => {
       let context = "hello";
       const signals: AbortSignal[] = [];
