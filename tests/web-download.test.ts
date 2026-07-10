@@ -57,4 +57,25 @@ describe("Web download surface", () => {
     const body = await response.text();
     expect(body).toInclude("/download/tab.dmg");
   });
+
+  it("renders a direct, interactive landing-page funnel", async () => {
+    const webApp = createWebApp({
+      apiBaseUrl: "http://localhost:8787",
+      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
+    });
+
+    const response = await webRequest(webApp, "/");
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude('href="/download/tab.dmg"');
+    expect(body).toInclude("Writing with AI should not mean leaving the sentence");
+    expect(body).toInclude("data-tab-workflow");
+    expect(body).toInclude("data-workflow-accept");
+    expect(body).toInclude("Suggestions that remember what matters");
+    expect(body).toInclude("Useful context in. Raw typing logs out.");
+    expect(body).toInclude("data-animated-showcase");
+    expect(body).toInclude("data-showcase-replay");
+    expect(body).toInclude('id="pricing"');
+  });
 });

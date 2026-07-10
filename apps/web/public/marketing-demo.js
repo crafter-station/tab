@@ -20,6 +20,29 @@
     announce(demo, "Suggestion accepted and added to the example.");
   }
 
+  const workflowResetTimers = new WeakMap();
+
+  function acceptWorkflow(workflow) {
+    workflow.dataset.accepted = "true";
+    const announcement = workflow.querySelector("[data-workflow-announcement]");
+    if (announcement) announcement.textContent = "Suggestion accepted and added to the example.";
+    const currentTimer = workflowResetTimers.get(workflow);
+    if (currentTimer) window.clearTimeout(currentTimer);
+    const resetTimer = window.setTimeout(() => {
+      workflow.dataset.accepted = "false";
+      if (announcement) announcement.textContent = "Suggestion ready. Press Option plus Tab or click to accept.";
+      workflowResetTimers.delete(workflow);
+    }, 1800);
+    workflowResetTimers.set(workflow, resetTimer);
+  }
+
+  function replayShowcase(showcase) {
+    showcase.dataset.restarting = "true";
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      showcase.dataset.restarting = "false";
+    }));
+  }
+
   function activateTab(demo, button, moveFocus = false) {
     const target = button.getAttribute("data-demo-target");
     if (!target) return;
@@ -40,8 +63,20 @@
 
   document.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
-    const control = event.target.closest("[data-demo-target], [data-demo-replay], [data-demo-accept]");
+    const control = event.target.closest("[data-demo-target], [data-demo-replay], [data-demo-accept], [data-workflow-accept], [data-showcase-replay]");
     if (!control) return;
+
+    if (control.hasAttribute("data-showcase-replay")) {
+      const showcase = control.closest("[data-animated-showcase]");
+      if (showcase) replayShowcase(showcase);
+      return;
+    }
+
+    const workflow = control.closest("[data-tab-workflow]");
+    if (workflow) {
+      acceptWorkflow(workflow);
+      return;
+    }
 
     const demo = control.closest("[data-tab-demo]");
     if (!demo) return;

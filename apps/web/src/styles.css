@@ -24,6 +24,178 @@
   animation-delay: 130ms;
 }
 
+.marketing-intro > :nth-child(6) {
+  animation-delay: 160ms;
+}
+
+.tab-app-marquee {
+  -webkit-mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
+  mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
+}
+
+.tab-app-marquee-track {
+  animation: tab-app-marquee 24s linear infinite;
+}
+
+.marketing-quote {
+  background-image: radial-gradient(color-mix(in srgb, var(--foreground) 12%, transparent) 0.75px, transparent 0.75px);
+  background-size: 0.75rem 0.75rem;
+}
+
+.tab-workflow-map {
+  background-image:
+    radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--card) 94%, transparent) 0, transparent 62%),
+    linear-gradient(color-mix(in srgb, var(--border) 58%, transparent) 1px, transparent 1px),
+    linear-gradient(90deg, color-mix(in srgb, var(--border) 58%, transparent) 1px, transparent 1px);
+  background-size: auto, 3rem 3rem, 3rem 3rem;
+}
+
+.tab-workflow-line {
+  vector-effect: non-scaling-stroke;
+}
+
+.tab-workflow-signal {
+  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--foreground) 35%, transparent));
+}
+
+.tab-workflow-completion {
+  transition: color 220ms var(--tab-ease-out);
+}
+
+.tab-workflow-command {
+  animation: tab-workflow-command 3.2s var(--tab-ease-in-out) infinite;
+}
+
+.tab-workflow[data-accepted="true"] .tab-workflow-completion {
+  color: var(--foreground);
+}
+
+.tab-workflow[data-accepted="true"] .tab-workflow-command {
+  animation: none;
+  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
+  background: var(--success);
+  color: var(--success-foreground);
+}
+
+.tab-workflow[data-accepted="true"] .tab-workflow-ready-label {
+  display: none;
+}
+
+.tab-workflow[data-accepted="true"] .tab-workflow-accepted-label {
+  display: inline;
+}
+
+.tab-showcase-canvas {
+  background-image:
+    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card) 92%, transparent) 0, transparent 68%),
+    radial-gradient(color-mix(in srgb, var(--foreground) 11%, transparent) 0.75px, transparent 0.75px);
+  background-size: auto, 0.85rem 0.85rem;
+}
+
+.tab-memory-row {
+  opacity: 0.42;
+  transform: translate3d(-0.25rem, 0, 0);
+  animation: tab-memory-focus 9s linear infinite;
+}
+
+.tab-memory-row:nth-child(1),
+.tab-memory-output:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.tab-memory-row:nth-child(2),
+.tab-memory-output:nth-child(2) {
+  animation-delay: -6s;
+}
+
+.tab-memory-row:nth-child(3),
+.tab-memory-output:nth-child(3) {
+  animation-delay: -3s;
+}
+
+.tab-memory-output {
+  opacity: 0;
+  transform: translate3d(0, 0.5rem, 0);
+  animation: tab-memory-output 9s var(--tab-ease-in-out) infinite;
+}
+
+.tab-memory-transfer-dot {
+  top: 0;
+  left: 50%;
+  animation: tab-transfer-y 3s var(--tab-ease-in-out) infinite;
+}
+
+.tab-privacy-transfer-dot {
+  top: 0;
+  left: 50%;
+  animation: tab-privacy-transfer-y 2.8s var(--tab-ease-in-out) infinite;
+}
+
+.tab-privacy-transfer-dot-delayed {
+  animation-delay: -1.4s;
+}
+
+.tab-privacy-check {
+  opacity: 0.45;
+  transform: translate3d(-0.2rem, 0, 0);
+  animation: tab-privacy-check 6s linear infinite;
+}
+
+.tab-privacy-check:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.tab-privacy-check:nth-child(2) {
+  animation-delay: -4s;
+}
+
+.tab-privacy-check:nth-child(3) {
+  animation-delay: -2s;
+}
+
+.tab-privacy-request::after {
+  position: absolute;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--success), transparent);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(0, 0, 0);
+  animation: tab-privacy-scan 5.6s linear infinite;
+}
+
+[data-animated-showcase][data-restarting="true"] .tab-memory-row,
+[data-animated-showcase][data-restarting="true"] .tab-memory-output,
+[data-animated-showcase][data-restarting="true"] .tab-memory-transfer-dot,
+[data-animated-showcase][data-restarting="true"] .tab-privacy-transfer-dot,
+[data-animated-showcase][data-restarting="true"] .tab-privacy-check,
+[data-animated-showcase][data-restarting="true"] .tab-privacy-request::after {
+  animation: none;
+}
+
+@media (min-width: 48rem) {
+  .tab-memory-transfer-dot {
+    top: 50%;
+    left: 0;
+    animation-name: tab-transfer-x;
+  }
+
+  .tab-privacy-transfer-dot {
+    top: 50%;
+    left: 0;
+    animation-name: tab-privacy-transfer-x;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tab-app-marquee:hover .tab-app-marquee-track {
+    animation-play-state: paused;
+  }
+}
+
 .tab-demo {
   box-shadow: var(--tab-shadow-window);
 }
@@ -101,6 +273,142 @@
   }
 }
 
+@keyframes tab-app-marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@keyframes tab-workflow-command {
+  0%,
+  72%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  80% {
+    transform: translate3d(0, -0.2rem, 0);
+  }
+}
+
+@keyframes tab-memory-focus {
+  0%,
+  27%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  34%,
+  94% {
+    opacity: 0.42;
+    transform: translate3d(-0.25rem, 0, 0);
+  }
+}
+
+@keyframes tab-memory-output {
+  0%,
+  27%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  31%,
+  96% {
+    opacity: 0;
+    transform: translate3d(0, 0.5rem, 0);
+  }
+}
+
+@keyframes tab-transfer-y {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 0, 0) scale(0.9);
+  }
+  18%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, 2.5rem, 0) scale(1);
+  }
+}
+
+@keyframes tab-transfer-x {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -50%, 0) scale(0.9);
+  }
+  18%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(3.5rem, -50%, 0) scale(1);
+  }
+}
+
+@keyframes tab-privacy-transfer-y {
+  0% {
+    opacity: 0;
+    transform: translate3d(-50%, 0, 0) scale(0.9);
+  }
+  18%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(-50%, 2rem, 0) scale(1);
+  }
+}
+
+@keyframes tab-privacy-transfer-x {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -50%, 0) scale(0.9);
+  }
+  18%,
+  82% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(2.5rem, -50%, 0) scale(1);
+  }
+}
+
+@keyframes tab-privacy-check {
+  0%,
+  27%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0);
+  }
+  34%,
+  94% {
+    opacity: 0.45;
+    transform: translate3d(-0.2rem, 0, 0);
+  }
+}
+
+@keyframes tab-privacy-scan {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+  28%,
+  72% {
+    opacity: 0.85;
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 13rem, 0);
+  }
+}
+
 @keyframes tab-demo-scene {
   from {
     opacity: 0;
@@ -121,5 +429,53 @@
   from {
     opacity: 0;
     transform: translate3d(0, 0.5rem, 0) scale(0.97);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-app-marquee-track {
+    width: 100%;
+    animation: none;
+  }
+
+  .tab-app-marquee-group {
+    flex-wrap: wrap;
+    justify-content: center;
+    width: 100%;
+    padding-right: 0;
+  }
+
+  .tab-app-marquee-copy,
+  .tab-workflow-signal {
+    display: none;
+  }
+
+  .tab-workflow-command {
+    animation: none;
+  }
+
+  .tab-showcase-replay,
+  .tab-memory-transfer-dot,
+  .tab-privacy-transfer-dot,
+  .tab-privacy-request::after {
+    display: none;
+  }
+
+  .tab-memory-row,
+  .tab-privacy-check {
+    opacity: 1;
+    transform: none;
+    animation: none;
+  }
+
+  .tab-memory-output {
+    display: none;
+    animation: none;
+  }
+
+  .tab-memory-output:first-child {
+    display: grid;
+    opacity: 1;
+    transform: none;
   }
 }

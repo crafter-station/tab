@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowUpRight, List, X } from "@phosphor-icons/react";
-import { TabMark } from "@tab/ui";
+import { TabMark, buttonVariants } from "@tab/ui";
 
 const primaryLinks = [
   { href: "/#features", label: "Features" },
@@ -82,6 +82,7 @@ export function SiteHeader({
           </details>
           {themeControl}
           {accountControl}
+          <a className={buttonVariants({ size: "sm", className: "max-sm:hidden" })} href="/download/tab.dmg">Download free</a>
         </div>
       </div>
     </header>
