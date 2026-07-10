@@ -17,7 +17,7 @@ import {
 } from "./personal-memory-policy.ts";
 import { env } from "./env.ts";
 import { z } from "zod";
-import { and, eq, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { and, eq, gt, isNotNull, isNull, lte, or } from "drizzle-orm";
 import type { AppDatabase } from "./db/index.ts";
 import { memoryExtractionIdempotency } from "./db/schema.ts";
 
@@ -26,7 +26,9 @@ export type { ProposedMemoryOperation } from "./personal-memory-policy.ts";
 
 export const MEMORY_EXTRACTION_MODEL_ID = "openai/gpt-5.5";
 const MEMORY_EXTRACTION_CLAIM_LEASE_MS = 5 * 60 * 1_000;
+const MEMORY_EXTRACTION_CLAIM_HEARTBEAT_MS = 60 * 1_000;
 const MEMORY_EXTRACTION_RESULT_POLL_MS = 25;
+const MEMORY_EXTRACTION_NO_OP_RESULT_TTL_MS = 5 * 1_000;
 
 const MemoryOperationOutputSchema = z.object({
   operations: z.array(
@@ -97,6 +99,31 @@ export interface MemoryAgentModel {
   ): Promise<readonly ProposedMemoryOperation[]>;
 }
 
+export interface MemoryExtractionClock {
+  now(): Date;
+  sleep(ms: number, signal?: AbortSignal): Promise<void>;
+}
+
+const systemMemoryExtractionClock: MemoryExtractionClock = {
+  now: () => new Date(),
+  sleep(ms, signal) {
+    if (signal?.aborted) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+      const timeout = setTimeout(finish, ms);
+      signal?.addEventListener("abort", finish, { once: true });
+    });
+  },
+};
+
 export interface MemoryExtractionIdempotencyStorage {
   claim(input: {
     readonly userId: string;
@@ -109,7 +136,15 @@ export interface MemoryExtractionIdempotencyStorage {
     readonly batchIdHash: string;
     readonly claimId: string;
     readonly counts: MemoryExtractionCounts;
+    readonly now: Date;
     readonly expiresAt: Date;
+  }): Promise<boolean>;
+  renew(input: {
+    readonly userId: string;
+    readonly batchIdHash: string;
+    readonly claimId: string;
+    readonly now: Date;
+    readonly leaseExpiresAt: Date;
   }): Promise<boolean>;
   waitForResult(input: {
     readonly userId: string;
@@ -150,10 +185,6 @@ function extractionCountsFromRow(row: {
   };
 }
 
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
 export class InMemoryMemoryExtractionIdempotencyStorage
   implements MemoryExtractionIdempotencyStorage
 {
@@ -161,6 +192,11 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     string,
     InMemoryExtractionIdempotencyRecord
   >();
+
+  constructor(
+    private readonly clock: MemoryExtractionClock = systemMemoryExtractionClock,
+    private readonly resultPollMs = MEMORY_EXTRACTION_RESULT_POLL_MS,
+  ) {}
 
   async claim(input: {
     readonly userId: string;
@@ -196,11 +232,18 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     readonly batchIdHash: string;
     readonly claimId: string;
     readonly counts: MemoryExtractionCounts;
+    readonly now: Date;
     readonly expiresAt: Date;
   }): Promise<boolean> {
     const key = `${input.userId}:${input.batchIdHash}`;
     const existing = this.records.get(key);
-    if (existing?.claimId !== input.claimId) return false;
+    if (
+      existing?.claimId !== input.claimId ||
+      !existing.leaseExpiresAt ||
+      existing.leaseExpiresAt <= input.now
+    ) {
+      return false;
+    }
     this.records.set(key, {
       claimId: null,
       leaseExpiresAt: null,
@@ -210,23 +253,44 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     return true;
   }
 
+  async renew(input: {
+    readonly userId: string;
+    readonly batchIdHash: string;
+    readonly claimId: string;
+    readonly now: Date;
+    readonly leaseExpiresAt: Date;
+  }): Promise<boolean> {
+    const record = this.records.get(`${input.userId}:${input.batchIdHash}`);
+    if (
+      record?.claimId !== input.claimId ||
+      !record.leaseExpiresAt ||
+      record.leaseExpiresAt <= input.now
+    ) {
+      return false;
+    }
+
+    record.leaseExpiresAt = input.leaseExpiresAt;
+    record.expiresAt = input.leaseExpiresAt;
+    return true;
+  }
+
   async waitForResult(input: {
     readonly userId: string;
     readonly batchIdHash: string;
     readonly waitUntil: Date;
   }): Promise<MemoryExtractionCounts | null> {
     const key = `${input.userId}:${input.batchIdHash}`;
-    while (new Date() < input.waitUntil) {
+    while (this.clock.now() < input.waitUntil) {
       const record = this.records.get(key);
-      const now = new Date();
+      const now = this.clock.now();
       if (!record) return null;
       if (!record.claimId) {
         return record.expiresAt > now ? record.counts : null;
       }
       if (!record.leaseExpiresAt || record.leaseExpiresAt <= now) return null;
-      await wait(
+      await this.clock.sleep(
         Math.min(
-          MEMORY_EXTRACTION_RESULT_POLL_MS,
+          this.resultPollMs,
           input.waitUntil.getTime() - now.getTime(),
         ),
       );
@@ -250,7 +314,11 @@ export class InMemoryMemoryExtractionIdempotencyStorage
 export class D1MemoryExtractionIdempotencyStorage
   implements MemoryExtractionIdempotencyStorage
 {
-  constructor(private readonly db: AppDatabase) {}
+  constructor(
+    private readonly db: AppDatabase,
+    private readonly clock: MemoryExtractionClock = systemMemoryExtractionClock,
+    private readonly resultPollMs = MEMORY_EXTRACTION_RESULT_POLL_MS,
+  ) {}
 
   async claim(input: {
     readonly userId: string;
@@ -325,6 +393,7 @@ export class D1MemoryExtractionIdempotencyStorage
     readonly batchIdHash: string;
     readonly claimId: string;
     readonly counts: MemoryExtractionCounts;
+    readonly now: Date;
     readonly expiresAt: Date;
   }): Promise<boolean> {
     const completed = await this.db
@@ -343,10 +412,42 @@ export class D1MemoryExtractionIdempotencyStorage
           eq(memoryExtractionIdempotency.userId, input.userId),
           eq(memoryExtractionIdempotency.batchIdHash, input.batchIdHash),
           eq(memoryExtractionIdempotency.claimId, input.claimId),
+          gt(
+            memoryExtractionIdempotency.leaseExpiresAt,
+            input.now.toISOString(),
+          ),
         ),
       )
       .returning({ batchIdHash: memoryExtractionIdempotency.batchIdHash });
     return completed.length > 0;
+  }
+
+  async renew(input: {
+    readonly userId: string;
+    readonly batchIdHash: string;
+    readonly claimId: string;
+    readonly now: Date;
+    readonly leaseExpiresAt: Date;
+  }): Promise<boolean> {
+    const renewed = await this.db
+      .update(memoryExtractionIdempotency)
+      .set({
+        leaseExpiresAt: input.leaseExpiresAt.toISOString(),
+        expiresAt: input.leaseExpiresAt.toISOString(),
+      })
+      .where(
+        and(
+          eq(memoryExtractionIdempotency.userId, input.userId),
+          eq(memoryExtractionIdempotency.batchIdHash, input.batchIdHash),
+          eq(memoryExtractionIdempotency.claimId, input.claimId),
+          gt(
+            memoryExtractionIdempotency.leaseExpiresAt,
+            input.now.toISOString(),
+          ),
+        ),
+      )
+      .returning({ claimId: memoryExtractionIdempotency.claimId });
+    return renewed[0]?.claimId === input.claimId;
   }
 
   async waitForResult(input: {
@@ -354,9 +455,9 @@ export class D1MemoryExtractionIdempotencyStorage
     readonly batchIdHash: string;
     readonly waitUntil: Date;
   }): Promise<MemoryExtractionCounts | null> {
-    while (new Date() < input.waitUntil) {
+    while (this.clock.now() < input.waitUntil) {
       const row = await this.findRow(input.userId, input.batchIdHash);
-      const now = new Date();
+      const now = this.clock.now();
       if (!row) return null;
       if (!row.claimId) {
         return row.expiresAt > now.toISOString()
@@ -366,9 +467,9 @@ export class D1MemoryExtractionIdempotencyStorage
       if (!row.leaseExpiresAt || row.leaseExpiresAt <= now.toISOString()) {
         return null;
       }
-      await wait(
+      await this.clock.sleep(
         Math.min(
-          MEMORY_EXTRACTION_RESULT_POLL_MS,
+          this.resultPollMs,
           input.waitUntil.getTime() - now.getTime(),
         ),
       );
@@ -409,19 +510,137 @@ export type MemoryExtractionServiceDependencies = {
   readonly idempotencyStorage: MemoryExtractionIdempotencyStorage;
   readonly model?: MemoryAgentModel;
   readonly personalMemoryPolicy?: PersonalMemoryPolicy;
+  readonly clock?: MemoryExtractionClock;
+  readonly claimLeaseMs?: number;
+  readonly claimHeartbeatMs?: number;
+  readonly noOpResultTtlMs?: number;
 };
+
+class MemoryExtractionClaimLostError extends Error {
+  constructor() {
+    super("Extraction claim was lost before completion");
+  }
+}
+
+class MemoryExtractionClaimLease {
+  private readonly abortController = new AbortController();
+  private readonly heartbeatPromise: Promise<void>;
+  private renewalPromise: Promise<boolean> | null = null;
+  private lost = false;
+
+  constructor(
+    private readonly storage: MemoryExtractionIdempotencyStorage,
+    private readonly clock: MemoryExtractionClock,
+    private readonly claim: {
+      readonly userId: string;
+      readonly batchIdHash: string;
+      readonly claimId: string;
+    },
+    private readonly leaseMs: number,
+    private readonly heartbeatMs: number,
+  ) {
+    this.heartbeatPromise = this.runHeartbeat();
+  }
+
+  async ensureOwned(): Promise<void> {
+    if (this.lost || !(await this.renew())) {
+      this.lost = true;
+      throw new MemoryExtractionClaimLostError();
+    }
+  }
+
+  async stop(): Promise<void> {
+    this.abortController.abort();
+    await this.heartbeatPromise;
+  }
+
+  private async renew(): Promise<boolean> {
+    if (this.renewalPromise) return this.renewalPromise;
+
+    const renewalPromise = this.renewClaim();
+    this.renewalPromise = renewalPromise;
+    try {
+      return await renewalPromise;
+    } finally {
+      if (this.renewalPromise === renewalPromise) {
+        this.renewalPromise = null;
+      }
+    }
+  }
+
+  private async renewClaim(): Promise<boolean> {
+    const now = this.clock.now();
+    const leaseExpiresAt = new Date(now.getTime() + this.leaseMs);
+    const renewed = await this.storage.renew({
+      ...this.claim,
+      now,
+      leaseExpiresAt,
+    });
+    return renewed && leaseExpiresAt > this.clock.now();
+  }
+
+  private async runHeartbeat(): Promise<void> {
+    while (!this.abortController.signal.aborted && !this.lost) {
+      try {
+        await this.clock.sleep(
+          this.heartbeatMs,
+          this.abortController.signal,
+        );
+      } catch {
+        if (this.abortController.signal.aborted) return;
+        continue;
+      }
+      if (this.abortController.signal.aborted) return;
+
+      try {
+        if (!(await this.renew())) {
+          this.lost = true;
+        }
+      } catch {
+        // Mutation guards still fail closed if renewal remains unavailable.
+      }
+    }
+  }
+}
+
+function isNoOpExtractionResult(counts: MemoryExtractionCounts): boolean {
+  return (
+    counts.created === 0 &&
+    counts.updated === 0 &&
+    counts.deleted === 0 &&
+    counts.rejected === 0
+  );
+}
 
 export class MemoryExtractionService {
   private readonly personalMemoryService: PersonalMemoryService;
   private readonly idempotencyStorage: MemoryExtractionIdempotencyStorage;
   private readonly model: MemoryAgentModel;
   private readonly personalMemoryPolicy: PersonalMemoryPolicy;
+  private readonly clock: MemoryExtractionClock;
+  private readonly claimLeaseMs: number;
+  private readonly claimHeartbeatMs: number;
+  private readonly noOpResultTtlMs: number;
 
   constructor(deps: MemoryExtractionServiceDependencies) {
     this.personalMemoryService = deps.personalMemoryService;
     this.idempotencyStorage = deps.idempotencyStorage;
     this.model = deps.model ?? new NoOpMemoryAgentModel();
     this.personalMemoryPolicy = deps.personalMemoryPolicy ?? new PersonalMemoryPolicy(deps.personalMemoryService);
+    this.clock = deps.clock ?? systemMemoryExtractionClock;
+    this.claimLeaseMs = deps.claimLeaseMs ?? MEMORY_EXTRACTION_CLAIM_LEASE_MS;
+    this.claimHeartbeatMs =
+      deps.claimHeartbeatMs ?? MEMORY_EXTRACTION_CLAIM_HEARTBEAT_MS;
+    this.noOpResultTtlMs =
+      deps.noOpResultTtlMs ?? MEMORY_EXTRACTION_NO_OP_RESULT_TTL_MS;
+    if (
+      this.claimLeaseMs <= 0 ||
+      this.claimHeartbeatMs <= 0 ||
+      this.claimHeartbeatMs >= this.claimLeaseMs ||
+      this.noOpResultTtlMs <= 0
+    ) {
+      throw new Error("Memory extraction lease timings are invalid");
+    }
   }
 
   async extract(
@@ -440,14 +659,28 @@ export class MemoryExtractionService {
       return claim.counts;
     }
 
+    const lease = new MemoryExtractionClaimLease(
+      this.idempotencyStorage,
+      this.clock,
+      { userId, batchIdHash, claimId: claim.claimId },
+      this.claimLeaseMs,
+      this.claimHeartbeatMs,
+    );
+    let counts: MemoryExtractionCounts | undefined;
+    let failure: unknown;
+    let failed = false;
     try {
-      await this.personalMemoryService.cleanupPendingVectorDeletions(userId);
-      const memories = await this.personalMemoryService.selectCandidateMemoriesForExtraction({
-        userId,
-        typingContext: extractionWindow.typingContext,
-        activeApplication: extractionWindow.activeApplication,
-        memoryEnabled: true,
-      });
+      await lease.ensureOwned();
+      const memories =
+        await this.personalMemoryService.selectCandidateMemoriesForExtraction(
+          {
+            userId,
+            typingContext: extractionWindow.typingContext,
+            activeApplication: extractionWindow.activeApplication,
+            memoryEnabled: true,
+          },
+          () => lease.ensureOwned(),
+        );
       const operations = await this.model.proposeOperations(
         {
           requestId: parsed.batchId,
@@ -461,46 +694,59 @@ export class MemoryExtractionService {
         },
         memories,
       );
-      const counts = await this.personalMemoryPolicy.applyExtractionOperations(
+      await lease.ensureOwned();
+      counts = await this.personalMemoryPolicy.applyExtractionOperations(
         userId,
         operations,
+        () => lease.ensureOwned(),
       );
-      const completedAt = new Date();
+      await lease.ensureOwned();
+      const completedAt = this.clock.now();
+      // A no-op row coordinates in-flight waiters only; it is not a 24-hour
+      // idempotency record and becomes claimable again after this short TTL.
+      const resultTtlMs = isNoOpExtractionResult(counts)
+        ? this.noOpResultTtlMs
+        : MEMORY_EXTRACTION_WINDOW_POLICY.failedBatchTtlMs;
       const completed = await this.idempotencyStorage.complete({
         userId,
         batchIdHash,
         claimId: claim.claimId,
         counts,
-        expiresAt: new Date(
-          completedAt.getTime() + MEMORY_EXTRACTION_WINDOW_POLICY.failedBatchTtlMs,
-        ),
+        now: completedAt,
+        expiresAt: new Date(completedAt.getTime() + resultTtlMs),
       });
       if (!completed) {
-        const winner = await this.idempotencyStorage.waitForResult({
-          userId,
-          batchIdHash,
-          waitUntil: new Date(
-            completedAt.getTime() + MEMORY_EXTRACTION_CLAIM_LEASE_MS,
-          ),
-        });
-        if (winner) return winner;
-        throw new Error("Extraction claim was lost before completion");
+        throw new MemoryExtractionClaimLostError();
       }
-
-      return counts;
     } catch (error) {
-      try {
-        await this.idempotencyStorage.release({
-          userId,
-          batchIdHash,
-          claimId: claim.claimId,
-          now: new Date(),
-        });
-      } catch {
-        // The bounded lease still permits recovery if releasing the claim fails.
-      }
-      throw error;
+      failed = true;
+      failure = error;
+    } finally {
+      await lease.stop();
     }
+
+    if (!failed && counts) return counts;
+    if (failure instanceof MemoryExtractionClaimLostError) {
+      const winner = await this.idempotencyStorage.waitForResult({
+        userId,
+        batchIdHash,
+        waitUntil: new Date(this.clock.now().getTime() + this.claimLeaseMs),
+      });
+      if (winner) return winner;
+      throw failure;
+    }
+
+    try {
+      await this.idempotencyStorage.release({
+        userId,
+        batchIdHash,
+        claimId: claim.claimId,
+        now: this.clock.now(),
+      });
+    } catch {
+      // The bounded lease still permits recovery if releasing the claim fails.
+    }
+    throw failure;
   }
 
   private async acquireClaim(
@@ -508,12 +754,12 @@ export class MemoryExtractionService {
     batchIdHash: string,
   ): Promise<Exclude<MemoryExtractionClaim, { status: "pending" }>> {
     while (true) {
-      const now = new Date();
+      const now = this.clock.now();
       const claim = await this.idempotencyStorage.claim({
         userId,
         batchIdHash,
         now,
-        leaseExpiresAt: new Date(now.getTime() + MEMORY_EXTRACTION_CLAIM_LEASE_MS),
+        leaseExpiresAt: new Date(now.getTime() + this.claimLeaseMs),
       });
       if (claim.status !== "pending") return claim;
 

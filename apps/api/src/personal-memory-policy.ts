@@ -34,13 +34,18 @@ export type PersonalMemoryPolicyPort = {
     readonly userId: string;
     readonly content: string;
     readonly createdBy: "system";
-  }): Promise<PersonalMemory>;
+  }, beforeMutation?: () => Promise<void>): Promise<PersonalMemory>;
   updateMemoryForExtraction(
     userId: string,
     id: string,
     input: { readonly content: string },
+    beforeMutation?: () => Promise<void>,
   ): Promise<PersonalMemory | null>;
-  deleteMemoryForExtraction(userId: string, id: string): Promise<boolean>;
+  deleteMemoryForExtraction(
+    userId: string,
+    id: string,
+    beforeMutation?: () => Promise<void>,
+  ): Promise<boolean>;
 };
 
 export function emptyExtractionCounts(): MemoryExtractionCounts {
@@ -56,6 +61,7 @@ export class PersonalMemoryPolicy {
   async applyExtractionOperations(
     userId: string,
     operations: readonly ProposedMemoryOperation[],
+    beforeMutation?: () => Promise<void>,
   ): Promise<MemoryExtractionCounts> {
     const counts = emptyExtractionCounts();
 
@@ -64,19 +70,31 @@ export class PersonalMemoryPolicy {
 
       switch (operation.type) {
         case "create": {
-          applied = await this.applyCreateOperation(userId, operation);
+          applied = await this.applyCreateOperation(
+            userId,
+            operation,
+            beforeMutation,
+          );
           if (applied) counts.created += 1;
           break;
         }
 
         case "update": {
-          applied = await this.applyUpdateOperation(userId, operation);
+          applied = await this.applyUpdateOperation(
+            userId,
+            operation,
+            beforeMutation,
+          );
           if (applied) counts.updated += 1;
           break;
         }
 
         case "delete": {
-          applied = await this.applyDeleteOperation(userId, operation);
+          applied = await this.applyDeleteOperation(
+            userId,
+            operation,
+            beforeMutation,
+          );
           if (applied) counts.deleted += 1;
           break;
         }
@@ -93,6 +111,7 @@ export class PersonalMemoryPolicy {
   private async applyCreateOperation(
     userId: string,
     operation: ProposedCreateMemory,
+    beforeMutation?: () => Promise<void>,
   ): Promise<boolean> {
     const currentCount = (await this.memory.listMemories(userId)).length;
     if (
@@ -102,27 +121,34 @@ export class PersonalMemoryPolicy {
       return false;
     }
 
-    await this.memory.createMemory({
-      userId,
-      content: operation.content,
-      createdBy: "system",
-    });
+    await beforeMutation?.();
+    await this.memory.createMemory(
+      {
+        userId,
+        content: operation.content,
+        createdBy: "system",
+      },
+      beforeMutation,
+    );
     return true;
   }
 
   private async applyUpdateOperation(
     userId: string,
     operation: ProposedUpdateMemory,
+    beforeMutation?: () => Promise<void>,
   ): Promise<boolean> {
     const existing = await this.findMutableSystemMemory(userId, operation.id);
     if (!existing || !this.isSafeMemoryText(operation.content)) {
       return false;
     }
 
+    await beforeMutation?.();
     const updated = await this.memory.updateMemoryForExtraction(
       userId,
       operation.id,
       { content: operation.content },
+      beforeMutation,
     );
     return updated !== null;
   }
@@ -130,13 +156,19 @@ export class PersonalMemoryPolicy {
   private async applyDeleteOperation(
     userId: string,
     operation: ProposedDeleteMemory,
+    beforeMutation?: () => Promise<void>,
   ): Promise<boolean> {
     const existing = await this.findMutableSystemMemory(userId, operation.id);
     if (!existing || !operation.reason?.trim()) {
       return false;
     }
 
-    return this.memory.deleteMemoryForExtraction(userId, operation.id);
+    await beforeMutation?.();
+    return this.memory.deleteMemoryForExtraction(
+      userId,
+      operation.id,
+      beforeMutation,
+    );
   }
 
   private async findMutableSystemMemory(

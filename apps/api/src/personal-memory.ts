@@ -534,6 +534,8 @@ export type RelevanceInput = {
   readonly memoryEnabled: boolean;
 };
 
+export type PersonalMemoryMutationGuard = () => Promise<void>;
+
 const createMemoryInputSchema = z.object({
   userId: z.string().min(1),
   content: z.string().trim().min(1).max(500),
@@ -641,10 +643,14 @@ export class PersonalMemoryService {
     this.maxRelevantMemories = deps.maxRelevantMemories ?? DEFAULT_MAX_RELEVANT_MEMORIES;
   }
 
-  async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
+  async createMemory(
+    input: CreatePersonalMemoryInput,
+    beforeMutation?: PersonalMemoryMutationGuard,
+  ): Promise<PersonalMemory> {
     const parsed = createMemoryInputSchema.parse(input);
+    await beforeMutation?.();
     const memory = await this.storage.createMemory(parsed);
-    await this.indexMemory(memory);
+    await this.indexMemory(memory, beforeMutation);
     return memory;
   }
 
@@ -695,15 +701,17 @@ export class PersonalMemoryService {
     userId: string,
     id: string,
     input: UpdateExtractedPersonalMemoryInput,
+    beforeMutation?: PersonalMemoryMutationGuard,
   ): Promise<PersonalMemory | null> {
     const parsed = updateExtractedMemoryInputSchema.parse(input);
+    await beforeMutation?.();
     const memory = await this.storage.updateMemoryForExtraction(
       userId,
       id,
       parsed,
     );
     if (memory) {
-      await this.indexMemory(memory);
+      await this.indexMemory(memory, beforeMutation);
     }
     return memory;
   }
@@ -711,15 +719,18 @@ export class PersonalMemoryService {
   async deleteMemoryForExtraction(
     userId: string,
     id: string,
+    beforeMutation?: PersonalMemoryMutationGuard,
   ): Promise<boolean> {
+    await beforeMutation?.();
     const deleted = await this.storage.deleteMemoryForExtraction(userId, id);
-    await this.cleanupPendingVectorDeletions(userId, id);
+    await this.cleanupPendingVectorDeletions(userId, id, beforeMutation);
     return deleted;
   }
 
   async cleanupPendingVectorDeletions(
     userId: string,
     memoryId?: string,
+    beforeMutation?: PersonalMemoryMutationGuard,
   ): Promise<void> {
     if (!this.vectorIndex) return;
 
@@ -731,14 +742,22 @@ export class PersonalMemoryService {
     }
 
     for (const deletion of pending) {
+      await beforeMutation?.();
       try {
         await this.vectorIndex.deleteMemory(deletion.memoryId);
+      } catch {
+        // Canonical deletion is complete; leave the tombstone for a later retry.
+        continue;
+      }
+
+      await beforeMutation?.();
+      try {
         await this.storage.acknowledgeVectorDeletion(
           deletion.userId,
           deletion.memoryId,
         );
       } catch {
-        // Canonical deletion is complete; leave the tombstone for a later retry.
+        // Leave the tombstone for a later idempotent vector deletion.
       }
     }
   }
@@ -778,12 +797,17 @@ export class PersonalMemoryService {
 
   async selectCandidateMemoriesForExtraction(
     input: RelevanceInput,
+    beforeMutation?: PersonalMemoryMutationGuard,
   ): Promise<PersonalMemory[]> {
     if (!input.memoryEnabled) {
       return [];
     }
 
-    await this.cleanupPendingVectorDeletions(input.userId);
+    await this.cleanupPendingVectorDeletions(
+      input.userId,
+      undefined,
+      beforeMutation,
+    );
 
     if (this.embeddingService && this.vectorIndex) {
       return this.selectVectorMemories(
@@ -848,12 +872,16 @@ export class PersonalMemoryService {
     return memories;
   }
 
-  private async indexMemory(memory: PersonalMemory): Promise<void> {
+  private async indexMemory(
+    memory: PersonalMemory,
+    beforeMutation?: PersonalMemoryMutationGuard,
+  ): Promise<void> {
     if (!this.embeddingService || !this.vectorIndex) return;
 
     let indexedMemory = memory;
     while (true) {
       const values = await this.embeddingService.embedText(indexedMemory.content);
+      await beforeMutation?.();
       await this.vectorIndex.upsertMemory({
         id: indexedMemory.id,
         values,
@@ -868,6 +896,7 @@ export class PersonalMemoryService {
         indexedMemory.id,
       );
       if (!canonical) {
+        await beforeMutation?.();
         await this.storage.enqueueVectorDeletion(
           indexedMemory.userId,
           indexedMemory.id,
@@ -875,6 +904,7 @@ export class PersonalMemoryService {
         await this.cleanupPendingVectorDeletions(
           indexedMemory.userId,
           indexedMemory.id,
+          beforeMutation,
         );
         return;
       }

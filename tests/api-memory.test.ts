@@ -25,10 +25,15 @@ import {
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type {
   MemoryAgentModel,
+  MemoryExtractionClock,
   MemoryExtractionIdempotencyStorage,
   ProposedMemoryOperation,
 } from "../apps/api/src/memory-agent.ts";
-import { D1MemoryExtractionIdempotencyStorage } from "../apps/api/src/memory-agent.ts";
+import {
+  D1MemoryExtractionIdempotencyStorage,
+  InMemoryMemoryExtractionIdempotencyStorage,
+  MemoryExtractionService,
+} from "../apps/api/src/memory-agent.ts";
 import { createTestDatabase } from "./test-db.ts";
 import type {
   SuggestionGenerator,
@@ -187,6 +192,53 @@ function deferred<T>() {
     resolve = nextResolve;
   });
   return { promise, resolve };
+}
+
+class ManualMemoryExtractionClock implements MemoryExtractionClock {
+  private current: Date;
+  private readonly sleepers = new Set<() => void>();
+
+  constructor(now = new Date("2026-07-10T10:00:00.000Z")) {
+    this.current = now;
+  }
+
+  now(): Date {
+    return new Date(this.current);
+  }
+
+  sleep(_ms: number, signal?: AbortSignal): Promise<void> {
+    if (signal?.aborted) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        this.sleepers.delete(finish);
+        signal?.removeEventListener("abort", finish);
+        resolve();
+      };
+      this.sleepers.add(finish);
+      signal?.addEventListener("abort", finish, { once: true });
+    });
+  }
+
+  advance(ms: number, wakeTimers = true): void {
+    this.current = new Date(this.current.getTime() + ms);
+    if (wakeTimers) {
+      for (const wake of Array.from(this.sleepers)) wake();
+    }
+  }
+
+  get pendingSleeps(): number {
+    return this.sleepers.size;
+  }
+}
+
+async function flushAsyncWork(): Promise<void> {
+  for (let index = 0; index < 10; index += 1) {
+    await Promise.resolve();
+  }
 }
 
 class DeferredUpsertVectorIndex extends FakeVectorIndex {
@@ -552,6 +604,61 @@ describe("Personal Memory API", () => {
     expect(claims.filter((claim) => claim.status === "pending")).toHaveLength(1);
   });
 
+  it("renews a live D1 lease without allowing an expired owner to revive it", async () => {
+    const sqlite = createExtractionIdempotencyDatabase();
+    const ownerStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const contenderStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const claim = await ownerStorage.claim({
+      userId: "user-1",
+      batchIdHash: "renewed-batch",
+      now: new Date("2026-07-10T10:00:00.000Z"),
+      leaseExpiresAt: new Date("2026-07-10T10:00:01.000Z"),
+    });
+    if (claim.status !== "claimed") throw new Error("Expected extraction claim");
+
+    expect(
+      await ownerStorage.renew({
+        userId: "user-1",
+        batchIdHash: "renewed-batch",
+        claimId: claim.claimId,
+        now: new Date("2026-07-10T10:00:00.500Z"),
+        leaseExpiresAt: new Date("2026-07-10T10:00:02.000Z"),
+      }),
+    ).toBe(true);
+    expect(
+      await contenderStorage.claim({
+        userId: "user-1",
+        batchIdHash: "renewed-batch",
+        now: new Date("2026-07-10T10:00:01.500Z"),
+        leaseExpiresAt: new Date("2026-07-10T10:00:03.000Z"),
+      }),
+    ).toEqual({
+      status: "pending",
+      leaseExpiresAt: new Date("2026-07-10T10:00:02.000Z"),
+    });
+
+    const replacement = await contenderStorage.claim({
+      userId: "user-1",
+      batchIdHash: "renewed-batch",
+      now: new Date("2026-07-10T10:00:02.001Z"),
+      leaseExpiresAt: new Date("2026-07-10T10:00:03.001Z"),
+    });
+    expect(replacement.status).toBe("claimed");
+    expect(
+      await ownerStorage.renew({
+        userId: "user-1",
+        batchIdHash: "renewed-batch",
+        claimId: claim.claimId,
+        now: new Date("2026-07-10T10:00:02.001Z"),
+        leaseExpiresAt: new Date("2026-07-10T10:00:04.000Z"),
+      }),
+    ).toBe(false);
+  });
+
   it("atomically completes and reuses D1 extraction results while waiters observe completion", async () => {
     const sqlite = createExtractionIdempotencyDatabase();
     const ownerStorage = new D1MemoryExtractionIdempotencyStorage(
@@ -582,6 +689,7 @@ describe("Personal Memory API", () => {
         batchIdHash: "completed-batch",
         claimId: claim.claimId,
         counts,
+        now,
         expiresAt: new Date(now.getTime() + 60_000),
       }),
     ).toBe(false);
@@ -591,6 +699,7 @@ describe("Personal Memory API", () => {
         batchIdHash: "completed-batch",
         claimId: claim.claimId,
         counts,
+        now,
         expiresAt: new Date(now.getTime() + 60_000),
       }),
     ).toBe(true);
@@ -646,9 +755,222 @@ describe("Personal Memory API", () => {
         batchIdHash: "expired-batch",
         claimId: first.claimId,
         counts: { created: 1, updated: 0, deleted: 0, rejected: 0 },
+        now: new Date("2026-07-10T10:00:01.001Z"),
         expiresAt: new Date("2026-07-11T10:00:00.000Z"),
       }),
     ).toBe(false);
+  });
+
+  it("renews a live extraction claim while the model is running", async () => {
+    const clock = new ManualMemoryExtractionClock();
+    const idempotencyStorage =
+      new InMemoryMemoryExtractionIdempotencyStorage(clock);
+    const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+    const modelStarted = deferred<void>();
+    const continueModel = deferred<void>();
+    let modelCalls = 0;
+    const service = new MemoryExtractionService({
+      personalMemoryService: new PersonalMemoryService({
+        storage: personalMemoryStorage,
+      }),
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      model: {
+        async proposeOperations() {
+          modelCalls += 1;
+          modelStarted.resolve();
+          await continueModel.promise;
+          return [{ type: "create", content: "Live claimant result" }];
+        },
+      },
+    });
+    const request = extractionBatch("batch-live-heartbeat", "Live claimant");
+
+    const first = service.extract("user-1", request);
+    await modelStarted.promise;
+    clock.advance(75);
+    await flushAsyncWork();
+    clock.advance(50, false);
+    const second = service.extract("user-1", request);
+    await flushAsyncWork();
+
+    expect(modelCalls).toBe(1);
+    continueModel.resolve();
+    const firstCounts = await first;
+    clock.advance(1);
+
+    await expect(second).resolves.toEqual(firstCounts);
+    expect(firstCounts).toEqual({
+      created: 1,
+      updated: 0,
+      deleted: 0,
+      rejected: 0,
+    });
+    expect(
+      await personalMemoryStorage.listMemoriesByUser("user-1"),
+    ).toHaveLength(1);
+    expect(clock.pendingSleeps).toBe(0);
+  });
+
+  it("fences a stale claimant after lease takeover before canonical or vector mutation", async () => {
+    const clock = new ManualMemoryExtractionClock();
+    const idempotencyStorage =
+      new InMemoryMemoryExtractionIdempotencyStorage(clock);
+    const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const firstModelStarted = deferred<void>();
+    const continueFirstModel = deferred<void>();
+    let modelCalls = 0;
+    const service = new MemoryExtractionService({
+      personalMemoryService: new PersonalMemoryService({
+        storage: personalMemoryStorage,
+        embeddingService,
+        vectorIndex,
+      }),
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      model: {
+        async proposeOperations() {
+          modelCalls += 1;
+          if (modelCalls === 1) {
+            firstModelStarted.resolve();
+            await continueFirstModel.promise;
+            return [{ type: "create", content: "Stale claimant mutation" }];
+          }
+          return [{ type: "create", content: "Replacement winner mutation" }];
+        },
+      },
+    });
+    const request = extractionBatch("batch-takeover", "Takeover facts");
+
+    const stale = service.extract("user-1", request);
+    await firstModelStarted.promise;
+    // Simulate an isolate whose event loop is wedged: time advances, but its
+    // heartbeat timer cannot run before a replacement takes the expired lease.
+    clock.advance(101, false);
+    const winnerCounts = await service.extract("user-1", request);
+    continueFirstModel.resolve();
+
+    await expect(stale).resolves.toEqual(winnerCounts);
+    expect(winnerCounts).toEqual({
+      created: 1,
+      updated: 0,
+      deleted: 0,
+      rejected: 0,
+    });
+    expect(modelCalls).toBe(2);
+    expect(
+      (await personalMemoryStorage.listMemoriesByUser("user-1")).map(
+        (memory) => memory.content,
+      ),
+    ).toEqual(["Replacement winner mutation"]);
+    expect(vectorIndex.upserts).toHaveLength(1);
+    expect(embeddingService.embeddedTexts).not.toContain(
+      "Stale claimant mutation",
+    );
+    expect(clock.pendingSleeps).toBe(0);
+  });
+
+  it("shares no-op completion with active waiters but expires its coordination result quickly", async () => {
+    const clock = new ManualMemoryExtractionClock();
+    const idempotencyStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(createExtractionIdempotencyDatabase()),
+      clock,
+    );
+    const firstModelStarted = deferred<void>();
+    const continueFirstModel = deferred<void>();
+    let modelCalls = 0;
+    const service = new MemoryExtractionService({
+      personalMemoryService: new PersonalMemoryService({
+        storage: new InMemoryPersonalMemoryStorage(),
+      }),
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      noOpResultTtlMs: 50,
+      model: {
+        async proposeOperations() {
+          modelCalls += 1;
+          if (modelCalls === 1) {
+            firstModelStarted.resolve();
+            await continueFirstModel.promise;
+          }
+          return [];
+        },
+      },
+    });
+    const request = extractionBatch("batch-no-op", "No durable fact");
+
+    const first = service.extract("user-1", request);
+    await firstModelStarted.promise;
+    const waiter = service.extract("user-1", request);
+    await flushAsyncWork();
+    expect(modelCalls).toBe(1);
+
+    continueFirstModel.resolve();
+    const firstCounts = await first;
+    clock.advance(1);
+    await expect(waiter).resolves.toEqual(firstCounts);
+    await expect(service.extract("user-1", request)).resolves.toEqual(
+      firstCounts,
+    );
+    expect(modelCalls).toBe(1);
+
+    clock.advance(51, false);
+    await expect(service.extract("user-1", request)).resolves.toEqual(
+      firstCounts,
+    );
+    expect(modelCalls).toBe(2);
+    expect(firstCounts).toEqual({
+      created: 0,
+      updated: 0,
+      deleted: 0,
+      rejected: 0,
+    });
+    expect(clock.pendingSleeps).toBe(0);
+  });
+
+  it("stops the claim heartbeat and releases the lease when extraction fails", async () => {
+    const clock = new ManualMemoryExtractionClock();
+    const idempotencyStorage =
+      new InMemoryMemoryExtractionIdempotencyStorage(clock);
+    let modelCalls = 0;
+    const service = new MemoryExtractionService({
+      personalMemoryService: new PersonalMemoryService({
+        storage: new InMemoryPersonalMemoryStorage(),
+      }),
+      idempotencyStorage,
+      clock,
+      claimLeaseMs: 100,
+      claimHeartbeatMs: 25,
+      model: {
+        async proposeOperations() {
+          modelCalls += 1;
+          if (modelCalls === 1) throw new Error("model unavailable");
+          return [];
+        },
+      },
+    });
+    const request = extractionBatch("batch-heartbeat-failure", "Retry facts");
+
+    await expect(service.extract("user-1", request)).rejects.toThrow(
+      "model unavailable",
+    );
+    expect(clock.pendingSleeps).toBe(0);
+    await expect(service.extract("user-1", request)).resolves.toEqual({
+      created: 0,
+      updated: 0,
+      deleted: 0,
+      rejected: 0,
+    });
+    expect(modelCalls).toBe(2);
+    expect(clock.pendingSleeps).toBe(0);
   });
 
   it("rejects unsafe extraction operations and protected user-created mutations", async () => {
