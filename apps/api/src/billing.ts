@@ -1,6 +1,6 @@
 import { Polar } from "@polar-sh/sdk";
 import { validateEvent } from "@polar-sh/sdk/webhooks";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, lt, sql } from "drizzle-orm";
 import { planQuotas, type PlanId } from "@tab/billing";
 import type { AppDatabase } from "./db/index.ts";
 import { usageRecords, user, userEntitlements } from "./db/schema.ts";
@@ -51,13 +51,6 @@ export type UserEntitlement = {
   readonly cachedAt: Date;
 };
 
-export type UsageRecord = {
-  readonly userId: string;
-  readonly month: string;
-  readonly count: number;
-  readonly updatedAt: Date;
-};
-
 export type QuotaCheckResult =
   | {
       readonly ok: true;
@@ -80,7 +73,11 @@ export interface BillingStorage {
   getEntitlement(userId: string): Promise<UserEntitlement | null>;
   setEntitlement(entitlement: UserEntitlement): Promise<void>;
   getUsage(userId: string, month: string): Promise<number>;
-  incrementUsage(userId: string, month: string): Promise<number>;
+  consumeUsageWithinLimit(
+    userId: string,
+    month: string,
+    limit: number,
+  ): Promise<number | null>;
 }
 
 export type PolarUsageEvent = {
@@ -392,9 +389,41 @@ export class BillingService {
   }
 
   async checkQuota(userId: string): Promise<QuotaCheckResult> {
+    return this.checkQuotaForMonth(userId, currentMonth());
+  }
+
+  async consumeSuggestion(userId: string): Promise<QuotaCheckResult> {
+    const month = currentMonth();
+    const quotaCheck = await this.checkQuotaForMonth(userId, month);
+    if (!quotaCheck.ok) return quotaCheck;
+
+    const count = await this.storage.consumeUsageWithinLimit(
+      userId,
+      month,
+      quotaCheck.quota,
+    );
+    if (count === null) {
+      return {
+        ...quotaCheck,
+        ok: false,
+        reason: "quota_exhausted",
+        usage: await this.storage.getUsage(userId, month),
+      };
+    }
+
+    return { ...quotaCheck, usage: count };
+  }
+
+  async applyEntitlement(entitlement: UserEntitlement): Promise<void> {
+    await this.storage.setEntitlement(entitlement);
+  }
+
+  private async checkQuotaForMonth(
+    userId: string,
+    month: string,
+  ): Promise<QuotaCheckResult> {
     const entitlement = await this.getEntitlement(userId);
     const quota = planQuotas[entitlement.planId].monthlyAutocompleteSuggestions;
-    const month = currentMonth();
     const usage = await this.storage.getUsage(userId, month);
     const resetAt = nextResetDate();
 
@@ -421,16 +450,6 @@ export class BillingService {
     }
 
     return { ok: true, entitlement, usage, quota, resetAt };
-  }
-
-  async consumeSuggestion(userId: string): Promise<UsageRecord> {
-    const month = currentMonth();
-    const count = await this.storage.incrementUsage(userId, month);
-    return { userId, month, count, updatedAt: new Date() };
-  }
-
-  async applyEntitlement(entitlement: UserEntitlement): Promise<void> {
-    await this.storage.setEntitlement(entitlement);
   }
 }
 
@@ -499,9 +518,18 @@ export class InMemoryBillingStorage implements BillingStorage {
     return this.usage.get(this.usageKey(userId, month)) ?? 0;
   }
 
-  async incrementUsage(userId: string, month: string): Promise<number> {
+  async consumeUsageWithinLimit(
+    userId: string,
+    month: string,
+    limit: number,
+  ): Promise<number | null> {
+    if (limit <= 0) return null;
+
     const key = this.usageKey(userId, month);
-    const next = (this.usage.get(key) ?? 0) + 1;
+    const current = this.usage.get(key) ?? 0;
+    if (current >= limit) return null;
+
+    const next = current + 1;
     this.usage.set(key, next);
     return next;
   }
@@ -584,9 +612,15 @@ export class D1BillingStorage implements BillingStorage {
     return row?.count ?? 0;
   }
 
-  async incrementUsage(userId: string, month: string): Promise<number> {
+  async consumeUsageWithinLimit(
+    userId: string,
+    month: string,
+    limit: number,
+  ): Promise<number | null> {
+    if (limit <= 0) return null;
+
     const now = new Date().toISOString();
-    await this.db
+    const rows = await this.db
       .insert(usageRecords)
       .values({
         userId,
@@ -600,15 +634,11 @@ export class D1BillingStorage implements BillingStorage {
           count: sql`${usageRecords.count} + 1`,
           updatedAt: now,
         },
-      });
+        setWhere: lt(usageRecords.count, limit),
+      })
+      .returning({ count: usageRecords.count });
 
-    const row = await this.db.query.usageRecords.findFirst({
-      where: and(
-        eq(usageRecords.userId, userId),
-        eq(usageRecords.month, month),
-      ),
-    });
-    return row?.count ?? 1;
+    return rows[0]?.count ?? null;
   }
 }
 

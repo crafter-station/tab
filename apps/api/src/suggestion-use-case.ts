@@ -12,7 +12,11 @@ import type {
   SuggestionRequest,
   TelemetryEvent,
 } from "@tab/contracts";
-import type { BillingService, UsageMeterService } from "./billing.ts";
+import type {
+  BillingService,
+  QuotaCheckResult,
+  UsageMeterService,
+} from "./billing.ts";
 import type { Device } from "./device-tokens.ts";
 import type { PersonalMemoryService } from "./personal-memory.ts";
 import type { TelemetryService } from "./telemetry.ts";
@@ -266,6 +270,31 @@ function createQuotaExhaustedDetails(quotaCheck: {
   };
 }
 
+function createEntitlementError(
+  quotaCheck: Extract<QuotaCheckResult, { readonly ok: false }>,
+): SuggestionUseCaseResult {
+  if (quotaCheck.reason === "billing_required") {
+    return {
+      ok: false,
+      status: 402,
+      code: "billing_required",
+      message: "Choose the free plan in Polar to continue using Tab.",
+      details: {
+        ...createQuotaExhaustedDetails(quotaCheck),
+        upgradeUrl: "/billing/checkout?plan=free",
+      },
+    };
+  }
+
+  return {
+    ok: false,
+    status: 402,
+    code: "quota_exhausted",
+    message: "Monthly autocomplete quota exhausted. Upgrade to continue.",
+    details: createQuotaExhaustedDetails(quotaCheck),
+  };
+}
+
 export class SuggestionUseCase {
   constructor(private readonly deps: SuggestionUseCaseDependencies) {}
 
@@ -276,26 +305,7 @@ export class SuggestionUseCase {
   ): Promise<SuggestionUseCaseResult> {
     const quotaCheck = await this.deps.billingService.checkQuota(device.userId);
     if (!quotaCheck.ok) {
-      if (quotaCheck.reason === "billing_required") {
-        return {
-          ok: false,
-          status: 402,
-          code: "billing_required",
-          message: "Choose the free plan in Polar to continue using Tab.",
-          details: {
-            ...createQuotaExhaustedDetails(quotaCheck),
-            upgradeUrl: "/billing/checkout?plan=free",
-          },
-        };
-      }
-
-      return {
-        ok: false,
-        status: 402,
-        code: "quota_exhausted",
-        message: "Monthly autocomplete quota exhausted. Upgrade to continue.",
-        details: createQuotaExhaustedDetails(quotaCheck),
-      };
+      return createEntitlementError(quotaCheck);
     }
 
     const suggestionStart = performance.now();
@@ -333,6 +343,15 @@ export class SuggestionUseCase {
         ? [{ id: `sg-${request.requestId}`, text: generated.text }]
         : [];
 
+      if (shouldCountSuggestionResponse(suggestions.length)) {
+        const consumption = await this.deps.billingService.consumeSuggestion(
+          device.userId,
+        );
+        if (!consumption.ok) {
+          return createEntitlementError(consumption);
+        }
+      }
+
       await recordSuggestionEvent({
         eventType: "suggestion_shown",
         timestamp: new Date().toISOString(),
@@ -349,7 +368,6 @@ export class SuggestionUseCase {
       });
 
       if (shouldCountSuggestionResponse(suggestions.length)) {
-        await this.deps.billingService.consumeSuggestion(device.userId);
         const usageMeterPromise = this.deps.usageMeterService
           .recordUsage({
             userId: device.userId,

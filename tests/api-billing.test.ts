@@ -460,10 +460,24 @@ describe("Billing and quota enforcement", () => {
     const entitlement = await storage.getEntitlement("user-d1");
     expect(entitlement?.planId).toBe("max");
 
-    const first = await storage.incrementUsage("user-d1", currentMonth());
-    const second = await storage.incrementUsage("user-d1", currentMonth());
+    const first = await storage.consumeUsageWithinLimit(
+      "user-d1",
+      currentMonth(),
+      2,
+    );
+    const second = await storage.consumeUsageWithinLimit(
+      "user-d1",
+      currentMonth(),
+      2,
+    );
+    const exhausted = await storage.consumeUsageWithinLimit(
+      "user-d1",
+      currentMonth(),
+      2,
+    );
     expect(first).toBe(1);
     expect(second).toBe(2);
+    expect(exhausted).toBeNull();
 
     const usage = await storage.getUsage("user-d1", currentMonth());
     expect(usage).toBe(2);

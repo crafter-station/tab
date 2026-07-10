@@ -442,6 +442,57 @@ describe("SuggestionUseCase", () => {
     expect(generated).toBe(false);
   });
 
+  it("allows only one concurrent suggestion to consume the final quota slot", async () => {
+    let releaseGeneration!: () => void;
+    const generationGate = new Promise<void>((resolve) => {
+      releaseGeneration = resolve;
+    });
+    let generationCount = 0;
+    let bothGenerating!: () => void;
+    const bothGeneratingPromise = new Promise<void>((resolve) => {
+      bothGenerating = resolve;
+    });
+    const {
+      billingService,
+      telemetryService,
+      usageMeterClient,
+      useCase,
+    } = createUseCase(async () => {
+      generationCount += 1;
+      if (generationCount === 2) bothGenerating();
+      await generationGate;
+      return { text: " world" };
+    });
+    await activateFreePlan(billingService);
+    for (let i = 0; i < 99; i += 1) {
+      await billingService.consumeSuggestion("user-1");
+    }
+
+    const resultsPromise = Promise.all([
+      useCase.handle(validDevice, validRequest),
+      useCase.handle(validDevice, { ...validRequest, requestId: "req-2" }),
+    ]);
+    await bothGeneratingPromise;
+    releaseGeneration();
+    const results = await resultsPromise;
+
+    expect(results.filter((result) => result.ok)).toHaveLength(1);
+    const rejected = results.find((result) => !result.ok);
+    expect(rejected).toMatchObject({
+      ok: false,
+      status: 402,
+      code: "quota_exhausted",
+      details: { quota: 100, usage: 100 },
+    });
+    expect((await billingService.checkQuota("user-1")).usage).toBe(100);
+    expect(usageMeterClient.getEvents()).toHaveLength(1);
+    expect(
+      (await telemetryService.listEvents()).filter(
+        (event) => event.eventType === "suggestion_shown",
+      ),
+    ).toHaveLength(1);
+  });
+
   it("records provider failures without enqueueing memory jobs", async () => {
     const { billingService, telemetryService, useCase } = createUseCase(async () => {
       throw new Error("model timeout");
