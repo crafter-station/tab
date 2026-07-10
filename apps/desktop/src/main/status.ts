@@ -5,6 +5,7 @@ import {
 import type {
   CredentialGeneration,
   DesktopAuthorizationObservation,
+  SynchronousCredentialPublication,
 } from "./auth.ts";
 
 export type DesktopAuthStatus =
@@ -38,6 +39,10 @@ export type DesktopStatusServiceDependencies = {
   getAuthorizationObservation(): Promise<DesktopAuthorizationObservation>;
   isCredentialGenerationCurrent(
     credentialGeneration: CredentialGeneration,
+  ): Promise<boolean>;
+  publishIfCredentialGenerationCurrent(
+    credentialGeneration: CredentialGeneration,
+    publish: SynchronousCredentialPublication,
   ): Promise<boolean>;
   fetch?: typeof globalThis.fetch;
   onChange?(
@@ -101,9 +106,18 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
     sequence: number,
     credentialGeneration: CredentialGeneration,
   ): Promise<DesktopStatus> {
-    if (!(await canAccept(sequence, credentialGeneration))) return currentStatus;
-    emit(status, credentialGeneration);
-    return status;
+    if (sequence !== refreshSequence) return currentStatus;
+    let accepted = false;
+    const generationIsCurrent = await deps.publishIfCredentialGenerationCurrent(
+      credentialGeneration,
+      () => {
+        if (sequence !== refreshSequence) return undefined;
+        emit(status, credentialGeneration);
+        accepted = true;
+        return undefined;
+      },
+    );
+    return generationIsCurrent && accepted ? status : currentStatus;
   }
 
   async function refresh(): Promise<DesktopStatus> {

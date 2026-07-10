@@ -1,5 +1,9 @@
 import { describe, it, expect, spyOn } from "bun:test";
-import type { CredentialGeneration } from "../apps/desktop/src/main/auth.ts";
+import {
+  createDesktopAuthClient,
+  type CredentialGeneration,
+  type SynchronousCredentialPublication,
+} from "../apps/desktop/src/main/auth.ts";
 import { createDesktopStatusService, type DesktopStatus } from "../apps/desktop/src/main/status.ts";
 
 type StatusEvent = { type: "changed"; status: DesktopStatus };
@@ -16,6 +20,14 @@ function authorizationObservation(
 }
 
 async function acceptCredentialGeneration(): Promise<boolean> {
+  return true;
+}
+
+async function publishCredentialGeneration(
+  _credentialGeneration: CredentialGeneration,
+  publish: SynchronousCredentialPublication,
+): Promise<boolean> {
+  publish();
   return true;
 }
 
@@ -48,6 +60,7 @@ describe("desktop status service", () => {
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation(null),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       onChange: (status) => events.push({ type: "changed", status }),
     });
 
@@ -65,6 +78,7 @@ describe("desktop status service", () => {
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -105,6 +119,7 @@ describe("desktop status service", () => {
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -131,6 +146,7 @@ describe("desktop status service", () => {
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -156,6 +172,7 @@ describe("desktop status service", () => {
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       fetch: makeFetch([
         () =>
           new Response(
@@ -189,6 +206,7 @@ describe("desktop status service", () => {
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       fetch: makeFetch([
         () => {
           throw new Error("network unreachable");
@@ -210,6 +228,7 @@ describe("desktop status service", () => {
       apiBaseUrl: "http://localhost:8787",
       getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       fetch: makeFetch([
         () => {
           throw new Error("network unreachable");
@@ -237,6 +256,7 @@ describe("desktop status service", () => {
         throw observationError;
       },
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       onChange: (status, credentialGeneration) => {
         events.push({ status, credentialGeneration });
       },
@@ -293,6 +313,11 @@ describe("desktop status service", () => {
           authorizationObservation("Bearer token-a", requestGeneration),
         isCredentialGenerationCurrent: async (observedGeneration) =>
           observedGeneration === currentGeneration,
+        publishIfCredentialGenerationCurrent: async (observedGeneration, publish) => {
+          if (observedGeneration !== currentGeneration) return false;
+          publish();
+          return true;
+        },
         fetch: async (_input, init) => {
           requestAuthorization = new Headers(init?.headers).get("Authorization");
           fetchStarted.resolve();
@@ -314,6 +339,73 @@ describe("desktop status service", () => {
     }
   });
 
+  it("publishes token-A status before a token-B store queued behind its final guard", async () => {
+    let token: string | null = "token-a";
+    const operations: string[] = [];
+    const exchangeBody = createDeferred<unknown>();
+    const exchangeReadStarted = createDeferred<void>();
+    const authClient = createDesktopAuthClient({
+      apiBaseUrl: "http://localhost:8787",
+      webBaseUrl: "http://localhost:3000",
+      deviceId: "desktop-device-publication-order",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      keychain: {
+        set: async (_service, _account, value) => {
+          token = value;
+          operations.push(`store:${value}`);
+        },
+        get: async () => token,
+        remove: async () => {
+          token = null;
+        },
+      },
+      fetch: async () => ({
+        ok: true,
+        json: () => {
+          exchangeReadStarted.resolve();
+          return exchangeBody.promise;
+        },
+      }) as Response,
+    });
+    const replacement = authClient.handleCallback("tab://auth/callback?code=replace");
+    await exchangeReadStarted.promise;
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      getAuthorizationObservation: () => authClient.getAuthorizationObservation(),
+      isCredentialGenerationCurrent: (credentialGeneration) =>
+        authClient.isCredentialGenerationCurrent(credentialGeneration),
+      publishIfCredentialGenerationCurrent: (credentialGeneration, publish) => {
+        const publication = authClient.publishIfCredentialGenerationCurrent(
+          credentialGeneration,
+          publish,
+        );
+        exchangeBody.resolve({ token: "token-b" });
+        return publication;
+      },
+      fetch: async () => Response.json(
+        {
+          status: "error",
+          error: { code: "revoked_device", message: "This device has been revoked." },
+        },
+        { status: 401 },
+      ),
+      onChange: (status) => {
+        operations.push(`publish:${token}:${status.auth}`);
+      },
+    });
+
+    const status = await service.refresh();
+    await replacement;
+
+    expect(status.auth).toBe("revoked_device");
+    expect(operations).toEqual([
+      "publish:token-a:revoked_device",
+      "store:token-b",
+    ]);
+    expect(await authClient.getToken()).toBe("token-b");
+  });
+
   it("keeps a newer same-generation refresh when an older response arrives last", async () => {
     const credentialGeneration = generation(23);
     const firstFetchStarted = createDeferred<void>();
@@ -330,6 +422,7 @@ describe("desktop status service", () => {
       getAuthorizationObservation: async () =>
         authorizationObservation("Bearer token", credentialGeneration),
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       fetch: async () => {
         fetchCount += 1;
         if (fetchCount === 1) {
@@ -403,6 +496,7 @@ describe("desktop status service", () => {
         return authorizationObservation(null, credentialGeneration);
       },
       isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
       onChange: (status) => events.push(status),
     });
 

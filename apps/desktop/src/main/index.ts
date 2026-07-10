@@ -188,6 +188,8 @@ const statusService = createDesktopStatusService({
   getAuthorizationObservation: () => authClient.getAuthorizationObservation(),
   isCredentialGenerationCurrent: (credentialGeneration) =>
     authClient.isCredentialGenerationCurrent(credentialGeneration),
+  publishIfCredentialGenerationCurrent: (credentialGeneration, publish) =>
+    authClient.publishIfCredentialGenerationCurrent(credentialGeneration, publish),
   onChange: (status, credentialGeneration) => {
     settingsWindowManager.sendStatus(status);
     onboardingWindowManager.sendStatus(status);

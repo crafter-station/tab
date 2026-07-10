@@ -23,6 +23,8 @@ export type ObservedCredentialState =
   | "current_absent"
   | "stale";
 
+export type SynchronousCredentialPublication = () => undefined;
+
 export type DesktopAuthClientDependencies = {
   apiBaseUrl: string;
   webBaseUrl: string;
@@ -157,6 +159,17 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
     return enqueueCredentialOperation(async () => credentialGeneration === observedGeneration);
   }
 
+  async function publishIfCredentialGenerationCurrent(
+    observedGeneration: CredentialGeneration,
+    publish: SynchronousCredentialPublication,
+  ): Promise<boolean> {
+    return enqueueCredentialOperation(async () => {
+      if (credentialGeneration !== observedGeneration) return false;
+      publish();
+      return true;
+    });
+  }
+
   async function getAuthorizationHeader(): Promise<string | null> {
     const observation = await getAuthorizationObservation();
     return observation.authorizationHeader;
@@ -182,6 +195,7 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
     isAuthenticated,
     getCredentialState,
     isCredentialGenerationCurrent,
+    publishIfCredentialGenerationCurrent,
     getAuthorizationHeader,
     getAuthorizationObservation,
   };
