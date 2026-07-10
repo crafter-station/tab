@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { rmSync } from "node:fs";
+import { existsSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
@@ -480,16 +480,50 @@ describe("Billing and quota enforcement", () => {
         currentMonth(),
         2,
       );
-      const contenders = await Promise.all([
-        firstStorage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
-        secondStorage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
-      ]);
+      const startPath = `${databasePath}.start`;
+      const readyPaths = [
+        `${databasePath}.ready-1`,
+        `${databasePath}.ready-2`,
+      ];
+      const consumers = readyPaths.map((readyPath) =>
+        Bun.spawn(
+          [
+            "bun",
+            "tests/fixtures/consume-d1-quota.ts",
+            databasePath,
+            readyPath,
+            startPath,
+            currentMonth(),
+            "2",
+          ],
+          { stdout: "pipe", stderr: "pipe" },
+        ),
+      );
+      while (!readyPaths.every(existsSync)) {
+        await Bun.sleep(1);
+      }
+      await Bun.write(startPath, "start");
+      const contenderOutputs = await Promise.all(
+        consumers.map(async (consumer) => {
+          const [exitCode, stdout, stderr] = await Promise.all([
+            consumer.exited,
+            new Response(consumer.stdout).text(),
+            new Response(consumer.stderr).text(),
+          ]);
+          expect(stderr).toBe("");
+          expect(exitCode).toBe(0);
+          return JSON.parse(stdout.trim()) as number | null;
+        }),
+      );
       expect(first).toBe(1);
-      expect(contenders).toContain(2);
-      expect(contenders).toContain(null);
+      expect(contenderOutputs).toContain(2);
+      expect(contenderOutputs).toContain(null);
 
       const usage = await secondStorage.getUsage("user-d1", currentMonth());
       expect(usage).toBe(2);
+
+      rmSync(startPath, { force: true });
+      for (const readyPath of readyPaths) rmSync(readyPath, { force: true });
     } finally {
       firstConnection.close();
       secondConnection.close();
