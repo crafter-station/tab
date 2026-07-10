@@ -1,4 +1,4 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, spyOn } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
@@ -9,6 +9,7 @@ import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import {
   createDesktopAuthClient,
   createDesktopAuthSession,
+  type CredentialGeneration,
 } from "../apps/desktop/src/main/auth.ts";
 import { createMemoryKeychain } from "../apps/desktop/src/main/keychain.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
@@ -19,6 +20,18 @@ import {
 } from "../apps/desktop/src/main/typing-context.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
+
+function generation(value: number): CredentialGeneration {
+  return value as CredentialGeneration;
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 async function createApiFixture(generateSuggestion?: Parameters<typeof createApp>[0]["generateSuggestion"]) {
   const database = new Database(":memory:");
@@ -243,19 +256,67 @@ describe("desktop auth client", () => {
     expect(await client.isAuthenticated()).toBe(false);
     expect(await client.getAuthorizationHeader()).toBeNull();
   });
+
+  it("serializes replacement storage behind a generation-conditional removal", async () => {
+    let token: string | null = "token-a";
+    const removeStarted = createDeferred<void>();
+    const finishRemove = createDeferred<void>();
+    const operations: string[] = [];
+    const client = createDesktopAuthClient({
+      apiBaseUrl: TEST_ORIGIN,
+      webBaseUrl: "http://localhost:3000",
+      deviceId: "desktop-device-mutation-order",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      keychain: {
+        set: async (_service, _account, value) => {
+          operations.push(`set:${value}`);
+          token = value;
+        },
+        get: async () => token,
+        remove: async () => {
+          operations.push("remove:start");
+          removeStarted.resolve();
+          await finishRemove.promise;
+          token = null;
+          operations.push("remove:end");
+        },
+      },
+      fetch: async () => Response.json({ token: "token-b" }),
+    });
+    const oldObservation = await client.getAuthorizationObservation();
+
+    const clear = client.clearTokenForGeneration(oldObservation.credentialGeneration);
+    await removeStarted.promise;
+    const replace = client.handleCallback("tab://auth/callback?code=replace");
+    await Promise.resolve();
+
+    expect(operations).toEqual(["remove:start"]);
+    finishRemove.resolve();
+    expect(await clear).toBe(true);
+    await replace;
+
+    expect(operations).toEqual(["remove:start", "remove:end", "set:token-b"]);
+    expect(await client.getToken()).toBe("token-b");
+  });
 });
 
 describe("desktop auth session", () => {
   function createFixture(authenticated = true) {
     let hasToken = authenticated;
+    let generationValue = 1;
     let clearCount = 0;
     let signedOutCount = 0;
     const session = createDesktopAuthSession({
       authClient: {
-        isAuthenticated: async () => hasToken,
-        clearToken: async () => {
+        isAuthenticated: async (observedGeneration) =>
+          hasToken && observedGeneration === generation(generationValue),
+        clearTokenForGeneration: async (observedGeneration) => {
+          if (!hasToken || observedGeneration !== generation(generationValue)) return false;
           hasToken = false;
           clearCount += 1;
+          generationValue += 1;
+          return true;
         },
       },
       onSignedOut: () => {
@@ -266,7 +327,11 @@ describe("desktop auth session", () => {
     return {
       session,
       setAuthenticated(value: boolean) {
+        if (hasToken !== value) generationValue += 1;
         hasToken = value;
+      },
+      get generation() {
+        return generation(generationValue);
       },
       get clearCount() {
         return clearCount;
@@ -280,7 +345,7 @@ describe("desktop auth session", () => {
   it("clears a present credential immediately when the device is revoked", async () => {
     const fixture = createFixture();
 
-    await fixture.session.handleStatus("revoked_device");
+    await fixture.session.handleStatus("revoked_device", fixture.generation);
 
     expect(fixture.clearCount).toBe(1);
     expect(fixture.signedOutCount).toBe(1);
@@ -289,11 +354,11 @@ describe("desktop auth session", () => {
   it("clears a credential after three consecutive sign-in-required statuses", async () => {
     const fixture = createFixture();
 
-    await fixture.session.handleStatus("sign_in_required");
-    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
     expect(fixture.clearCount).toBe(0);
 
-    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
 
     expect(fixture.clearCount).toBe(1);
     expect(fixture.signedOutCount).toBe(1);
@@ -302,10 +367,10 @@ describe("desktop auth session", () => {
   it("resets consecutive failures when authentication recovers", async () => {
     const fixture = createFixture();
 
-    await fixture.session.handleStatus("sign_in_required");
-    await fixture.session.handleStatus("sign_in_required");
-    await fixture.session.handleStatus("signed_in");
-    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
+    await fixture.session.handleStatus("signed_in", fixture.generation);
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
 
     expect(fixture.clearCount).toBe(0);
   });
@@ -313,12 +378,235 @@ describe("desktop auth session", () => {
   it("does not count sign-in-required statuses without a stored credential", async () => {
     const fixture = createFixture(false);
 
-    await fixture.session.handleStatus("sign_in_required");
-    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
     fixture.setAuthenticated(true);
-    await fixture.session.handleStatus("sign_in_required");
-    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
+    await fixture.session.handleStatus("sign_in_required", fixture.generation);
 
     expect(fixture.clearCount).toBe(0);
+  });
+
+  it("serializes overlapping failures and clears the current credential once", async () => {
+    const firstRead = createDeferred<boolean>();
+    const credentialGeneration = generation(7);
+    let readCount = 0;
+    let hasToken = true;
+    let clearCount = 0;
+    let signedOutCount = 0;
+    const session = createDesktopAuthSession({
+      authClient: {
+        isAuthenticated: async () => {
+          readCount += 1;
+          return readCount === 1 ? firstRead.promise : hasToken;
+        },
+        clearTokenForGeneration: async (observedGeneration) => {
+          if (!hasToken || observedGeneration !== credentialGeneration) return false;
+          hasToken = false;
+          clearCount += 1;
+          return true;
+        },
+      },
+      onSignedOut: () => {
+        signedOutCount += 1;
+      },
+    });
+
+    const first = session.handleStatus("sign_in_required", credentialGeneration);
+    const second = session.handleStatus("sign_in_required", credentialGeneration);
+    const third = session.handleStatus("sign_in_required", credentialGeneration);
+    let thirdResolved = false;
+    void third.then(() => {
+      thirdResolved = true;
+    });
+
+    await Promise.resolve();
+    expect(readCount).toBe(1);
+    expect(thirdResolved).toBe(false);
+    firstRead.resolve(true);
+    await Promise.all([first, second, third]);
+
+    expect(clearCount).toBe(1);
+    expect(signedOutCount).toBe(1);
+    expect(thirdResolved).toBe(true);
+  });
+
+  it("applies queued recovery before a later failure while an earlier read is pending", async () => {
+    const firstRead = createDeferred<boolean>();
+    const credentialGeneration = generation(8);
+    let readCount = 0;
+    let clearCount = 0;
+    const session = createDesktopAuthSession({
+      authClient: {
+        isAuthenticated: async () => {
+          readCount += 1;
+          return readCount === 1 ? firstRead.promise : true;
+        },
+        clearTokenForGeneration: async () => {
+          clearCount += 1;
+          return true;
+        },
+      },
+      onSignedOut: () => {},
+    });
+
+    const failure = session.handleStatus("sign_in_required", credentialGeneration);
+    const recovery = session.handleStatus("signed_in", credentialGeneration);
+    const laterFailure = session.handleStatus("sign_in_required", credentialGeneration);
+
+    await Promise.resolve();
+    expect(readCount).toBe(1);
+    firstRead.resolve(true);
+    await Promise.all([failure, recovery, laterFailure]);
+
+    expect(readCount).toBe(3);
+    expect(clearCount).toBe(0);
+  });
+
+  it("applies queued revocation after an earlier credential read completes", async () => {
+    const firstRead = createDeferred<boolean>();
+    const credentialGeneration = generation(9);
+    let readCount = 0;
+    let clearCount = 0;
+    const session = createDesktopAuthSession({
+      authClient: {
+        isAuthenticated: async () => {
+          readCount += 1;
+          return readCount === 1 ? firstRead.promise : true;
+        },
+        clearTokenForGeneration: async () => {
+          clearCount += 1;
+          return true;
+        },
+      },
+      onSignedOut: () => {},
+    });
+
+    const failure = session.handleStatus("sign_in_required", credentialGeneration);
+    const revocation = session.handleStatus("revoked_device", credentialGeneration);
+
+    await Promise.resolve();
+    expect(readCount).toBe(1);
+    expect(clearCount).toBe(0);
+    firstRead.resolve(true);
+    await Promise.all([failure, revocation]);
+
+    expect(clearCount).toBe(1);
+  });
+
+  it("ignores old-token failures and revocation after reauthentication", async () => {
+    const keychain = createMemoryKeychain();
+    await keychain.set("tab", "device-token", "token-a");
+    const authClient = createDesktopAuthClient({
+      apiBaseUrl: TEST_ORIGIN,
+      webBaseUrl: "http://localhost:3000",
+      deviceId: "desktop-device-reauthenticated",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      keychain,
+      fetch: async () => Response.json({ token: "token-b" }),
+    });
+    const oldObservation = await authClient.getAuthorizationObservation();
+    await authClient.handleCallback("tab://auth/callback?code=re-authenticate");
+    const newObservation = await authClient.getAuthorizationObservation();
+    let signedOutCount = 0;
+    const session = createDesktopAuthSession({
+      authClient,
+      onSignedOut: () => {
+        signedOutCount += 1;
+      },
+    });
+
+    await session.handleStatus("sign_in_required", oldObservation.credentialGeneration);
+    await session.handleStatus("sign_in_required", oldObservation.credentialGeneration);
+    await session.handleStatus("sign_in_required", oldObservation.credentialGeneration);
+    await session.handleStatus("revoked_device", oldObservation.credentialGeneration);
+
+    expect(newObservation.credentialGeneration).not.toBe(oldObservation.credentialGeneration);
+    expect(await authClient.getToken()).toBe("token-b");
+    expect(signedOutCount).toBe(0);
+  });
+
+  it("contains authentication-state read failures", async () => {
+    const readError = new Error("keychain read failed");
+    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+    let signedOutCount = 0;
+    const session = createDesktopAuthSession({
+      authClient: {
+        isAuthenticated: async () => {
+          throw readError;
+        },
+        clearTokenForGeneration: async () => true,
+      },
+      onSignedOut: () => {
+        signedOutCount += 1;
+      },
+    });
+
+    try {
+      await session.handleStatus("revoked_device", generation(10));
+      expect(signedOutCount).toBe(0);
+      expect(errorLog).toHaveBeenCalledWith(
+        "Failed to read desktop authentication state:",
+        readError,
+      );
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  it("contains conditional-clear failures without notifying signed out", async () => {
+    const clearError = new Error("keychain clear failed");
+    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+    let signedOutCount = 0;
+    const session = createDesktopAuthSession({
+      authClient: {
+        isAuthenticated: async () => true,
+        clearTokenForGeneration: async () => {
+          throw clearError;
+        },
+      },
+      onSignedOut: () => {
+        signedOutCount += 1;
+      },
+    });
+
+    try {
+      await session.handleStatus("revoked_device", generation(11));
+      expect(signedOutCount).toBe(0);
+      expect(errorLog).toHaveBeenCalledWith(
+        "Failed to clear revoked device token:",
+        clearError,
+      );
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  it("contains and separately logs signed-out surface failures", async () => {
+    const surfaceError = new Error("surface failed");
+    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+    const session = createDesktopAuthSession({
+      authClient: {
+        isAuthenticated: async () => true,
+        clearTokenForGeneration: async () => true,
+      },
+      onSignedOut: () => {
+        throw surfaceError;
+      },
+    });
+
+    try {
+      await session.handleStatus("revoked_device", generation(12));
+      expect(errorLog).toHaveBeenCalledWith(
+        "Failed to show signed-out surface:",
+        surfaceError,
+      );
+      expect(
+        errorLog.mock.calls.some(([message]) => message === "Failed to clear revoked device token:"),
+      ).toBe(false);
+    } finally {
+      errorLog.mockRestore();
+    }
   });
 });

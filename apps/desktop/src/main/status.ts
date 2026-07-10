@@ -2,6 +2,10 @@ import {
   ApiErrorResponseSchema,
   DesktopStatusResponseSchema,
 } from "@tab/contracts";
+import type {
+  CredentialGeneration,
+  DesktopAuthorizationObservation,
+} from "./auth.ts";
 
 export type DesktopAuthStatus =
   | "sign_in_required"
@@ -31,9 +35,12 @@ export type DesktopStatus = {
 
 export type DesktopStatusServiceDependencies = {
   apiBaseUrl: string;
-  getAuthorizationHeader(): Promise<string | null>;
+  getAuthorizationObservation(): Promise<DesktopAuthorizationObservation>;
   fetch?: typeof globalThis.fetch;
-  onChange?(status: DesktopStatus): void;
+  onChange?(
+    status: DesktopStatus,
+    credentialGeneration: CredentialGeneration | null,
+  ): void;
 };
 
 function createInitialStatus(): DesktopStatus {
@@ -68,17 +75,34 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
   const http = deps.fetch ?? globalThis.fetch;
   let currentStatus: DesktopStatus = createInitialStatus();
 
-  function emit(status: DesktopStatus): void {
+  function emit(
+    status: DesktopStatus,
+    credentialGeneration: CredentialGeneration | null,
+  ): void {
     currentStatus = status;
-    deps.onChange?.(status);
+    deps.onChange?.(status, credentialGeneration);
   }
 
   async function refresh(): Promise<DesktopStatus> {
-    const authorization = await deps.getAuthorizationHeader();
+    let authorizationObservation: DesktopAuthorizationObservation;
+    try {
+      authorizationObservation = await deps.getAuthorizationObservation();
+    } catch (error) {
+      console.error("Failed to read desktop authorization:", error);
+      const status = markUpdated({
+        ...currentStatus,
+        connectivity: "offline",
+        overlay: "hidden",
+      });
+      emit(status, null);
+      return status;
+    }
 
-    if (!authorization) {
+    const { authorizationHeader, credentialGeneration } = authorizationObservation;
+
+    if (!authorizationHeader) {
       const status = markUpdated(createInitialStatus());
-      emit(status);
+      emit(status, credentialGeneration);
       return status;
     }
 
@@ -92,7 +116,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
       const response = await http(`${deps.apiBaseUrl}/api/status`, {
         method: "GET",
         headers: {
-          Authorization: authorization,
+          Authorization: authorizationHeader,
           Accept: "application/json",
         },
       });
@@ -106,7 +130,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
             connectivity: "online",
             overlay: "hidden",
           });
-          emit(status);
+          emit(status, credentialGeneration);
           return status;
         }
 
@@ -116,14 +140,14 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
             connectivity: "online",
             overlay: "hidden",
           });
-          emit(status);
+          emit(status, credentialGeneration);
           return status;
         }
       }
 
       if (!response.ok) {
         const status = createOfflineStatus();
-        emit(status);
+        emit(status, credentialGeneration);
         return status;
       }
 
@@ -132,7 +156,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
 
       if (!parsed.success) {
         const status = createOfflineStatus();
-        emit(status);
+        emit(status, credentialGeneration);
         return status;
       }
 
@@ -152,7 +176,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
           : null,
         overlay: "hidden",
       });
-      emit(status);
+      emit(status, credentialGeneration);
       return status;
     } catch {
       // If we have a stored token but cannot reach the API, preserve the last
@@ -160,7 +184,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
       // token exists. Status UI surfaces the connectivity issue separately from
       // the overlay.
       const status = createOfflineStatus();
-      emit(status);
+      emit(status, credentialGeneration);
       return status;
     }
   }

@@ -1,7 +1,27 @@
-import { describe, it, expect } from "bun:test";
+import { describe, it, expect, spyOn } from "bun:test";
+import type { CredentialGeneration } from "../apps/desktop/src/main/auth.ts";
 import { createDesktopStatusService, type DesktopStatus } from "../apps/desktop/src/main/status.ts";
 
 type StatusEvent = { type: "changed"; status: DesktopStatus };
+
+function generation(value: number): CredentialGeneration {
+  return value as CredentialGeneration;
+}
+
+function authorizationObservation(
+  authorizationHeader: string | null,
+  credentialGeneration = generation(1),
+) {
+  return { authorizationHeader, credentialGeneration };
+}
+
+function createDeferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise;
+  });
+  return { promise, resolve };
+}
 
 function makeFetch(responses: Array<() => Response>) {
   let index = 0;
@@ -20,7 +40,7 @@ describe("desktop status service", () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationHeader: async () => null,
+      getAuthorizationObservation: async () => authorizationObservation(null),
       onChange: (status) => events.push({ type: "changed", status }),
     });
 
@@ -36,7 +56,7 @@ describe("desktop status service", () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationHeader: async () => "Bearer token",
+      getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       fetch: makeFetch([
         () =>
           new Response(
@@ -75,7 +95,7 @@ describe("desktop status service", () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationHeader: async () => "Bearer token",
+      getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       fetch: makeFetch([
         () =>
           new Response(
@@ -100,7 +120,7 @@ describe("desktop status service", () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationHeader: async () => "Bearer token",
+      getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       fetch: makeFetch([
         () =>
           new Response(
@@ -124,7 +144,7 @@ describe("desktop status service", () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationHeader: async () => "Bearer token",
+      getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       fetch: makeFetch([
         () =>
           new Response(
@@ -156,7 +176,7 @@ describe("desktop status service", () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationHeader: async () => "Bearer token",
+      getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       fetch: makeFetch([
         () => {
           throw new Error("network unreachable");
@@ -176,7 +196,7 @@ describe("desktop status service", () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
-      getAuthorizationHeader: async () => "Bearer token",
+      getAuthorizationObservation: async () => authorizationObservation("Bearer token"),
       fetch: makeFetch([
         () => {
           throw new Error("network unreachable");
@@ -189,5 +209,85 @@ describe("desktop status service", () => {
 
     // The overlay should not receive error notifications; status UI handles them.
     expect(events[0].status.overlay).toBe("hidden");
+  });
+
+  it("contains authorization observation failures", async () => {
+    const observationError = new Error("keychain unavailable");
+    const errorLog = spyOn(console, "error").mockImplementation(() => {});
+    const events: Array<{
+      status: DesktopStatus;
+      credentialGeneration: CredentialGeneration | null;
+    }> = [];
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      getAuthorizationObservation: async () => {
+        throw observationError;
+      },
+      onChange: (status, credentialGeneration) => {
+        events.push({ status, credentialGeneration });
+      },
+    });
+
+    try {
+      const status = await service.refresh();
+      expect(status.connectivity).toBe("offline");
+      expect(events).toHaveLength(1);
+      expect(events[0].credentialGeneration).toBeNull();
+      expect(errorLog).toHaveBeenCalledWith(
+        "Failed to read desktop authorization:",
+        observationError,
+      );
+    } finally {
+      errorLog.mockRestore();
+    }
+  });
+
+  it("carries the request credential generation separately from renderer status", async () => {
+    const requestGeneration = generation(21);
+    const replacementGeneration = generation(22);
+    let currentObservation = authorizationObservation("Bearer token-a", requestGeneration);
+    let requestAuthorization: string | null = null;
+    const fetchStarted = createDeferred<void>();
+    const response = createDeferred<Response>();
+    const events: Array<{
+      status: DesktopStatus;
+      credentialGeneration: CredentialGeneration | null;
+    }> = [];
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      getAuthorizationObservation: async () => currentObservation,
+      fetch: async (_input, init) => {
+        requestAuthorization = new Headers(init?.headers).get("Authorization");
+        fetchStarted.resolve();
+        return response.promise;
+      },
+      onChange: (status, credentialGeneration) => {
+        events.push({ status, credentialGeneration });
+      },
+    });
+
+    const refresh = service.refresh();
+    await fetchStarted.promise;
+    currentObservation = authorizationObservation("Bearer token-b", replacementGeneration);
+    response.resolve(Response.json({
+      status: "ok",
+      data: {
+        authenticated: true,
+        deviceRevoked: false,
+      },
+    }));
+    await refresh;
+
+    expect(requestAuthorization).toBe("Bearer token-a");
+    expect(events).toHaveLength(1);
+    expect(events[0].credentialGeneration).toBe(requestGeneration);
+    expect(Object.keys(events[0].status).sort()).toEqual([
+      "auth",
+      "connectivity",
+      "lastUpdatedAt",
+      "overlay",
+      "quota",
+      "userId",
+    ]);
   });
 });

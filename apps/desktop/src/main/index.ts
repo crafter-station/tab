@@ -185,12 +185,14 @@ const updateChecker = createUpdateChecker({
 
 const statusService = createDesktopStatusService({
   apiBaseUrl: API_BASE_URL,
-  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
-  onChange: (status) => {
+  getAuthorizationObservation: () => authClient.getAuthorizationObservation(),
+  onChange: (status, credentialGeneration) => {
     settingsWindowManager.sendStatus(status);
     onboardingWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
-    void authSession.handleStatus(status.auth);
+    if (credentialGeneration !== null) {
+      void authSession.handleStatus(status.auth, credentialGeneration);
+    }
   },
 });
 

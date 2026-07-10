@@ -8,6 +8,16 @@ import type { DesktopAuthStatus } from "./status.ts";
 const TOKEN_SERVICE = "tab";
 const TOKEN_ACCOUNT = "device-token";
 
+declare const credentialGenerationBrand: unique symbol;
+export type CredentialGeneration = number & {
+  readonly [credentialGenerationBrand]: true;
+};
+
+export type DesktopAuthorizationObservation = {
+  readonly authorizationHeader: string | null;
+  readonly credentialGeneration: CredentialGeneration;
+};
+
 export type DesktopAuthClientDependencies = {
   apiBaseUrl: string;
   webBaseUrl: string;
@@ -21,6 +31,21 @@ export type DesktopAuthClientDependencies = {
 
 export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
+  let credentialGeneration = 0 as CredentialGeneration;
+  let credentialOperation = Promise.resolve();
+
+  function enqueueCredentialOperation<T>(operation: () => Promise<T>): Promise<T> {
+    const result = credentialOperation.then(operation);
+    credentialOperation = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
+  }
+
+  function advanceCredentialGeneration(): void {
+    credentialGeneration = (credentialGeneration + 1) as CredentialGeneration;
+  }
 
   function buildBrowserLoginUrl({
     callbackScheme = "tab",
@@ -73,25 +98,60 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
       throw new Error("Invalid device token exchange response.");
     }
 
-    await deps.keychain.set(TOKEN_SERVICE, TOKEN_ACCOUNT, parsed.data.token);
+    await enqueueCredentialOperation(async () => {
+      await deps.keychain.set(TOKEN_SERVICE, TOKEN_ACCOUNT, parsed.data.token);
+      advanceCredentialGeneration();
+    });
     return parsed.data.token;
   }
 
   async function getToken(): Promise<string | null> {
-    return deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+    return enqueueCredentialOperation(() => deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT));
   }
 
   async function clearToken(): Promise<void> {
-    await deps.keychain.remove(TOKEN_SERVICE, TOKEN_ACCOUNT);
+    await enqueueCredentialOperation(async () => {
+      await deps.keychain.remove(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      advanceCredentialGeneration();
+    });
   }
 
-  async function isAuthenticated(): Promise<boolean> {
-    return (await getToken()) !== null;
+  async function clearTokenForGeneration(
+    observedGeneration: CredentialGeneration,
+  ): Promise<boolean> {
+    return enqueueCredentialOperation(async () => {
+      if (credentialGeneration !== observedGeneration) return false;
+      if ((await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT)) === null) return false;
+
+      await deps.keychain.remove(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      advanceCredentialGeneration();
+      return true;
+    });
+  }
+
+  async function isAuthenticated(
+    observedGeneration?: CredentialGeneration,
+  ): Promise<boolean> {
+    return enqueueCredentialOperation(async () => {
+      const token = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      return token !== null &&
+        (observedGeneration === undefined || credentialGeneration === observedGeneration);
+    });
   }
 
   async function getAuthorizationHeader(): Promise<string | null> {
-    const token = await getToken();
-    return token ? `Bearer ${token}` : null;
+    const observation = await getAuthorizationObservation();
+    return observation.authorizationHeader;
+  }
+
+  async function getAuthorizationObservation(): Promise<DesktopAuthorizationObservation> {
+    return enqueueCredentialOperation(async () => {
+      const token = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      return {
+        authorizationHeader: token ? `Bearer ${token}` : null,
+        credentialGeneration,
+      };
+    });
   }
 
   return {
@@ -100,65 +160,116 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
     handleCallback,
     getToken,
     clearToken,
+    clearTokenForGeneration,
     isAuthenticated,
     getAuthorizationHeader,
+    getAuthorizationObservation,
   };
 }
 
 export type DesktopAuthClient = ReturnType<typeof createDesktopAuthClient>;
 
 export type DesktopAuthSessionDependencies = {
-  authClient: Pick<DesktopAuthClient, "clearToken" | "isAuthenticated">;
-  onSignedOut(): void;
+  authClient: Pick<DesktopAuthClient, "clearTokenForGeneration" | "isAuthenticated">;
+  onSignedOut(): void | Promise<void>;
 };
 
 export function createDesktopAuthSession(deps: DesktopAuthSessionDependencies) {
   let consecutiveAuthFailures = 0;
+  let failureGeneration: CredentialGeneration | null = null;
+  let transitionQueue = Promise.resolve();
   const maxConsecutiveAuthFailures = 3;
 
-  async function handleStatus(status: DesktopAuthStatus): Promise<void> {
+  function resetFailures(): void {
+    consecutiveAuthFailures = 0;
+    failureGeneration = null;
+  }
+
+  async function notifySignedOut(): Promise<void> {
+    try {
+      await deps.onSignedOut();
+    } catch (error) {
+      console.error("Failed to show signed-out surface:", error);
+    }
+  }
+
+  async function clearObservedCredential(
+    credentialGeneration: CredentialGeneration,
+    errorMessage: string,
+  ): Promise<void> {
+    let cleared = false;
+    try {
+      cleared = await deps.authClient.clearTokenForGeneration(credentialGeneration);
+    } catch (error) {
+      console.error(errorMessage, error);
+      return;
+    }
+
+    if (cleared) {
+      await notifySignedOut();
+    }
+  }
+
+  async function applyStatus(
+    status: DesktopAuthStatus,
+    credentialGeneration: CredentialGeneration,
+  ): Promise<void> {
+    try {
+      if (!(await deps.authClient.isAuthenticated(credentialGeneration))) {
+        return;
+      }
+    } catch (error) {
+      console.error("Failed to read desktop authentication state:", error);
+      return;
+    }
+
     if (status === "signed_in") {
       if (consecutiveAuthFailures > 0) {
         console.log(`Auth recovered after ${consecutiveAuthFailures} transient failure(s).`);
-        consecutiveAuthFailures = 0;
+        resetFailures();
       }
       return;
     }
 
     if (status === "revoked_device") {
-      consecutiveAuthFailures = 0;
+      resetFailures();
       console.warn("Device token revoked by server; signing out.");
-      try {
-        if (await deps.authClient.isAuthenticated()) {
-          await deps.authClient.clearToken();
-          deps.onSignedOut();
-        }
-      } catch (error) {
-        console.error("Failed to clear revoked device token:", error);
-      }
+      await clearObservedCredential(
+        credentialGeneration,
+        "Failed to clear revoked device token:",
+      );
       return;
     }
 
-    try {
-      if (!(await deps.authClient.isAuthenticated())) {
-        consecutiveAuthFailures = 0;
-        return;
-      }
-
-      consecutiveAuthFailures += 1;
-      console.warn(
-        `Server reported sign-in required (failure ${consecutiveAuthFailures}/${maxConsecutiveAuthFailures}).`,
-      );
-
-      if (consecutiveAuthFailures < maxConsecutiveAuthFailures) return;
-
-      console.error("Clearing device token after repeated sign-in-required responses.");
-      await deps.authClient.clearToken();
+    if (failureGeneration !== credentialGeneration) {
       consecutiveAuthFailures = 0;
-      deps.onSignedOut();
-    } catch (error) {
-      console.error("Failed to handle sign-in-required status:", error);
+      failureGeneration = credentialGeneration;
     }
+
+    consecutiveAuthFailures += 1;
+    console.warn(
+      `Server reported sign-in required (failure ${consecutiveAuthFailures}/${maxConsecutiveAuthFailures}).`,
+    );
+
+    if (consecutiveAuthFailures < maxConsecutiveAuthFailures) return;
+
+    console.error("Clearing device token after repeated sign-in-required responses.");
+    resetFailures();
+    await clearObservedCredential(
+      credentialGeneration,
+      "Failed to clear device token after repeated sign-in-required responses:",
+    );
+  }
+
+  function handleStatus(
+    status: DesktopAuthStatus,
+    credentialGeneration: CredentialGeneration,
+  ): Promise<void> {
+    const transition = transitionQueue.then(() => applyStatus(status, credentialGeneration));
+    transitionQueue = transition.catch((error) => {
+      console.error("Failed to handle desktop authentication status:", error);
+    });
+    return transitionQueue;
   }
 
   return { handleStatus };
