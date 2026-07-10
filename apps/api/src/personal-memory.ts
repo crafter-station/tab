@@ -24,6 +24,10 @@ export type UpdatePersonalMemoryInput = {
   readonly createdBy?: PersonalMemoryCreatedBy;
 };
 
+export type UpdateExtractedPersonalMemoryInput = {
+  readonly content: string;
+};
+
 export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
@@ -34,6 +38,12 @@ export interface PersonalMemoryStorage {
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null>;
   deleteMemory(userId: string, id: string): Promise<boolean>;
+  updateMemoryForExtraction(
+    userId: string,
+    id: string,
+    input: UpdateExtractedPersonalMemoryInput,
+  ): Promise<PersonalMemory | null>;
+  deleteMemoryForExtraction(userId: string, id: string): Promise<boolean>;
 }
 
 export type PersonalMemoryVectorMetadata = {
@@ -225,6 +235,44 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     if (!existing || existing.userId !== userId) return false;
     return this.memories.delete(id);
   }
+
+  async updateMemoryForExtraction(
+    userId: string,
+    id: string,
+    input: UpdateExtractedPersonalMemoryInput,
+  ): Promise<PersonalMemory | null> {
+    const existing = this.memories.get(id);
+    if (
+      !existing ||
+      existing.userId !== userId ||
+      existing.createdBy !== "system"
+    ) {
+      return null;
+    }
+
+    const updated: PersonalMemory = {
+      ...existing,
+      content: input.content,
+      updatedAt: toISOTimestamp(new Date()),
+    };
+    this.memories.set(id, updated);
+    return updated;
+  }
+
+  async deleteMemoryForExtraction(
+    userId: string,
+    id: string,
+  ): Promise<boolean> {
+    const existing = this.memories.get(id);
+    if (
+      !existing ||
+      existing.userId !== userId ||
+      existing.createdBy !== "system"
+    ) {
+      return false;
+    }
+    return this.memories.delete(id);
+  }
 }
 
 function rowToMemory(row: typeof personalMemories.$inferSelect): PersonalMemory {
@@ -322,6 +370,46 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
       .returning();
     return result.length > 0;
   }
+
+  async updateMemoryForExtraction(
+    userId: string,
+    id: string,
+    input: UpdateExtractedPersonalMemoryInput,
+  ): Promise<PersonalMemory | null> {
+    const rows = await this.db
+      .update(personalMemories)
+      .set({
+        content: input.content,
+        updatedAt: toISOTimestamp(new Date()),
+      })
+      .where(
+        and(
+          eq(personalMemories.userId, userId),
+          eq(personalMemories.id, id),
+          eq(personalMemories.createdBy, "system"),
+        ),
+      )
+      .returning();
+
+    return rows[0] ? rowToMemory(rows[0]) : null;
+  }
+
+  async deleteMemoryForExtraction(
+    userId: string,
+    id: string,
+  ): Promise<boolean> {
+    const result = await this.db
+      .delete(personalMemories)
+      .where(
+        and(
+          eq(personalMemories.userId, userId),
+          eq(personalMemories.id, id),
+          eq(personalMemories.createdBy, "system"),
+        ),
+      )
+      .returning();
+    return result.length > 0;
+  }
 }
 
 export type PersonalMemoryServiceDependencies = {
@@ -347,6 +435,10 @@ const createMemoryInputSchema = z.object({
 const updateMemoryInputSchema = z.object({
   content: z.string().trim().min(1).max(500).optional(),
   createdBy: PersonalMemorySchema.shape.createdBy.optional(),
+});
+
+const updateExtractedMemoryInputSchema = z.object({
+  content: z.string().trim().min(1).max(500),
 });
 
 function normalizeTokens(text: string): Set<string> {
@@ -460,11 +552,12 @@ export class PersonalMemoryService {
   }
 
   async deleteMemory(userId: string, id: string): Promise<boolean> {
-    const deleted = await this.storage.deleteMemory(userId, id);
-    if (deleted) {
-      await this.vectorIndex?.deleteMemory(id);
-    }
-    return deleted;
+    const memory = await this.storage.findMemoryById(userId, id);
+    if (!memory) return false;
+
+    return this.deleteIndexedMemory(id, () =>
+      this.storage.deleteMemory(userId, id),
+    );
   }
 
   async updateMemory(
@@ -490,6 +583,35 @@ export class PersonalMemoryService {
       createdBy: "user",
     });
     return this.updateMemory(userId, id, userAuthoredUpdate);
+  }
+
+  async updateMemoryForExtraction(
+    userId: string,
+    id: string,
+    input: UpdateExtractedPersonalMemoryInput,
+  ): Promise<PersonalMemory | null> {
+    const parsed = updateExtractedMemoryInputSchema.parse(input);
+    const memory = await this.storage.updateMemoryForExtraction(
+      userId,
+      id,
+      parsed,
+    );
+    if (memory) {
+      await this.indexMemory(memory);
+    }
+    return memory;
+  }
+
+  async deleteMemoryForExtraction(
+    userId: string,
+    id: string,
+  ): Promise<boolean> {
+    const memory = await this.storage.findMemoryById(userId, id);
+    if (!memory || memory.createdBy !== "system") return false;
+
+    return this.deleteIndexedMemory(id, () =>
+      this.storage.deleteMemoryForExtraction(userId, id),
+    );
   }
 
   async reindexMemoryForUser(
@@ -605,5 +727,13 @@ export class PersonalMemoryService {
         createdBy: memory.createdBy,
       },
     });
+  }
+
+  private async deleteIndexedMemory(
+    id: string,
+    deleteCanonicalMemory: () => Promise<boolean>,
+  ): Promise<boolean> {
+    await this.vectorIndex?.deleteMemory(id);
+    return deleteCanonicalMemory();
   }
 }

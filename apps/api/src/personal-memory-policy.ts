@@ -35,12 +35,12 @@ export type PersonalMemoryPolicyPort = {
     readonly content: string;
     readonly createdBy: "system";
   }): Promise<PersonalMemory>;
-  updateMemory(
+  updateMemoryForExtraction(
     userId: string,
     id: string,
     input: { readonly content: string },
   ): Promise<PersonalMemory | null>;
-  deleteMemory(userId: string, id: string): Promise<boolean>;
+  deleteMemoryForExtraction(userId: string, id: string): Promise<boolean>;
 };
 
 export function emptyExtractionCounts(): MemoryExtractionCounts {
@@ -128,9 +128,11 @@ export class PersonalMemoryPolicy {
       return false;
     }
 
-    const updated = await this.memory.updateMemory(userId, operation.id, {
-      content: operation.content,
-    });
+    const updated = await this.memory.updateMemoryForExtraction(
+      userId,
+      operation.id,
+      { content: operation.content },
+    );
     return updated !== null;
   }
 
@@ -143,7 +145,7 @@ export class PersonalMemoryPolicy {
       return false;
     }
 
-    return this.memory.deleteMemory(userId, operation.id);
+    return this.memory.deleteMemoryForExtraction(userId, operation.id);
   }
 
   private async findMutableSystemMemory(

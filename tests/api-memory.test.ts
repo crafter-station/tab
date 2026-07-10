@@ -134,6 +134,7 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
   matches: PersonalMemoryVectorMatch[] = [];
   failQueries = false;
   failUpserts = false;
+  failDeletes = false;
 
   async upsertMemory(input: UpsertPersonalMemoryVectorInput): Promise<void> {
     if (this.failUpserts) {
@@ -148,6 +149,9 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
 
   async deleteMemory(id: string): Promise<void> {
     this.deletes.push(id);
+    if (this.failDeletes) {
+      throw new Error("vector delete unavailable");
+    }
   }
 
   async queryMemories(
@@ -232,10 +236,86 @@ async function expectOwnerScopedStorage(storage: PersonalMemoryStorage) {
   expect(await storage.findMemoryById("user-1", memory.id)).toBeNull();
 }
 
+async function expectExtractionScopedStorage(storage: PersonalMemoryStorage) {
+  const updateMemory = await storage.createMemory({
+    userId: "user-1",
+    content: "System update candidate",
+    createdBy: "system",
+  });
+  const deleteMemory = await storage.createMemory({
+    userId: "user-1",
+    content: "System delete candidate",
+    createdBy: "system",
+  });
+  const allowedUpdate = await storage.createMemory({
+    userId: "user-1",
+    content: "Allowed system update",
+    createdBy: "system",
+  });
+  const allowedDelete = await storage.createMemory({
+    userId: "user-1",
+    content: "Allowed system delete",
+    createdBy: "system",
+  });
+
+  expect(
+    await storage.findMemoryById("user-1", updateMemory.id),
+  ).toMatchObject({ createdBy: "system" });
+  expect(
+    await storage.findMemoryById("user-1", deleteMemory.id),
+  ).toMatchObject({ createdBy: "system" });
+  expect(
+    await storage.updateMemoryForExtraction("user-2", updateMemory.id, {
+      content: "Cross-owner overwrite",
+    }),
+  ).toBeNull();
+  expect(
+    await storage.deleteMemoryForExtraction("user-2", deleteMemory.id),
+  ).toBe(false);
+
+  await storage.updateMemory("user-1", updateMemory.id, {
+    createdBy: "user",
+  });
+  await storage.updateMemory("user-1", deleteMemory.id, {
+    createdBy: "user",
+  });
+
+  expect(
+    await storage.updateMemoryForExtraction("user-1", updateMemory.id, {
+      content: "System overwrite",
+    }),
+  ).toBeNull();
+  expect(
+    await storage.deleteMemoryForExtraction("user-1", deleteMemory.id),
+  ).toBe(false);
+  expect(
+    await storage.findMemoryById("user-1", updateMemory.id),
+  ).toMatchObject({ content: "System update candidate", createdBy: "user" });
+  expect(
+    await storage.findMemoryById("user-1", deleteMemory.id),
+  ).toMatchObject({ content: "System delete candidate", createdBy: "user" });
+  expect(
+    await storage.updateMemoryForExtraction("user-1", allowedUpdate.id, {
+      content: "Updated by extraction",
+    }),
+  ).toMatchObject({ content: "Updated by extraction", createdBy: "system" });
+  expect(
+    await storage.deleteMemoryForExtraction("user-1", allowedDelete.id),
+  ).toBe(true);
+  expect(
+    await storage.findMemoryById("user-1", allowedDelete.id),
+  ).toBeNull();
+}
+
 describe("Personal Memory API", () => {
   it("scopes canonical reads and mutations to the owning user in every storage adapter", async () => {
     await expectOwnerScopedStorage(new InMemoryPersonalMemoryStorage());
     await expectOwnerScopedStorage(createD1MemoryStorage());
+  });
+
+  it("atomically protects memories whose authorship changes after an extraction candidate read", async () => {
+    await expectExtractionScopedStorage(new InMemoryPersonalMemoryStorage());
+    await expectExtractionScopedStorage(createD1MemoryStorage());
   });
 
   it("processes synchronous extraction operations and returns final counts", async () => {
@@ -558,6 +638,34 @@ describe("Personal Memory API", () => {
     expect(embeddingService.embeddedTexts).toEqual([]);
     expect(vectorIndex.upserts).toEqual([]);
     expect(vectorIndex.deletes).toEqual([]);
+  });
+
+  it("retains canonical memory when vector deletion fails and deletes it on retry", async () => {
+    const storage = createD1MemoryStorage();
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService: new FakeEmbeddingService(),
+      vectorIndex,
+    });
+    const memory = await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Retryable deletion",
+      createdBy: "user",
+    });
+    vectorIndex.failDeletes = true;
+
+    await expect(
+      personalMemoryService.deleteMemory("user-1", memory.id),
+    ).rejects.toThrow("vector delete unavailable");
+    expect(await storage.findMemoryById("user-1", memory.id)).not.toBeNull();
+
+    vectorIndex.failDeletes = false;
+    await expect(
+      personalMemoryService.deleteMemory("user-1", memory.id),
+    ).resolves.toBe(true);
+    expect(await storage.findMemoryById("user-1", memory.id)).toBeNull();
+    expect(vectorIndex.deletes).toEqual([memory.id, memory.id]);
   });
 
   it("reindexes an existing memory by id from canonical storage and is safe to rerun", async () => {

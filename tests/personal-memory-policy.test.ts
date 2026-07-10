@@ -10,6 +10,8 @@ class FakePersonalMemoryPort implements PersonalMemoryPolicyPort {
   deleted = 0;
   failUpdates = false;
   failDeletes = false;
+  changeAuthorshipBeforeUpdate = false;
+  changeAuthorshipBeforeDelete = false;
 
   async listMemories(userId: string): Promise<PersonalMemory[]> {
     return Array.from(this.memories.values()).filter((memory) => memory.userId === userId);
@@ -42,14 +44,25 @@ class FakePersonalMemoryPort implements PersonalMemoryPolicyPort {
     return memory;
   }
 
-  async updateMemory(
+  async updateMemoryForExtraction(
     userId: string,
     id: string,
     input: { readonly content: string },
   ): Promise<PersonalMemory | null> {
     this.updated += 1;
-    const memory = this.memories.get(id);
-    if (!memory || memory.userId !== userId || this.failUpdates) return null;
+    let memory = this.memories.get(id);
+    if (memory && this.changeAuthorshipBeforeUpdate) {
+      memory = { ...memory, createdBy: "user" };
+      this.memories.set(id, memory);
+    }
+    if (
+      !memory ||
+      memory.userId !== userId ||
+      memory.createdBy !== "system" ||
+      this.failUpdates
+    ) {
+      return null;
+    }
     const updated = {
       ...memory,
       content: input.content,
@@ -59,10 +72,21 @@ class FakePersonalMemoryPort implements PersonalMemoryPolicyPort {
     return updated;
   }
 
-  async deleteMemory(userId: string, id: string): Promise<boolean> {
+  async deleteMemoryForExtraction(userId: string, id: string): Promise<boolean> {
     this.deleted += 1;
-    const memory = this.memories.get(id);
-    if (!memory || memory.userId !== userId || this.failDeletes) return false;
+    let memory = this.memories.get(id);
+    if (memory && this.changeAuthorshipBeforeDelete) {
+      memory = { ...memory, createdBy: "user" };
+      this.memories.set(id, memory);
+    }
+    if (
+      !memory ||
+      memory.userId !== userId ||
+      memory.createdBy !== "system" ||
+      this.failDeletes
+    ) {
+      return false;
+    }
     return this.memories.delete(id);
   }
 }
@@ -125,5 +149,34 @@ describe("Personal Memory policy", () => {
     );
 
     expect(counts).toEqual({ created: 0, updated: 0, deleted: 0, rejected: 2 });
+  });
+
+  it("counts extraction mutations as rejected when authorship changes after the candidate read", async () => {
+    const port = new FakePersonalMemoryPort();
+    port.memories.set(
+      "update-memory",
+      memory("update-memory", "user-1", "system"),
+    );
+    port.memories.set(
+      "delete-memory",
+      memory("delete-memory", "user-1", "system"),
+    );
+    port.changeAuthorshipBeforeUpdate = true;
+    port.changeAuthorshipBeforeDelete = true;
+
+    const counts = await new PersonalMemoryPolicy(port).applyExtractionOperations(
+      "user-1",
+      [
+        { type: "update", id: "update-memory", content: "System overwrite" },
+        { type: "delete", id: "delete-memory", reason: "Contradicted" },
+      ],
+    );
+
+    expect(counts).toEqual({ created: 0, updated: 0, deleted: 0, rejected: 2 });
+    expect(port.memories.get("update-memory")).toMatchObject({
+      content: "system memory",
+      createdBy: "user",
+    });
+    expect(port.memories.get("delete-memory")?.createdBy).toBe("user");
   });
 });
