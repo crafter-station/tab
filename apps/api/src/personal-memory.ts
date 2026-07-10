@@ -4,7 +4,7 @@ import {
   type PersonalMemory,
   type PersonalMemoryCreatedBy,
 } from "@tab/contracts";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";
 import { personalMemories } from "./db/schema.ts";
@@ -27,12 +27,13 @@ export type UpdatePersonalMemoryInput = {
 export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
-  findMemoryById(id: string): Promise<PersonalMemory | null>;
+  findMemoryById(userId: string, id: string): Promise<PersonalMemory | null>;
   updateMemory(
+    userId: string,
     id: string,
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null>;
-  deleteMemory(id: string): Promise<boolean>;
+  deleteMemory(userId: string, id: string): Promise<boolean>;
 }
 
 export type PersonalMemoryVectorMetadata = {
@@ -193,16 +194,21 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
       .sort(compareMemoriesByNewestUpdate);
   }
 
-  async findMemoryById(id: string): Promise<PersonalMemory | null> {
-    return this.memories.get(id) ?? null;
+  async findMemoryById(
+    userId: string,
+    id: string,
+  ): Promise<PersonalMemory | null> {
+    const memory = this.memories.get(id);
+    return memory?.userId === userId ? memory : null;
   }
 
   async updateMemory(
+    userId: string,
     id: string,
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
     const existing = this.memories.get(id);
-    if (!existing) return null;
+    if (!existing || existing.userId !== userId) return null;
 
     const updated: PersonalMemory = {
       ...existing,
@@ -214,7 +220,9 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     return updated;
   }
 
-  async deleteMemory(id: string): Promise<boolean> {
+  async deleteMemory(userId: string, id: string): Promise<boolean> {
+    const existing = this.memories.get(id);
+    if (!existing || existing.userId !== userId) return false;
     return this.memories.delete(id);
   }
 }
@@ -265,45 +273,52 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     return rows.map(rowToMemory);
   }
 
-  async findMemoryById(id: string): Promise<PersonalMemory | null> {
+  async findMemoryById(
+    userId: string,
+    id: string,
+  ): Promise<PersonalMemory | null> {
     const row = await this.db.query.personalMemories.findFirst({
-      where: eq(personalMemories.id, id),
+      where: and(
+        eq(personalMemories.userId, userId),
+        eq(personalMemories.id, id),
+      ),
     });
     return row ? rowToMemory(row) : null;
   }
 
   async updateMemory(
+    userId: string,
     id: string,
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
-    const existing = await this.findMemoryById(id);
-    if (!existing) return null;
-
-    const content = input.content ?? existing.content;
-    const createdBy = input.createdBy ?? existing.createdBy;
     const updatedAt = toISOTimestamp(new Date());
-
-    await this.db
+    const rows = await this.db
       .update(personalMemories)
       .set({
-        content,
-        createdBy,
+        ...(input.content !== undefined && { content: input.content }),
+        ...(input.createdBy !== undefined && { createdBy: input.createdBy }),
         updatedAt,
       })
-      .where(eq(personalMemories.id, id));
+      .where(
+        and(
+          eq(personalMemories.userId, userId),
+          eq(personalMemories.id, id),
+        ),
+      )
+      .returning();
 
-    return {
-      ...existing,
-      content,
-      createdBy,
-      updatedAt,
-    };
+    return rows[0] ? rowToMemory(rows[0]) : null;
   }
 
-  async deleteMemory(id: string): Promise<boolean> {
+  async deleteMemory(userId: string, id: string): Promise<boolean> {
     const result = await this.db
       .delete(personalMemories)
-      .where(eq(personalMemories.id, id))
+      .where(
+        and(
+          eq(personalMemories.userId, userId),
+          eq(personalMemories.id, id),
+        ),
+      )
       .returning();
     return result.length > 0;
   }
@@ -437,16 +452,15 @@ export class PersonalMemoryService {
     return this.storage.listMemoriesByUser(userId);
   }
 
-  async findMemoryById(id: string): Promise<PersonalMemory | null> {
-    return this.storage.findMemoryById(id);
+  async findMemoryById(
+    userId: string,
+    id: string,
+  ): Promise<PersonalMemory | null> {
+    return this.storage.findMemoryById(userId, id);
   }
 
   async deleteMemory(userId: string, id: string): Promise<boolean> {
-    const memory = await this.storage.findMemoryById(id);
-    if (!memory || memory.userId !== userId) {
-      return false;
-    }
-    const deleted = await this.storage.deleteMemory(id);
+    const deleted = await this.storage.deleteMemory(userId, id);
     if (deleted) {
       await this.vectorIndex?.deleteMemory(id);
     }
@@ -454,11 +468,12 @@ export class PersonalMemoryService {
   }
 
   async updateMemory(
+    userId: string,
     id: string,
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
     const parsed = updateMemoryInputSchema.parse(input);
-    const memory = await this.storage.updateMemory(id, parsed);
+    const memory = await this.storage.updateMemory(userId, id, parsed);
     if (memory) {
       await this.indexMemory(memory);
     }
@@ -470,26 +485,19 @@ export class PersonalMemoryService {
     id: string,
     input: { readonly content: string },
   ): Promise<PersonalMemory | null> {
-    const memory = await this.storage.findMemoryById(id);
-    if (!memory || memory.userId !== userId) {
-      return null;
-    }
-
     const userAuthoredUpdate = updateMemoryInputSchema.parse({
       content: input.content,
       createdBy: "user",
     });
-    return this.updateMemory(id, userAuthoredUpdate);
+    return this.updateMemory(userId, id, userAuthoredUpdate);
   }
 
   async reindexMemoryForUser(
     userId: string,
     id: string,
   ): Promise<PersonalMemory | null> {
-    const memory = await this.storage.findMemoryById(id);
-    if (!memory || memory.userId !== userId) {
-      return null;
-    }
+    const memory = await this.storage.findMemoryById(userId, id);
+    if (!memory) return null;
 
     await this.indexMemory(memory);
     return memory;
@@ -576,8 +584,8 @@ export class PersonalMemoryService {
 
     for (const match of matches) {
       if (memories.length >= this.maxRelevantMemories) break;
-      const memory = await this.storage.findMemoryById(match.id);
-      if (memory?.userId === input.userId) {
+      const memory = await this.storage.findMemoryById(input.userId, match.id);
+      if (memory) {
         memories.push(memory);
       }
     }

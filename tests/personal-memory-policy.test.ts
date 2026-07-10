@@ -8,13 +8,19 @@ class FakePersonalMemoryPort implements PersonalMemoryPolicyPort {
   created = 0;
   updated = 0;
   deleted = 0;
+  failUpdates = false;
+  failDeletes = false;
 
   async listMemories(userId: string): Promise<PersonalMemory[]> {
     return Array.from(this.memories.values()).filter((memory) => memory.userId === userId);
   }
 
-  async findMemoryById(id: string): Promise<PersonalMemory | null> {
-    return this.memories.get(id) ?? null;
+  async findMemoryById(
+    userId: string,
+    id: string,
+  ): Promise<PersonalMemory | null> {
+    const memory = this.memories.get(id);
+    return memory?.userId === userId ? memory : null;
   }
 
   async createMemory(input: {
@@ -36,17 +42,27 @@ class FakePersonalMemoryPort implements PersonalMemoryPolicyPort {
     return memory;
   }
 
-  async updateMemory(id: string, input: { readonly content: string }): Promise<PersonalMemory | null> {
+  async updateMemory(
+    userId: string,
+    id: string,
+    input: { readonly content: string },
+  ): Promise<PersonalMemory | null> {
     this.updated += 1;
     const memory = this.memories.get(id);
-    if (!memory) return null;
-    const updated = { ...memory, content: input.content, updatedAt: new Date().toISOString() };
+    if (!memory || memory.userId !== userId || this.failUpdates) return null;
+    const updated = {
+      ...memory,
+      content: input.content,
+      updatedAt: new Date().toISOString(),
+    };
     this.memories.set(id, updated);
     return updated;
   }
 
-  async deleteMemory(_userId: string, id: string): Promise<boolean> {
+  async deleteMemory(userId: string, id: string): Promise<boolean> {
     this.deleted += 1;
+    const memory = this.memories.get(id);
+    if (!memory || memory.userId !== userId || this.failDeletes) return false;
     return this.memories.delete(id);
   }
 }
@@ -85,5 +101,29 @@ describe("Personal Memory policy", () => {
     expect(port.deleted).toBe(1);
     expect(port.memories.get("user-memory")?.content).toBe("user memory");
     expect(port.memories.has("system-memory")).toBe(false);
+  });
+
+  it("rejects scoped mutations that no longer apply", async () => {
+    const port = new FakePersonalMemoryPort();
+    port.memories.set(
+      "update-memory",
+      memory("update-memory", "user-1", "system"),
+    );
+    port.memories.set(
+      "delete-memory",
+      memory("delete-memory", "user-1", "system"),
+    );
+    port.failUpdates = true;
+    port.failDeletes = true;
+
+    const counts = await new PersonalMemoryPolicy(port).applyExtractionOperations(
+      "user-1",
+      [
+        { type: "update", id: "update-memory", content: "Updated content" },
+        { type: "delete", id: "delete-memory", reason: "Contradicted" },
+      ],
+    );
+
+    expect(counts).toEqual({ created: 0, updated: 0, deleted: 0, rejected: 2 });
   });
 });

@@ -747,7 +747,9 @@ describe("Web account surface", () => {
     expect(unconfirmedDeleteResponse.headers.get("location")).toBe(
       "/dashboard/memories",
     );
-    expect(await personalMemoryStorage.findMemoryById(memory.id)).toBeTruthy();
+    expect(
+      await personalMemoryStorage.findMemoryById(memory.userId, memory.id),
+    ).toBeTruthy();
 
     const deleteForm = new FormData();
     deleteForm.set("confirm", "delete-memory");
@@ -814,7 +816,10 @@ describe("Web account surface", () => {
       "/dashboard/memories",
     );
 
-    const editedMemory = await personalMemoryStorage.findMemoryById(systemMemory.id);
+    const editedMemory = await personalMemoryStorage.findMemoryById(
+      systemMemory.userId,
+      systemMemory.id,
+    );
     expect(editedMemory?.content).toBe("Works at Acme Robotics");
     expect(editedMemory?.createdBy).toBe("user");
 
@@ -865,9 +870,24 @@ describe("Web account surface", () => {
     expect(deleteSelectedResponse.headers.get("location")).toBe(
       "/dashboard/memories",
     );
-    expect(await personalMemoryStorage.findMemoryById(firstMemory.id)).toBeNull();
-    expect(await personalMemoryStorage.findMemoryById(secondMemory.id)).toBeNull();
-    expect(await personalMemoryStorage.findMemoryById(remainingMemory.id)).toBeTruthy();
+    expect(
+      await personalMemoryStorage.findMemoryById(
+        firstMemory.userId,
+        firstMemory.id,
+      ),
+    ).toBeNull();
+    expect(
+      await personalMemoryStorage.findMemoryById(
+        secondMemory.userId,
+        secondMemory.id,
+      ),
+    ).toBeNull();
+    expect(
+      await personalMemoryStorage.findMemoryById(
+        remainingMemory.userId,
+        remainingMemory.id,
+      ),
+    ).toBeTruthy();
   });
 
   it("lists and revokes native devices from the account surface", async () => {

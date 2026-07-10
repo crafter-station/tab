@@ -7,6 +7,7 @@ import {
   D1PersonalMemoryStorage,
   InMemoryPersonalMemoryStorage,
   PersonalMemoryService,
+  type PersonalMemoryStorage,
   type QueryPersonalMemoryVectorsInput,
   type PersonalMemoryEmbeddingService,
   type PersonalMemoryVectorIndex,
@@ -190,7 +191,53 @@ function extractionModel(
   };
 }
 
+function createD1MemoryStorage(): D1PersonalMemoryStorage {
+  const sqlite = new Database(":memory:");
+  sqlite.exec(`
+    CREATE TABLE personal_memories (
+      id text PRIMARY KEY NOT NULL,
+      user_id text NOT NULL,
+      content text NOT NULL,
+      created_by text DEFAULT 'system' NOT NULL,
+      created_at text NOT NULL,
+      updated_at text NOT NULL
+    );
+    CREATE INDEX idx_personal_memories_user ON personal_memories (user_id);
+  `);
+  return new D1PersonalMemoryStorage(createTestDatabase(sqlite));
+}
+
+async function expectOwnerScopedStorage(storage: PersonalMemoryStorage) {
+  const memory = await storage.createMemory({
+    userId: "user-1",
+    content: "Owner-scoped memory",
+    createdBy: "system",
+  });
+
+  expect(await storage.findMemoryById("user-2", memory.id)).toBeNull();
+  expect(
+    await storage.updateMemory("user-2", memory.id, {
+      content: "Cross-user edit",
+    }),
+  ).toBeNull();
+  expect(await storage.deleteMemory("user-2", memory.id)).toBe(false);
+  expect(await storage.findMemoryById("user-1", memory.id)).toMatchObject({
+    content: "Owner-scoped memory",
+  });
+
+  expect(
+    await storage.updateMemory("user-1", memory.id, { content: "Owner edit" }),
+  ).toMatchObject({ content: "Owner edit" });
+  expect(await storage.deleteMemory("user-1", memory.id)).toBe(true);
+  expect(await storage.findMemoryById("user-1", memory.id)).toBeNull();
+}
+
 describe("Personal Memory API", () => {
+  it("scopes canonical reads and mutations to the owning user in every storage adapter", async () => {
+    await expectOwnerScopedStorage(new InMemoryPersonalMemoryStorage());
+    await expectOwnerScopedStorage(createD1MemoryStorage());
+  });
+
   it("processes synchronous extraction operations and returns final counts", async () => {
     const embeddingService = new FakeEmbeddingService();
     const vectorIndex = new FakeVectorIndex();
@@ -237,10 +284,12 @@ describe("Personal Memory API", () => {
       status: "ok",
       data: { counts: { created: 1, updated: 1, deleted: 1, rejected: 0 } },
     });
-    expect(await personalMemoryStorage.findMemoryById(deleted.id)).toBeNull();
-    expect((await personalMemoryStorage.findMemoryById(updated.id))?.content).toBe(
-      "Works on Tab launch planning",
-    );
+    expect(
+      await personalMemoryStorage.findMemoryById("user-1", deleted.id),
+    ).toBeNull();
+    expect(
+      (await personalMemoryStorage.findMemoryById("user-1", updated.id))?.content,
+    ).toBe("Works on Tab launch planning");
     expect(vectorIndex.queries).toHaveLength(1);
     expect(embeddingService.embeddedTexts[0]).toBe(
       "I now use the new launch plan.",
@@ -313,11 +362,15 @@ describe("Personal Memory API", () => {
       status: "ok",
       data: { counts: { created: 0, updated: 0, deleted: 0, rejected: 4 } },
     });
-    expect(await personalMemoryStorage.findMemoryById(userMemory.id)).toMatchObject({
+    expect(
+      await personalMemoryStorage.findMemoryById("user-1", userMemory.id),
+    ).toMatchObject({
       content: "User-authored fact",
       createdBy: "user",
     });
-    expect(await personalMemoryStorage.findMemoryById(systemMemory.id)).toMatchObject({
+    expect(
+      await personalMemoryStorage.findMemoryById("user-1", systemMemory.id),
+    ).toMatchObject({
       content: "System-authored fact",
     });
   });
@@ -478,6 +531,35 @@ describe("Personal Memory API", () => {
     ]);
   });
 
+  it("does not touch the vector index when a scoped mutation does not apply", async () => {
+    const storage = new InMemoryPersonalMemoryStorage();
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService,
+      vectorIndex,
+    });
+    const memory = await storage.createMemory({
+      userId: "user-1",
+      content: "Private owner memory",
+      createdBy: "system",
+    });
+
+    await expect(
+      personalMemoryService.updateMemory("user-2", memory.id, {
+        content: "Cross-user edit",
+      }),
+    ).resolves.toBeNull();
+    await expect(
+      personalMemoryService.deleteMemory("user-2", memory.id),
+    ).resolves.toBe(false);
+
+    expect(embeddingService.embeddedTexts).toEqual([]);
+    expect(vectorIndex.upserts).toEqual([]);
+    expect(vectorIndex.deletes).toEqual([]);
+  });
+
   it("reindexes an existing memory by id from canonical storage and is safe to rerun", async () => {
     const content = "Acme prefers Friday status updates";
     const embeddingService = new FakeEmbeddingService();
@@ -574,7 +656,7 @@ describe("Personal Memory API", () => {
       createdBy: "system",
     });
     await new Promise((resolve) => setTimeout(resolve, 1));
-    await personalMemoryStorage.updateMemory(older.id, {
+    await personalMemoryStorage.updateMemory("user-1", older.id, {
       content: "Updated older memory",
     });
 
@@ -635,7 +717,10 @@ describe("Personal Memory API", () => {
     expect(body.data.memory.content).toBe("Works at Acme Robotics");
     expect(body.data.memory.createdBy).toBe("user");
 
-    const stored = await personalMemoryStorage.findMemoryById(memory.id);
+    const stored = await personalMemoryStorage.findMemoryById(
+      "user-1",
+      memory.id,
+    );
     expect(stored?.createdBy).toBe("user");
   });
 
@@ -704,7 +789,9 @@ describe("Personal Memory API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(await personalMemoryStorage.findMemoryById(memory.id)).toBeNull();
+    expect(
+      await personalMemoryStorage.findMemoryById("user-1", memory.id),
+    ).toBeNull();
   });
 
   it("rejects deletion of another user's memory", async () => {
@@ -1015,7 +1102,7 @@ describe("Personal Memory API", () => {
       content: "Acme Corp is a customer",
       createdBy: "system",
     });
-    await personalMemoryStorage.deleteMemory(memory.id);
+    await personalMemoryStorage.deleteMemory("user-1", memory.id);
 
     const response = await app.request("/suggestions", {
       method: "POST",

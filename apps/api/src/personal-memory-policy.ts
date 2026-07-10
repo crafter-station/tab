@@ -29,13 +29,14 @@ export type ProposedMemoryOperation =
 
 export type PersonalMemoryPolicyPort = {
   listMemories(userId: string): Promise<PersonalMemory[]>;
-  findMemoryById(id: string): Promise<PersonalMemory | null>;
+  findMemoryById(userId: string, id: string): Promise<PersonalMemory | null>;
   createMemory(input: {
     readonly userId: string;
     readonly content: string;
     readonly createdBy: "system";
   }): Promise<PersonalMemory>;
   updateMemory(
+    userId: string,
     id: string,
     input: { readonly content: string },
   ): Promise<PersonalMemory | null>;
@@ -127,10 +128,10 @@ export class PersonalMemoryPolicy {
       return false;
     }
 
-    await this.memory.updateMemory(operation.id, {
+    const updated = await this.memory.updateMemory(userId, operation.id, {
       content: operation.content,
     });
-    return true;
+    return updated !== null;
   }
 
   private async applyDeleteOperation(
@@ -142,16 +143,15 @@ export class PersonalMemoryPolicy {
       return false;
     }
 
-    await this.memory.deleteMemory(userId, operation.id);
-    return true;
+    return this.memory.deleteMemory(userId, operation.id);
   }
 
   private async findMutableSystemMemory(
     userId: string,
     memoryId: string,
   ): Promise<PersonalMemory | null> {
-    const memory = await this.memory.findMemoryById(memoryId);
-    if (!memory || memory.userId !== userId || memory.createdBy !== "system") {
+    const memory = await this.memory.findMemoryById(userId, memoryId);
+    if (!memory || memory.createdBy !== "system") {
       return null;
     }
     return memory;
