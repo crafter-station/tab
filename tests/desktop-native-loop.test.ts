@@ -706,6 +706,81 @@ describe("desktop native suggestion loop", () => {
       expect(events.find((event) => event.type === "show")?.payload).toEqual({ id: "s-1", text: " world" });
     });
 
+    it("withholds stale debounced cloud responses even when the source ignores abort", async () => {
+      let context = "hello";
+      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
+      const { events, deps } = makeDeps({
+        getContext: () => makeSnapshot({ context }),
+        requestSuggestion: () => new Promise((resolve) => {
+          resolves.push(resolve);
+        }),
+      });
+      const loop = createSuggestionLoop(deps);
+
+      loop.onContextChanged();
+      await wait(10);
+      context = "hello again";
+      loop.onContextChanged();
+      resolves[0]?.({ id: "stale", text: " world" });
+      await wait(1);
+
+      expect(events.filter((event) => event.type === "show")).toHaveLength(0);
+      loop.invalidate();
+    });
+
+    it("withholds stale explicit cloud responses for every Typing Context identity change", async () => {
+      const textSession = (caretIdentity: string): TextSessionSnapshot => ({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 5, length: 0 },
+        caretIdentity,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        supportsSemanticInsertion: true,
+        surroundingContext: { beforeCaret: "hello", afterCaret: "" },
+      });
+      const cases: Array<[string, SafeTypingContextSnapshot, SafeTypingContextSnapshot]> = [
+        ["text", makeSnapshot({ context: "hello" }), makeSnapshot({ context: "hello again" })],
+        [
+          "active application",
+          makeSnapshot({ activeApplication: { bundleId: "com.apple.TextEdit" } }),
+          makeSnapshot({ activeApplication: { bundleId: "com.apple.Notes" } }),
+        ],
+        [
+          "active window",
+          makeSnapshot({ activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" } }),
+          makeSnapshot({ activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:2" } }),
+        ],
+        [
+          "Text Session",
+          createSafeTextSessionSnapshot(textSession("caret:1")),
+          createSafeTextSessionSnapshot(textSession("caret:2")),
+        ],
+      ];
+
+      for (const [identity, initial, changed] of cases) {
+        let snapshot = initial;
+        let resolveRequest: ((suggestion: Suggestion | null) => void) | undefined;
+        const { events, deps } = makeDeps({
+          getContext: () => snapshot,
+          requestSuggestion: () => new Promise((resolve) => {
+            resolveRequest = resolve;
+          }),
+        });
+        const loop = createSuggestionLoop(deps);
+
+        const request = loop.requestCloudSuggestionNow();
+        snapshot = changed;
+        loop.onContextChanged();
+        resolveRequest?.({ id: `stale-${identity}`, text: " world" });
+        await request;
+
+        expect(events.filter((event) => event.type === "show"), identity).toHaveLength(0);
+        loop.invalidate();
+      }
+    });
+
     it("aborts stale cloud requests when context changes", async () => {
       let context = "hello";
       const signals: AbortSignal[] = [];
