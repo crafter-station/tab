@@ -1,11 +1,11 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { existsSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { getPlatformProxy } from "wrangler";
+import type { D1Database } from "@cloudflare/workers-types";
 import { ApiResponseSchema } from "../packages/contracts/src/index.ts";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
+import { createDatabase } from "../apps/api/src/db/index.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import {
   BillingService,
@@ -447,87 +447,54 @@ describe("Billing and quota enforcement", () => {
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
   });
 
-  it("stores entitlements and usage in D1-compatible storage", async () => {
-    const databasePath = join(
-      tmpdir(),
-      `tab-billing-${crypto.randomUUID()}.sqlite`,
-    );
-    const firstConnection = new Database(databasePath, { create: true });
-    const secondConnection = new Database(databasePath);
+  it("stores entitlements and atomically consumes usage in local D1", async () => {
+    const platform = await getPlatformProxy<{ DB: D1Database }>({
+      configPath: "wrangler.jsonc",
+      persist: false,
+      remoteBindings: false,
+    });
 
     try {
-      bootstrapBillingTestSchema(firstConnection);
-      insertBillingTestUser(firstConnection, "user-d1");
-      const firstStorage = new D1BillingStorage(
-        createTestDatabase(firstConnection),
+      await platform.env.DB.batch(
+        billingTestSchemaStatements.map((statement) =>
+          platform.env.DB.prepare(statement),
+        ),
       );
-      const secondStorage = new D1BillingStorage(
-        createTestDatabase(secondConnection),
-      );
+      const now = Date.now();
+      await platform.env.DB.prepare(
+        "INSERT INTO user (id, name, email, email_verified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+      )
+        .bind("user-d1", "Test User", "user-d1@example.com", 1, now, now)
+        .run();
+      const storage = new D1BillingStorage(createDatabase(platform.env.DB));
 
-      await firstStorage.setEntitlement({
+      await storage.setEntitlement({
         userId: "user-d1",
         planId: "max",
         status: "active",
         cachedAt: new Date(),
       });
 
-      const entitlement = await secondStorage.getEntitlement("user-d1");
+      const entitlement = await storage.getEntitlement("user-d1");
       expect(entitlement?.planId).toBe("max");
 
-      const first = await firstStorage.consumeUsageWithinLimit(
+      const first = await storage.consumeUsageWithinLimit(
         "user-d1",
         currentMonth(),
         2,
       );
-      const startPath = `${databasePath}.start`;
-      const readyPaths = [
-        `${databasePath}.ready-1`,
-        `${databasePath}.ready-2`,
-      ];
-      const consumers = readyPaths.map((readyPath) =>
-        Bun.spawn(
-          [
-            "bun",
-            "tests/fixtures/consume-d1-quota.ts",
-            databasePath,
-            readyPath,
-            startPath,
-            currentMonth(),
-            "2",
-          ],
-          { stdout: "pipe", stderr: "pipe" },
-        ),
-      );
-      while (!readyPaths.every(existsSync)) {
-        await Bun.sleep(1);
-      }
-      await Bun.write(startPath, "start");
-      const contenderOutputs = await Promise.all(
-        consumers.map(async (consumer) => {
-          const [exitCode, stdout, stderr] = await Promise.all([
-            consumer.exited,
-            new Response(consumer.stdout).text(),
-            new Response(consumer.stderr).text(),
-          ]);
-          expect(stderr).toBe("");
-          expect(exitCode).toBe(0);
-          return JSON.parse(stdout.trim()) as number | null;
-        }),
-      );
+      const contenders = await Promise.all([
+        storage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
+        storage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
+      ]);
       expect(first).toBe(1);
-      expect(contenderOutputs).toContain(2);
-      expect(contenderOutputs).toContain(null);
+      expect(contenders).toContain(2);
+      expect(contenders).toContain(null);
 
-      const usage = await secondStorage.getUsage("user-d1", currentMonth());
+      const usage = await storage.getUsage("user-d1", currentMonth());
       expect(usage).toBe(2);
-
-      rmSync(startPath, { force: true });
-      for (const readyPath of readyPaths) rmSync(readyPath, { force: true });
     } finally {
-      firstConnection.close();
-      secondConnection.close();
-      rmSync(databasePath, { force: true });
+      await platform.dispose();
     }
   });
 
@@ -602,11 +569,8 @@ describe("PolarUsageMeterClient", () => {
   });
 });
 
-function bootstrapBillingTestSchema(db: Database): void {
-  db.exec(`
-    PRAGMA foreign_keys = ON;
-
-    CREATE TABLE user (
+const billingTestSchemaStatements = [
+  `CREATE TABLE user (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT NOT NULL UNIQUE,
@@ -614,9 +578,8 @@ function bootstrapBillingTestSchema(db: Database): void {
       image TEXT,
       created_at INTEGER NOT NULL,
       updated_at INTEGER NOT NULL
-    );
-
-    CREATE TABLE user_entitlements (
+    )`,
+  `CREATE TABLE user_entitlements (
       user_id TEXT PRIMARY KEY,
       plan_id TEXT NOT NULL,
       polar_customer_id TEXT,
@@ -625,17 +588,24 @@ function bootstrapBillingTestSchema(db: Database): void {
       current_period_end TEXT,
       cached_at TEXT NOT NULL,
       FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
-    );
-
-    CREATE TABLE usage_records (
+    )`,
+  `CREATE TABLE usage_records (
       user_id TEXT NOT NULL,
       month TEXT NOT NULL,
       count INTEGER NOT NULL DEFAULT 0,
       updated_at TEXT NOT NULL,
       PRIMARY KEY (user_id, month),
       FOREIGN KEY (user_id) REFERENCES user(id) ON DELETE CASCADE
-    );
-  `);
+    )`,
+];
+
+const billingTestSchemaSql = `
+  PRAGMA foreign_keys = ON;
+  ${billingTestSchemaStatements.join(";\n")};
+`;
+
+function bootstrapBillingTestSchema(db: Database): void {
+  db.exec(billingTestSchemaSql);
 }
 
 function insertBillingTestUser(db: Database, userId: string): void {
