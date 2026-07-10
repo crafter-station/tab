@@ -28,7 +28,7 @@ import {
 } from "./app-context.ts";
 import { createAppContextExtractor, type AppContextAccessibilityTree } from "./app-context-extractor.ts";
 import { createDesktopEventIngress } from "./desktop-event-ingress.ts";
-import { createDesktopAuthClient } from "./auth.ts";
+import { createDesktopAuthClient, createDesktopAuthSession } from "./auth.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
 import { createDesktopMemoryClient } from "./memory-client.ts";
@@ -168,8 +168,11 @@ const memoryExtractionDispatcher = createMemoryExtractionDispatcher({
 });
 
 let updateAvailable = false;
-let consecutiveAuthFailures = 0;
-const MAX_CONSECUTIVE_AUTH_FAILURES = 3;
+
+const authSession = createDesktopAuthSession({
+  authClient,
+  onSignedOut: showSignedOutSurface,
+});
 
 const updateChecker = createUpdateChecker({
   currentVersion: APP_VERSION,
@@ -187,59 +190,7 @@ const statusService = createDesktopStatusService({
     settingsWindowManager.sendStatus(status);
     onboardingWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
-
-    if (status.auth === "signed_in") {
-      if (consecutiveAuthFailures > 0) {
-        console.log(`Auth recovered after ${consecutiveAuthFailures} transient failure(s).`);
-        consecutiveAuthFailures = 0;
-      }
-      return;
-    }
-
-    if (status.auth === "revoked_device") {
-      consecutiveAuthFailures = 0;
-      console.warn("Device token revoked by server; signing out.");
-      authClient
-        .isAuthenticated()
-        .then((authenticated) => {
-          if (authenticated) {
-            return authClient.clearToken().then(() => showSignedOutSurface());
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to clear revoked device token:", error);
-        });
-      return;
-    }
-
-    if (status.auth === "sign_in_required") {
-      authClient
-        .isAuthenticated()
-        .then((authenticated) => {
-          if (!authenticated) {
-            consecutiveAuthFailures = 0;
-            return;
-          }
-
-          consecutiveAuthFailures += 1;
-          console.warn(
-            `Server reported sign-in required (failure ${consecutiveAuthFailures}/${MAX_CONSECUTIVE_AUTH_FAILURES}).`,
-          );
-
-          if (consecutiveAuthFailures < MAX_CONSECUTIVE_AUTH_FAILURES) {
-            return;
-          }
-
-          console.error("Clearing device token after repeated sign-in-required responses.");
-          return authClient.clearToken().then(() => {
-            consecutiveAuthFailures = 0;
-            showSignedOutSurface();
-          });
-        })
-        .catch((error) => {
-          console.error("Failed to handle sign-in-required status:", error);
-        });
-    }
+    void authSession.handleStatus(status.auth);
   },
 });
 

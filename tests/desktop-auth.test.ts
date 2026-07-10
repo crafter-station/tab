@@ -6,7 +6,10 @@ import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
-import { createDesktopAuthClient } from "../apps/desktop/src/main/auth.ts";
+import {
+  createDesktopAuthClient,
+  createDesktopAuthSession,
+} from "../apps/desktop/src/main/auth.ts";
 import { createMemoryKeychain } from "../apps/desktop/src/main/keychain.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
 import {
@@ -239,5 +242,83 @@ describe("desktop auth client", () => {
 
     expect(await client.isAuthenticated()).toBe(false);
     expect(await client.getAuthorizationHeader()).toBeNull();
+  });
+});
+
+describe("desktop auth session", () => {
+  function createFixture(authenticated = true) {
+    let hasToken = authenticated;
+    let clearCount = 0;
+    let signedOutCount = 0;
+    const session = createDesktopAuthSession({
+      authClient: {
+        isAuthenticated: async () => hasToken,
+        clearToken: async () => {
+          hasToken = false;
+          clearCount += 1;
+        },
+      },
+      onSignedOut: () => {
+        signedOutCount += 1;
+      },
+    });
+
+    return {
+      session,
+      setAuthenticated(value: boolean) {
+        hasToken = value;
+      },
+      get clearCount() {
+        return clearCount;
+      },
+      get signedOutCount() {
+        return signedOutCount;
+      },
+    };
+  }
+
+  it("clears a present credential immediately when the device is revoked", async () => {
+    const fixture = createFixture();
+
+    await fixture.session.handleStatus("revoked_device");
+
+    expect(fixture.clearCount).toBe(1);
+    expect(fixture.signedOutCount).toBe(1);
+  });
+
+  it("clears a credential after three consecutive sign-in-required statuses", async () => {
+    const fixture = createFixture();
+
+    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required");
+    expect(fixture.clearCount).toBe(0);
+
+    await fixture.session.handleStatus("sign_in_required");
+
+    expect(fixture.clearCount).toBe(1);
+    expect(fixture.signedOutCount).toBe(1);
+  });
+
+  it("resets consecutive failures when authentication recovers", async () => {
+    const fixture = createFixture();
+
+    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("signed_in");
+    await fixture.session.handleStatus("sign_in_required");
+
+    expect(fixture.clearCount).toBe(0);
+  });
+
+  it("does not count sign-in-required statuses without a stored credential", async () => {
+    const fixture = createFixture(false);
+
+    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required");
+    fixture.setAuthenticated(true);
+    await fixture.session.handleStatus("sign_in_required");
+    await fixture.session.handleStatus("sign_in_required");
+
+    expect(fixture.clearCount).toBe(0);
   });
 });

@@ -3,6 +3,7 @@ import {
   type DeviceTokenExchangeRequest,
 } from "@tab/contracts";
 import type { Keychain } from "./keychain.ts";
+import type { DesktopAuthStatus } from "./status.ts";
 
 const TOKEN_SERVICE = "tab";
 const TOKEN_ACCOUNT = "device-token";
@@ -105,3 +106,62 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
 }
 
 export type DesktopAuthClient = ReturnType<typeof createDesktopAuthClient>;
+
+export type DesktopAuthSessionDependencies = {
+  authClient: Pick<DesktopAuthClient, "clearToken" | "isAuthenticated">;
+  onSignedOut(): void;
+};
+
+export function createDesktopAuthSession(deps: DesktopAuthSessionDependencies) {
+  let consecutiveAuthFailures = 0;
+  const maxConsecutiveAuthFailures = 3;
+
+  async function handleStatus(status: DesktopAuthStatus): Promise<void> {
+    if (status === "signed_in") {
+      if (consecutiveAuthFailures > 0) {
+        console.log(`Auth recovered after ${consecutiveAuthFailures} transient failure(s).`);
+        consecutiveAuthFailures = 0;
+      }
+      return;
+    }
+
+    if (status === "revoked_device") {
+      consecutiveAuthFailures = 0;
+      console.warn("Device token revoked by server; signing out.");
+      try {
+        if (await deps.authClient.isAuthenticated()) {
+          await deps.authClient.clearToken();
+          deps.onSignedOut();
+        }
+      } catch (error) {
+        console.error("Failed to clear revoked device token:", error);
+      }
+      return;
+    }
+
+    try {
+      if (!(await deps.authClient.isAuthenticated())) {
+        consecutiveAuthFailures = 0;
+        return;
+      }
+
+      consecutiveAuthFailures += 1;
+      console.warn(
+        `Server reported sign-in required (failure ${consecutiveAuthFailures}/${maxConsecutiveAuthFailures}).`,
+      );
+
+      if (consecutiveAuthFailures < maxConsecutiveAuthFailures) return;
+
+      console.error("Clearing device token after repeated sign-in-required responses.");
+      await deps.authClient.clearToken();
+      consecutiveAuthFailures = 0;
+      deps.onSignedOut();
+    } catch (error) {
+      console.error("Failed to handle sign-in-required status:", error);
+    }
+  }
+
+  return { handleStatus };
+}
+
+export type DesktopAuthSession = ReturnType<typeof createDesktopAuthSession>;
