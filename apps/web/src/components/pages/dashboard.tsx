@@ -141,8 +141,8 @@ function DashboardMetric({
 }) {
   return (
     <div className="min-w-0 py-5 sm:px-5 sm:first:pl-0 sm:last:pr-0">
-      <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</p>
-      <p className="mt-2 flex min-w-0 items-center gap-2 text-xl font-bold tracking-[-0.02em] text-foreground">
+      <p className="text-xs font-semibold uppercase text-muted-foreground">{label}</p>
+      <p className="mt-2 flex min-w-0 items-center gap-2 text-xl font-bold text-foreground">
         {tone ? <span className={`size-2 shrink-0 rounded-full ${metricToneClasses[tone]}`} aria-hidden="true" /> : null}
         <span className="min-w-0">{value}</span>
       </p>
@@ -313,7 +313,7 @@ export function DashboardAccountPage({ data }: { data: DashboardData }) {
     <section className="border-y border-border">
       <div className="flex flex-col gap-5 py-6 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Signed-in account</p>
+          <p className="text-xs font-semibold uppercase text-muted-foreground">Signed-in account</p>
           <p className="mt-2 truncate text-lg font-semibold text-foreground">{accountName}</p>
         </div>
         <form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>
@@ -342,7 +342,7 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
       <section className="grid gap-5 border-y border-border py-6">
         <div className="flex items-center justify-between gap-4">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Current plan</p>
+            <p className="text-xs font-semibold uppercase text-muted-foreground">Current plan</p>
             <p className="mt-2 text-xl font-bold">{formatPlanName(quota.planId)}</p>
           </div>
           <p className="flex items-center gap-2 text-sm font-semibold">
@@ -363,7 +363,7 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
       <section>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <h2 className="text-xl font-bold tracking-[-0.02em]">Change plan</h2>
+            <h2 className="text-xl font-bold">Change plan</h2>
             <p className="mt-1 text-sm text-muted-foreground">A new allowance applies after checkout.</p>
           </div>
           <a className={buttonVariants({ variant: "secondary", size: "sm" })} href="/billing/portal">Manage billing</a>

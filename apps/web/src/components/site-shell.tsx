@@ -47,7 +47,7 @@ function Brand() {
   return (
     <a className="group inline-flex items-center gap-2.5 no-underline" href="/" aria-label="Tab home">
       <TabMark className="transition-transform duration-150 ease-[var(--tab-ease-out)] group-active:scale-[0.97]" />
-      <span className="font-[var(--font-display)] text-lg font-bold tracking-[-0.035em]">Tab</span>
+      <span className="font-[var(--font-display)] text-lg font-bold">Tab</span>
     </a>
   );
 }
@@ -104,7 +104,7 @@ export function SiteFooter({ authenticated = false }: { authenticated?: boolean 
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3">
             {footerGroups(authenticated).map((group) => (
               <div key={group.label}>
-                <p className="font-[var(--font-code)] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">{group.label}</p>
+                <p className="font-[var(--font-code)] text-xs font-semibold uppercase text-muted-foreground">{group.label}</p>
                 <ul className="mt-4 grid gap-3 text-sm font-medium">
                   {group.links.map((link) => (
                     <li key={link.href}>

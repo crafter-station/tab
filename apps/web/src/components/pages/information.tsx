@@ -17,7 +17,7 @@ function PageIntro({
   return (
     <header className="grid gap-5 border-b border-border pb-12 pt-4 sm:pb-16 sm:pt-10">
       <PageKicker>{eyebrow}</PageKicker>
-      <h1 className="max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(3rem,7vw,6rem)] font-bold leading-[0.92] tracking-[-0.06em]">{title}</h1>
+      <h1 className="max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(3rem,7vw,6rem)] font-bold leading-[0.92] tracking-[-0.035em]">{title}</h1>
       <p className="max-w-[44rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">{description}</p>
     </header>
   );
@@ -26,7 +26,7 @@ function PageIntro({
 function LegalSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="grid gap-4 border-b border-border py-8 sm:grid-cols-[minmax(9rem,0.4fr)_minmax(0,1fr)] sm:gap-10 sm:py-10">
-      <h2 className="text-lg font-bold tracking-[-0.02em]">{title}</h2>
+      <h2 className="text-lg font-bold">{title}</h2>
       <div className="grid max-w-[46rem] gap-4 text-pretty leading-relaxed text-muted-foreground [&_a]:font-semibold [&_a]:text-foreground [&_a]:underline [&_a]:decoration-border [&_a]:underline-offset-4 [&_strong]:text-foreground">{children}</div>
     </section>
   );
@@ -39,7 +39,7 @@ export function AboutPage() {
       <section className="grid gap-12 py-16 sm:py-24 lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] lg:gap-20">
         <div>
           <PageKicker>Why we built it</PageKicker>
-          <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.045em]">The best writing tool is the one that does not pull you away from the sentence.</h2>
+          <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.015em]">The best writing tool is the one that does not pull you away from the sentence.</h2>
         </div>
         <div className="grid gap-6 text-pretty text-lg leading-relaxed text-muted-foreground">
           <p>Writing assistants often ask you to stop, switch context, explain the task, and carry the answer back. Tab works at the smaller, more frequent moment: when you know what comes next and want to get it onto the page faster.</p>
@@ -56,7 +56,7 @@ export function AboutPage() {
           ].map((principle) => (
             <article className="min-h-64 bg-card p-7" key={principle.title}>
               <ShieldCheck aria-hidden="true" />
-              <h3 className="mt-20 text-xl font-bold tracking-[-0.02em]">{principle.title}</h3>
+              <h3 className="mt-20 text-xl font-bold">{principle.title}</h3>
               <p className="mt-3 text-pretty leading-relaxed text-muted-foreground">{principle.copy}</p>
             </article>
           ))}
@@ -65,7 +65,7 @@ export function AboutPage() {
       <section className="grid gap-7 py-16 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:py-24">
         <div>
           <PageKicker>Built in the open</PageKicker>
-          <h2 className="mt-4 max-w-[16ch] text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.045em]">Follow the work or try Tab on your Mac.</h2>
+          <h2 className="mt-4 max-w-[16ch] text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em]">Follow the work or try Tab on your Mac.</h2>
         </div>
         <div className="flex flex-wrap gap-3">
           <a className={buttonVariants({ variant: "secondary", size: "lg" })} href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">View GitHub <ArrowUpRight data-icon="inline-end" aria-hidden="true" /></a>
@@ -83,11 +83,11 @@ export function ContactPage() {
       <section className="grid gap-4 py-12 sm:py-20 md:grid-cols-2">
         <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="mailto:tab@cueva.io">
           <div className="flex items-center justify-between"><EnvelopeSimple aria-hidden="true" /><ArrowUpRight className="text-muted-foreground" aria-hidden="true" /></div>
-          <div><p className="text-sm font-semibold text-muted-foreground">Email</p><h2 className="mt-2 text-2xl font-bold tracking-[-0.03em]">tab@cueva.io</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for account, billing, privacy, and general product questions.</p></div>
+          <div><p className="text-sm font-semibold text-muted-foreground">Email</p><h2 className="mt-2 text-2xl font-bold">tab@cueva.io</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for account, billing, privacy, and general product questions.</p></div>
         </a>
         <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="https://github.com/crafter-station/tab/issues" target="_blank" rel="noreferrer">
           <div className="flex items-center justify-between"><GithubLogo aria-hidden="true" /><ArrowUpRight className="text-muted-foreground" aria-hidden="true" /></div>
-          <div><p className="text-sm font-semibold text-muted-foreground">GitHub</p><h2 className="mt-2 text-2xl font-bold tracking-[-0.03em]">Report an issue</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for reproducible bugs and technical product feedback.</p></div>
+          <div><p className="text-sm font-semibold text-muted-foreground">GitHub</p><h2 className="mt-2 text-2xl font-bold">Report an issue</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for reproducible bugs and technical product feedback.</p></div>
         </a>
       </section>
       <section className="grid gap-8 border-y border-border py-10 sm:grid-cols-3">

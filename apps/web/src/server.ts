@@ -124,6 +124,24 @@ async function stylesheet(): Promise<Response> {
 async function publicAsset(path: string): Promise<Response | undefined> {
   const isMarketingScript = path === "/marketing-demo.js";
   const isLogo = /^\/logos\/[a-z0-9-]+\.svg$/.test(path);
+  const fontFile = path.match(/^\/files\/(geist|space-grotesk)-[a-z0-9-]+\.woff2$/)?.[0].slice(7);
+
+  if (fontFile) {
+    const fontPackage = fontFile.startsWith("geist-")
+      ? "@fontsource-variable/geist"
+      : "@fontsource-variable/space-grotesk";
+    const file = Bun.file(new URL(import.meta.resolve(`${fontPackage}/files/${fontFile}`)));
+
+    if (!(await file.exists())) return undefined;
+
+    return new Response(file, {
+      headers: {
+        "cache-control": "public, max-age=31536000, immutable",
+        "content-type": "font/woff2",
+      },
+    });
+  }
+
   if (!isMarketingScript && !isLogo) return undefined;
 
   const file = Bun.file(new URL(`../public${path}`, import.meta.url));

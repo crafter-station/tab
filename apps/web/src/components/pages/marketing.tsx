@@ -71,7 +71,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       <div className="grid gap-4 sm:grid-cols-[minmax(0,0.8fr)_minmax(280px,1.2fr)] sm:items-end sm:gap-12">
         <div>
           <PageKicker>Simple pricing</PageKicker>
-          <h1 className="mt-3 text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.04em]">Choose by how much you write.</h1>
+          <h1 className="mt-3 text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em]">Choose by how much you write.</h1>
         </div>
         <p className="max-w-[56ch] text-pretty text-lg leading-relaxed text-muted-foreground">Every plan includes suggestions across your Mac and control over saved memories. The only difference is monthly volume.</p>
       </div>
@@ -83,10 +83,10 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
               {plan.planId === "pro" ? <span className="text-xs font-semibold text-muted-foreground">Best for daily use</span> : null}
             </div>
             <p className="mt-2 min-h-12 text-sm leading-relaxed text-muted-foreground">{planDescription(plan.planId)}</p>
-            <p className="mt-7 font-[var(--font-display)] text-4xl font-bold tabular-nums tracking-[-0.04em]">{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
+            <p className="mt-7 font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em] tabular-nums">{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
             <div className="my-6 border-t border-border" />
             <div className="flex-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Monthly suggestions</p>
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Monthly suggestions</p>
               <p className="mt-2 text-2xl font-bold tabular-nums">{formatCount(plan.monthlyAutocompleteSuggestions)}</p>
               <ul className="mt-5 grid gap-3 text-sm text-muted-foreground">
                 <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Use Tab across supported Mac apps</span></li>
@@ -113,7 +113,7 @@ export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
     <section className="grid gap-12 py-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] lg:items-center lg:gap-16 lg:py-14">
       <div className="grid content-center gap-5">
         <PageKicker>Tab for Mac</PageKicker>
-        <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,7vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.045em]">Put Tab where you write.</h1>
+        <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,7vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Put Tab where you write.</h1>
         <p className="max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">One Mac app brings suggestions to Mail, Slack, Notes, terminals, and the other text fields you already use.</p>
         <p className="mt-2"><a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg">Download for macOS</a></p>
         <p className="text-sm tabular-nums text-muted-foreground">macOS 14 or newer{latestVersion ? `, version ${latestVersion}` : ""}</p>
@@ -121,7 +121,7 @@ export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
       <aside className="border-y border-border">
         <div className="py-5">
           <PageKicker>Three-minute setup</PageKicker>
-          <h2 className="mt-3 font-[var(--font-display)] text-2xl font-bold tracking-[-0.025em]">From download to first suggestion.</h2>
+          <h2 className="mt-3 font-[var(--font-display)] text-2xl font-bold">From download to first suggestion.</h2>
         </div>
         <ol>
           {downloadSteps.map((step) => (

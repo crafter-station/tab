@@ -122,7 +122,7 @@ export type MessagePageProps = {
 export function MessagePage({ title, message, action }: MessagePageProps) {
   return (
     <section className="grid max-w-[34rem] gap-4 border-y border-border py-10">
-      <h1 className="text-balance font-[var(--font-display)] text-3xl font-bold leading-tight">{title}</h1>
+      <h1 className="text-balance font-[var(--font-display)] text-3xl font-bold leading-tight tracking-[-0.015em]">{title}</h1>
       <p className="text-pretty leading-relaxed text-muted-foreground">{message}</p>
       {action ? <p><a className={buttonVariants()} href={action.href}>{action.label}</a></p> : null}
     </section>

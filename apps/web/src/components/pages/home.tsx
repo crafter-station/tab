@@ -183,7 +183,7 @@ function AutocompleteDemo() {
         <DemoScene name="notes">
           <div>
             <div className="border-b border-border pb-4">
-              <p className="text-xl font-bold tracking-[-0.02em]">Launch checklist</p>
+              <p className="text-xl font-bold">Launch checklist</p>
               <p className="mt-1 text-xs text-muted-foreground">Edited just now</p>
             </div>
             <div className="pt-6 text-[1.025rem] leading-8 sm:text-lg">
@@ -218,7 +218,7 @@ export function HomePage() {
       <section className="grid gap-12 py-8 lg:grid-cols-[minmax(0,0.88fr)_minmax(31rem,1.12fr)] lg:items-center lg:gap-16 lg:py-20">
         <div className="marketing-intro grid content-center gap-6">
           <PageKicker>Native Autocomplete for your Mac</PageKicker>
-          <h1 className="max-w-[10ch] text-balance font-[var(--font-display)] text-[clamp(3.25rem,7vw,6.4rem)] font-bold leading-[0.88] tracking-[-0.065em]">Keep the thought. Skip the typing.</h1>
+          <h1 className="max-w-[10ch] text-balance font-[var(--font-display)] text-[clamp(3.25rem,7vw,6.4rem)] font-bold leading-[0.88] tracking-[-0.035em]">Keep the thought. Skip the typing.</h1>
           <p className="max-w-[34rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next few words in the Mac apps where you already write. Preview the phrase, press Option+Tab, and keep moving.</p>
           <div className="flex flex-col gap-3 min-[420px]:flex-row">
             <a className={buttonVariants({ size: "lg" })} href="/download">
@@ -247,7 +247,7 @@ export function HomePage() {
         <div className="grid gap-10 lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] lg:gap-20">
           <div>
             <PageKicker>Less friction, same voice</PageKicker>
-            <h2 className="mt-4 max-w-[12ch] text-balance font-[var(--font-display)] text-[clamp(2.25rem,5vw,4.25rem)] font-bold leading-[0.98] tracking-[-0.05em]">The thought is already there. Typing it should not be the slow part.</h2>
+            <h2 className="mt-4 max-w-[12ch] text-balance font-[var(--font-display)] text-[clamp(2.25rem,5vw,4.25rem)] font-bold leading-[0.98] tracking-[-0.03em]">The thought is already there. Typing it should not be the slow part.</h2>
           </div>
           <div className="grid border-t border-border">
             {benefits.map((benefit) => {
@@ -256,7 +256,7 @@ export function HomePage() {
                 <article className="grid gap-4 border-b border-border py-6 sm:grid-cols-[2.5rem_1fr] sm:gap-5" key={benefit.title}>
                   <Icon className="mt-0.5" aria-hidden="true" />
                   <div>
-                    <h3 className="text-xl font-bold tracking-[-0.02em]">{benefit.title}</h3>
+                    <h3 className="text-xl font-bold">{benefit.title}</h3>
                     <p className="mt-2 max-w-[36rem] text-pretty leading-relaxed text-muted-foreground">{benefit.description}</p>
                   </div>
                 </article>
@@ -268,7 +268,7 @@ export function HomePage() {
         <div className="mt-20 grid overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card lg:grid-cols-[minmax(0,1.15fr)_minmax(22rem,0.85fr)]">
           <div className="p-6 sm:p-10 lg:p-14">
             <PageKicker>Personal Memory, made visible</PageKicker>
-            <h3 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-3xl font-bold leading-tight tracking-[-0.04em] sm:text-4xl">Personal, without becoming mysterious.</h3>
+            <h3 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-3xl font-bold leading-tight tracking-[-0.015em] sm:text-4xl">Personal, without becoming mysterious.</h3>
             <p className="mt-5 max-w-[32rem] text-pretty text-lg leading-relaxed text-muted-foreground">Tab can remember useful details from your own writing. Every saved fact has a place in your dashboard, with controls to edit or delete it.</p>
             <div className="mt-8 grid gap-3 text-sm font-medium sm:grid-cols-2">
               <p className="flex items-center gap-2"><ShieldCheck aria-hidden="true" /> Review what is saved</p>
@@ -317,7 +317,7 @@ export function HomePage() {
         <div className="grid gap-8 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] sm:items-end">
           <div>
             <PageKicker>Small examples, every day</PageKicker>
-            <h2 className="mt-4 text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.045em]">Useful words, right where they belong.</h2>
+            <h2 className="mt-4 text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.015em]">Useful words, right where they belong.</h2>
           </div>
           <p className="max-w-[36rem] text-pretty text-lg leading-relaxed text-muted-foreground">Tab is not another destination. It shortens the routine parts of writing while leaving the idea, judgment, and final wording with you.</p>
         </div>
@@ -336,7 +336,7 @@ export function HomePage() {
         <div className="grid gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(27rem,1.15fr)] lg:items-center lg:gap-20">
           <div>
             <PageKicker>Open source by default</PageKicker>
-            <h2 className="mt-4 max-w-[12ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-bold leading-[0.98] tracking-[-0.05em]">Trust the product. Inspect the work.</h2>
+            <h2 className="mt-4 max-w-[12ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-bold leading-[0.98] tracking-[-0.03em]">Trust the product. Inspect the work.</h2>
             <p className="mt-6 max-w-[36rem] text-pretty text-lg leading-relaxed text-muted-foreground">Tab is developed in public. Read the implementation, follow architectural decisions, report a bug, or see what is being built next.</p>
             <div className="mt-8 flex flex-wrap gap-3">
               <a className={buttonVariants({ size: "lg" })} href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">
@@ -377,8 +377,8 @@ export function HomePage() {
       <section className="-mx-5 bg-foreground px-5 py-20 text-background sm:-mx-8 sm:px-8 sm:py-24">
         <div className="mx-auto grid max-w-7xl gap-12 lg:grid-cols-[minmax(0,1fr)_minmax(24rem,0.82fr)] lg:items-center lg:gap-20">
           <div>
-            <p className="font-[var(--font-code)] text-xs font-semibold uppercase tracking-[0.12em] text-background/70">Clear boundaries by design</p>
-            <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.05em]">Your writing is not a black box.</h2>
+            <p className="font-[var(--font-code)] text-xs font-semibold uppercase text-background/70">Clear boundaries by design</p>
+            <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Your writing is not a black box.</h2>
             <p className="mt-6 max-w-[36rem] text-pretty text-lg leading-relaxed text-background/70">Tab asks for only the macOS permissions needed to read the current typing context, show a suggestion, and insert it when you accept. It does not need screenshots, your clipboard, or full documents.</p>
             <a className="mt-8 inline-flex items-center gap-2 border-b border-background/35 pb-1 text-sm font-semibold no-underline transition-colors duration-150 hover:border-background" href="/privacy">Read the privacy policy <ArrowRight aria-hidden="true" /></a>
           </div>
@@ -403,7 +403,7 @@ export function HomePage() {
       <section id="pricing" className="scroll-mt-24 py-20 sm:py-28">
         <div className="text-center">
           <PageKicker>Start small, move when you need to</PageKicker>
-          <h2 className="mx-auto mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.045em] sm:text-5xl">Pay for the writing volume you actually use.</h2>
+          <h2 className="mx-auto mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Pay for the writing volume you actually use.</h2>
           <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">The same native autocomplete and Personal Memory controls are included on every plan.</p>
         </div>
         <div className="mx-auto mt-12 grid max-w-4xl gap-4 md:grid-cols-2">
@@ -416,7 +416,7 @@ export function HomePage() {
                   <h3 className="text-xl font-bold">{plan.name}</h3>
                   {featured ? <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/70">Daily writing</span> : null}
                 </div>
-                <p className={`mt-8 font-[var(--font-display)] text-5xl font-bold tracking-[-0.05em] ${featured ? "text-background" : "text-foreground"}`}>{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
+                <p className={`mt-8 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] ${featured ? "text-background" : "text-foreground"}`}>{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
                 <p className={`mt-3 text-sm ${featured ? "text-background/65" : "text-muted-foreground"}`}>{formatCount(plan.monthlyAutocompleteSuggestions)} suggestions each month</p>
                 <ul className={`mt-8 grid flex-1 gap-3 text-sm ${featured ? "text-background/75" : "text-muted-foreground"}`}>
                   <li className="flex items-center gap-2"><Check aria-hidden="true" /> Works across supported Mac apps</li>
@@ -435,7 +435,7 @@ export function HomePage() {
         <div className="grid gap-10 lg:grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)] lg:gap-20">
           <div>
             <PageKicker>Questions, answered</PageKicker>
-            <h2 className="mt-4 text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.045em]">Know before you install.</h2>
+            <h2 className="mt-4 text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.015em]">Know before you install.</h2>
           </div>
           <div className="border-t border-border">
             {faqs.map((faq) => (
@@ -456,8 +456,8 @@ export function HomePage() {
       <section className="border-t border-border py-16 sm:py-24">
         <div className="grid gap-8 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div>
-            <p className="font-[var(--font-code)] text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your next sentence can move faster</p>
-            <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.92] tracking-[-0.06em]">Stay with the idea, not the keys.</h2>
+            <p className="font-[var(--font-code)] text-xs font-semibold uppercase text-muted-foreground">Your next sentence can move faster</p>
+            <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.92] tracking-[-0.035em]">Stay with the idea, not the keys.</h2>
           </div>
           <div className="sm:text-right">
             <a className={buttonVariants({ size: "lg" })} href="/download"><DownloadSimple data-icon="inline-start" aria-hidden="true" /> Download Tab free</a>

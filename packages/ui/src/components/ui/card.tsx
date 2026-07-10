@@ -40,7 +40,7 @@ const CardTitle = React.forwardRef<HTMLHeadingElement, CardTitleProps>(
     return (
       <Heading
         ref={ref}
-        className={cn("text-balance font-[var(--font-display)] text-lg font-semibold leading-tight tracking-[-0.02em]", className)}
+        className={cn("text-balance font-[var(--font-display)] text-lg font-semibold leading-tight", className)}
         {...props}
       />
     )

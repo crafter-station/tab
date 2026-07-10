@@ -31,7 +31,7 @@
   font-size: 38px;
   font-weight: 700;
   line-height: 1.02;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.015em;
   text-wrap: balance;
 }
 
@@ -57,7 +57,6 @@
 .sign-in-proof__step strong {
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.01em;
 }
 
 .sign-in-proof__step div > span {
@@ -105,7 +104,6 @@
   margin-top: 2px;
   font-size: 13px;
   font-weight: 600;
-  letter-spacing: -0.015em;
 }
 
 .sign-in-copy {
@@ -118,7 +116,7 @@
   font-family: var(--font-display);
   font-size: 32px;
   font-weight: 600;
-  letter-spacing: -0.055em;
+  letter-spacing: -0.015em;
   line-height: 1;
   text-wrap: balance;
 }

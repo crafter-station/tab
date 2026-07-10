@@ -69,7 +69,7 @@ type EyebrowProps = PropsWithChildren<{
 
 export function Eyebrow({ className, children }: EyebrowProps) {
   return (
-    <p className={cn("font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground", className)}>
+    <p className={cn("font-mono text-[11px] font-semibold uppercase text-muted-foreground", className)}>
       {children}
     </p>
   );
@@ -96,7 +96,7 @@ export function SurfaceHeader({ eyebrow, title, description, action, className, 
     <div className={cn("flex items-start justify-between gap-4 max-sm:flex-col", className)}>
       <div className="grid gap-2">
         {eyebrow ? <Eyebrow>{eyebrow}</Eyebrow> : null}
-        <Heading className={cn("text-balance font-[var(--font-display)] font-semibold leading-tight tracking-[-0.035em] text-foreground", headingLevel === 1 ? "text-3xl" : "text-2xl")}>
+        <Heading className={cn("text-balance font-[var(--font-display)] font-semibold leading-tight text-foreground", headingLevel === 1 ? "text-3xl tracking-[-0.015em]" : "text-2xl tracking-[-0.01em]")}>
           {title}
         </Heading>
         {description ? <p className="max-w-[65ch] text-pretty text-sm leading-relaxed text-muted-foreground">{description}</p> : null}
@@ -159,7 +159,7 @@ type CommandBlockProps = {
 export function CommandBlock({ command, label = "Command", description, className }: CommandBlockProps) {
   return (
     <div className={cn("rounded-[var(--radius-media)] border border-border bg-foreground p-4 text-background", className)}>
-      <p className="text-xs font-semibold uppercase tracking-[0.1em] opacity-65">{label}</p>
+      <p className="text-xs font-semibold uppercase opacity-65">{label}</p>
       <code className="mt-2 block break-words font-[var(--font-code)] text-sm font-semibold">{command}</code>
       {description ? <p className="mt-2 text-sm opacity-72">{description}</p> : null}
     </div>
@@ -239,7 +239,7 @@ export function SummaryMetric({ label, value, detail, className }: SummaryMetric
   return (
     <div className={cn("grid min-w-0 gap-1 rounded-[var(--radius-card)] border border-border bg-[var(--tab-surface-raised)] p-4 shadow-[var(--tab-shadow-control)]", className)}>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
-      <p className="truncate text-xl font-semibold tracking-[-0.03em] text-foreground tabular-nums">{value}</p>
+      <p className="truncate text-xl font-semibold text-foreground tabular-nums">{value}</p>
       {detail ? <p className="truncate text-xs text-muted-foreground">{detail}</p> : null}
     </div>
   );
