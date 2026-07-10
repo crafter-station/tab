@@ -21,6 +21,7 @@ import {
   createZedFocusedEditorAppContextProvider,
   type AppContextSnapshot,
 } from "../apps/desktop/src/main/app-context.ts";
+import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeAutocompleteRuntime } from "../apps/desktop/src/main/native-autocomplete-runtime.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
@@ -1427,7 +1428,7 @@ describe("desktop native suggestion loop", () => {
         };
       };
       const providerSnapshot = (textSession: TextSessionSnapshot): AppContextSnapshot =>
-        zedProvider(createSafeTextSessionSnapshot(textSession));
+        normalizeAppContext(zedProvider(createSafeTextSessionSnapshot(textSession)));
 
       it("extracts bounded suggestion-only context for Zed prose, markdown, and comments", () => {
         const markdown = providerSnapshot(zedTextSession());
@@ -2102,8 +2103,12 @@ describe("desktop native suggestion loop", () => {
       };
     }
 
+    function obsidianSnapshot(textSession: TextSessionSnapshot): AppContextSnapshot {
+      return normalizeAppContext(createObsidianDocumentAppContext(textSession));
+    }
+
     it("extracts nearby Obsidian markdown context from the focused editor", () => {
-      const snapshot = createObsidianDocumentAppContext(makeObsidianTextSession());
+      const snapshot = obsidianSnapshot(makeObsidianTextSession());
 
       expect(snapshot.metadata).toMatchObject({
         provider: "obsidian-accessibility-editor",
@@ -2124,7 +2129,7 @@ describe("desktop native suggestion loop", () => {
     it("bounds long notes to nearby editor context", () => {
       const beforeCaret = `${"old paragraph\n".repeat(260)}# Current Heading\nRelevant paragraph before caret`;
       const afterCaret = ` continues after caret\n${"later paragraph\n".repeat(260)}`;
-      const snapshot = createObsidianDocumentAppContext(
+      const snapshot = obsidianSnapshot(
         makeObsidianTextSession({ surroundingContext: { beforeCaret, afterCaret } }),
       );
 
@@ -2137,7 +2142,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("falls back safely when focused editor semantics are missing", () => {
-      const snapshot = createObsidianDocumentAppContext(
+      const snapshot = obsidianSnapshot(
         makeObsidianTextSession({ focusedElementId: null, textElementId: null }),
       );
 
@@ -2150,7 +2155,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("falls back safely when Obsidian editor Accessibility semantics are unreliable", () => {
-      const snapshot = createObsidianDocumentAppContext(
+      const snapshot = obsidianSnapshot(
         makeObsidianTextSession({ accessibilityReliability: "unreliable" }),
       );
 
@@ -2163,7 +2168,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("drops noisy extraction instead of sending unreliable context", () => {
-      const snapshot = createObsidianDocumentAppContext(
+      const snapshot = obsidianSnapshot(
         makeObsidianTextSession({
           surroundingContext: {
             beforeCaret: "\u0000\u0000\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd",
@@ -2178,7 +2183,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     it("does not activate outside Obsidian", () => {
-      const snapshot = createObsidianDocumentAppContext(
+      const snapshot = obsidianSnapshot(
         makeObsidianTextSession({ activeApplication: { bundleId: "com.apple.TextEdit" } }),
       );
 

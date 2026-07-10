@@ -3,8 +3,13 @@ import {
   extractWhatsAppConversationContext,
   type AccessibilityNode,
 } from "../apps/desktop/src/main/whatsapp-app-context.ts";
+import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
 
 const whatsappApp = { bundleId: "net.whatsapp.WhatsApp", name: "WhatsApp" };
+
+function extractContext(options: Parameters<typeof extractWhatsAppConversationContext>[0]) {
+  return normalizeAppContext(extractWhatsAppConversationContext(options));
+}
 
 function message(description: string, overrides: Partial<AccessibilityNode> = {}): AccessibilityNode {
   return {
@@ -17,7 +22,7 @@ function message(description: string, overrides: Partial<AccessibilityNode> = {}
 
 describe("WhatsApp conversation App Context adapter", () => {
   it("extracts incoming and outgoing direct-message context from visible Accessibility nodes", () => {
-    const snapshot = extractWhatsAppConversationContext({
+    const snapshot = extractContext({
       activeApplication: whatsappApp,
       accessibilityTree: {
         role: "AXWindow",
@@ -55,7 +60,7 @@ describe("WhatsApp conversation App Context adapter", () => {
   });
 
   it("preserves group speaker and timestamp metadata when descriptions expose it", () => {
-    const snapshot = extractWhatsAppConversationContext({
+    const snapshot = extractContext({
       activeApplication: whatsappApp,
       accessibilityTree: {
         children: [
@@ -78,7 +83,7 @@ describe("WhatsApp conversation App Context adapter", () => {
   });
 
   it("preserves explicit Accessibility direction metadata when sender text is absent", () => {
-    const snapshot = extractWhatsAppConversationContext({
+    const snapshot = extractContext({
       activeApplication: whatsappApp,
       accessibilityTree: {
         children: [
@@ -106,7 +111,7 @@ describe("WhatsApp conversation App Context adapter", () => {
   });
 
   it("tolerates missing speaker and direction while keeping bounded recent visible messages", () => {
-    const snapshot = extractWhatsAppConversationContext({
+    const snapshot = extractContext({
       activeApplication: whatsappApp,
       maxMessages: 2,
       accessibilityTree: {
@@ -132,7 +137,7 @@ describe("WhatsApp conversation App Context adapter", () => {
   });
 
   it("drops malformed or noisy extraction results instead of sending misleading context", () => {
-    const snapshot = extractWhatsAppConversationContext({
+    const snapshot = extractContext({
       activeApplication: whatsappApp,
       accessibilityTree: {
         children: [
@@ -154,14 +159,14 @@ describe("WhatsApp conversation App Context adapter", () => {
 
   it("falls back safely when WhatsApp is not active or Accessibility is unavailable", () => {
     expect(
-      extractWhatsAppConversationContext({
+      extractContext({
         activeApplication: { bundleId: "com.apple.TextEdit" },
         accessibilityTree: { children: [message("Alex\n10:41 AM\nHi")] },
       }).metadata.status,
     ).toBe("unsupported");
 
     expect(
-      extractWhatsAppConversationContext({
+      extractContext({
         activeApplication: whatsappApp,
         accessibilityTree: null,
       }).metadata.status,

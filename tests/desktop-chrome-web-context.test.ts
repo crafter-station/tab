@@ -3,8 +3,13 @@ import {
   createChromeWebWritingContextSnapshot,
   type ChromeWebAccessibilityNode,
 } from "../apps/desktop/src/main/app-context.ts";
+import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
 
 const chrome = { bundleId: "com.google.Chrome", windowId: "window:1" };
+
+function createSnapshot(input: Parameters<typeof createChromeWebWritingContextSnapshot>[0]) {
+  return normalizeAppContext(createChromeWebWritingContextSnapshot(input));
+}
 
 function textNode(text: string, y: number, role = "AXStaticText"): ChromeWebAccessibilityNode {
   return { role, text, bounds: { x: 120, y, width: 640, height: 24 } };
@@ -23,7 +28,7 @@ function editable(value: string, y = 520): ChromeWebAccessibilityNode {
 
 describe("Chrome web writing context adapter", () => {
   it("extracts focused editable text and nearby visible page semantics for Chrome", () => {
-    const snapshot = createChromeWebWritingContextSnapshot({
+    const snapshot = createSnapshot({
       activeApplication: chrome,
       accessibilityTree: {
         role: "AXWebArea",
@@ -57,7 +62,7 @@ describe("Chrome web writing context adapter", () => {
       textNode(`Paragraph ${index} with useful visible document context for the draft.`, 120 + index * 20),
     );
 
-    const snapshot = createChromeWebWritingContextSnapshot({
+    const snapshot = createSnapshot({
       activeApplication: chrome,
       accessibilityTree: {
         role: "AXWebArea",
@@ -72,7 +77,7 @@ describe("Chrome web writing context adapter", () => {
   });
 
   it("does not include browser URLs, navigation, sidebars, controls, or hidden DOM text", () => {
-    const snapshot = createChromeWebWritingContextSnapshot({
+    const snapshot = createSnapshot({
       activeApplication: chrome,
       accessibilityTree: {
         role: "AXWebArea",
@@ -98,7 +103,7 @@ describe("Chrome web writing context adapter", () => {
   });
 
   it("ignores aggregate web area text instead of treating it as nearby semantics", () => {
-    const snapshot = createChromeWebWritingContextSnapshot({
+    const snapshot = createSnapshot({
       activeApplication: chrome,
       accessibilityTree: {
         role: "AXWebArea",
@@ -118,11 +123,11 @@ describe("Chrome web writing context adapter", () => {
 
   it("falls back safely when Accessibility data is missing or lacks a focused editable field", () => {
     expect(
-      createChromeWebWritingContextSnapshot({ activeApplication: chrome, accessibilityTree: null }),
+      createSnapshot({ activeApplication: chrome, accessibilityTree: null }),
     ).toMatchObject({ fragments: [], metadata: { status: "empty" } });
 
     expect(
-      createChromeWebWritingContextSnapshot({
+      createSnapshot({
         activeApplication: chrome,
         accessibilityTree: { role: "AXWebArea", children: [textNode("Only page text", 400)] },
       }),
@@ -130,7 +135,7 @@ describe("Chrome web writing context adapter", () => {
   });
 
   it("does not activate for non-Chrome applications", () => {
-    const snapshot = createChromeWebWritingContextSnapshot({
+    const snapshot = createSnapshot({
       activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
       accessibilityTree: { role: "AXWebArea", children: [textNode("Visible", 300), editable("Draft", 500)] },
     });
@@ -139,7 +144,7 @@ describe("Chrome web writing context adapter", () => {
   });
 
   it("suppresses noisy web controls and secret-like passive context", () => {
-    const snapshot = createChromeWebWritingContextSnapshot({
+    const snapshot = createSnapshot({
       activeApplication: chrome,
       accessibilityTree: {
         role: "AXWebArea",

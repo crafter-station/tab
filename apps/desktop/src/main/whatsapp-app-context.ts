@@ -1,5 +1,6 @@
-import type { ActiveApplication, AppContextFragment } from "@tab/contracts";
-import { sanitizeAppContextSnapshot, type AppContextSnapshot } from "./app-context.ts";
+import type { ActiveApplication } from "@tab/contracts";
+import type { AppContextCandidate, AppContextCandidateFragment } from "./app-context-policy.ts";
+import type { AppContextSnapshot } from "./app-context.ts";
 
 const PROVIDER = "whatsapp-conversation";
 const WHATSAPP_BUNDLE_IDS = new Set([
@@ -237,7 +238,7 @@ function confidenceFor(chatTitle: string | undefined, messages: readonly WhatsAp
 
 export function extractWhatsAppConversationContext(
   options: ExtractWhatsAppConversationContextOptions,
-): AppContextSnapshot {
+): AppContextCandidate {
   if (!isWhatsAppActive(options.activeApplication)) return emptySnapshot("unsupported");
   if (!options.accessibilityTree) return emptySnapshot("empty");
 
@@ -255,7 +256,7 @@ export function extractWhatsAppConversationContext(
     ...(chatTitle ? [`Chat: ${chatTitle}`] : []),
     ...messages.map(formatMessage),
   ].join("\n");
-  const fragment: AppContextFragment = {
+  const fragment: AppContextCandidateFragment = {
     id: `${PROVIDER}:visible-conversation`,
     provider: PROVIDER,
     kind: "conversation",
@@ -266,13 +267,10 @@ export function extractWhatsAppConversationContext(
       messageCount: messages.length,
       messages: messages.map(messageMetadata),
     },
-    redaction: { applied: false, redactionCount: 0, kinds: [] },
-    requestable: true,
-    memoryEligible: false,
   };
 
-  return sanitizeAppContextSnapshot({
+  return {
     fragments: [fragment],
     metadata: { provider: PROVIDER, status: "available", confidence },
-  });
+  };
 }

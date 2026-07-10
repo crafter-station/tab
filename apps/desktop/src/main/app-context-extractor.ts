@@ -1,4 +1,5 @@
 import type { ActiveApplication } from "@tab/contracts";
+import { normalizeAppContext, type AppContextCandidate } from "./app-context-policy.ts";
 import {
   createAppContextManager,
   createChromeWebWritingContextSnapshot,
@@ -6,7 +7,6 @@ import {
   createObsidianDocumentAppContext,
   createZedFocusedEditorAppContextProvider,
   extractAppContextFromAccessibility,
-  sanitizeAppContextSnapshot,
   type AccessibilityTextNode,
   type AppContextSnapshot,
   type ChromeWebAccessibilityNode,
@@ -54,18 +54,18 @@ type AccessibilityAppContextProvider = {
   readonly getSnapshot: (input: {
     readonly activeApplication: ActiveApplication | null;
     readonly accessibilityTree: AppContextAccessibilityTree | null | undefined;
-  }) => AppContextSnapshot;
+  }) => AppContextCandidate;
 };
 
 type SnapshotProvider = {
-  readonly getSnapshot: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
+  readonly getSnapshot: (snapshot: SafeTypingContextSnapshot) => AppContextCandidate;
 };
 
-function isAvailable(snapshot: AppContextSnapshot): boolean {
+function isAvailable(snapshot: AppContextCandidate): boolean {
   return snapshot.metadata.status === "available" && snapshot.fragments.length > 0;
 }
 
-function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
+function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextCandidate {
   const surroundingContext = snapshot.textSession?.surroundingContext;
   if (!surroundingContext) return { fragments: [], metadata: { status: "empty" } };
 
@@ -81,7 +81,7 @@ function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppC
   });
 }
 
-function firstAvailableOrSuppressed(snapshots: readonly AppContextSnapshot[]): AppContextSnapshot | null {
+function firstAvailableOrSuppressed(snapshots: readonly AppContextCandidate[]): AppContextCandidate | null {
   return snapshots.find((snapshot) => isAvailable(snapshot) || snapshot.metadata.status === "suppressed") ?? null;
 }
 
@@ -116,7 +116,7 @@ function createSnapshotProviderRegistry(getZedAppContext: SnapshotAppContextProv
     },
     { getSnapshot: getZedAppContext },
     { getSnapshot: getAppContextFromTextSession },
-    { getSnapshot: (snapshot) => sanitizeAppContextSnapshot(createGhosttyAppContextSnapshot(snapshot)) },
+    { getSnapshot: createGhosttyAppContextSnapshot },
   ];
 }
 
@@ -138,7 +138,11 @@ export function createAppContextExtractor(options: {
       if (isAvailable(managedSnapshot)) return managedSnapshot;
 
       const snapshots = snapshotProviders.map((provider) => provider.getSnapshot(snapshot));
-      return firstAvailableOrSuppressed(snapshots) ?? snapshots[snapshots.length - 1] ?? { fragments: [], metadata: { status: "empty" } };
+      return normalizeAppContext(
+        firstAvailableOrSuppressed(snapshots)
+          ?? snapshots[snapshots.length - 1]
+          ?? { fragments: [], metadata: { status: "empty" } },
+      );
     },
     clear() {
       managedContext.clear();

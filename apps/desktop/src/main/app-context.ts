@@ -1,13 +1,15 @@
 import type { ActiveApplication, AppContext, AppContextFragment } from "@tab/contracts";
-import { redactSensitiveText } from "@tab/redaction";
+import {
+  normalizeAppContext,
+  type AppContextCandidate,
+  type AppContextCandidateFragment,
+} from "./app-context-policy.ts";
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
 
-const MAX_FRAGMENTS = 5;
 const MAX_FRAGMENT_LENGTH = 2_000;
 const MAX_EXTRACTED_TEXT_LENGTH = 1_500;
 const MAX_OBSIDIAN_DOCUMENT_CONTEXT_LENGTH = 1_600;
 const MAX_OBSIDIAN_CONTEXT_BEFORE_CARET = 1_000;
-const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
 const MIN_ACCESSIBILITY_CONFIDENCE = 0.7;
 const ACCESSIBILITY_TEXT_FIELDS = ["value", "title", "description"] as const;
 const MIN_PROVIDER_CONFIDENCE = 0.65;
@@ -131,7 +133,7 @@ type ExtractableObsidianTextSession = TextSessionSnapshot & {
   readonly surroundingContext: NonNullable<TextSessionSnapshot["surroundingContext"]>;
 };
 
-export type SnapshotAppContextProvider = (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
+export type SnapshotAppContextProvider = (snapshot: SafeTypingContextSnapshot) => AppContextCandidate;
 
 export type ChromeWebAccessibilityNode = {
   readonly id?: string;
@@ -166,12 +168,12 @@ export type AccessibilityTextNode = {
 };
 
 export type AppContextManager = {
-  setSnapshot(snapshot: AppContextSnapshot): void;
+  setSnapshot(snapshot: AppContextCandidate): void;
   getSnapshot(): AppContextSnapshot;
   clear(): void;
 };
 
-function emptySnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextSnapshot {
+function emptySnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextCandidate {
   return { fragments: [], metadata: { status } };
 }
 
@@ -326,7 +328,7 @@ function emptyProviderSnapshot(
   provider: string,
   status: AppContextSnapshot["metadata"]["status"],
   suppressionReason?: string,
-): AppContextSnapshot {
+): AppContextCandidate {
   return {
     fragments: [],
     metadata: {
@@ -341,19 +343,11 @@ function emptyProviderSnapshot(
 function emptyObsidianSnapshot(
   status: AppContextSnapshot["metadata"]["status"],
   suppressionReason?: string,
-): AppContextSnapshot {
+): AppContextCandidate {
   return emptyProviderSnapshot(OBSIDIAN_PROVIDER, status, suppressionReason);
 }
 
-function createSafeRedactionSummary(): AppContextFragment["redaction"] {
-  return {
-    applied: false,
-    redactionCount: 0,
-    kinds: [],
-  };
-}
-
-function emptyGhosttySnapshot(status: AppContextSnapshot["metadata"]["status"], confidence?: number): AppContextSnapshot {
+function emptyGhosttySnapshot(status: AppContextSnapshot["metadata"]["status"], confidence?: number): AppContextCandidate {
   return {
     fragments: [],
     metadata: { provider: GHOSTTY_PROVIDER, status, confidence },
@@ -392,7 +386,7 @@ function normalizeTerminalContext(text: string): string {
     .slice(-MAX_FRAGMENT_LENGTH);
 }
 
-export function createGhosttyAppContextSnapshot(snapshot: SafeTypingContextSnapshot): AppContextSnapshot {
+export function createGhosttyAppContextSnapshot(snapshot: SafeTypingContextSnapshot): AppContextCandidate {
   if (snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID) {
     return emptyGhosttySnapshot("unsupported");
   }
@@ -422,9 +416,6 @@ export function createGhosttyAppContextSnapshot(snapshot: SafeTypingContextSnaps
         kind: "terminal_visible_context",
         text,
         confidence,
-        redaction: createSafeRedactionSummary(),
-        requestable: true,
-        memoryEligible: false,
       },
     ],
     metadata: { provider: GHOSTTY_PROVIDER, status: "available", confidence },
@@ -528,7 +519,7 @@ function providerDefinitionFor(activeApplication: ActiveApplication): ProviderDe
 export function extractAppContextFromAccessibility(
   activeApplication: ActiveApplication | null,
   root: AccessibilityTextNode | null,
-): AppContextSnapshot {
+): AppContextCandidate {
   if (!activeApplication || !root) {
     return emptySnapshot("unsupported");
   }
@@ -552,7 +543,7 @@ export function extractAppContextFromAccessibility(
     };
   }
 
-  return sanitizeAppContextSnapshot({
+  return {
     fragments: [
       {
         id: `${definition.provider}:${activeApplication.bundleId}`,
@@ -560,9 +551,6 @@ export function extractAppContextFromAccessibility(
         kind: definition.kind,
         text,
         confidence,
-        redaction: createSafeRedactionSummary(),
-        requestable: true,
-        memoryEligible: false,
       },
     ],
     metadata: {
@@ -570,18 +558,18 @@ export function extractAppContextFromAccessibility(
       status: "available",
       confidence,
     },
-  });
+  };
 }
 
-function createEmptyZedSnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextSnapshot {
+function createEmptyZedSnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextCandidate {
   return { fragments: [], metadata: { provider: ZED_PROVIDER, status } };
 }
 
-function createSuppressedZedSnapshot(suppressionReason: string): AppContextSnapshot {
+function createSuppressedZedSnapshot(suppressionReason: string): AppContextCandidate {
   return { fragments: [], metadata: { provider: ZED_PROVIDER, status: "suppressed", suppressionReason } };
 }
 
-function chromeWebUnavailableSnapshot(status: AppContextSnapshot["metadata"]["status"] = "unsupported"): AppContextSnapshot {
+function chromeWebUnavailableSnapshot(status: AppContextSnapshot["metadata"]["status"] = "unsupported"): AppContextCandidate {
   return { fragments: [], metadata: { provider: CHROME_WEB_PROVIDER, status } };
 }
 
@@ -690,7 +678,7 @@ function createChromeWebFragment(
   kind: AppContextFragment["kind"],
   text: string,
   confidence: number,
-): AppContextFragment | null {
+): AppContextCandidateFragment | null {
   const bounded = boundedText(text, MAX_FRAGMENT_LENGTH);
   if (!bounded) return null;
 
@@ -700,37 +688,22 @@ function createChromeWebFragment(
     kind,
     text: bounded,
     confidence,
-    redaction: createSafeRedactionSummary(),
-    requestable: true,
-    memoryEligible: false,
   };
-}
-
-function suppressedChromeWebSnapshot(reason = SECRET_LIKE_CONTEXT_SUPPRESSION_REASON): AppContextSnapshot {
-  return {
-    fragments: [],
-    metadata: { provider: CHROME_WEB_PROVIDER, status: "suppressed", suppressionReason: reason },
-  };
-}
-
-function containsSensitiveText(text: string): boolean {
-  return redactSensitiveText(text).redactions.length > 0;
 }
 
 export function createChromeWebWritingContextSnapshot(input: {
   readonly activeApplication: ActiveApplication | null;
   readonly accessibilityTree: ChromeWebAccessibilityNode | null | undefined;
   readonly focusedElementId?: string;
-}): AppContextSnapshot {
+}): AppContextCandidate {
   if (!isChromeApplication(input.activeApplication)) return chromeWebUnavailableSnapshot();
   if (!input.accessibilityTree) return chromeWebUnavailableSnapshot("empty");
 
   const focused = findFocusedEditableNode(input.accessibilityTree, input.focusedElementId);
   if (!focused) return chromeWebUnavailableSnapshot("empty");
 
-  const fragments: AppContextFragment[] = [];
+  const fragments: AppContextCandidateFragment[] = [];
   const focusedText = boundedText(nodeText(focused), FOCUSED_EDITABLE_CONTEXT_LIMIT);
-  if (focusedText && containsSensitiveText(focusedText)) return suppressedChromeWebSnapshot();
   const focusedFragment = createChromeWebFragment(
     CHROME_WEB_FOCUSED_EDITABLE_FRAGMENT_ID,
     "focused_editable",
@@ -741,7 +714,6 @@ export function createChromeWebWritingContextSnapshot(input: {
 
   const nearbyText: string[] = [];
   collectNearbyVisibleText(input.accessibilityTree, focused, nearbyText);
-  if (nearbyText.some(containsSensitiveText)) return suppressedChromeWebSnapshot();
   const nearbyFragment = createChromeWebFragment(
     CHROME_WEB_NEARBY_VISIBLE_TEXT_FRAGMENT_ID,
     "nearby_visible_text",
@@ -752,68 +724,12 @@ export function createChromeWebWritingContextSnapshot(input: {
 
   if (fragments.length === 0) return chromeWebUnavailableSnapshot("empty");
 
-  return sanitizeAppContextSnapshot({
+  return {
     fragments,
     metadata: {
       provider: CHROME_WEB_PROVIDER,
       status: "available",
       confidence: Math.max(...fragments.map((fragment) => fragment.confidence)),
-    },
-  });
-}
-
-function sanitizeFragment(fragment: AppContextFragment): AppContextFragment | null {
-  if (!fragment.requestable || fragment.confidence <= 0) return null;
-
-  const boundedText = fragment.text.slice(0, MAX_FRAGMENT_LENGTH);
-  const redacted = redactSensitiveText(boundedText);
-  if (redacted.redactions.length > 0 || redacted.text.trim().length === 0) {
-    return null;
-  }
-
-  return {
-    ...fragment,
-    text: redacted.text,
-    redaction: createSafeRedactionSummary(),
-    memoryEligible: false,
-  };
-}
-
-export function sanitizeAppContextSnapshot(snapshot: AppContextSnapshot): AppContextSnapshot {
-  const fragments = snapshot.fragments
-    .slice(0, MAX_FRAGMENTS)
-    .map(sanitizeFragment)
-    .filter((fragment): fragment is AppContextFragment => fragment !== null);
-
-  if (snapshot.fragments.length > 0 && fragments.length === 0) {
-    return {
-      fragments: [],
-      metadata: {
-        provider: snapshot.metadata.provider,
-        status: "suppressed",
-        confidence: snapshot.metadata.confidence,
-        suppressionReason: SECRET_LIKE_CONTEXT_SUPPRESSION_REASON,
-      },
-    };
-  }
-
-  if (fragments.length === 0) {
-    return {
-      fragments: [],
-      metadata: {
-        provider: snapshot.metadata.provider,
-        status: snapshot.metadata.status === "cleared" ? "cleared" : "empty",
-        confidence: snapshot.metadata.confidence,
-      },
-    };
-  }
-
-  return {
-    fragments,
-    metadata: {
-      provider: snapshot.metadata.provider ?? fragments[0]?.provider,
-      status: "available",
-      confidence: snapshot.metadata.confidence ?? Math.max(...fragments.map((fragment) => fragment.confidence)),
     },
   };
 }
@@ -881,7 +797,7 @@ function boundedObsidianContext(beforeCaret: string, afterCaret: string): string
   return cleanAccessibilityText(`${before}${after}`).trim();
 }
 
-function createObsidianFragment(snapshot: ExtractableObsidianTextSession, text: string): AppContextFragment {
+function createObsidianFragment(snapshot: ExtractableObsidianTextSession, text: string): AppContextCandidateFragment {
   return {
     id: [
       OBSIDIAN_PROVIDER,
@@ -894,13 +810,10 @@ function createObsidianFragment(snapshot: ExtractableObsidianTextSession, text: 
     kind: "markdown_document",
     text,
     confidence: OBSIDIAN_CONTEXT_CONFIDENCE,
-    redaction: createSafeRedactionSummary(),
-    requestable: true,
-    memoryEligible: false,
   };
 }
 
-export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot): AppContextSnapshot {
+export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot): AppContextCandidate {
   if (!isObsidianApplication(snapshot)) {
     return emptyObsidianSnapshot("unsupported");
   }
@@ -920,14 +833,14 @@ export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot):
 
   const fragment = createObsidianFragment(snapshot, text);
 
-  return sanitizeAppContextSnapshot({
+  return {
     fragments: [fragment],
     metadata: {
       provider: OBSIDIAN_PROVIDER,
       status: "available",
       confidence: fragment.confidence,
     },
-  });
+  };
 }
 
 function takeTrailingText(text: string, maxLength: number): string {
@@ -988,7 +901,7 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
       return createSuppressedZedSnapshot(CODE_LIKE_CONTEXT_SUPPRESSION_REASON);
     }
 
-    return sanitizeAppContextSnapshot({
+    return {
       fragments: [
         {
           id: `${ZED_PROVIDER}:${snapshot.contextHash}`,
@@ -996,9 +909,6 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
           kind: "focused_editor",
           text,
           confidence: ZED_CONTEXT_CONFIDENCE,
-          redaction: createSafeRedactionSummary(),
-          requestable: true,
-          memoryEligible: false,
         },
       ],
       metadata: {
@@ -1006,22 +916,22 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
         status: "available",
         confidence: ZED_CONTEXT_CONFIDENCE,
       },
-    });
+    };
   };
 }
 
 export function createAppContextManager(): AppContextManager {
-  let snapshot = emptySnapshot("empty");
+  let snapshot: AppContextSnapshot = normalizeAppContext(emptySnapshot("empty"));
 
   return {
     setSnapshot(nextSnapshot) {
-      snapshot = sanitizeAppContextSnapshot(nextSnapshot);
+      snapshot = normalizeAppContext(nextSnapshot);
     },
     getSnapshot() {
       return snapshot;
     },
     clear() {
-      snapshot = emptySnapshot("cleared");
+      snapshot = normalizeAppContext(emptySnapshot("cleared"));
     },
   };
 }
@@ -1032,10 +942,10 @@ export function createAccessibilityAppContextProvider(
   return () => {
     const input = readInput();
     const adapter = findAdapter(input.activeApplication);
-    if (!adapter) return emptySnapshot("unsupported");
+    if (!adapter) return normalizeAppContext(emptySnapshot("unsupported"));
 
     if (adapter.confidence < MIN_PROVIDER_CONFIDENCE) {
-      return {
+      return normalizeAppContext({
         fragments: [],
         metadata: {
           provider: adapter.provider,
@@ -1043,7 +953,7 @@ export function createAccessibilityAppContextProvider(
           confidence: adapter.confidence,
           suppressionReason: "low_confidence_provider",
         },
-      };
+      });
     }
 
     const text = uniqueBoundedLines([
@@ -1052,17 +962,17 @@ export function createAccessibilityAppContextProvider(
     ]);
 
     if (text.length === 0) {
-      return {
+      return normalizeAppContext({
         fragments: [],
         metadata: {
           provider: adapter.provider,
           status: "empty",
           confidence: adapter.confidence,
         },
-      };
+      });
     }
 
-    return sanitizeAppContextSnapshot({
+    return normalizeAppContext({
       fragments: [
         {
           id: `${adapter.provider}:visible-context`,
@@ -1070,9 +980,6 @@ export function createAccessibilityAppContextProvider(
           kind: adapter.kind,
           text,
           confidence: adapter.confidence,
-          redaction: createSafeRedactionSummary(),
-          requestable: true,
-          memoryEligible: false,
         },
       ],
       metadata: {
