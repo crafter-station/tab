@@ -43,6 +43,13 @@
       "when": 1783681224414,
       "tag": "0005_chunky_trish_tilby",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1783682206513,
+      "tag": "0006_thick_captain_america",
+      "breakpoints": true
     }
   ]
 }

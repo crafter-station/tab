@@ -47,15 +47,6 @@ export function emptyExtractionCounts(): MemoryExtractionCounts {
   return { created: 0, updated: 0, deleted: 0, rejected: 0 };
 }
 
-export function hasDurableExtractionResult(counts: MemoryExtractionCounts): boolean {
-  return (
-    counts.created > 0 ||
-    counts.updated > 0 ||
-    counts.deleted > 0 ||
-    counts.rejected > 0
-  );
-}
-
 export class PersonalMemoryPolicy {
   constructor(
     private readonly memory: PersonalMemoryPolicyPort,

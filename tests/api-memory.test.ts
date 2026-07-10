@@ -25,8 +25,10 @@ import {
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type {
   MemoryAgentModel,
+  MemoryExtractionIdempotencyStorage,
   ProposedMemoryOperation,
 } from "../apps/api/src/memory-agent.ts";
+import { D1MemoryExtractionIdempotencyStorage } from "../apps/api/src/memory-agent.ts";
 import { createTestDatabase } from "./test-db.ts";
 import type {
   SuggestionGenerator,
@@ -40,6 +42,10 @@ async function createAuthenticatedTestApp(
     vectorIndex: PersonalMemoryVectorIndex;
   },
   memoryExtractionModel?: MemoryAgentModel,
+  options?: {
+    readonly personalMemoryStorage?: InMemoryPersonalMemoryStorage;
+    readonly memoryExtractionIdempotencyStorage?: MemoryExtractionIdempotencyStorage;
+  },
 ) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({ database });
@@ -48,7 +54,8 @@ async function createAuthenticatedTestApp(
   const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
   const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
-  const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+  const personalMemoryStorage =
+    options?.personalMemoryStorage ?? new InMemoryPersonalMemoryStorage();
   const app = createApp({
     generateSuggestion,
     auth,
@@ -56,6 +63,8 @@ async function createAuthenticatedTestApp(
     deviceTokenService,
     personalMemoryStorage,
     memoryExtractionModel,
+    memoryExtractionIdempotencyStorage:
+      options?.memoryExtractionIdempotencyStorage,
     ...vectorDeps,
     telemetryStorage: new InMemoryTelemetryStorage(),
   });
@@ -129,6 +138,7 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
     metadata: PersonalMemoryVectorMetadata;
   }> = [];
   readonly deletes: string[] = [];
+  readonly vectors = new Map<string, UpsertPersonalMemoryVectorInput>();
   readonly queries: Array<{ values: number[]; userId: string; limit: number }> =
     [];
   matches: PersonalMemoryVectorMatch[] = [];
@@ -145,6 +155,7 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
       values: Array.from(input.values),
       metadata: input.metadata,
     });
+    this.vectors.set(input.id, input);
   }
 
   async deleteMemory(id: string): Promise<void> {
@@ -152,6 +163,7 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
     if (this.failDeletes) {
       throw new Error("vector delete unavailable");
     }
+    this.vectors.delete(id);
   }
 
   async queryMemories(
@@ -166,6 +178,46 @@ class FakeVectorIndex implements PersonalMemoryVectorIndex {
       throw new Error("vector unavailable");
     }
     return this.matches;
+  }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((nextResolve) => {
+    resolve = nextResolve;
+  });
+  return { promise, resolve };
+}
+
+class DeferredUpsertVectorIndex extends FakeVectorIndex {
+  readonly upsertStarted = deferred<UpsertPersonalMemoryVectorInput>();
+  readonly continueUpsert = deferred<void>();
+
+  override async upsertMemory(
+    input: UpsertPersonalMemoryVectorInput,
+  ): Promise<void> {
+    this.upsertStarted.resolve(input);
+    await this.continueUpsert.promise;
+    await super.upsertMemory(input);
+  }
+}
+
+class DeferredTextEmbeddingService extends FakeEmbeddingService {
+  readonly embeddingStarted = deferred<void>();
+  readonly continueEmbedding = deferred<void>();
+  private deferred = false;
+
+  constructor(private readonly deferredText: string) {
+    super();
+  }
+
+  override async embedText(text: string): Promise<number[]> {
+    if (text === this.deferredText && !this.deferred) {
+      this.deferred = true;
+      this.embeddingStarted.resolve();
+      await this.continueEmbedding.promise;
+    }
+    return super.embedText(text);
   }
 }
 
@@ -223,12 +275,46 @@ function createD1MemoryStorage(options?: {
   return new D1PersonalMemoryStorage(createTestDatabase(sqlite));
 }
 
+function createExtractionIdempotencyDatabase(): Database {
+  const sqlite = new Database(":memory:");
+  sqlite.exec(`
+    CREATE TABLE memory_extraction_idempotency (
+      user_id text NOT NULL,
+      batch_id_hash text NOT NULL,
+      created integer NOT NULL,
+      updated integer NOT NULL,
+      deleted integer NOT NULL,
+      rejected integer NOT NULL,
+      claim_id text,
+      lease_expires_at text,
+      created_at text NOT NULL,
+      expires_at text NOT NULL,
+      PRIMARY KEY (user_id, batch_id_hash)
+    );
+    CREATE INDEX idx_memory_extraction_idempotency_expires
+      ON memory_extraction_idempotency (expires_at);
+  `);
+  return sqlite;
+}
+
 class AuthorshipFlippingMemoryStorage extends InMemoryPersonalMemoryStorage {
   override async deleteMemoryForExtraction(
     userId: string,
     id: string,
   ): Promise<boolean> {
     await this.updateMemory(userId, id, { createdBy: "user" });
+    return super.deleteMemoryForExtraction(userId, id);
+  }
+}
+
+class CountingPersonalMemoryStorage extends InMemoryPersonalMemoryStorage {
+  extractionDeletes = 0;
+
+  override async deleteMemoryForExtraction(
+    userId: string,
+    id: string,
+  ): Promise<boolean> {
+    this.extractionDeletes += 1;
     return super.deleteMemoryForExtraction(userId, id);
   }
 }
@@ -434,6 +520,135 @@ describe("Personal Memory API", () => {
     expect(await personalMemoryStorage.listMemoriesByUser("user-1")).toHaveLength(
       1,
     );
+  });
+
+  it("allows only one D1 extraction claim across storage instances", async () => {
+    const sqlite = createExtractionIdempotencyDatabase();
+    const firstStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const secondStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const now = new Date("2026-07-10T10:00:00.000Z");
+    const leaseExpiresAt = new Date("2026-07-10T10:05:00.000Z");
+
+    const claims = await Promise.all([
+      firstStorage.claim({
+        userId: "user-1",
+        batchIdHash: "batch-hash",
+        now,
+        leaseExpiresAt,
+      }),
+      secondStorage.claim({
+        userId: "user-1",
+        batchIdHash: "batch-hash",
+        now,
+        leaseExpiresAt,
+      }),
+    ]);
+
+    expect(claims.filter((claim) => claim.status === "claimed")).toHaveLength(1);
+    expect(claims.filter((claim) => claim.status === "pending")).toHaveLength(1);
+  });
+
+  it("atomically completes and reuses D1 extraction results while waiters observe completion", async () => {
+    const sqlite = createExtractionIdempotencyDatabase();
+    const ownerStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const waiterStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const now = new Date();
+    const leaseExpiresAt = new Date(now.getTime() + 5_000);
+    const claim = await ownerStorage.claim({
+      userId: "user-1",
+      batchIdHash: "completed-batch",
+      now,
+      leaseExpiresAt,
+    });
+    if (claim.status !== "claimed") throw new Error("Expected extraction claim");
+    const counts = { created: 1, updated: 2, deleted: 3, rejected: 4 };
+    const waiting = waiterStorage.waitForResult({
+      userId: "user-1",
+      batchIdHash: "completed-batch",
+      waitUntil: leaseExpiresAt,
+    });
+
+    expect(
+      await ownerStorage.complete({
+        userId: "user-2",
+        batchIdHash: "completed-batch",
+        claimId: claim.claimId,
+        counts,
+        expiresAt: new Date(now.getTime() + 60_000),
+      }),
+    ).toBe(false);
+    expect(
+      await ownerStorage.complete({
+        userId: "user-1",
+        batchIdHash: "completed-batch",
+        claimId: claim.claimId,
+        counts,
+        expiresAt: new Date(now.getTime() + 60_000),
+      }),
+    ).toBe(true);
+    expect(await waiting).toEqual(counts);
+    expect(
+      await waiterStorage.claim({
+        userId: "user-1",
+        batchIdHash: "completed-batch",
+        now: new Date(now.getTime() + 1_000),
+        leaseExpiresAt: new Date(now.getTime() + 6_000),
+      }),
+    ).toEqual({ status: "completed", counts });
+  });
+
+  it("takes over an expired D1 extraction lease and rejects the stale claimant", async () => {
+    const sqlite = createExtractionIdempotencyDatabase();
+    const firstStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const secondStorage = new D1MemoryExtractionIdempotencyStorage(
+      createTestDatabase(sqlite),
+    );
+    const startedAt = new Date("2026-07-10T10:00:00.000Z");
+    const leaseExpiresAt = new Date("2026-07-10T10:00:01.000Z");
+    const first = await firstStorage.claim({
+      userId: "user-1",
+      batchIdHash: "expired-batch",
+      now: startedAt,
+      leaseExpiresAt,
+    });
+    if (first.status !== "claimed") throw new Error("Expected first claim");
+
+    expect(
+      await secondStorage.claim({
+        userId: "user-1",
+        batchIdHash: "expired-batch",
+        now: new Date("2026-07-10T10:00:00.999Z"),
+        leaseExpiresAt: new Date("2026-07-10T10:05:00.999Z"),
+      }),
+    ).toEqual({ status: "pending", leaseExpiresAt });
+
+    const recovered = await secondStorage.claim({
+      userId: "user-1",
+      batchIdHash: "expired-batch",
+      now: new Date("2026-07-10T10:00:01.001Z"),
+      leaseExpiresAt: new Date("2026-07-10T10:05:01.001Z"),
+    });
+    expect(recovered.status).toBe("claimed");
+    expect(recovered).not.toMatchObject({ claimId: first.claimId });
+    expect(
+      await firstStorage.complete({
+        userId: "user-1",
+        batchIdHash: "expired-batch",
+        claimId: first.claimId,
+        counts: { created: 1, updated: 0, deleted: 0, rejected: 0 },
+        expiresAt: new Date("2026-07-11T10:00:00.000Z"),
+      }),
+    ).toBe(false);
   });
 
   it("rejects unsafe extraction operations and protected user-created mutations", async () => {
@@ -701,6 +916,74 @@ describe("Personal Memory API", () => {
     expect(vectorIndex.deletes).toEqual([memory.id, memory.id]);
   });
 
+  it("removes a delayed vector upsert after a concurrent canonical deletion", async () => {
+    const storage = createD1MemoryStorage();
+    const vectorIndex = new DeferredUpsertVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService: new FakeEmbeddingService(),
+      vectorIndex,
+    });
+    const creating = personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Memory deleted during indexing",
+      createdBy: "user",
+    });
+    const delayedUpsert = await vectorIndex.upsertStarted.promise;
+
+    await expect(
+      personalMemoryService.deleteMemory("user-1", delayedUpsert.id),
+    ).resolves.toBe(true);
+    expect(vectorIndex.vectors.has(delayedUpsert.id)).toBe(false);
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
+
+    vectorIndex.continueUpsert.resolve();
+    await creating;
+
+    expect(await storage.findMemoryById("user-1", delayedUpsert.id)).toBeNull();
+    expect(vectorIndex.vectors.has(delayedUpsert.id)).toBe(false);
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
+    expect(vectorIndex.deletes).toEqual([delayedUpsert.id, delayedUpsert.id]);
+  });
+
+  it("reindexes the current canonical content after an older update resumes", async () => {
+    const delayedContent = "Outdated concurrent content";
+    const currentContent = "Current canonical content";
+    const storage = createD1MemoryStorage();
+    const embeddingService = new DeferredTextEmbeddingService(delayedContent);
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService,
+      vectorIndex,
+    });
+    const memory = await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Initial content",
+      createdBy: "system",
+    });
+    const olderUpdate = personalMemoryService.updateMemory(
+      "user-1",
+      memory.id,
+      { content: delayedContent },
+    );
+    await embeddingService.embeddingStarted.promise;
+
+    await personalMemoryService.updateMemory("user-1", memory.id, {
+      content: currentContent,
+    });
+    embeddingService.continueEmbedding.resolve();
+    await olderUpdate;
+
+    expect(await storage.findMemoryById("user-1", memory.id)).toMatchObject({
+      content: currentContent,
+    });
+    expect(vectorIndex.vectors.get(memory.id)?.values[0]).toBe(
+      currentContent.length,
+    );
+    expect(embeddingService.embeddedTexts.at(-1)).toBe(currentContent);
+  });
+
   it("acknowledges cleanup after an ordinary vector deletion succeeds", async () => {
     const storage = createD1MemoryStorage();
     const vectorIndex = new FakeVectorIndex();
@@ -830,6 +1113,75 @@ describe("Personal Memory API", () => {
       await personalMemoryStorage.listPendingVectorDeletions("user-1"),
     ).toEqual([]);
     expect(vectorIndex.deletes).toEqual([memory.id, memory.id]);
+  });
+
+  it("shares one completed extraction across concurrent requests while failed vector cleanup remains durable", async () => {
+    const modelStarted = deferred<void>();
+    const continueModel = deferred<void>();
+    const storage = new CountingPersonalMemoryStorage();
+    const vectorIndex = new FakeVectorIndex();
+    const sqlite = createExtractionIdempotencyDatabase();
+    let modelCalls = 0;
+    const { app, token } = await createAuthenticatedTestApp(
+      undefined,
+      { embeddingService: new FakeEmbeddingService(), vectorIndex },
+      {
+        async proposeOperations(_job, memories) {
+          modelCalls += 1;
+          modelStarted.resolve();
+          await continueModel.promise;
+          return [
+            { type: "delete", id: memories[0].id, reason: "Contradicted" },
+          ];
+        },
+      },
+      {
+        personalMemoryStorage: storage,
+        memoryExtractionIdempotencyStorage:
+          new D1MemoryExtractionIdempotencyStorage(createTestDatabase(sqlite)),
+      },
+    );
+    const memory = await storage.createMemory({
+      userId: "user-1",
+      content: "Old concurrent extraction fact",
+      createdBy: "system",
+    });
+    vectorIndex.matches = [{ id: memory.id }];
+    vectorIndex.failDeletes = true;
+    const request = () =>
+      app.request("/api/memory/extract", {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify(
+          extractionBatch("batch-concurrent", "Replacement fact"),
+        ),
+      });
+
+    const first = request();
+    await modelStarted.promise;
+    const second = request();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    continueModel.resolve();
+    const responses = await Promise.all([first, second]);
+    const bodies = await Promise.all(responses.map((response) => response.json()));
+
+    expect(responses.map((response) => response.status)).toEqual([200, 200]);
+    expect(bodies).toEqual([
+      {
+        status: "ok",
+        data: { counts: { created: 0, updated: 0, deleted: 1, rejected: 0 } },
+      },
+      {
+        status: "ok",
+        data: { counts: { created: 0, updated: 0, deleted: 1, rejected: 0 } },
+      },
+    ]);
+    expect(modelCalls).toBe(1);
+    expect(storage.extractionDeletes).toBe(1);
+    expect(await storage.findMemoryById("user-1", memory.id)).toBeNull();
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([
+      expect.objectContaining({ userId: "user-1", memoryId: memory.id }),
+    ]);
   });
 
   it("reindexes an existing memory by id from canonical storage and is safe to rerun", async () => {

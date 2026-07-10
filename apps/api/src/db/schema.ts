@@ -127,6 +127,8 @@ export const memoryExtractionIdempotency = sqliteTable(
     updated: integer("updated").notNull(),
     deleted: integer("deleted").notNull(),
     rejected: integer("rejected").notNull(),
+    claimId: text("claim_id"),
+    leaseExpiresAt: text("lease_expires_at"),
     createdAt: text("created_at").notNull(),
     expiresAt: text("expires_at").notNull(),
   },

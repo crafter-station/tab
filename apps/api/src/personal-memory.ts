@@ -57,6 +57,7 @@ export interface PersonalMemoryStorage {
     userId: string,
     memoryId?: string,
   ): Promise<PendingPersonalMemoryVectorDeletion[]>;
+  enqueueVectorDeletion(userId: string, memoryId: string): Promise<void>;
   acknowledgeVectorDeletion(userId: string, memoryId: string): Promise<void>;
 }
 
@@ -251,7 +252,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   async deleteMemory(userId: string, id: string): Promise<boolean> {
     const existing = this.memories.get(id);
     if (!existing || existing.userId !== userId) return false;
-    this.enqueueVectorDeletion(userId, id);
+    await this.enqueueVectorDeletion(userId, id);
     return this.memories.delete(id);
   }
 
@@ -290,7 +291,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     ) {
       return false;
     }
-    this.enqueueVectorDeletion(userId, id);
+    await this.enqueueVectorDeletion(userId, id);
     return this.memories.delete(id);
   }
 
@@ -312,7 +313,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     this.pendingVectorDeletions.delete(`${userId}:${memoryId}`);
   }
 
-  private enqueueVectorDeletion(userId: string, memoryId: string): void {
+  async enqueueVectorDeletion(userId: string, memoryId: string): Promise<void> {
     const key = `${userId}:${memoryId}`;
     if (this.pendingVectorDeletions.has(key)) return;
     this.pendingVectorDeletions.set(key, {
@@ -469,6 +470,17 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
           eq(pendingPersonalMemoryVectorDeletions.memoryId, memoryId),
         ),
       );
+  }
+
+  async enqueueVectorDeletion(userId: string, memoryId: string): Promise<void> {
+    await this.db
+      .insert(pendingPersonalMemoryVectorDeletions)
+      .values({
+        userId,
+        memoryId,
+        createdAt: toISOTimestamp(new Date()),
+      })
+      .onConflictDoNothing();
   }
 
   private async deleteMemoryAndEnqueueVectorCleanup(
@@ -839,14 +851,42 @@ export class PersonalMemoryService {
   private async indexMemory(memory: PersonalMemory): Promise<void> {
     if (!this.embeddingService || !this.vectorIndex) return;
 
-    const values = await this.embeddingService.embedText(memory.content);
-    await this.vectorIndex.upsertMemory({
-      id: memory.id,
-      values,
-      metadata: {
-        userId: memory.userId,
-        createdBy: memory.createdBy,
-      },
-    });
+    let indexedMemory = memory;
+    while (true) {
+      const values = await this.embeddingService.embedText(indexedMemory.content);
+      await this.vectorIndex.upsertMemory({
+        id: indexedMemory.id,
+        values,
+        metadata: {
+          userId: indexedMemory.userId,
+          createdBy: indexedMemory.createdBy,
+        },
+      });
+
+      const canonical = await this.storage.findMemoryById(
+        indexedMemory.userId,
+        indexedMemory.id,
+      );
+      if (!canonical) {
+        await this.storage.enqueueVectorDeletion(
+          indexedMemory.userId,
+          indexedMemory.id,
+        );
+        await this.cleanupPendingVectorDeletions(
+          indexedMemory.userId,
+          indexedMemory.id,
+        );
+        return;
+      }
+      // A newer canonical update won while this embedding/upsert was in flight.
+      if (
+        canonical.content === indexedMemory.content &&
+        canonical.createdBy === indexedMemory.createdBy
+      ) {
+        return;
+      }
+
+      indexedMemory = canonical;
+    }
   }
 }
