@@ -47,8 +47,6 @@ const CHROME_BUNDLE_IDS = new Set([
   "com.google.Chrome.canary",
   "com.google.Chrome.dev",
 ]);
-const FOCUSED_EDITABLE_CONTEXT_LIMIT = 1_000;
-const NEARBY_VISIBLE_CONTEXT_LIMIT = 1_500;
 const FOCUSED_EDITABLE_CONFIDENCE = 0.92;
 const NEARBY_VISIBLE_TEXT_CONFIDENCE = 0.82;
 const MAX_NEARBY_TEXT_NODES = 12;
@@ -133,7 +131,7 @@ type ExtractableObsidianTextSession = TextSessionSnapshot & {
   readonly surroundingContext: NonNullable<TextSessionSnapshot["surroundingContext"]>;
 };
 
-export type SnapshotAppContextProvider = (snapshot: SafeTypingContextSnapshot) => AppContextCandidate;
+export type AppContextCandidateProvider = (snapshot: SafeTypingContextSnapshot) => AppContextCandidate;
 
 export type ChromeWebAccessibilityNode = {
   readonly id?: string;
@@ -168,12 +166,12 @@ export type AccessibilityTextNode = {
 };
 
 export type AppContextManager = {
-  setSnapshot(snapshot: AppContextCandidate): void;
+  setCandidate(candidate: AppContextCandidate): void;
   getSnapshot(): AppContextSnapshot;
   clear(): void;
 };
 
-function emptySnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextCandidate {
+function emptyCandidate(status: AppContextSnapshot["metadata"]["status"]): AppContextCandidate {
   return { fragments: [], metadata: { status } };
 }
 
@@ -324,7 +322,7 @@ function uniqueBoundedLines(lines: readonly string[]): string {
   return uniqueLines.join("\n").slice(0, MAX_FRAGMENT_LENGTH).trim();
 }
 
-function emptyProviderSnapshot(
+function emptyProviderCandidate(
   provider: string,
   status: AppContextSnapshot["metadata"]["status"],
   suppressionReason?: string,
@@ -340,14 +338,14 @@ function emptyProviderSnapshot(
   };
 }
 
-function emptyObsidianSnapshot(
+function emptyObsidianCandidate(
   status: AppContextSnapshot["metadata"]["status"],
   suppressionReason?: string,
 ): AppContextCandidate {
-  return emptyProviderSnapshot(OBSIDIAN_PROVIDER, status, suppressionReason);
+  return emptyProviderCandidate(OBSIDIAN_PROVIDER, status, suppressionReason);
 }
 
-function emptyGhosttySnapshot(status: AppContextSnapshot["metadata"]["status"], confidence?: number): AppContextCandidate {
+function emptyGhosttyCandidate(status: AppContextSnapshot["metadata"]["status"], confidence?: number): AppContextCandidate {
   return {
     fragments: [],
     metadata: { provider: GHOSTTY_PROVIDER, status, confidence },
@@ -386,25 +384,25 @@ function normalizeTerminalContext(text: string): string {
     .slice(-MAX_FRAGMENT_LENGTH);
 }
 
-export function createGhosttyAppContextSnapshot(snapshot: SafeTypingContextSnapshot): AppContextCandidate {
+export function createGhosttyAppContextCandidate(snapshot: SafeTypingContextSnapshot): AppContextCandidate {
   if (snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID) {
-    return emptyGhosttySnapshot("unsupported");
+    return emptyGhosttyCandidate("unsupported");
   }
 
   const textSession = snapshot.textSession;
   if (!textSession || textSession.accessibilityReliability !== "reliable" || textSession.secureLike) {
-    return emptyGhosttySnapshot("empty", 0);
+    return emptyGhosttyCandidate("empty", 0);
   }
 
   const rawContext = terminalSessionText(textSession);
 
   if (rawContext.trim().length === 0 || controlCharacterRatio(rawContext) > MAX_CONTROL_CHARACTER_RATIO) {
-    return emptyGhosttySnapshot("empty", 0);
+    return emptyGhosttyCandidate("empty", 0);
   }
 
   const text = normalizeTerminalContext(rawContext);
   if (text.length < MIN_GHOSTTY_CONTEXT_LENGTH) {
-    return emptyGhosttySnapshot("empty", 0.4);
+    return emptyGhosttyCandidate("empty", 0.4);
   }
 
   const confidence = 0.86;
@@ -516,17 +514,17 @@ function providerDefinitionFor(activeApplication: ActiveApplication): ProviderDe
   return appSpecificProvider?.definition ?? genericProviderFor(activeApplication);
 }
 
-export function extractAppContextFromAccessibility(
+export function extractAppContextCandidateFromAccessibility(
   activeApplication: ActiveApplication | null,
   root: AccessibilityTextNode | null,
 ): AppContextCandidate {
   if (!activeApplication || !root) {
-    return emptySnapshot("unsupported");
+    return emptyCandidate("unsupported");
   }
 
   const definition = providerDefinitionFor(activeApplication);
   if (!definition) {
-    return emptySnapshot("unsupported");
+    return emptyCandidate("unsupported");
   }
 
   const text = extractBoundedAccessibilityText(root);
@@ -561,15 +559,15 @@ export function extractAppContextFromAccessibility(
   };
 }
 
-function createEmptyZedSnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextCandidate {
+function createEmptyZedCandidate(status: AppContextSnapshot["metadata"]["status"]): AppContextCandidate {
   return { fragments: [], metadata: { provider: ZED_PROVIDER, status } };
 }
 
-function createSuppressedZedSnapshot(suppressionReason: string): AppContextCandidate {
+function createSuppressedZedCandidate(suppressionReason: string): AppContextCandidate {
   return { fragments: [], metadata: { provider: ZED_PROVIDER, status: "suppressed", suppressionReason } };
 }
 
-function chromeWebUnavailableSnapshot(status: AppContextSnapshot["metadata"]["status"] = "unsupported"): AppContextCandidate {
+function chromeWebUnavailableCandidate(status: AppContextSnapshot["metadata"]["status"] = "unsupported"): AppContextCandidate {
   return { fragments: [], metadata: { provider: CHROME_WEB_PROVIDER, status } };
 }
 
@@ -623,12 +621,6 @@ function findFocusedEditableNode(node: ChromeWebAccessibilityNode, focusedElemen
   return null;
 }
 
-function boundedText(text: string, maxLength: number): string {
-  const normalized = text.replace(/\s+/g, " ").trim();
-  if (normalized.length <= maxLength) return normalized;
-  return normalized.slice(0, maxLength).replace(/\s+\S*$/, "").trim();
-}
-
 function verticalDistance(a: ChromeWebAccessibilityBounds, b: ChromeWebAccessibilityBounds): number {
   const aBottom = a.y + a.height;
   const bBottom = b.y + b.height;
@@ -679,31 +671,30 @@ function createChromeWebFragment(
   text: string,
   confidence: number,
 ): AppContextCandidateFragment | null {
-  const bounded = boundedText(text, MAX_FRAGMENT_LENGTH);
-  if (!bounded) return null;
+  if (!text) return null;
 
   return {
     id,
     provider: CHROME_WEB_PROVIDER,
     kind,
-    text: bounded,
+    text,
     confidence,
   };
 }
 
-export function createChromeWebWritingContextSnapshot(input: {
+export function createChromeWebWritingContextCandidate(input: {
   readonly activeApplication: ActiveApplication | null;
   readonly accessibilityTree: ChromeWebAccessibilityNode | null | undefined;
   readonly focusedElementId?: string;
 }): AppContextCandidate {
-  if (!isChromeApplication(input.activeApplication)) return chromeWebUnavailableSnapshot();
-  if (!input.accessibilityTree) return chromeWebUnavailableSnapshot("empty");
+  if (!isChromeApplication(input.activeApplication)) return chromeWebUnavailableCandidate();
+  if (!input.accessibilityTree) return chromeWebUnavailableCandidate("empty");
 
   const focused = findFocusedEditableNode(input.accessibilityTree, input.focusedElementId);
-  if (!focused) return chromeWebUnavailableSnapshot("empty");
+  if (!focused) return chromeWebUnavailableCandidate("empty");
 
   const fragments: AppContextCandidateFragment[] = [];
-  const focusedText = boundedText(nodeText(focused), FOCUSED_EDITABLE_CONTEXT_LIMIT);
+  const focusedText = nodeText(focused);
   const focusedFragment = createChromeWebFragment(
     CHROME_WEB_FOCUSED_EDITABLE_FRAGMENT_ID,
     "focused_editable",
@@ -717,12 +708,12 @@ export function createChromeWebWritingContextSnapshot(input: {
   const nearbyFragment = createChromeWebFragment(
     CHROME_WEB_NEARBY_VISIBLE_TEXT_FRAGMENT_ID,
     "nearby_visible_text",
-    boundedText(nearbyText.join("\n"), NEARBY_VISIBLE_CONTEXT_LIMIT),
+    nearbyText.join(" "),
     nearbyText.length > 0 ? NEARBY_VISIBLE_TEXT_CONFIDENCE : 0,
   );
   if (nearbyFragment) fragments.push(nearbyFragment);
 
-  if (fragments.length === 0) return chromeWebUnavailableSnapshot("empty");
+  if (fragments.length === 0) return chromeWebUnavailableCandidate("empty");
 
   return {
     fragments,
@@ -813,13 +804,13 @@ function createObsidianFragment(snapshot: ExtractableObsidianTextSession, text: 
   };
 }
 
-export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot): AppContextCandidate {
+export function createObsidianDocumentAppContextCandidate(snapshot: TextSessionSnapshot): AppContextCandidate {
   if (!isObsidianApplication(snapshot)) {
-    return emptyObsidianSnapshot("unsupported");
+    return emptyObsidianCandidate("unsupported");
   }
 
   if (!canExtractObsidianEditorContext(snapshot)) {
-    return emptyObsidianSnapshot("empty", MISSING_OBSIDIAN_EDITOR_SEMANTICS_REASON);
+    return emptyObsidianCandidate("empty", MISSING_OBSIDIAN_EDITOR_SEMANTICS_REASON);
   }
 
   const text = boundedObsidianContext(
@@ -828,7 +819,7 @@ export function createObsidianDocumentAppContext(snapshot: TextSessionSnapshot):
   );
 
   if (isNoisyAccessibilityText(text)) {
-    return emptyObsidianSnapshot("empty", NOISY_OBSIDIAN_EXTRACTION_REASON);
+    return emptyObsidianCandidate("empty", NOISY_OBSIDIAN_EXTRACTION_REASON);
   }
 
   const fragment = createObsidianFragment(snapshot, text);
@@ -881,24 +872,24 @@ function isZedBundleId(bundleId: string | undefined): boolean {
   return bundleId ? ZED_BUNDLE_IDS.has(bundleId) : false;
 }
 
-export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextProvider {
+export function createZedFocusedEditorAppContextCandidateProvider(): AppContextCandidateProvider {
   return (snapshot) => {
     const textSession = snapshot.textSession;
     if (!isZedBundleId(snapshot.activeApplication?.bundleId)) {
-      return createEmptyZedSnapshot("unsupported");
+      return createEmptyZedCandidate("unsupported");
     }
     if (!textSession || textSession.accessibilityReliability !== "reliable" || textSession.secureLike) {
-      return createEmptyZedSnapshot("empty");
+      return createEmptyZedCandidate("empty");
     }
 
     const beforeCaret = textSession.surroundingContext?.beforeCaret ?? "";
     const afterCaret = textSession.surroundingContext?.afterCaret ?? "";
     const text = buildBoundedFocusedEditorText(beforeCaret, afterCaret);
     if (text.trim().length < MIN_EDITOR_CONTEXT_LENGTH) {
-      return createEmptyZedSnapshot("empty");
+      return createEmptyZedCandidate("empty");
     }
     if (isCodeLikeFocusedEditorText(text)) {
-      return createSuppressedZedSnapshot(CODE_LIKE_CONTEXT_SUPPRESSION_REASON);
+      return createSuppressedZedCandidate(CODE_LIKE_CONTEXT_SUPPRESSION_REASON);
     }
 
     return {
@@ -921,17 +912,17 @@ export function createZedFocusedEditorAppContextProvider(): SnapshotAppContextPr
 }
 
 export function createAppContextManager(): AppContextManager {
-  let snapshot: AppContextSnapshot = normalizeAppContext(emptySnapshot("empty"));
+  let snapshot: AppContextSnapshot = normalizeAppContext(emptyCandidate("empty"));
 
   return {
-    setSnapshot(nextSnapshot) {
-      snapshot = normalizeAppContext(nextSnapshot);
+    setCandidate(candidate) {
+      snapshot = normalizeAppContext(candidate);
     },
     getSnapshot() {
       return snapshot;
     },
     clear() {
-      snapshot = normalizeAppContext(emptySnapshot("cleared"));
+      snapshot = normalizeAppContext(emptyCandidate("cleared"));
     },
   };
 }
@@ -942,7 +933,7 @@ export function createAccessibilityAppContextProvider(
   return () => {
     const input = readInput();
     const adapter = findAdapter(input.activeApplication);
-    if (!adapter) return normalizeAppContext(emptySnapshot("unsupported"));
+    if (!adapter) return normalizeAppContext(emptyCandidate("unsupported"));
 
     if (adapter.confidence < MIN_PROVIDER_CONFIDENCE) {
       return normalizeAppContext({

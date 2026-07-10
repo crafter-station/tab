@@ -1,14 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import {
-  createChromeWebWritingContextSnapshot,
+  createChromeWebWritingContextCandidate,
   type ChromeWebAccessibilityNode,
 } from "../apps/desktop/src/main/app-context.ts";
 import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
 
 const chrome = { bundleId: "com.google.Chrome", windowId: "window:1" };
 
-function createSnapshot(input: Parameters<typeof createChromeWebWritingContextSnapshot>[0]) {
-  return normalizeAppContext(createChromeWebWritingContextSnapshot(input));
+function createSnapshot(input: Parameters<typeof createChromeWebWritingContextCandidate>[0]) {
+  return normalizeAppContext(createChromeWebWritingContextCandidate(input));
 }
 
 function textNode(text: string, y: number, role = "AXStaticText"): ChromeWebAccessibilityNode {
@@ -27,6 +27,23 @@ function editable(value: string, y = 520): ChromeWebAccessibilityNode {
 }
 
 describe("Chrome web writing context adapter", () => {
+  it("emits semantic candidates without final privacy policy fields", () => {
+    const candidate = createChromeWebWritingContextCandidate({
+      activeApplication: chrome,
+      accessibilityTree: {
+        role: "AXWebArea",
+        children: [textNode("Visible conversation context", 420), editable("Draft reply", 520)],
+      },
+    });
+
+    expect(candidate.fragments).toHaveLength(2);
+    for (const fragment of candidate.fragments) {
+      expect(fragment).not.toHaveProperty("redaction");
+      expect(fragment).not.toHaveProperty("requestable");
+      expect(fragment).not.toHaveProperty("memoryEligible");
+    }
+  });
+
   it("extracts focused editable text and nearby visible page semantics for Chrome", () => {
     const snapshot = createSnapshot({
       activeApplication: chrome,
@@ -58,19 +75,29 @@ describe("Chrome web writing context adapter", () => {
   });
 
   it("bounds long visible page context instead of sending a full page dump", () => {
-    const longParagraphs = Array.from({ length: 80 }, (_, index) =>
-      textNode(`Paragraph ${index} with useful visible document context for the draft.`, 120 + index * 20),
-    );
-
-    const snapshot = createSnapshot({
+    const longParagraphs = [
+      textNode(`Paragraph 0 ${"with useful visible document context for the draft ".repeat(50)}`, 120),
+      ...Array.from({ length: 79 }, (_, index) =>
+        textNode(`Paragraph ${index + 1} with useful visible document context for the draft.`, 140 + index * 20),
+      ),
+    ];
+    const input = {
       activeApplication: chrome,
       accessibilityTree: {
         role: "AXWebArea",
-        children: [...longParagraphs, editable("Continue this doc", 900)],
+        children: [...longParagraphs, editable("Focused draft context ".repeat(80), 900)],
       },
-    });
+    };
+    const candidate = createChromeWebWritingContextCandidate(input);
 
+    expect(candidate.fragments.find((fragment) => fragment.kind === "focused_editable")?.text.length).toBeGreaterThan(1_000);
+    expect(candidate.fragments.find((fragment) => fragment.kind === "nearby_visible_text")?.text.length).toBeGreaterThan(1_500);
+
+    const snapshot = normalizeAppContext(candidate);
+
+    const focused = snapshot.fragments.find((fragment) => fragment.kind === "focused_editable");
     const nearby = snapshot.fragments.find((fragment) => fragment.kind === "nearby_visible_text");
+    expect(focused?.text.length).toBeLessThanOrEqual(1_000);
     expect(nearby?.text.length).toBeLessThanOrEqual(1_500);
     expect(nearby?.text).toContain("Paragraph 0");
     expect(nearby?.text).not.toContain("Paragraph 79");
@@ -165,6 +192,27 @@ describe("Chrome web writing context adapter", () => {
     expect(snapshot.metadata).toMatchObject({
       status: "suppressed",
       suppressionReason: "secret_like_context",
+    });
+  });
+
+  it("suppresses a secret in semantic source beyond the bounded Chrome payload", () => {
+    const safePrefix = "Ordinary visible conversation context ".repeat(60);
+    const candidate = createChromeWebWritingContextCandidate({
+      activeApplication: chrome,
+      accessibilityTree: {
+        role: "AXWebArea",
+        children: [
+          textNode(`${safePrefix} api_key=sk-abc1234567890`, 420),
+          editable("Draft", 520),
+        ],
+      },
+    });
+    const nearbyCandidate = candidate.fragments.find((fragment) => fragment.kind === "nearby_visible_text");
+
+    expect(nearbyCandidate?.text.length).toBeGreaterThan(1_500);
+    expect(normalizeAppContext(candidate)).toMatchObject({
+      fragments: [],
+      metadata: { status: "suppressed", suppressionReason: "secret_like_context" },
     });
   });
 });

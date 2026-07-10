@@ -2,17 +2,17 @@ import type { ActiveApplication } from "@tab/contracts";
 import { normalizeAppContext, type AppContextCandidate } from "./app-context-policy.ts";
 import {
   createAppContextManager,
-  createChromeWebWritingContextSnapshot,
-  createGhosttyAppContextSnapshot,
-  createObsidianDocumentAppContext,
-  createZedFocusedEditorAppContextProvider,
-  extractAppContextFromAccessibility,
+  createChromeWebWritingContextCandidate,
+  createGhosttyAppContextCandidate,
+  createObsidianDocumentAppContextCandidate,
+  createZedFocusedEditorAppContextCandidateProvider,
+  extractAppContextCandidateFromAccessibility,
   type AccessibilityTextNode,
+  type AppContextCandidateProvider,
   type AppContextSnapshot,
   type ChromeWebAccessibilityNode,
-  type SnapshotAppContextProvider,
 } from "./app-context.ts";
-import { extractWhatsAppConversationContext } from "./whatsapp-app-context.ts";
+import { extractWhatsAppConversationContextCandidate } from "./whatsapp-app-context.ts";
 import type { AccessibilityNode as WhatsAppAccessibilityNode } from "./whatsapp-app-context.ts";
 import type { SafeTypingContextSnapshot } from "./typing-context.ts";
 
@@ -50,22 +50,22 @@ export type AppContextExtractor = {
   clear(): void;
 };
 
-type AccessibilityAppContextProvider = {
-  readonly getSnapshot: (input: {
+type AccessibilityAppContextCandidateProvider = {
+  readonly getCandidate: (input: {
     readonly activeApplication: ActiveApplication | null;
     readonly accessibilityTree: AppContextAccessibilityTree | null | undefined;
   }) => AppContextCandidate;
 };
 
-type SnapshotProvider = {
-  readonly getSnapshot: (snapshot: SafeTypingContextSnapshot) => AppContextCandidate;
+type SnapshotCandidateProvider = {
+  readonly getCandidate: (snapshot: SafeTypingContextSnapshot) => AppContextCandidate;
 };
 
 function isAvailable(snapshot: AppContextCandidate): boolean {
   return snapshot.metadata.status === "available" && snapshot.fragments.length > 0;
 }
 
-function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextCandidate {
+function getAppContextCandidateFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextCandidate {
   const surroundingContext = snapshot.textSession?.surroundingContext;
   if (!surroundingContext) return { fragments: [], metadata: { status: "empty" } };
 
@@ -75,7 +75,7 @@ function getAppContextFromTextSession(snapshot: SafeTypingContextSnapshot): AppC
     if (trimmedValue) children.push({ role: "AXStaticText", value: trimmedValue });
   }
 
-  return extractAppContextFromAccessibility(snapshot.activeApplication, {
+  return extractAppContextCandidateFromAccessibility(snapshot.activeApplication, {
     role: "AXFocusedTextSession",
     children,
   });
@@ -85,62 +85,62 @@ function firstAvailableOrSuppressed(snapshots: readonly AppContextCandidate[]): 
   return snapshots.find((snapshot) => isAvailable(snapshot) || snapshot.metadata.status === "suppressed") ?? null;
 }
 
-function createAccessibilityProviderRegistry(): readonly AccessibilityAppContextProvider[] {
+function createAccessibilityCandidateProviderRegistry(): readonly AccessibilityAppContextCandidateProvider[] {
   return [
     {
-      getSnapshot: ({ activeApplication, accessibilityTree }) =>
-        createChromeWebWritingContextSnapshot({
+      getCandidate: ({ activeApplication, accessibilityTree }) =>
+        createChromeWebWritingContextCandidate({
           activeApplication,
           accessibilityTree: accessibilityTree as ChromeWebAccessibilityNode | null | undefined,
         }),
     },
     {
-      getSnapshot: ({ activeApplication, accessibilityTree }) =>
-        extractWhatsAppConversationContext({
+      getCandidate: ({ activeApplication, accessibilityTree }) =>
+        extractWhatsAppConversationContextCandidate({
           activeApplication,
           accessibilityTree: accessibilityTree as WhatsAppAccessibilityNode | null | undefined,
         }),
     },
     {
-      getSnapshot: ({ activeApplication, accessibilityTree }) =>
-        extractAppContextFromAccessibility(activeApplication, accessibilityTree as AccessibilityTextNode | null),
+      getCandidate: ({ activeApplication, accessibilityTree }) =>
+        extractAppContextCandidateFromAccessibility(activeApplication, accessibilityTree as AccessibilityTextNode | null),
     },
   ];
 }
 
-function createSnapshotProviderRegistry(getZedAppContext: SnapshotAppContextProvider): readonly SnapshotProvider[] {
+function createSnapshotCandidateProviderRegistry(getZedAppContext: AppContextCandidateProvider): readonly SnapshotCandidateProvider[] {
   return [
     {
-      getSnapshot: (snapshot) =>
-        snapshot.textSession ? createObsidianDocumentAppContext(snapshot.textSession) : { fragments: [], metadata: { status: "empty" } },
+      getCandidate: (snapshot) =>
+        snapshot.textSession ? createObsidianDocumentAppContextCandidate(snapshot.textSession) : { fragments: [], metadata: { status: "empty" } },
     },
-    { getSnapshot: getZedAppContext },
-    { getSnapshot: getAppContextFromTextSession },
-    { getSnapshot: createGhosttyAppContextSnapshot },
+    { getCandidate: getZedAppContext },
+    { getCandidate: getAppContextCandidateFromTextSession },
+    { getCandidate: createGhosttyAppContextCandidate },
   ];
 }
 
 export function createAppContextExtractor(options: {
-  readonly zedProvider?: SnapshotAppContextProvider;
+  readonly zedCandidateProvider?: AppContextCandidateProvider;
 } = {}): AppContextExtractor {
   const managedContext = createAppContextManager();
-  const getZedAppContext = options.zedProvider ?? createZedFocusedEditorAppContextProvider();
-  const accessibilityProviders = createAccessibilityProviderRegistry();
-  const snapshotProviders = createSnapshotProviderRegistry(getZedAppContext);
+  const getZedAppContext = options.zedCandidateProvider ?? createZedFocusedEditorAppContextCandidateProvider();
+  const accessibilityProviders = createAccessibilityCandidateProviderRegistry();
+  const snapshotProviders = createSnapshotCandidateProviderRegistry(getZedAppContext);
 
   return {
     ingestAccessibilityTree(input) {
-      const snapshots = accessibilityProviders.map((provider) => provider.getSnapshot(input));
-      managedContext.setSnapshot(firstAvailableOrSuppressed(snapshots) ?? { fragments: [], metadata: { status: "unsupported" } });
+      const candidates = accessibilityProviders.map((provider) => provider.getCandidate(input));
+      managedContext.setCandidate(firstAvailableOrSuppressed(candidates) ?? { fragments: [], metadata: { status: "unsupported" } });
     },
     getSnapshot(snapshot) {
       const managedSnapshot = managedContext.getSnapshot();
       if (isAvailable(managedSnapshot)) return managedSnapshot;
 
-      const snapshots = snapshotProviders.map((provider) => provider.getSnapshot(snapshot));
+      const candidates = snapshotProviders.map((provider) => provider.getCandidate(snapshot));
       return normalizeAppContext(
-        firstAvailableOrSuppressed(snapshots)
-          ?? snapshots[snapshots.length - 1]
+        firstAvailableOrSuppressed(candidates)
+          ?? candidates[candidates.length - 1]
           ?? { fragments: [], metadata: { status: "empty" } },
       );
     },

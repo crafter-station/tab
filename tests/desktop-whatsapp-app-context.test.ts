@@ -1,14 +1,14 @@
 import { describe, expect, it } from "bun:test";
 import {
-  extractWhatsAppConversationContext,
+  extractWhatsAppConversationContextCandidate,
   type AccessibilityNode,
 } from "../apps/desktop/src/main/whatsapp-app-context.ts";
 import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
 
 const whatsappApp = { bundleId: "net.whatsapp.WhatsApp", name: "WhatsApp" };
 
-function extractContext(options: Parameters<typeof extractWhatsAppConversationContext>[0]) {
-  return normalizeAppContext(extractWhatsAppConversationContext(options));
+function extractContext(options: Parameters<typeof extractWhatsAppConversationContextCandidate>[0]) {
+  return normalizeAppContext(extractWhatsAppConversationContextCandidate(options));
 }
 
 function message(description: string, overrides: Partial<AccessibilityNode> = {}): AccessibilityNode {
@@ -21,6 +21,23 @@ function message(description: string, overrides: Partial<AccessibilityNode> = {}
 }
 
 describe("WhatsApp conversation App Context adapter", () => {
+  it("emits semantic candidates without final privacy policy fields", () => {
+    const candidate = extractWhatsAppConversationContextCandidate({
+      activeApplication: whatsappApp,
+      accessibilityTree: {
+        children: [
+          { role: "AXHeading", title: "Alex" },
+          message("Alex\n10:41 AM\nCan you confirm the launch date?"),
+          message("You\n10:42 AM\nYes, I'll confirm it today."),
+        ],
+      },
+    });
+
+    expect(candidate.fragments[0]).not.toHaveProperty("redaction");
+    expect(candidate.fragments[0]).not.toHaveProperty("requestable");
+    expect(candidate.fragments[0]).not.toHaveProperty("memoryEligible");
+  });
+
   it("extracts incoming and outgoing direct-message context from visible Accessibility nodes", () => {
     const snapshot = extractContext({
       activeApplication: whatsappApp,

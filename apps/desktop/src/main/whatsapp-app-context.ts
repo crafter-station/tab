@@ -1,6 +1,5 @@
 import type { ActiveApplication } from "@tab/contracts";
 import type { AppContextCandidate, AppContextCandidateFragment } from "./app-context-policy.ts";
-import type { AppContextSnapshot } from "./app-context.ts";
 
 const PROVIDER = "whatsapp-conversation";
 const WHATSAPP_BUNDLE_IDS = new Set([
@@ -52,11 +51,11 @@ type ExtractWhatsAppConversationContextOptions = {
   readonly maxMessages?: number;
 };
 
-function emptySnapshot(status: AppContextSnapshot["metadata"]["status"]): AppContextSnapshot {
+function emptyCandidate(status: AppContextCandidate["metadata"]["status"]): AppContextCandidate {
   return { fragments: [], metadata: { provider: PROVIDER, status } };
 }
 
-function suppressedSnapshot(): AppContextSnapshot {
+function suppressedCandidate(): AppContextCandidate {
   return {
     fragments: [],
     metadata: {
@@ -236,11 +235,11 @@ function confidenceFor(chatTitle: string | undefined, messages: readonly WhatsAp
   return 0;
 }
 
-export function extractWhatsAppConversationContext(
+export function extractWhatsAppConversationContextCandidate(
   options: ExtractWhatsAppConversationContextOptions,
 ): AppContextCandidate {
-  if (!isWhatsAppActive(options.activeApplication)) return emptySnapshot("unsupported");
-  if (!options.accessibilityTree) return emptySnapshot("empty");
+  if (!isWhatsAppActive(options.activeApplication)) return emptyCandidate("unsupported");
+  if (!options.accessibilityTree) return emptyCandidate("empty");
 
   const maxMessages = Math.max(1, options.maxMessages ?? DEFAULT_MAX_MESSAGES);
   const nodes = flattenTree(options.accessibilityTree);
@@ -250,7 +249,7 @@ export function extractWhatsAppConversationContext(
   ).slice(-maxMessages);
   const confidence = confidenceFor(chatTitle, messages);
 
-  if (confidence < 0.65) return suppressedSnapshot();
+  if (confidence < 0.65) return suppressedCandidate();
 
   const text = [
     ...(chatTitle ? [`Chat: ${chatTitle}`] : []),

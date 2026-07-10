@@ -17,8 +17,8 @@ import {
   APP_CONTEXT_TRUST_COPY,
   createAccessibilityAppContextProvider,
   createAppContextManager,
-  createObsidianDocumentAppContext,
-  createZedFocusedEditorAppContextProvider,
+  createObsidianDocumentAppContextCandidate,
+  createZedFocusedEditorAppContextCandidateProvider,
   type AppContextSnapshot,
 } from "../apps/desktop/src/main/app-context.ts";
 import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
@@ -1383,7 +1383,7 @@ describe("desktop native suggestion loop", () => {
 
     it("clears App Context on lifecycle clearing events", () => {
       const manager = createAppContextManager();
-      manager.setSnapshot({
+      manager.setCandidate({
         fragments: [
           {
             id: "fragment-1",
@@ -1391,9 +1391,6 @@ describe("desktop native suggestion loop", () => {
             kind: "visible_text",
             text: "Temporary background",
             confidence: 0.9,
-            redaction: { applied: false, redactionCount: 0, kinds: [] },
-            requestable: true,
-            memoryEligible: false,
           },
         ],
         metadata: { provider: "synthetic-provider", status: "available", confidence: 0.9 },
@@ -1410,7 +1407,7 @@ describe("desktop native suggestion loop", () => {
     });
 
     describe("Zed focused editor App Context", () => {
-      const zedProvider = createZedFocusedEditorAppContextProvider();
+      const zedProvider = createZedFocusedEditorAppContextCandidateProvider();
       const zedTextSession = (overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot => {
         const beforeCaret = overrides.surroundingContext?.beforeCaret ?? "# Launch notes\n\nWe should explain the privacy model";
         const afterCaret = overrides.surroundingContext?.afterCaret ?? " before the demo starts.";
@@ -1431,7 +1428,12 @@ describe("desktop native suggestion loop", () => {
         normalizeAppContext(zedProvider(createSafeTextSessionSnapshot(textSession)));
 
       it("extracts bounded suggestion-only context for Zed prose, markdown, and comments", () => {
-        const markdown = providerSnapshot(zedTextSession());
+        const candidate = zedProvider(createSafeTextSessionSnapshot(zedTextSession()));
+        expect(candidate.fragments[0]).not.toHaveProperty("redaction");
+        expect(candidate.fragments[0]).not.toHaveProperty("requestable");
+        expect(candidate.fragments[0]).not.toHaveProperty("memoryEligible");
+
+        const markdown = normalizeAppContext(candidate);
         expect(markdown.metadata).toMatchObject({
           provider: "zed-focused-editor",
           status: "available",
@@ -1952,7 +1954,7 @@ describe("desktop native suggestion loop", () => {
 
       it("redacts and suppresses secret-like App Context fragments before requests", async () => {
         const manager = createAppContextManager();
-        manager.setSnapshot({
+        manager.setCandidate({
           fragments: [
             {
               id: "fragment-1",
@@ -1960,9 +1962,6 @@ describe("desktop native suggestion loop", () => {
               kind: "visible_text",
               text: "api_key=sk-abc1234567890",
               confidence: 0.9,
-              redaction: { applied: false, redactionCount: 0, kinds: [] },
-              requestable: true,
-              memoryEligible: false,
             },
           ],
           metadata: { provider: "synthetic-provider", status: "available", confidence: 0.9 },
@@ -2104,11 +2103,16 @@ describe("desktop native suggestion loop", () => {
     }
 
     function obsidianSnapshot(textSession: TextSessionSnapshot): AppContextSnapshot {
-      return normalizeAppContext(createObsidianDocumentAppContext(textSession));
+      return normalizeAppContext(createObsidianDocumentAppContextCandidate(textSession));
     }
 
     it("extracts nearby Obsidian markdown context from the focused editor", () => {
-      const snapshot = obsidianSnapshot(makeObsidianTextSession());
+      const candidate = createObsidianDocumentAppContextCandidate(makeObsidianTextSession());
+      expect(candidate.fragments[0]).not.toHaveProperty("redaction");
+      expect(candidate.fragments[0]).not.toHaveProperty("requestable");
+      expect(candidate.fragments[0]).not.toHaveProperty("memoryEligible");
+
+      const snapshot = normalizeAppContext(candidate);
 
       expect(snapshot.metadata).toMatchObject({
         provider: "obsidian-accessibility-editor",

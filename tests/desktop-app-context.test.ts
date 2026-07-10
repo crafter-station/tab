@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import {
-  createGhosttyAppContextSnapshot,
-  extractAppContextFromAccessibility,
+  createGhosttyAppContextCandidate,
+  extractAppContextCandidateFromAccessibility,
   type AccessibilityTextNode,
 } from "../apps/desktop/src/main/app-context.ts";
 import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
@@ -47,7 +47,13 @@ function makeSnapshot(overrides: Partial<SafeTypingContextSnapshot> = {}): SafeT
 
 describe("Ghostty App Context provider", () => {
   it("extracts bounded suggestion-only terminal context from reliable Ghostty Accessibility text", () => {
-    const snapshot = normalizeAppContext(createGhosttyAppContextSnapshot(makeSnapshot()));
+    const candidate = createGhosttyAppContextCandidate(makeSnapshot());
+
+    expect(candidate.fragments[0]).not.toHaveProperty("redaction");
+    expect(candidate.fragments[0]).not.toHaveProperty("requestable");
+    expect(candidate.fragments[0]).not.toHaveProperty("memoryEligible");
+
+    const snapshot = normalizeAppContext(candidate);
 
     expect(snapshot.metadata).toMatchObject({
       provider: "ghostty-terminal",
@@ -68,15 +74,15 @@ describe("Ghostty App Context provider", () => {
     const textSession = makeTextSession({ activeApplication: { bundleId: "com.apple.Terminal" } });
     const snapshot = makeSnapshot({ activeApplication: textSession.activeApplication, textSession });
 
-    expect(normalizeAppContext(createGhosttyAppContextSnapshot(snapshot))).toEqual({
+    expect(normalizeAppContext(createGhosttyAppContextCandidate(snapshot))).toEqual({
       fragments: [],
       metadata: { provider: "ghostty-terminal", status: "unsupported" },
     });
   });
 
   it("falls back to Typing Context when Accessibility data is missing or unreliable", () => {
-    const missing = normalizeAppContext(createGhosttyAppContextSnapshot(makeSnapshot({ textSession: undefined })));
-    const unreliable = normalizeAppContext(createGhosttyAppContextSnapshot(
+    const missing = normalizeAppContext(createGhosttyAppContextCandidate(makeSnapshot({ textSession: undefined })));
+    const unreliable = normalizeAppContext(createGhosttyAppContextCandidate(
       makeSnapshot({ textSession: makeTextSession({ accessibilityReliability: "unavailable" }) }),
     ));
 
@@ -87,7 +93,7 @@ describe("Ghostty App Context provider", () => {
   });
 
   it("drops noisy ANSI/control terminal captures", () => {
-    const snapshot = normalizeAppContext(createGhosttyAppContextSnapshot(
+    const snapshot = normalizeAppContext(createGhosttyAppContextCandidate(
       makeSnapshot({
         textSession: makeTextSession({
           surroundingContext: {
@@ -104,7 +110,7 @@ describe("Ghostty App Context provider", () => {
 
   it("suppresses secret-like terminal output before requests", () => {
     const snapshot = normalizeAppContext(
-      createGhosttyAppContextSnapshot(
+      createGhosttyAppContextCandidate(
         makeSnapshot({
           textSession: makeTextSession({
             surroundingContext: {
@@ -137,10 +143,16 @@ describe("desktop App Context common writing app providers", () => {
       "com.microsoft.VSCode",
       "com.apple.TextEdit",
     ]) {
-      const snapshot = normalizeAppContext(extractAppContextFromAccessibility(
+      const candidate = extractAppContextCandidateFromAccessibility(
         { bundleId },
         tree(["Project notes", "Please confirm the release checklist before Friday."]),
-      ));
+      );
+
+      expect(candidate.fragments[0]).not.toHaveProperty("redaction");
+      expect(candidate.fragments[0]).not.toHaveProperty("requestable");
+      expect(candidate.fragments[0]).not.toHaveProperty("memoryEligible");
+
+      const snapshot = normalizeAppContext(candidate);
 
       expect(snapshot.metadata).toMatchObject({
         provider: "generic-accessibility-text",
@@ -182,7 +194,7 @@ describe("desktop App Context common writing app providers", () => {
 
     for (const item of cases) {
       const snapshot = normalizeAppContext(
-        extractAppContextFromAccessibility({ bundleId: item.bundleId }, tree([item.text])),
+        extractAppContextCandidateFromAccessibility({ bundleId: item.bundleId }, tree([item.text])),
       );
 
       expect(snapshot.metadata).toMatchObject({ provider: item.provider, status: "available" });
@@ -216,7 +228,7 @@ describe("desktop App Context common writing app providers", () => {
     ];
 
     for (const item of cases) {
-      const snapshot = normalizeAppContext(extractAppContextFromAccessibility(
+      const snapshot = normalizeAppContext(extractAppContextCandidateFromAccessibility(
         { bundleId: item.bundleId },
         tree(["A reliable common writing surface exposes surrounding draft text."]),
       ));
@@ -227,12 +239,12 @@ describe("desktop App Context common writing app providers", () => {
   });
 
   it("falls back safely for unsupported apps and low-confidence Accessibility text", () => {
-    const unsupported = normalizeAppContext(extractAppContextFromAccessibility(
+    const unsupported = normalizeAppContext(extractAppContextCandidateFromAccessibility(
       { bundleId: "com.example.UnsupportedWriter" },
       tree(["This app exposes text but is not allowlisted."]),
     ));
     const lowConfidence = normalizeAppContext(
-      extractAppContextFromAccessibility({ bundleId: "com.apple.Notes" }, tree(["ok"])),
+      extractAppContextCandidateFromAccessibility({ bundleId: "com.apple.Notes" }, tree(["ok"])),
     );
 
     expect(unsupported).toEqual({ fragments: [], metadata: { status: "unsupported" } });
@@ -246,10 +258,16 @@ describe("desktop App Context common writing app providers", () => {
 });
 
 describe("App Context privacy normalization", () => {
-  it("is idempotent and preserves non-available status metadata", () => {
+  it("is idempotent and empties contradictory fragments for every non-available status", () => {
     for (const status of ["empty", "suppressed", "cleared", "unsupported"] as const) {
       const candidate = {
-        fragments: [],
+        fragments: [{
+          id: `contradictory-${status}`,
+          provider: "test-provider",
+          kind: "visible_text",
+          text: "api_key=sk-abc1234567890",
+          confidence: 0.9,
+        }],
         metadata: {
           provider: "test-provider",
           status,
@@ -260,8 +278,59 @@ describe("App Context privacy normalization", () => {
       const normalized = normalizeAppContext(candidate);
 
       expect(normalizeAppContext(normalized)).toEqual(normalized);
+      expect(normalized.fragments).toEqual([]);
       expect(normalized.metadata).toEqual(candidate.metadata);
     }
+  });
+
+  it("returns empty without secret suppression when fragments are blank or zero-confidence", () => {
+    for (const fragment of [
+      {
+        id: "blank-fragment",
+        provider: "test-provider",
+        kind: "visible_text",
+        text: "   ",
+        confidence: 0.9,
+      },
+      {
+        id: "zero-confidence-fragment",
+        provider: "test-provider",
+        kind: "visible_text",
+        text: "Useful nearby context",
+        confidence: 0,
+      },
+    ]) {
+      expect(normalizeAppContext({
+        fragments: [fragment],
+        metadata: { provider: "test-provider", status: "available", confidence: 0.4 },
+      })).toEqual({
+        fragments: [],
+        metadata: { provider: "test-provider", status: "empty", confidence: 0.4 },
+      });
+    }
+  });
+
+  it("bounds oversized candidates to five globally bounded fragments", () => {
+    const snapshot = normalizeAppContext({
+      fragments: Array.from({ length: 6 }, (_, index) => ({
+        id: `fragment-${index}`,
+        provider: "test-provider",
+        kind: "visible_text",
+        text: `Fragment ${index} ${"ordinary context ".repeat(180)}`,
+        confidence: 0.9,
+      })),
+      metadata: { provider: "test-provider", status: "available", confidence: 0.9 },
+    });
+
+    expect(snapshot.fragments).toHaveLength(5);
+    expect(snapshot.fragments.map((fragment) => fragment.id)).toEqual([
+      "fragment-0",
+      "fragment-1",
+      "fragment-2",
+      "fragment-3",
+      "fragment-4",
+    ]);
+    expect(snapshot.fragments.every((fragment) => fragment.text.length === 2_000)).toBe(true);
   });
 
   it("owns requestability, memory eligibility, bounds, and secret suppression", () => {
@@ -334,7 +403,7 @@ describe("App Context extraction module", () => {
 
   it("keeps fallback order behind the extraction interface", () => {
     const extractor = createAppContextExtractor({
-      zedProvider: () => ({
+      zedCandidateProvider: () => ({
         fragments: [
           {
             id: "zed:test",
@@ -342,9 +411,6 @@ describe("App Context extraction module", () => {
             kind: "focused_editor",
             text: "A prose comment visible in the focused editor.",
             confidence: 0.82,
-            redaction: { applied: false, redactionCount: 0, kinds: [] },
-            requestable: true,
-            memoryEligible: false,
           },
         ],
         metadata: { provider: "zed-focused-editor", status: "available", confidence: 0.82 },
