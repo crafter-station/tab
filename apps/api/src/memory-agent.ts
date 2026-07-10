@@ -581,53 +581,8 @@ export class D1MemoryExtractionIdempotencyStorage
     ).toISOString();
     const boundedLeaseExpiresAt =
       leaseExpiresAt < recoveryExpiresAt ? leaseExpiresAt : recoveryExpiresAt;
-    const pruneOperations = this.db
-      .delete(memoryExtractionOperations)
-      .where(
-        exists(
-          this.db
-            .select({ userId: memoryExtractionIdempotency.userId })
-            .from(memoryExtractionIdempotency)
-            .where(
-              and(
-                eq(
-                  memoryExtractionIdempotency.userId,
-                  memoryExtractionOperations.userId,
-                ),
-                eq(
-                  memoryExtractionIdempotency.batchIdHash,
-                  memoryExtractionOperations.batchIdHash,
-                ),
-                or(
-                  and(
-                    isNull(memoryExtractionIdempotency.claimId),
-                    lte(memoryExtractionIdempotency.expiresAt, now),
-                  ),
-                  and(
-                    isNotNull(memoryExtractionIdempotency.claimId),
-                    lte(memoryExtractionIdempotency.leaseExpiresAt, now),
-                    lte(memoryExtractionIdempotency.expiresAt, now),
-                  ),
-                ),
-              ),
-            ),
-        ),
-      );
-    const pruneClaims = this.db
-      .delete(memoryExtractionIdempotency)
-      .where(
-        or(
-          and(
-            isNull(memoryExtractionIdempotency.claimId),
-            lte(memoryExtractionIdempotency.expiresAt, now),
-          ),
-          and(
-            isNotNull(memoryExtractionIdempotency.claimId),
-            lte(memoryExtractionIdempotency.leaseExpiresAt, now),
-            lte(memoryExtractionIdempotency.expiresAt, now),
-          ),
-        ),
-      );
+    const [pruneOperations, pruneClaims] =
+      this.buildExpiredRecordPruneQueries(input.now);
     const claimBatch = this.db
       .insert(memoryExtractionIdempotency)
       .values({
@@ -1316,7 +1271,11 @@ export class D1MemoryExtractionIdempotencyStorage
     );
   }
 
-  private async pruneExpiredRecords(now: Date): Promise<void> {
+  async pruneExpiredRecords(now: Date): Promise<void> {
+    await this.db.batch(this.buildExpiredRecordPruneQueries(now));
+  }
+
+  private buildExpiredRecordPruneQueries(now: Date) {
     const timestamp = now.toISOString();
     const pruneOperations = this.db
       .delete(memoryExtractionOperations)
@@ -1368,7 +1327,7 @@ export class D1MemoryExtractionIdempotencyStorage
           ),
         ),
       );
-    await this.db.batch([pruneOperations, pruneClaims] as const);
+    return [pruneOperations, pruneClaims] as const;
   }
 
   private findRow(userId: string, batchIdHash: string) {

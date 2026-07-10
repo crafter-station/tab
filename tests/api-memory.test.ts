@@ -43,6 +43,7 @@ import {
   InMemoryMemoryExtractionIdempotencyStorage,
   MemoryExtractionService,
 } from "../apps/api/src/memory-agent.ts";
+import { cleanupExpiredMemoryExtractionRecords } from "../apps/api/src/worker.ts";
 import { createTestDatabase } from "./test-db.ts";
 import type {
   SuggestionGenerator,
@@ -965,6 +966,117 @@ describe("Personal Memory API", () => {
         )
         .all(),
     ).toEqual([]);
+  });
+
+  it("globally prunes expired extraction state while retaining takeover and completed records", async () => {
+    const sqlite = createExtractionIdempotencyDatabase();
+    const database = createTestDatabase(sqlite);
+    const now = new Date("2026-07-10T12:00:00.000Z");
+    const expiredAt = new Date(now.getTime() - 1).toISOString();
+    const expiredLease = new Date(now.getTime() - 60_000).toISOString();
+    const retainedUntil = new Date(now.getTime() + 60_000).toISOString();
+    const operationPlan = (memoryId: string) =>
+      JSON.stringify({
+        version: 1,
+        operations: [
+          {
+            type: "create",
+            memoryId,
+            content: "Retained operation content",
+            eligible: true,
+          },
+        ],
+      });
+    const insertRecord = sqlite.prepare(`
+      INSERT INTO memory_extraction_idempotency (
+        user_id, batch_id_hash, created, updated, deleted, rejected,
+        claim_id, lease_expires_at, operation_plan, operation_count,
+        created_at, expires_at
+      ) VALUES (?, ?, ?, 0, 0, 0, ?, ?, ?, ?, ?, ?)
+    `);
+
+    insertRecord.run(
+      "user-1",
+      "expired-abandoned",
+      1,
+      "expired-claim",
+      expiredLease,
+      operationPlan("expired-memory"),
+      1,
+      "2026-07-09T11:59:59.000Z",
+      expiredAt,
+    );
+    insertRecord.run(
+      "user-1",
+      "retained-takeover",
+      1,
+      "takeover-claim",
+      expiredLease,
+      operationPlan("retained-memory"),
+      1,
+      "2026-07-10T11:00:00.000Z",
+      retainedUntil,
+    );
+    insertRecord.run(
+      "user-1",
+      "retained-completed",
+      1,
+      null,
+      null,
+      null,
+      0,
+      "2026-07-10T11:00:00.000Z",
+      retainedUntil,
+    );
+    const insertOperation = sqlite.prepare(`
+      INSERT INTO memory_extraction_operations (
+        user_id, batch_id_hash, operation_index, outcome, memory_id,
+        counted, created_at
+      ) VALUES ('user-1', ?, 0, 'created', ?, 1, ?)
+    `);
+    insertOperation.run(
+      "expired-abandoned",
+      "expired-memory",
+      "2026-07-09T12:00:00.000Z",
+    );
+    insertOperation.run(
+      "retained-takeover",
+      "retained-memory",
+      "2026-07-10T11:00:00.000Z",
+    );
+
+    await cleanupExpiredMemoryExtractionRecords(database, now);
+
+    expect(
+      sqlite
+        .query(
+          "select batch_id_hash, created, claim_id from memory_extraction_idempotency order by batch_id_hash",
+        )
+        .all(),
+    ).toEqual([
+      {
+        batch_id_hash: "retained-completed",
+        created: 1,
+        claim_id: null,
+      },
+      {
+        batch_id_hash: "retained-takeover",
+        created: 1,
+        claim_id: "takeover-claim",
+      },
+    ]);
+    expect(
+      sqlite
+        .query(
+          "select batch_id_hash, memory_id from memory_extraction_operations order by batch_id_hash",
+        )
+        .all(),
+    ).toEqual([
+      {
+        batch_id_hash: "retained-takeover",
+        memory_id: "retained-memory",
+      },
+    ]);
   });
 
   it("runs a non-no-op extraction through createApp production D1 wiring", async () => {
@@ -2127,6 +2239,37 @@ describe("Personal Memory API", () => {
     expect(vectorIndex.deletes).toEqual(["orphaned-vector"]);
     expect(await storage.listPendingVectorUpserts("user-1")).toEqual([]);
     expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
+  });
+
+  it("drains unrelated deletions when read-path upsert repair fails", async () => {
+    const storage = createD1MemoryStorage();
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService: new FakeEmbeddingService(),
+      vectorIndex,
+    });
+    const memory = await storage.createMemory({
+      userId: "user-1",
+      content: "Pending retryable upsert",
+      createdBy: "user",
+    });
+    await storage.enqueueVectorDeletion("user-1", "unrelated-deleted-vector");
+    vectorIndex.failUpserts = true;
+
+    await expect(personalMemoryService.listMemories("user-1")).resolves.toEqual([
+      memory,
+    ]);
+
+    expect(vectorIndex.deletes).toEqual(["unrelated-deleted-vector"]);
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
+    expect(await storage.listPendingVectorUpserts("user-1")).toEqual([
+      expect.objectContaining({ memoryId: memory.id }),
+    ]);
+
+    vectorIndex.failUpserts = false;
+    await personalMemoryService.listMemories("user-1");
+    expect(await storage.listPendingVectorUpserts("user-1")).toEqual([]);
   });
 
   it("does not touch the vector index when a scoped mutation does not apply", async () => {

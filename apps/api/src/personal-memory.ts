@@ -1166,17 +1166,28 @@ export class PersonalMemoryService {
   ): Promise<void> {
     if (!this.vectorIndex) return;
 
-    if (this.embeddingService) {
-      const pending = await this.storage.listPendingVectorUpserts(
-        userId,
-        memoryId,
-      );
-      for (const upsert of pending) {
-        await this.reconcileVectorUpsert(upsert, this.embeddingService);
+    let firstUpsertFailure: unknown;
+    let upsertFailed = false;
+    try {
+      if (this.embeddingService) {
+        const pending = await this.storage.listPendingVectorUpserts(
+          userId,
+          memoryId,
+        );
+        for (const upsert of pending) {
+          try {
+            await this.reconcileVectorUpsert(upsert, this.embeddingService);
+          } catch (error) {
+            if (!upsertFailed) firstUpsertFailure = error;
+            upsertFailed = true;
+          }
+        }
       }
+    } finally {
+      await this.cleanupPendingVectorDeletions(userId, memoryId);
     }
 
-    await this.cleanupPendingVectorDeletions(userId, memoryId);
+    if (upsertFailed) throw firstUpsertFailure;
   }
 
   private async reconcilePendingVectorMutationsForRead(
