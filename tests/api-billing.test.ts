@@ -465,19 +465,13 @@ describe("Billing and quota enforcement", () => {
       currentMonth(),
       2,
     );
-    const second = await storage.consumeUsageWithinLimit(
-      "user-d1",
-      currentMonth(),
-      2,
-    );
-    const exhausted = await storage.consumeUsageWithinLimit(
-      "user-d1",
-      currentMonth(),
-      2,
-    );
+    const contenders = await Promise.all([
+      storage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
+      storage.consumeUsageWithinLimit("user-d1", currentMonth(), 2),
+    ]);
     expect(first).toBe(1);
-    expect(second).toBe(2);
-    expect(exhausted).toBeNull();
+    expect(contenders).toContain(2);
+    expect(contenders).toContain(null);
 
     const usage = await storage.getUsage("user-d1", currentMonth());
     expect(usage).toBe(2);
