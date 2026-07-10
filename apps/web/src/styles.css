@@ -1,1 +1,160 @@
 @import "../../../packages/ui/src/styles/globals.css";
+
+.tab-web {
+  background-image:
+    linear-gradient(to right, color-mix(in srgb, var(--border) 35%, transparent) 1px, transparent 1px),
+    linear-gradient(to bottom, color-mix(in srgb, var(--border) 35%, transparent) 1px, transparent 1px);
+  background-size: 4rem 4rem;
+  background-position: center top;
+}
+
+.tab-web::before {
+  position: fixed;
+  z-index: -1;
+  inset: 0;
+  background: color-mix(in srgb, var(--background) 88%, transparent);
+  content: "";
+}
+
+.marketing-intro > * {
+  animation: marketing-intro 650ms var(--tab-ease-out) both;
+}
+
+.marketing-intro > :nth-child(2) {
+  animation-delay: 60ms;
+}
+
+.marketing-intro > :nth-child(3) {
+  animation-delay: 110ms;
+}
+
+.marketing-intro > :nth-child(4) {
+  animation-delay: 160ms;
+}
+
+.marketing-intro > :nth-child(5) {
+  animation-delay: 210ms;
+}
+
+.tab-demo {
+  box-shadow: 0 2.5rem 6rem color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+.tab-demo [data-demo-scene] {
+  display: none;
+}
+
+.tab-demo[data-active="mail"] [data-demo-scene="mail"],
+.tab-demo[data-active="slack"] [data-demo-scene="slack"],
+.tab-demo[data-active="notes"] [data-demo-scene="notes"] {
+  display: grid;
+  animation: tab-demo-scene 320ms var(--tab-ease-out) both;
+}
+
+.tab-demo[data-active="mail"] [data-demo-target="mail"],
+.tab-demo[data-active="slack"] [data-demo-target="slack"],
+.tab-demo[data-active="notes"] [data-demo-target="notes"] {
+  border-color: var(--foreground);
+  background: var(--foreground);
+  color: var(--background);
+}
+
+.tab-demo-suggestion {
+  display: inline;
+  animation: tab-demo-suggestion 650ms var(--tab-ease-out) 420ms both;
+  transition: color 200ms var(--tab-ease-out);
+}
+
+.tab-demo-overlay {
+  animation: tab-demo-overlay 420ms var(--tab-ease-out) 900ms both;
+}
+
+.tab-demo[data-restarting="true"] .tab-demo-suggestion,
+.tab-demo[data-restarting="true"] .tab-demo-overlay {
+  animation: none;
+  opacity: 0;
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-suggestion {
+  animation: none;
+  opacity: 1;
+  color: var(--foreground);
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-overlay {
+  animation: none;
+  opacity: 1;
+  transform: none;
+  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
+  background: var(--success);
+  color: var(--success-foreground);
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-ready-label {
+  display: none;
+}
+
+.tab-demo[data-accepted="true"] .tab-demo-accepted-label {
+  display: inline;
+}
+
+.marketing-marquee-track {
+  width: max-content;
+  animation: marketing-marquee 28s linear infinite;
+}
+
+.marketing-detail > summary::-webkit-details-marker {
+  display: none;
+}
+
+.marketing-detail[open] .marketing-detail-icon {
+  transform: rotate(45deg);
+}
+
+@keyframes marketing-intro {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.75rem, 0);
+  }
+}
+
+@keyframes tab-demo-scene {
+  from {
+    opacity: 0;
+    transform: translate3d(0.5rem, 0, 0);
+  }
+}
+
+@keyframes tab-demo-suggestion {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes tab-demo-overlay {
+  from {
+    opacity: 0;
+    transform: translate3d(0, 0.5rem, 0) scale(0.97);
+  }
+}
+
+@keyframes marketing-marquee {
+  to {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .marketing-marquee:hover .marketing-marquee-track {
+    animation-play-state: paused;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-marquee-track {
+    animation: none;
+  }
+}

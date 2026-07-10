@@ -9,6 +9,7 @@ import {
   SignupPage,
 } from "./components/pages/auth.tsx";
 import { DashboardPage, type DashboardSection } from "./components/pages/dashboard.tsx";
+import { AboutPage, ContactPage, PrivacyPage, TermsPage } from "./components/pages/information.tsx";
 import { DownloadPage, HomePage, PricingPage } from "./components/pages/marketing.tsx";
 import { MessagePage, type AuthSearch, type User } from "./components/pages/shared.tsx";
 import { env } from "./env.ts";
@@ -59,8 +60,8 @@ function loginRedirect(next?: string): Response {
   return redirect(`/login${query ? `?${query}` : ""}`);
 }
 
-function html(body: ReactNode, title: string, status = 200, user?: User): Response {
-  return new Response(renderPage(title, body, user), {
+function html(body: ReactNode, title: string, status = 200, user?: User, description?: string): Response {
+  return new Response(renderPage(title, body, user, description), {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
@@ -116,6 +117,22 @@ async function stylesheet(): Promise<Response> {
     headers: {
       "cache-control": "no-cache",
       "content-type": "text/css; charset=utf-8",
+    },
+  });
+}
+
+async function publicAsset(path: string): Promise<Response | undefined> {
+  const isMarketingScript = path === "/marketing-demo.js";
+  const isLogo = /^\/logos\/[a-z0-9-]+\.svg$/.test(path);
+  if (!isMarketingScript && !isLogo) return undefined;
+
+  const file = Bun.file(new URL(`../public${path}`, import.meta.url));
+  if (!(await file.exists())) return undefined;
+
+  return new Response(file, {
+    headers: {
+      "cache-control": "public, max-age=86400",
+      "content-type": isMarketingScript ? "text/javascript; charset=utf-8" : "image/svg+xml",
     },
   });
 }
@@ -189,7 +206,13 @@ export function createWebApp(config: WebAppConfig) {
 
   async function homePage(cookieHeader: string | undefined): Promise<Response> {
     const user = await getOptionalUser(cookieHeader);
-    return html(createElement(HomePage), `${appName} - Autocomplete for your Mac`, 200, user);
+    return html(
+      createElement(HomePage),
+      `${appName} - Native autocomplete for your Mac`,
+      200,
+      user,
+      "Finish thoughts faster in Mail, Slack, Notes, and the Mac apps where you already write. Tab only inserts a suggestion when you choose.",
+    );
   }
 
   async function pricingPage(cookieHeader: string | undefined): Promise<Response> {
@@ -740,12 +763,57 @@ export function createWebApp(config: WebAppConfig) {
         return stylesheet();
       }
 
+      if (request.method === "GET") {
+        const assetResponse = await publicAsset(path);
+        if (assetResponse) return assetResponse;
+      }
+
       if (path === "/" && request.method === "GET") {
         return homePage(cookieHeader);
       }
 
       if (path === "/pricing" && request.method === "GET") {
         return pricingPage(cookieHeader);
+      }
+
+      if (path === "/about" && request.method === "GET") {
+        return html(
+          createElement(AboutPage),
+          `About ${appName} - Native autocomplete for macOS`,
+          200,
+          undefined,
+          "Why Tab brings deliberate, controllable autocomplete to the Mac apps where you already write.",
+        );
+      }
+
+      if (path === "/contact" && request.method === "GET") {
+        return html(
+          createElement(ContactPage),
+          `Contact ${appName}`,
+          200,
+          undefined,
+          "Contact Tab for setup, privacy, billing, account help, or technical product feedback.",
+        );
+      }
+
+      if (path === "/privacy" && request.method === "GET") {
+        return html(
+          createElement(PrivacyPage),
+          `Privacy Policy - ${appName}`,
+          200,
+          undefined,
+          "How Tab processes Typing Context, Personal Memory, account, device, usage, and billing information.",
+        );
+      }
+
+      if (path === "/terms" && request.method === "GET") {
+        return html(
+          createElement(TermsPage),
+          `Terms of Service - ${appName}`,
+          200,
+          undefined,
+          "Terms governing the Tab website, native macOS app, account dashboard, and paid plans.",
+        );
       }
 
       if (path === "/components" && request.method === "GET") {

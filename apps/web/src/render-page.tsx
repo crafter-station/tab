@@ -12,6 +12,7 @@ import {
 } from "@tab/ui";
 import { Desktop, Gear, Moon, SignOut, Sun, UserCircle } from "@phosphor-icons/react";
 import type { User } from "./components/pages/shared.tsx";
+import { SiteFooter, SiteHeader } from "./components/site-shell.tsx";
 
 const themeInitScript = getThemeInitScript();
 const themeControlScript = getThemeControlScript();
@@ -97,13 +98,17 @@ function UserMenu({ user }: { user: User }) {
 
 function WebDocument({
   title,
+  description,
   children,
   user,
 }: {
   title: string;
+  description?: string;
   children: ReactNode;
   user?: User;
 }) {
+  const pageDescription = description ?? "Finish thoughts faster in the Mac apps where you already write. Tab only inserts a suggestion when you choose.";
+
   return (
     <html lang="en" style={{ colorScheme: "light dark" }}>
       <head>
@@ -112,33 +117,26 @@ function WebDocument({
         <meta name="color-scheme" content="light dark" />
         <meta name="theme-color" content="#f5f4f0" media="(prefers-color-scheme: light)" />
         <meta name="theme-color" content="#0d0f0e" media="(prefers-color-scheme: dark)" />
+        <meta name="description" content={pageDescription} />
+        <meta property="og:type" content="website" />
+        <meta property="og:title" content={title} />
+        <meta property="og:description" content={pageDescription} />
+        <meta name="twitter:card" content="summary" />
         <title>{title}</title>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
         <link rel="stylesheet" href="/styles.css" />
       </head>
       <body className="tab-web">
         <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[var(--radius-control)] focus:border focus:border-border focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground" href="#main-content">Skip to main content</a>
-        <div className="min-h-dvh">
-          <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-5 sm:px-8">
-            <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border py-4 sm:py-5">
-              <a className="font-[var(--font-display)] text-xl font-bold tracking-[-0.03em] no-underline" href="/">Tab</a>
-              <nav className="flex flex-wrap items-center justify-end gap-2 text-sm font-semibold sm:gap-3">
-                 <a className="rounded-[var(--radius-control)] px-1.5 py-2 no-underline text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/pricing">Pricing</a>
-                 <a className="rounded-[var(--radius-control)] px-1.5 py-2 no-underline text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/download">Download</a>
-                <StaticThemeMenu />
-                {user ? (
-                  <UserMenu user={user} />
-                ) : (
-                  <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>
-                )}
-              </nav>
-            </header>
+        <div className="flex min-h-dvh flex-col">
+          <SiteHeader
+            themeControl={<StaticThemeMenu />}
+            accountControl={user ? <UserMenu user={user} /> : <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>}
+          />
+          <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 sm:px-8">
             <main id="main-content" className="flex-1 py-8 sm:py-12">{children}</main>
-            <footer className="flex items-center justify-between gap-4 border-t border-border py-6 text-sm text-muted-foreground max-md:flex-col max-md:items-start">
-              <span>Tab, autocomplete for your Mac.</span>
-              <span>You choose when to add suggestions, and you control saved memories.</span>
-            </footer>
           </div>
+          <SiteFooter authenticated={Boolean(user)} />
         </div>
         <script dangerouslySetInnerHTML={{ __html: themeControlScript }} />
       </body>
@@ -146,6 +144,6 @@ function WebDocument({
   );
 }
 
-export function renderPage(title: string, children: ReactNode, user?: User): string {
-  return `<!doctype html>${renderToStaticMarkup(<WebDocument title={title} user={user}>{children}</WebDocument>)}`;
+export function renderPage(title: string, children: ReactNode, user?: User, description?: string): string {
+  return `<!doctype html>${renderToStaticMarkup(<WebDocument title={title} user={user} description={description}>{children}</WebDocument>)}`;
 }
