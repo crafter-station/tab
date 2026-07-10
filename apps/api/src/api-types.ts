@@ -3,19 +3,28 @@ import type { Hono } from "hono";
 import type { Device } from "./device-tokens.ts";
 
 export type WorkersAiBinding = {
-  run(model: string, input: { text: string | string[] }): Promise<unknown>;
+  run(
+    model: "@cf/baai/bge-base-en-v1.5",
+    input: { text: string | string[] },
+  ): Promise<unknown>;
 };
+
+type VectorizeMetadataValue = string | number | boolean | string[];
 
 export type VectorizeBinding = {
   upsert(
-    vectors: Array<{ id: string; values: number[]; metadata?: object }>,
+    vectors: Array<{
+      id: string;
+      values: number[];
+      metadata?: Record<string, VectorizeMetadataValue>;
+    }>,
   ): Promise<unknown>;
   deleteByIds(ids: string[]): Promise<unknown>;
   query(
     values: number[],
     options: {
       topK: number;
-      filter?: object;
+      filter?: Record<string, Exclude<VectorizeMetadataValue, string[]> | null>;
       returnMetadata?: boolean;
     },
   ): Promise<unknown>;

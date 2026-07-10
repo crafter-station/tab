@@ -160,7 +160,8 @@ export class WorkersAiPersonalMemoryEmbeddingService
 {
   constructor(
     private readonly ai: WorkersAiBinding,
-    private readonly model = MEMORY_EMBEDDING_MODEL,
+    private readonly model: typeof MEMORY_EMBEDDING_MODEL =
+      MEMORY_EMBEDDING_MODEL,
   ) {}
 
   async embedText(text: string): Promise<number[]> {
