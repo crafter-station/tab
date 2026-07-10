@@ -2,11 +2,14 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopStatus } from "../main/status.ts";
 import type { DesktopPreferences } from "../main/preferences.ts";
 import type { PersonalMemory } from "@tab/contracts";
+import type { LocalInferenceStatus } from "../main/local-inference-prototype.ts";
+import type { CompletionHistoryEntry } from "../main/completion-history.ts";
 
 type DebugApiState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "empty" }
+  | { status: "local-unavailable"; reason: string }
   | { status: "suggestion"; text: string };
 
 type DebugContext = {
@@ -29,7 +32,12 @@ type DebugContext = {
 };
 
 export type TabPreloadApi = {
-  onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => () => void;
+  onSuggestion: (callback: (suggestion: {
+    id: string;
+    text: string;
+    presentation?: "floating" | "inline";
+    inlineMetrics?: { fontSize: number; lineHeight: number };
+  }) => void) => () => void;
   onDebugContext: (callback: (debug: DebugContext) => void) => () => void;
   onHide: (callback: () => void) => () => void;
   overlayReady: () => void;
@@ -50,17 +58,30 @@ export type TabPreloadApi = {
   onMemoriesChanged: (callback: (memories: PersonalMemory[]) => void) => () => void;
   onPauseChanged: (callback: (paused: boolean) => void) => () => void;
   onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => () => void;
-  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences }>;
+  onLocalInferenceStatusChanged: (callback: (status: LocalInferenceStatus) => void) => () => void;
+  onCompletionHistoryChanged: (callback: (entries: readonly CompletionHistoryEntry[]) => void) => () => void;
+  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences; localInferenceStatus: LocalInferenceStatus; completionHistory: readonly CompletionHistoryEntry[] }>;
   signIn: () => void;
   signOut: () => void;
   togglePause: () => void;
+  downloadLocalModel: () => Promise<void>;
   setUsePersonalMemoryForSuggestions: (enabled: boolean) => void;
   deleteMemory: (id: string) => void;
 };
 
 contextBridge.exposeInMainWorld("tab", {
-  onSuggestion: (callback: (suggestion: { id: string; text: string }) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, suggestion: { id: string; text: string }) => callback(suggestion);
+  onSuggestion: (callback: (suggestion: {
+    id: string;
+    text: string;
+    presentation?: "floating" | "inline";
+    inlineMetrics?: { fontSize: number; lineHeight: number };
+  }) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, suggestion: {
+      id: string;
+      text: string;
+      presentation?: "floating" | "inline";
+      inlineMetrics?: { fontSize: number; lineHeight: number };
+    }) => callback(suggestion);
     ipcRenderer.on("suggestion", listener);
     return () => ipcRenderer.off("suggestion", listener);
   },
@@ -116,6 +137,16 @@ contextBridge.exposeInMainWorld("tab", {
     ipcRenderer.on("preferences-changed", listener);
     return () => ipcRenderer.off("preferences-changed", listener);
   },
+  onLocalInferenceStatusChanged: (callback: (status: LocalInferenceStatus) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, status: LocalInferenceStatus) => callback(status);
+    ipcRenderer.on("local-inference-status-changed", listener);
+    return () => ipcRenderer.off("local-inference-status-changed", listener);
+  },
+  onCompletionHistoryChanged: (callback: (entries: readonly CompletionHistoryEntry[]) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, entries: readonly CompletionHistoryEntry[]) => callback(entries);
+    ipcRenderer.on("completion-history-changed", listener);
+    return () => ipcRenderer.off("completion-history-changed", listener);
+  },
   getInitialState: () => ipcRenderer.invoke("get-initial-state"),
   signIn: () => {
     ipcRenderer.send("sign-in");
@@ -126,6 +157,7 @@ contextBridge.exposeInMainWorld("tab", {
   togglePause: () => {
     ipcRenderer.send("toggle-pause");
   },
+  downloadLocalModel: () => ipcRenderer.invoke("download-local-model"),
   setUsePersonalMemoryForSuggestions: (enabled: boolean) => {
     ipcRenderer.send("set-use-personal-memory-for-suggestions", enabled);
   },

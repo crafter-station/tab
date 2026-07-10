@@ -40,6 +40,7 @@ type RecordInteractionTelemetry = (event: RecordTelemetryEventRequest) => void |
 export type NativeSuggestionSessionDependencies = {
   readonly typingContext: TypingContextBuffer;
   readonly getLocalSuggestion?: SuggestionSource;
+  readonly fallbackToCloudOnLocalMiss?: boolean;
   readonly requestSuggestion: SuggestionSource;
   readonly getContextSource: () => SuggestionContextSource;
   readonly outputs: NativeSuggestionSessionOutputs;
@@ -82,7 +83,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let lastContextHash: string | null = null;
   const { outputs } = deps;
   const compatibilityStore = deps.compatibilityStore ?? createApplicationCompatibilityStore();
-  const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy({ compatibilityStore });
+  const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy();
 
   function requestIdFromSuggestion(suggestion: Suggestion): string {
     if (suggestion.id.startsWith(SUGGESTION_ID_PREFIX)) {
@@ -152,8 +153,15 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   const suggestionLoop = createSuggestionLoop({
     getContext: () => currentSafeSnapshot(),
     getLocalSuggestion: deps.getLocalSuggestion ?? ((snapshot) => generateLocalSuggestion(snapshot.sanitizedContext)),
+    fallbackToCloudOnLocalMiss: deps.fallbackToCloudOnLocalMiss,
     requestSuggestion: deps.requestSuggestion,
     onShowSuggestion: (suggestion) => {
+      currentSuggestion = suggestion;
+      visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
+      visibleSuggestionTelemetry = buildTelemetry(suggestion);
+      outputs.showSuggestion(suggestion);
+    },
+    onShowPartialSuggestion: (suggestion) => {
       currentSuggestion = suggestion;
       visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
       visibleSuggestionTelemetry = buildTelemetry(suggestion);

@@ -26,15 +26,18 @@ import {
 } from "@tab/ui";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
+import type { LocalInferenceStatus } from "../../../main/local-inference-prototype";
+import type { CompletionHistoryEntry } from "../../../main/completion-history";
 import { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 import { describePauseState, describePersonalMemorySource } from "./settingsCopy";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitialState"]>>;
-type SettingsTab = "account" | "controls" | "appearance" | "permissions" | "memory";
+type SettingsTab = "account" | "completions" | "controls" | "appearance" | "permissions" | "memory";
 type SidebarStatus = { label: string; detail: string; tone: SemanticTone };
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
   { value: "account", label: "Account", description: "Plan, usage, and connection for this Mac." },
+  { value: "completions", label: "Completions", description: "Inspect this session's inference requests." },
   { value: "controls", label: "Controls", description: "Choose when Tab can offer suggestions." },
   { value: "appearance", label: "Appearance", description: "Set how Tab looks on this Mac." },
   { value: "permissions", label: "Permissions", description: "Review the macOS access Tab needs." },
@@ -102,6 +105,9 @@ export function SettingsSurface() {
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
   const [usePersonalMemory, setUsePersonalMemory] = useState(false);
+  const [localInferenceStatus, setLocalInferenceStatus] = useState<LocalInferenceStatus>({ status: "stopped" });
+  const [modelDownloadError, setModelDownloadError] = useState<string | null>(null);
+  const [completionHistory, setCompletionHistory] = useState<readonly CompletionHistoryEntry[]>([]);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
   const activeTabConfig = SETTINGS_TABS.find((tab) => tab.value === activeTab);
@@ -127,6 +133,16 @@ export function SettingsSurface() {
     const unsubscribePreferences = window.tab.onPreferencesChanged((nextPreferences) => {
       setUsePersonalMemory(nextPreferences.suggestions.usePersonalMemory);
     });
+    let receivedLocalInferenceStatus = false;
+    const unsubscribeLocalInference = window.tab.onLocalInferenceStatusChanged((status) => {
+      receivedLocalInferenceStatus = true;
+      setLocalInferenceStatus(status);
+    });
+    let receivedCompletionHistory = false;
+    const unsubscribeCompletionHistory = window.tab.onCompletionHistoryChanged?.((entries) => {
+      receivedCompletionHistory = true;
+      setCompletionHistory(entries);
+    }) ?? (() => {});
 
     window.tab
       .getInitialState()
@@ -136,6 +152,8 @@ export function SettingsSurface() {
         setMemories(initialState.memories);
         setPaused(initialState.paused);
         setUsePersonalMemory(initialState.preferences.suggestions.usePersonalMemory);
+        if (!receivedLocalInferenceStatus) setLocalInferenceStatus(initialState.localInferenceStatus);
+        if (!receivedCompletionHistory) setCompletionHistory(initialState.completionHistory ?? []);
       })
       .catch(() => {});
 
@@ -145,6 +163,8 @@ export function SettingsSurface() {
       unsubscribeMemories();
       unsubscribePause();
       unsubscribePreferences();
+      unsubscribeLocalInference();
+      unsubscribeCompletionHistory();
     };
   }, [refreshAccessibility]);
 
@@ -181,6 +201,15 @@ export function SettingsSurface() {
   function handleThemeMode(nextMode: ThemeMode) {
     setThemeMode(nextMode);
     setThemePreference(nextMode);
+  }
+
+  async function handleDownloadModel() {
+    setModelDownloadError(null);
+    try {
+      await window.tab.downloadLocalModel();
+    } catch {
+      setModelDownloadError("The model could not be downloaded. Check your connection and try again.");
+    }
   }
 
   function renderActiveTab() {
@@ -248,6 +277,67 @@ export function SettingsSurface() {
               tone={paused ? "warning" : "success"}
               description="Your account stays connected. Tab stops checking recent typing and hides the suggestion bar."
             />
+            <SettingsRow
+              label="Local model"
+              description={modelDownloadError ?? (localInferenceStatus.status === "unavailable"
+                ? `Automatic Suggestions are unavailable (${localInferenceStatus.reason}). Remote inference will not be used automatically.`
+                : localInferenceStatus.status === "downloading"
+                  ? "Keep Tab open while the local model downloads."
+                : "Automatic Suggestions run on this Mac and never silently fall through to remote inference.")}
+            >
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <StatusBadge tone={localInferenceStatus.status === "ready" ? "success" : "warning"}>
+                  {localInferenceStatus.status === "ready"
+                    ? "Ready"
+                    : localInferenceStatus.status === "starting"
+                      ? "Starting"
+                      : localInferenceStatus.status === "downloading"
+                        ? localInferenceStatus.progress === null
+                          ? "Downloading"
+                          : `Downloading ${Math.round(localInferenceStatus.progress * 100)}%`
+                        : "Unavailable"}
+                </StatusBadge>
+                {localInferenceStatus.status === "unavailable"
+                  && ["missing_model", "artifact_mismatch", "download_failed"].includes(localInferenceStatus.reason) && (
+                  <Button onClick={handleDownloadModel}>Download model</Button>
+                )}
+              </div>
+            </SettingsRow>
+          </SettingsGroup>
+        );
+
+      case "completions":
+        return (
+          <SettingsGroup
+            title="Completion history"
+            description="The latest 100 successful completions from this app session. Input and output are kept in memory only and clear when Tab quits."
+          >
+            {completionHistory.length === 0 ? (
+              <EmptyState title="No completions yet" description="Type in another app and pause briefly to generate a local completion." />
+            ) : (
+              <div className="flex flex-col gap-3 p-4">
+                {completionHistory.map((entry) => (
+                  <article className="rounded-lg border border-border bg-background/40 p-4" key={entry.id}>
+                    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                      <StatusBadge tone={entry.mode === "local" ? "success" : "neutral"}>{entry.mode}</StatusBadge>
+                      <span>{entry.model}</span>
+                      <span>{entry.latencyMs} ms</span>
+                      <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleTimeString()}</time>
+                    </div>
+                    <div className="grid gap-3">
+                      <div>
+                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Input</div>
+                        <pre className="whitespace-pre-wrap break-words font-mono text-sm">{entry.input}</pre>
+                      </div>
+                      <div>
+                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Output</div>
+                        <pre className="whitespace-pre-wrap break-words font-mono text-sm text-foreground">{entry.output}</pre>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            )}
           </SettingsGroup>
         );
 

@@ -22,6 +22,7 @@
       "@tab/effect-services": ["packages/effect-services/src/index.ts"],
       "@tab/memory-policy": ["packages/memory-policy/src/index.ts"],
       "@tab/redaction": ["packages/redaction/src/index.ts"],
+      "@tab/suggestion-policy": ["packages/suggestion-policy/src/index.ts"],
       "@tab/ui": ["packages/ui/src/index.ts"],
       "@tab/ui/*": ["packages/ui/src/*"]
     },

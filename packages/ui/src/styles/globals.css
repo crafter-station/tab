@@ -358,3 +358,26 @@ a:not([class]) {
     transform: none !important;
   }
 }
+
+@layer base {
+  :root {
+    --sidebar-background: 100 5% 91%;
+    --sidebar-foreground: 120 4% 11%;
+    --sidebar-primary: 100 4% 13%;
+    --sidebar-primary-foreground: 90 20% 97%;
+    --sidebar-accent: 100 8% 87%;
+    --sidebar-accent-foreground: 100 10% 13%;
+    --sidebar-border: 100 7% 82%;
+    --sidebar-ring: 100 4% 19%;
+  }
+  .dark {
+    --sidebar-background: 120 5% 11%;
+    --sidebar-foreground: 90 20% 95%;
+    --sidebar-primary: 90 16% 94%;
+    --sidebar-primary-foreground: 120 5% 9%;
+    --sidebar-accent: 100 8% 19%;
+    --sidebar-accent-foreground: 90 20% 95%;
+    --sidebar-border: 100 4% 23%;
+    --sidebar-ring: 90 12% 92%;
+  }
+}

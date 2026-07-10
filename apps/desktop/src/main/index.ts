@@ -40,6 +40,8 @@ import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createUpdateChecker } from "./release.ts";
+import { createLocalInferencePrototype, QWEN_25_3B_Q4_K_M } from "./local-inference-prototype.ts";
+import { createCompletionHistory } from "./completion-history.ts";
 import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 
@@ -52,6 +54,13 @@ const APP_RENDERER_PATH = env.TAB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "r
 const TRAY_ICON_PATH = env.TAB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
 const INPUT_TAP_PATH = env.TAB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
+const LOCAL_INFERENCE_MODEL_PATH = env.TAB_LOCAL_INFERENCE_MODEL_PATH ?? path.join(
+  app.getPath("userData"),
+  "models",
+  "Qwen2.5-3B-Instruct-Q4_K_M.gguf",
+);
+const LOCAL_INFERENCE_MODEL_URL = env.TAB_LOCAL_INFERENCE_MODEL_URL
+  ?? "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/7dabda4d13d513e3e842b20f0d435c732f172cbe/qwen2.5-3b-instruct-q4_k_m.gguf";
 
 let overlayWindow: BrowserWindow | null = null;
 let debugOverlayWindow: BrowserWindow | null = null;
@@ -139,7 +148,7 @@ const authClient = createDesktopAuthClient({
   },
 });
 
-const requestSuggestion = createApiSuggestionClient({
+const requestCloudSuggestion = createApiSuggestionClient({
   apiBaseUrl: API_BASE_URL,
   deviceId: DEVICE_ID,
   appVersion: APP_VERSION,
@@ -147,6 +156,23 @@ const requestSuggestion = createApiSuggestionClient({
   memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
+const completionHistory = createCompletionHistory((entries) => {
+  settingsWindowManager.sendCompletionHistory(entries);
+});
+const requestSuggestion: ReturnType<typeof createApiSuggestionClient> = async (snapshot, options) => {
+  const startedAt = performance.now();
+  const suggestion = await requestCloudSuggestion(snapshot, options);
+  if (suggestion && !options?.signal?.aborted) {
+    completionHistory.record({
+      input: snapshot.sanitizedContext,
+      output: suggestion.text,
+      latencyMs: Math.round(performance.now() - startedAt),
+      mode: "cloud",
+      model: "openai/gpt-oss-20b",
+    });
+  }
+  return suggestion;
+};
 const recordInteractionTelemetry = createDesktopTelemetryClient({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
@@ -210,6 +236,7 @@ type DebugApiState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "empty" }
+  | { status: "local-unavailable"; reason: string }
   | { status: "suggestion"; text: string };
 type DebugAppContextState = {
   status: string;
@@ -220,10 +247,50 @@ type DebugAppContextState = {
   messageCount: number;
 };
 let debugApiState: DebugApiState = { status: "idle" };
+const localInference = createLocalInferencePrototype({
+  executablePath: env.TAB_LOCAL_INFERENCE_EXECUTABLE ?? "/opt/homebrew/bin/llama-server",
+  modelPath: LOCAL_INFERENCE_MODEL_PATH,
+  modelUrl: LOCAL_INFERENCE_MODEL_URL,
+  port: env.TAB_LOCAL_INFERENCE_PORT,
+  onStatusChange: (status) => {
+    settingsWindowManager.sendLocalInferenceStatus(status);
+    if (status.status === "unavailable") {
+      updateDebugApiState({ status: "local-unavailable", reason: status.reason });
+    }
+  },
+});
 const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
   typingContext: typingContextBuffer,
   appContext: appContextExtractor,
   memoryExtraction: memoryExtractionDispatcher,
+  getLocalSuggestion: async (snapshot, options) => {
+    updateDebugApiState({ status: "loading" });
+    const startedAt = performance.now();
+    try {
+      const suggestion = await localInference.getSuggestion(snapshot, options);
+      if (suggestion && !options?.signal?.aborted) {
+        const timing = localInference.getLastTiming();
+        completionHistory.record({
+          input: snapshot.sanitizedContext,
+          output: suggestion.text,
+          latencyMs: Math.round(performance.now() - startedAt),
+          ...(timing ?? {}),
+          mode: "local",
+          model: QWEN_25_3B_Q4_K_M.id,
+        });
+      }
+      updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
+      return suggestion;
+    } catch (error) {
+      const status = localInference.getStatus();
+      updateDebugApiState({
+        status: "local-unavailable",
+        reason: status.status === "unavailable" ? status.reason : "request_failed",
+      });
+      throw error;
+    }
+  },
+  fallbackToCloudOnLocalMiss: false,
   requestSuggestion,
   outputs: {
     showSuggestion: showOverlay,
@@ -264,7 +331,7 @@ const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
       clipboard.writeText(previous);
     },
   }),
-  debounceMs: 300,
+  debounceMs: 100,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
 });
@@ -844,6 +911,7 @@ function startMacOSInputTap(): void {
 }
 
 async function bootstrap(): Promise<void> {
+  void localInference.start();
   // Onboarding should guide the user to grant Accessibility and Input Monitoring
   // permissions. Tab deliberately does not request Screen Recording or Full
   // Disk Access; those are out of scope for the MVP per ADR-0037.
@@ -932,6 +1000,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.on("toggle-pause", () => {
     togglePause().catch((error) => console.error("Failed to toggle pause:", error));
   });
+  ipcMain.handle("download-local-model", () => localInference.downloadModel());
 
   ipcMain.on("delete-memory", (_event, id: string) => {
     memoryClient
@@ -953,6 +1022,8 @@ async function bootstrap(): Promise<void> {
     memories: currentMemories,
     paused: nativeAutocompleteRuntime.isPaused(),
     preferences: preferencesManager.get(),
+    localInferenceStatus: localInference.getStatus(),
+    completionHistory: completionHistory.getEntries(),
   }));
 
   // Register the custom URL scheme so the browser handoff can land back in the
@@ -1060,6 +1131,7 @@ app.on("will-quit", () => {
     debugOverlayWindow.close();
   }
   inputTapProcess?.kill();
+  localInference.stop();
   memoryExtractionDispatcher.stop();
   typingContextBuffer.clear();
 });

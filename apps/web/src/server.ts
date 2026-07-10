@@ -60,8 +60,8 @@ function loginRedirect(next?: string): Response {
   return redirect(`/login${query ? `?${query}` : ""}`);
 }
 
-function html(body: ReactNode, title: string, status = 200, user?: User, description?: string): Response {
-  return new Response(renderPage(title, body, user, description), {
+function html(body: ReactNode, title: string, status = 200, user?: User, description?: string, siteShell = true): Response {
+  return new Response(renderPage(title, body, user, description, siteShell), {
     status,
     headers: { "content-type": "text/html; charset=utf-8" },
   });
@@ -574,6 +574,8 @@ export function createWebApp(config: WebAppConfig) {
       `${section === "overview" ? "Dashboard" : `Dashboard ${section}`} - ${appName}`,
       200,
       sessionCheck.user,
+      undefined,
+      false,
     );
   }
 

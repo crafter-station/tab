@@ -16,6 +16,51 @@ import { SiteFooter, SiteHeader } from "./components/site-shell.tsx";
 
 const themeInitScript = getThemeInitScript();
 const themeControlScript = getThemeControlScript();
+const dashboardSidebarInitScript = `(() => { try { if (localStorage.getItem('tab-dashboard-sidebar') === 'collapsed') document.documentElement.dataset.dashboardSidebarState = 'collapsed'; } catch (_) {} })();`;
+const dashboardSidebarControlScript = `(() => {
+  var root = document.documentElement;
+  function collapsed() { return root.dataset.dashboardSidebarState === 'collapsed'; }
+  function sync() {
+    var isCollapsed = collapsed();
+    document.querySelectorAll('[data-dashboard-sidebar-toggle]').forEach(function(button) {
+      button.setAttribute('aria-expanded', isCollapsed ? 'false' : 'true');
+      button.setAttribute('aria-label', isCollapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      var label = button.querySelector('.sr-only');
+      if (label) label.textContent = isCollapsed ? 'Expand sidebar' : 'Collapse sidebar';
+    });
+  }
+  function toggle(fromKeyboard) {
+    if (fromKeyboard) root.dataset.dashboardSidebarMotion = 'none';
+    var next = collapsed() ? 'expanded' : 'collapsed';
+    root.dataset.dashboardSidebarState = next;
+    try { localStorage.setItem('tab-dashboard-sidebar', next); } catch (_) {}
+    sync();
+    if (fromKeyboard) requestAnimationFrame(function() { requestAnimationFrame(function() { delete root.dataset.dashboardSidebarMotion; }); });
+  }
+  document.addEventListener('click', function(event) {
+    var target = event.target instanceof Element ? event.target.closest('[data-dashboard-sidebar-toggle]') : null;
+    if (target) toggle(false);
+    var copyLogo = event.target instanceof Element ? event.target.closest('[data-copy-tab-logo]') : null;
+    if (copyLogo) {
+      var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tab logo"><rect width="32" height="32" rx="8" fill="#20221f"/><path fill="#f8f9f6" d="M9 8h14v4h-5v12h-4V12H9z"/></svg>';
+      navigator.clipboard.writeText(svg).then(function() {
+        var label = copyLogo.querySelector('span');
+        if (label) {
+          var previous = label.textContent;
+          label.textContent = 'Copied Logo SVG';
+          setTimeout(function() { label.textContent = previous; }, 1400);
+        }
+      }).catch(function() {});
+    }
+  });
+  document.addEventListener('keydown', function(event) {
+    if (event.key.toLowerCase() === 'b' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      toggle(true);
+    }
+  });
+  sync();
+})();`;
 
 function ThemeIcon({ mode }: { mode: ThemeMode }) {
   const Icon = mode === "light" ? Sun : mode === "dark" ? Moon : Desktop;
@@ -101,11 +146,13 @@ function WebDocument({
   description,
   children,
   user,
+  siteShell,
 }: {
   title: string;
   description?: string;
   children: ReactNode;
   user?: User;
+  siteShell: boolean;
 }) {
   const pageDescription = description ?? "Finish thoughts faster in the Mac apps where you already write. Tab only inserts a suggestion when you choose.";
 
@@ -124,26 +171,30 @@ function WebDocument({
         <meta name="twitter:card" content="summary" />
         <title>{title}</title>
         <script dangerouslySetInnerHTML={{ __html: themeInitScript }} />
+        <script dangerouslySetInnerHTML={{ __html: dashboardSidebarInitScript }} />
         <link rel="stylesheet" href="/styles.css" />
       </head>
       <body className="tab-web">
         <a className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-[var(--radius-control)] focus:border focus:border-border focus:bg-background focus:px-3 focus:py-2 focus:text-sm focus:font-semibold focus:text-foreground" href="#main-content">Skip to main content</a>
-        <div className="flex min-h-dvh flex-col">
-          <SiteHeader
-            themeControl={<StaticThemeMenu />}
-            accountControl={user ? <UserMenu user={user} /> : <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>}
-          />
-          <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 sm:px-8">
-            <main id="main-content" className="flex-1 py-8 sm:py-12">{children}</main>
+        {siteShell ? (
+          <div className="flex min-h-dvh flex-col">
+            <SiteHeader
+              themeControl={<StaticThemeMenu />}
+              accountControl={user ? <UserMenu user={user} /> : <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>}
+            />
+            <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 sm:px-8">
+              <main id="main-content" className="flex-1 py-8 sm:py-12">{children}</main>
+            </div>
+            <SiteFooter authenticated={Boolean(user)} />
           </div>
-          <SiteFooter authenticated={Boolean(user)} />
-        </div>
+        ) : children}
         <script dangerouslySetInnerHTML={{ __html: themeControlScript }} />
+        <script dangerouslySetInnerHTML={{ __html: dashboardSidebarControlScript }} />
       </body>
     </html>
   );
 }
 
-export function renderPage(title: string, children: ReactNode, user?: User, description?: string): string {
-  return `<!doctype html>${renderToStaticMarkup(<WebDocument title={title} user={user} description={description}>{children}</WebDocument>)}`;
+export function renderPage(title: string, children: ReactNode, user?: User, description?: string, siteShell = true): string {
+  return `<!doctype html>${renderToStaticMarkup(<WebDocument title={title} user={user} description={description} siteShell={siteShell}>{children}</WebDocument>)}`;
 }

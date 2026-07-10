@@ -13,14 +13,19 @@ export type SuggestionLoopState =
 
 export type SuggestionSource = (
   snapshot: RequestableTypingContextSnapshot,
-  options?: { signal?: AbortSignal },
+  options?: {
+    signal?: AbortSignal;
+    onPartialSuggestion?: (suggestion: Suggestion) => void;
+  },
 ) => Promise<Suggestion | null> | Suggestion | null;
 
 export type SuggestionLoopDependencies = {
   getContext(): SafeTypingContextSnapshot;
   getLocalSuggestion?: SuggestionSource;
+  fallbackToCloudOnLocalMiss?: boolean;
   requestSuggestion: SuggestionSource;
   onShowSuggestion(suggestion: Suggestion): void;
+  onShowPartialSuggestion?: (suggestion: Suggestion) => void;
   onHideSuggestion(): void;
   onRequestStarted?: (context: string) => void;
   onRequestFinished?: (suggestion: Suggestion | null) => void;
@@ -34,6 +39,7 @@ export type SuggestionLoopDependencies = {
 export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   let state: SuggestionLoopState = { status: "idle" };
   let requestVersion = 0;
+  let activeLocalController: AbortController | null = null;
   let activeCloudRequest: {
     contextHash: string;
     controller: AbortController;
@@ -76,10 +82,24 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   async function requestLocalSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null> {
     if (!deps.getLocalSuggestion) return null;
 
+    const controller = new AbortController();
+    activeLocalController = controller;
     try {
-      return await deps.getLocalSuggestion(snapshot);
+      return await deps.getLocalSuggestion(snapshot, {
+        signal: controller.signal,
+        onPartialSuggestion: (suggestion) => {
+          if (!isCurrentDebouncedContext(snapshot.contextHash)) return;
+          const showDecision = deps.triggerPolicy?.onSuggestionCandidate(snapshot, suggestion);
+          if (showDecision && !showDecision.allow) return;
+          deps.onShowPartialSuggestion?.(suggestion);
+        },
+      });
     } catch {
       return null;
+    } finally {
+      if (activeLocalController === controller) {
+        activeLocalController = null;
+      }
     }
   }
 
@@ -92,6 +112,8 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
 
   function invalidate(): void {
     requestVersion += 1;
+    activeLocalController?.abort();
+    activeLocalController = null;
     activeCloudRequest?.controller.abort();
     activeCloudRequest = null;
     if (state.status === "debouncing") {
@@ -212,6 +234,11 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
 
         if (localSuggestion) {
           tryShowSuggestion(latest, localSuggestion, hash);
+          return;
+        }
+
+        if (deps.getLocalSuggestion && deps.fallbackToCloudOnLocalMiss === false) {
+          state = { status: "idle" };
           return;
         }
 

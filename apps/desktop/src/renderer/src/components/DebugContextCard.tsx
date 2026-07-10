@@ -4,6 +4,7 @@ type DebugApiState =
   | { status: "idle" }
   | { status: "loading" }
   | { status: "empty" }
+  | { status: "local-unavailable"; reason: string }
   | { status: "suggestion"; text: string };
 
 export type DebugContext = {
@@ -33,6 +34,7 @@ function getApiText(api: DebugApiState | undefined): string {
   if (!api || api.status === "idle") return "Waiting before the next request...";
   if (api.status === "loading") return "Requesting a suggestion...";
   if (api.status === "empty") return "No suggestion returned yet.";
+  if (api.status === "local-unavailable") return `Local suggestions unavailable (${api.reason}).`;
   return api.text;
 }
 

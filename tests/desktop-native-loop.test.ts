@@ -313,7 +313,7 @@ describe("desktop native suggestion loop", () => {
 
     function makeDeps(overrides: {
       requestSuggestion?: SuggestionSource;
-      getLocalSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null> | Suggestion | null;
+      getLocalSuggestion?: SuggestionSource;
       getContext?: () => SafeTypingContextSnapshot;
       maxVisibleMs?: number;
     } = {}) {
@@ -501,10 +501,9 @@ describe("desktop native suggestion loop", () => {
       expect(events.some((e) => e.type === "hide")).toBe(true);
     });
 
-    it("suppresses cloud requests while prose typing cadence is still rapid", async () => {
-      let now = 1_000;
+    it("requests a suggestion for the latest prose after a rapid typing burst stops", async () => {
       let context = "Hello";
-      const policy = createPoliteTriggerPolicy({ now: () => now, rapidTypingMs: 250 });
+      const policy = createPoliteTriggerPolicy();
       const requestSuggestionCalls: string[] = [];
       const { deps } = makeDeps({
         getContext: () => makeSnapshot({ context }),
@@ -516,12 +515,11 @@ describe("desktop native suggestion loop", () => {
       const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy });
 
       loop.onContextChanged();
-      now += 40;
       context = "Hello t";
       loop.onContextChanged();
       await wait(10);
 
-      expect(requestSuggestionCalls).toHaveLength(0);
+      expect(requestSuggestionCalls).toEqual(["Hello t"]);
     });
 
     it("hides candidates that the trigger policy decides are too interruptive to show", async () => {
@@ -537,8 +535,8 @@ describe("desktop native suggestion loop", () => {
       expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished"]);
     });
 
-    it("uses stricter trigger behavior in terminal contexts than prose contexts", async () => {
-      const policy = createPoliteTriggerPolicy({ now: () => 10_000 });
+    it("requests local-first suggestions in terminal and prose contexts", async () => {
+      const policy = createPoliteTriggerPolicy();
       const terminalRequestSuggestionCalls: string[] = [];
       const proseRequestSuggestionCalls: string[] = [];
       const terminal = makeDeps({
@@ -563,22 +561,43 @@ describe("desktop native suggestion loop", () => {
       createSuggestionLoop({ ...terminal.deps, triggerPolicy: policy }).onContextChanged();
       createSuggestionLoop({
         ...prose.deps,
-        triggerPolicy: createPoliteTriggerPolicy({ now: () => 10_000 }),
+        triggerPolicy: createPoliteTriggerPolicy(),
       }).onContextChanged();
       await wait(10);
 
-      expect(terminalRequestSuggestionCalls).toHaveLength(0);
+      expect(terminalRequestSuggestionCalls).toEqual(["git status"]);
       expect(proseRequestSuggestionCalls).toEqual(["git status"]);
     });
 
-    it("activates bounded cooldowns after repeated stale suggestions", async () => {
-      let now = 1_000;
-      let context = "Hello ";
-      const policy = createPoliteTriggerPolicy({
-        now: () => now,
-        staleCooldownThreshold: 1,
-        staleCooldownMs: 500,
+    it("requests suggestions when Accessibility marks a safe Text Session as unreliable", async () => {
+      const requestSuggestionCalls: string[] = [];
+      const textSession: TextSessionSnapshot = {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 5, length: 0 },
+        caretIdentity: "caret:5",
+        secureLike: false,
+        accessibilityReliability: "unreliable",
+        surroundingContext: { beforeCaret: "hello", afterCaret: "" },
+      };
+      const { deps } = makeDeps({
+        getContext: () => createSafeTextSessionSnapshot(textSession),
+        requestSuggestion: async (snapshot) => {
+          requestSuggestionCalls.push(snapshot.sanitizedContext);
+          return { id: "s-unreliable", text: " world" };
+        },
       });
+
+      createSuggestionLoop({ ...deps, triggerPolicy: createPoliteTriggerPolicy() }).onContextChanged();
+      await wait(10);
+
+      expect(requestSuggestionCalls).toEqual(["hello"]);
+    });
+
+    it("continues requesting after stale suggestions", async () => {
+      let context = "Hello ";
+      const policy = createPoliteTriggerPolicy();
       const requestSuggestionCalls: string[] = [];
       const { deps } = makeDeps({
         getContext: () => makeSnapshot({ context }),
@@ -592,18 +611,16 @@ describe("desktop native suggestion loop", () => {
       loop.onContextChanged();
       await wait(25);
       context = "Hello again ";
-      now += 100;
-      loop.onContextChanged();
-      await wait(15);
-
-      expect(requestSuggestionCalls).toHaveLength(1);
-
-      now += 600;
-      context = "Hello again friend ";
       loop.onContextChanged();
       await wait(15);
 
       expect(requestSuggestionCalls).toHaveLength(2);
+
+      context = "Hello again friend ";
+      loop.onContextChanged();
+      await wait(15);
+
+      expect(requestSuggestionCalls).toHaveLength(3);
     });
 
     it("shows a confident local suggestion without making a cloud request", async () => {
@@ -651,6 +668,23 @@ describe("desktop native suggestion loop", () => {
       expect(cloudCalls).toEqual(["hello"]);
       expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show"]);
       expect(events[2].payload).toEqual({ id: "cloud-hello", text: " world" });
+    });
+
+    it("does not fall through to cloud when automatic suggestions are local-only", async () => {
+      const cloudCalls: string[] = [];
+      const { events, deps } = makeDeps({
+        getLocalSuggestion: () => null,
+        requestSuggestion: async (snapshot) => {
+          cloudCalls.push(snapshot.sanitizedContext);
+          return { id: "cloud-hello", text: " world" };
+        },
+      });
+
+      createSuggestionLoop({ ...deps, fallbackToCloudOnLocalMiss: false }).onContextChanged();
+      await wait(10);
+
+      expect(cloudCalls).toHaveLength(0);
+      expect(events).toHaveLength(0);
     });
 
     it("does not call local or cloud suggestion sources for unsafe contexts", async () => {
@@ -701,6 +735,27 @@ describe("desktop native suggestion loop", () => {
 
       expect(events.filter((event) => event.type === "show" && (event.payload as Suggestion).id === "local-thank")).toHaveLength(0);
       expect(cloudCalls).not.toContain("thank");
+    });
+
+    it("aborts local inference when Typing Context becomes stale", async () => {
+      let context = "thank";
+      let localSignal: AbortSignal | undefined;
+      const { deps } = makeDeps({
+        getContext: () => makeSnapshot({ context }),
+        getLocalSuggestion: (_snapshot, options) => {
+          localSignal = options?.signal;
+          return new Promise(() => {});
+        },
+      });
+      const loop = createSuggestionLoop(deps);
+
+      loop.onContextChanged();
+      await wait(10);
+      context = "please";
+      loop.onContextChanged();
+
+      expect(localSignal?.aborted).toBe(true);
+      loop.invalidate();
     });
 
     it("does not start duplicate requests for unchanged context while a request is in flight", async () => {
@@ -1767,13 +1822,8 @@ describe("desktop native suggestion loop", () => {
       expect(json).not.toContain("surroundingText");
     });
 
-    it("suppresses further suggestions for a bounded cooldown after repeated dismissals", async () => {
-      let now = 1_000;
-      const triggerPolicy = createPoliteTriggerPolicy({
-        now: () => now,
-        dismissalCooldownThreshold: 1,
-        dismissalCooldownMs: 500,
-      });
+    it("continues suggesting after repeated dismissals", async () => {
+      const triggerPolicy = createPoliteTriggerPolicy();
       const { calls, session } = makeSession({ triggerPolicy });
 
       session.setActiveApplication("com.apple.TextEdit", "window:1");
@@ -1781,20 +1831,17 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
       expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(1);
 
-      now += 100;
       session.appendText("again ");
       await wait(10);
-      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(1);
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(2);
 
-      now += 600;
       session.appendText("friend ");
       await wait(10);
-      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(2);
+      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(3);
     });
 
-    it("tracks metadata-only compatibility per Active Application for stricter triggers and safer insertion", async () => {
+    it("tracks metadata-only compatibility per Active Application for safer insertion", async () => {
       const compatibilityStore = createApplicationCompatibilityStore({
-        strictDismissalThreshold: 1,
         preferClipboardSemanticFailureThreshold: 1,
       });
       const { calls, session } = makeSession({
@@ -1828,7 +1875,7 @@ describe("desktop native suggestion loop", () => {
       const unreliableRequests = calls.filter(
         (call) => call.type === "requestSuggestion" && call.value === "Hello again friend",
       );
-      expect(unreliableRequests).toHaveLength(0);
+      expect(unreliableRequests).toHaveLength(1);
 
       const callTypesBeforeSecondAcceptance = calls.map((call) => call.type);
       session.applyTextSessionSnapshot(textSession("com.example.Unreliable", "Hello again friend "));
@@ -1847,7 +1894,7 @@ describe("desktop native suggestion loop", () => {
 
       const unreliableProfile = compatibilityStore.getProfile({ bundleId: "com.example.Unreliable" });
       expect(unreliableProfile).toMatchObject({
-        dismissalCount: 1,
+        dismissalCount: 2,
         acceptanceCount: 2,
         textSessionReliableCount: 4,
         semanticInsertionFailureCount: 1,

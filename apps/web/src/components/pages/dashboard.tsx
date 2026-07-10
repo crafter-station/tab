@@ -1,5 +1,5 @@
 import { planQuotas, type PlanId } from "@tab/billing";
-import { CaretDown, DotsThree } from "@phosphor-icons/react";
+import { ArrowLeft, Brain, CaretDown, ChartBar, Copy, Desktop, DotsThree, House, Moon, SidebarSimple, Sun, TextT, UserCircle } from "@phosphor-icons/react";
 import { Outlet } from "@tanstack/react-router";
 import { createContext, useContext, type ReactNode } from "react";
 import type {
@@ -18,8 +18,22 @@ import {
   FieldDescription,
   FieldLabel,
   Progress,
-  SettingsNav,
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarInset,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarProvider,
+  SidebarRail,
+  SidebarTrigger,
   SurfaceHeader,
+  TabMark,
   Table,
   TableBody,
   TableCell,
@@ -28,6 +42,7 @@ import {
   TableRow,
   Textarea,
   buttonVariants,
+  cn,
   type SemanticTone,
 } from "@tab/ui";
 import { formatCount, formatDate, type User } from "./shared.tsx";
@@ -206,34 +221,192 @@ function TableActionMenu({
   );
 }
 
-function DashboardTabs({ active }: { active: DashboardSection }) {
-  const items = [
-    { label: "Overview", href: "/dashboard", active: active === "overview" },
-    ...dashboardSections.map((section) => ({
-      label: section.title,
-      href: section.href,
-      active: active === section.id,
-    })),
-  ];
-
-  return <SettingsNav items={items} className="max-w-full" aria-label="Dashboard sections" />;
-}
-
 function DashboardHeader({ section }: { section: DashboardSection }) {
   const title = section === "overview"
     ? "Dashboard"
     : dashboardSections.find((item) => item.id === section)?.title ?? "Dashboard";
 
   return (
-    <div className="grid gap-4">
-      <SurfaceHeader
-        eyebrow="Your Tab account"
-        title={title}
-        description={dashboardDescriptions[section]}
-        headingLevel={1}
-      />
-      <DashboardTabs active={section} />
-    </div>
+    <SurfaceHeader
+      eyebrow="Your Tab account"
+      title={title}
+      description={dashboardDescriptions[section]}
+      headingLevel={1}
+    />
+  );
+}
+
+const dashboardNavigation = [
+  { id: "overview", href: "/dashboard", label: "Overview", icon: House },
+  { id: "account", href: "/dashboard/account", label: "Account", icon: UserCircle },
+  { id: "usage", href: "/dashboard/usage", label: "Usage and billing", icon: ChartBar },
+  { id: "devices", href: "/dashboard/devices", label: "Devices", icon: Desktop },
+  { id: "memories", href: "/dashboard/memories", label: "Memories", icon: Brain },
+] as const;
+
+const tabLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tab logo"><rect width="32" height="32" rx="8" fill="#20221f"/><path fill="#f8f9f6" d="M9 8h14v4h-5v12h-4V12H9z"/></svg>`;
+
+function DashboardBrandMenu() {
+  const modes = [
+    { id: "light", label: "Light", icon: Sun },
+    { id: "dark", label: "Dark", icon: Moon },
+    { id: "system", label: "System", icon: Desktop },
+  ] as const;
+
+  return (
+    <details className="dashboard-brand-menu group relative" name="dashboard-brand-menu">
+      <summary className={buttonVariants({ variant: "secondary", size: "icon", className: "list-none marker:hidden [&::-webkit-details-marker]:hidden" })} aria-label="Open Tab menu">
+        <TabMark className="size-6 rounded-[5px] border-0 shadow-none" />
+      </summary>
+      <div className="dashboard-brand-menu-panel tab-disclosure-panel absolute right-0 z-50 mt-2 grid w-64 gap-1 rounded-[var(--radius-card)] border border-border bg-popover p-2 text-popover-foreground shadow-[var(--tab-shadow-card)]">
+        <button
+          type="button"
+          data-copy-tab-logo
+          className="flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2.5 text-left text-sm font-semibold hover:bg-accent hover:text-accent-foreground"
+          onClick={() => void navigator.clipboard.writeText(tabLogoSvg)}
+        >
+          <Copy className="size-4" aria-hidden="true" />
+          <span>Copy Logo as SVG</span>
+        </button>
+        <button type="button" disabled className="flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2.5 text-left text-sm font-semibold opacity-45">
+          <TextT className="size-4" aria-hidden="true" />
+          <span>Copy Wordmark as SVG</span>
+          <span className="sr-only">Coming later</span>
+        </button>
+        <button type="button" disabled className="flex items-center gap-3 rounded-[var(--radius-control)] px-3 py-2.5 text-left text-sm font-semibold opacity-45">
+          <span className="size-4 rounded border border-dashed border-current" aria-hidden="true" />
+          <span>Brand Guidelines</span>
+          <span className="sr-only">Coming later</span>
+        </button>
+        <a href="/" className="mt-1 flex items-center gap-3 rounded-[var(--radius-control)] bg-muted px-3 py-2.5 text-sm font-semibold text-foreground no-underline hover:bg-accent hover:text-accent-foreground">
+          <House className="size-4" aria-hidden="true" />
+          <span>Home Page</span>
+        </a>
+        <div className="mt-1 flex items-center justify-between border-t border-border px-2 pt-2" aria-label="Theme selection">
+          <span className="text-xs font-medium text-muted-foreground">Theme</span>
+          <div className="flex items-center gap-1">
+            {modes.map((mode) => {
+              const Icon = mode.icon;
+              return (
+                <button key={mode.id} type="button" data-theme-choice={mode.id} aria-pressed="false" aria-label={`${mode.label} theme`} className="grid size-7 place-items-center rounded-[var(--radius-control)] text-muted-foreground hover:bg-accent hover:text-accent-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground">
+                  <Icon className="size-3.5" aria-hidden="true" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </details>
+  );
+}
+
+function DashboardSidebar({ active }: { active: DashboardSection }) {
+  return (
+    <Sidebar collapsible="icon">
+      <SidebarHeader className="border-b border-sidebar-border p-2">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild size="lg" tooltip="Tab dashboard">
+              <a href="/dashboard" aria-label="Tab dashboard">
+                <TabMark className="border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" />
+                <span className="grid min-w-0 text-left leading-tight">
+                  <span className="truncate font-[var(--font-display)] font-bold">Tab</span>
+                  <span className="truncate text-xs text-sidebar-foreground/60">Account workspace</span>
+                </span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {dashboardNavigation.map((item) => {
+                const Icon = item.icon;
+                return (
+                  <SidebarMenuItem key={item.id}>
+                    <SidebarMenuButton asChild isActive={active === item.id} tooltip={item.label}>
+                      <a href={item.href} aria-current={active === item.id ? "page" : undefined}>
+                        <Icon aria-hidden="true" />
+                        <span>{item.label}</span>
+                      </a>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                );
+              })}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+      <SidebarFooter className="border-t border-sidebar-border p-3">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild tooltip="Back to website">
+              <a href="/">
+                <ArrowLeft aria-hidden="true" />
+                <span>Back to website</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+      <SidebarRail />
+    </Sidebar>
+  );
+}
+
+function DashboardStaticSidebar({ active }: { active: DashboardSection }) {
+  return (
+    <aside id="dashboard-sidebar" className="dashboard-static-sidebar hidden w-64 shrink-0 overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex md:flex-col">
+      <a className="dashboard-static-sidebar-brand flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-4 no-underline" href="/dashboard">
+        <TabMark className="border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" />
+        <span className="dashboard-static-sidebar-label grid min-w-0 leading-tight">
+          <span className="truncate font-[var(--font-display)] font-bold">Tab</span>
+          <span className="truncate text-xs text-sidebar-foreground/60">Account workspace</span>
+        </span>
+      </a>
+      <nav className="dashboard-static-sidebar-nav flex flex-1 flex-col gap-1 p-3" aria-label="Dashboard navigation">
+        <p className="dashboard-static-sidebar-label px-2 pb-1 pt-2 text-xs font-medium text-sidebar-foreground/60">Workspace</p>
+        {dashboardNavigation.map((item) => {
+          const Icon = item.icon;
+          return (
+            <a
+              key={item.id}
+              href={item.href}
+              aria-current={active === item.id ? "page" : undefined}
+              className={cn(
+                "flex items-center gap-2 rounded-[var(--radius-control)] px-2 py-2 text-sm font-medium no-underline",
+                active === item.id ? "bg-sidebar-accent text-sidebar-accent-foreground" : "text-sidebar-foreground hover:bg-sidebar-accent/70",
+              )}
+            >
+              <Icon className="size-4" aria-hidden="true" />
+              <span className="dashboard-static-sidebar-label">{item.label}</span>
+            </a>
+          );
+        })}
+      </nav>
+      <a className="dashboard-static-sidebar-footer m-3 flex items-center gap-2 rounded-[var(--radius-control)] border-t border-sidebar-border px-2 py-3 text-sm font-medium text-sidebar-foreground no-underline" href="/">
+        <ArrowLeft className="size-4" aria-hidden="true" />
+        <span className="dashboard-static-sidebar-label whitespace-nowrap">Back to website</span>
+      </a>
+    </aside>
+  );
+}
+
+function DashboardContent({ data, section, children }: { data?: DashboardData; section: DashboardSection; children?: ReactNode }) {
+  return (
+    <main id="main-content" className="w-full flex-1 px-5 py-7 sm:px-8 sm:py-10 lg:px-10">
+      <div className="mx-auto grid w-full max-w-6xl gap-8">
+        <DashboardHeader section={section} />
+        {data ? (
+          <DashboardDataContext.Provider value={data}>
+            {children ?? <Outlet />}
+          </DashboardDataContext.Provider>
+        ) : <DashboardPlaceholder />}
+      </div>
+    </main>
   );
 }
 
@@ -260,13 +433,47 @@ export function DashboardLayout({
   children?: ReactNode;
 }) {
   return (
-    <div className="grid gap-6">
-      <DashboardHeader section={section} />
-      {data ? (
-        <DashboardDataContext.Provider value={data}>
-          {children ?? <Outlet />}
-        </DashboardDataContext.Provider>
-      ) : <DashboardPlaceholder />}
+    <SidebarProvider>
+      <DashboardSidebar active={section} />
+      <SidebarInset className="min-w-0 bg-background">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <SidebarTrigger className="-ml-1" />
+            <span className="h-4 w-px bg-border" aria-hidden="true" />
+            <p className="truncate text-sm font-semibold">Account dashboard</p>
+          </div>
+          <DashboardBrandMenu />
+        </header>
+        <DashboardContent data={data} section={section}>{children}</DashboardContent>
+      </SidebarInset>
+    </SidebarProvider>
+  );
+}
+
+function DashboardStaticLayout({ data, section, children }: { data: DashboardData; section: DashboardSection; children: ReactNode }) {
+  return (
+    <div className="flex min-h-dvh bg-background">
+      <DashboardStaticSidebar active={section} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border px-5 sm:px-8">
+          <div className="flex min-w-0 items-center gap-3">
+            <button
+              type="button"
+              data-dashboard-sidebar-toggle
+              aria-expanded="true"
+              aria-controls="dashboard-sidebar"
+              className={buttonVariants({ variant: "ghost", size: "icon", className: "-ml-2 hidden md:inline-flex" })}
+            >
+              <SidebarSimple aria-hidden="true" />
+              <span className="sr-only">Collapse sidebar</span>
+            </button>
+            <span className="hidden h-4 w-px bg-border md:block" aria-hidden="true" />
+            <p className="truncate text-sm font-semibold">Account dashboard</p>
+          </div>
+          <DashboardBrandMenu />
+        </header>
+        <DashboardContent data={data} section={section}>{children}</DashboardContent>
+      </div>
     </div>
   );
 }
@@ -621,8 +828,8 @@ export function DashboardPage({ data, section = "overview" }: { data?: Dashboard
   } satisfies Record<DashboardSection, ReactNode>;
 
   return (
-    <DashboardLayout data={data} section={section}>
+    <DashboardStaticLayout data={data} section={section}>
       {pageBySection[section]}
-    </DashboardLayout>
+    </DashboardStaticLayout>
   );
 }

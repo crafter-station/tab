@@ -1,0 +1,12 @@
+{
+  "name": "@tab/suggestion-policy",
+  "type": "module",
+  "private": true,
+  "main": "src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@tab/contracts": "workspace:*"
+  }
+}

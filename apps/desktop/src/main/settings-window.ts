@@ -2,6 +2,8 @@ import { BrowserWindow } from "electron";
 import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopPreferences } from "./preferences.ts";
+import type { LocalInferenceStatus } from "./local-inference-prototype.ts";
+import type { CompletionHistoryEntry } from "./completion-history.ts";
 
 export type ControlWindowRoute = "settings" | "onboarding" | "sign-in";
 
@@ -110,6 +112,18 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     }
   }
 
+  function sendLocalInferenceStatus(status: LocalInferenceStatus): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("local-inference-status-changed", status);
+    }
+  }
+
+  function sendCompletionHistory(entries: readonly CompletionHistoryEntry[]): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("completion-history-changed", entries);
+    }
+  }
+
   return {
     show,
     close,
@@ -118,5 +132,7 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     sendMemories,
     sendPaused,
     sendPreferences,
+    sendLocalInferenceStatus,
+    sendCompletionHistory,
   };
 }

@@ -2,6 +2,14 @@ import { generateText } from "ai";
 import { groq } from "@ai-sdk/groq";
 import { shouldCountSuggestionResponse } from "@tab/billing";
 import { getMemoryEligibility } from "@tab/memory-policy";
+import {
+  createSuggestionPrompt,
+  createSuggestionMessages,
+  isSuggestionContractValid,
+  MAX_SUGGESTION_LENGTH,
+  MAX_SUGGESTION_TOKENS,
+  normalizeGeneratedSuggestion,
+} from "@tab/suggestion-policy";
 import type {
   ActiveApplication,
   AppContext,
@@ -22,54 +30,10 @@ import type { PersonalMemoryService } from "./personal-memory.ts";
 import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
 
-const SUGGESTION_MODEL_ID = "openai/gpt-oss-20b";
-export const MAX_SUGGESTION_LENGTH = 80;
-const COMMON_SHORT_WORDS = new Set([
-  "am",
-  "an",
-  "as",
-  "at",
-  "ay",
-  "be",
-  "by",
-  "da",
-  "de",
-  "di",
-  "do",
-  "el",
-  "en",
-  "es",
-  "go",
-  "ha",
-  "he",
-  "if",
-  "in",
-  "is",
-  "it",
-  "la",
-  "le",
-  "lo",
-  "me",
-  "mi",
-  "my",
-  "no",
-  "of",
-  "on",
-  "or",
-  "os",
-  "se",
-  "si",
-  "so",
-  "to",
-  "tu",
-  "up",
-  "us",
-  "va",
-  "ve",
-  "we",
-  "ya",
-  "yo",
-]);
+const SUGGESTION_MODEL_ID = "llama-3.1-8b-instant";
+const MEMORY_RETRIEVAL_BUDGET_MS = 35;
+
+export { createSuggestionPrompt, MAX_SUGGESTION_LENGTH, normalizeGeneratedSuggestion };
 
 export type SuggestionInput = {
   readonly requestId: string;
@@ -108,110 +72,18 @@ export type SuggestionUseCaseOptions = {
   readonly waitUntil?: (promise: Promise<unknown>) => void;
 };
 
-function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
-  if (memories.length === 0) return "";
-
-  const lines = memories.map((memory) => `- ${memory.content}`);
-  return `\nRelevant personal memory:\n${lines.join("\n")}`;
-}
-
-function formatAppContext(appContext: AppContext | undefined): string {
-  if (!appContext || appContext.fragments.length === 0) return "";
-
-  const lines = appContext.fragments.map(
-    (fragment) => `- [${fragment.provider}/${fragment.kind}, confidence ${fragment.confidence.toFixed(2)}] ${fragment.text}`,
-  );
-  return `\nApp Context background (suggestion-only, do not continue this text directly):\n${lines.join("\n")}`;
-}
-
-export function createSuggestionPrompt(input: SuggestionInput): string {
-  return `You are an inline autocomplete engine. Continue the user's exact text with 2-10 likely next words and never more than ${MAX_SUGGESTION_LENGTH} characters. Output only the continuation text, with no quotes, labels, explanation, or punctuation unless punctuation is the natural next character. Do not repeat any part of the user draft. If the draft ends mid-word, output only the remaining characters and following words, not the whole word. Preserve the natural boundary: do not add a leading space when completing a partial word, do add one when starting the next word, and never start with whitespace when the draft already ends with whitespace. For ordinary prose, messages, search text, and short fragments, always make a best-effort continuation. Return an empty string only for passwords, secrets, clearly sensitive data, or nonsensical input.
-
-Active application: ${input.activeApplication.bundleId}
-Source: ${input.contextSource}${formatAppContext(input.appContext)}
-User draft to continue exactly: """${input.typingContext}"""${formatRelevantMemories(input.memories)}`;
-}
-
-export function normalizeGeneratedSuggestion(
-  typingContext: string,
-  generatedText: string,
-): string {
-  const cleanedText = generatedText.replace(/[\r\n]+/g, " ").trim();
-  const overlapLength = findContextPrefixOverlap(typingContext, cleanedText);
-  const text = normalizeSuggestionBoundary(
-    typingContext,
-    cleanedText.slice(overlapLength),
-  );
-  if (text.length === 0) return "";
-
-  const lastContextChar = typingContext.at(-1) ?? "";
-  const firstSuggestionChar = text.at(0) ?? "";
-  if (
-    overlapLength === 0 &&
-    isLetterOrNumber(lastContextChar) &&
-    isLetterOrNumber(firstSuggestionChar)
-  ) {
-    return ` ${truncateSuggestionText(text, MAX_SUGGESTION_LENGTH - 1)}`;
+async function withDeadline<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((resolve) => {
+        timer = setTimeout(resolve, timeoutMs, fallback);
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
-
-  return truncateSuggestionText(text, MAX_SUGGESTION_LENGTH);
-}
-
-function truncateSuggestionText(text: string, maxLength: number): string {
-  if (text.length <= maxLength) return text;
-
-  const truncatedAtWordBoundary = text.slice(0, maxLength + 1).replace(/\s+\S*$/u, "").trimEnd();
-  return truncatedAtWordBoundary || text.slice(0, maxLength).trimEnd();
-}
-
-function normalizeSuggestionBoundary(
-  typingContext: string,
-  suggestionText: string,
-): string {
-  if (/\s$/u.test(typingContext)) {
-    return suggestionText.trimStart();
-  }
-
-  return suggestionText.replace(/^\s+/u, " ");
-}
-
-function findContextPrefixOverlap(
-  typingContext: string,
-  generatedText: string,
-): number {
-  const maxLength = Math.min(typingContext.length, generatedText.length);
-
-  for (let length = maxLength; length >= 2; length -= 1) {
-    const contextSuffix = typingContext.slice(-length);
-    const suggestionPrefix = generatedText.slice(0, length);
-
-    if (
-      contextSuffix.localeCompare(suggestionPrefix, undefined, {
-        sensitivity: "accent",
-      }) === 0 &&
-      isPlausibleRepeatedContextOverlap(typingContext, generatedText, length)
-    ) {
-      return length;
-    }
-  }
-
-  return 0;
-}
-
-function isPlausibleRepeatedContextOverlap(
-  typingContext: string,
-  generatedText: string,
-  overlapLength: number,
-): boolean {
-  const nextGeneratedChar = generatedText.at(overlapLength) ?? "";
-  if (overlapLength > 2 || !isLetterOrNumber(nextGeneratedChar)) return true;
-
-  const overlappingText = typingContext.slice(-overlapLength).toLowerCase();
-  return !COMMON_SHORT_WORDS.has(overlappingText);
-}
-
-function isLetterOrNumber(value: string): boolean {
-  return /[\p{Letter}\p{Number}]/u.test(value);
 }
 
 export function createRealSuggestionGenerator(): SuggestionGenerator {
@@ -223,20 +95,10 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    const prompt = createSuggestionPrompt(input);
-    console.log("[suggestions] groq prompt", {
-      requestId: input.requestId,
-      modelId,
-      prompt,
-    });
-
     const { text } = await generateText({
       model: groq(modelId),
-      prompt,
-      maxOutputTokens: 128,
-      providerOptions: {
-        groq: { reasoningEffort: "low" },
-      },
+      messages: createSuggestionMessages(input),
+      maxOutputTokens: MAX_SUGGESTION_TOKENS,
       temperature: 0.3,
     });
 
@@ -244,6 +106,9 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       input.typingContext,
       text,
     );
+    if (!isSuggestionContractValid(input.typingContext, suggestionText)) {
+      return null;
+    }
     console.log("[suggestions] groq generated suggestion", {
       requestId: input.requestId,
       modelId,
@@ -428,12 +293,13 @@ export class SuggestionUseCase {
     }
 
     try {
-      const memories = await this.deps.personalMemoryService.selectRelevantMemories({
+      const retrieval = this.deps.personalMemoryService.selectRelevantMemories({
         userId: device.userId,
         typingContext: request.typingContext,
         activeApplication: request.activeApplication,
         memoryEnabled: true,
       });
+      const memories = await withDeadline(retrieval, MEMORY_RETRIEVAL_BUDGET_MS, []);
       console.log("[suggestions] memory selected", {
         requestId: request.requestId,
         count: memories.length,

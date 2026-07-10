@@ -7,6 +7,7 @@ import {
   MAX_SUGGESTION_LENGTH,
   normalizeGeneratedSuggestion,
 } from "../apps/api/src/index.ts";
+import { isSuggestionContractValid } from "../packages/suggestion-policy/src/index.ts";
 import { BillingService, InMemoryBillingStorage, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
@@ -120,6 +121,8 @@ describe("Hono suggestion API", () => {
     expect(normalizeGeneratedSuggestion("recomm", "recommendations for dinner")).toBe(
       "endations for dinner",
     );
+    expect(normalizeGeneratedSuggestion("See you tom", "orrow.")).toBe("orrow.");
+    expect(normalizeGeneratedSuggestion("I bought a", "apple")).toBe(" apple");
   });
 
   it("caps generated suggestions at the maximum length", () => {
@@ -129,9 +132,15 @@ describe("Hono suggestion API", () => {
     );
 
     expect(suggestion.length).toBeLessThanOrEqual(MAX_SUGGESTION_LENGTH);
-    expect(suggestion).toBe(
-      " the debounce behavior and identify why duplicate requests are still being sent",
-    );
+    expect(suggestion).toBe(" the debounce behavior");
+  });
+
+  it("caps suggestions at three words and rejects transcript framing", () => {
+    expect(normalizeGeneratedSuggestion("Hello, ", "how are you doing today?")).toBe("how are you");
+    expect(normalizeGeneratedSuggestion("Hello", "User: how are you?")).toBe(" User: how are");
+    expect(isSuggestionContractValid("Hello", " User: how are")).toBe(false);
+    expect(isSuggestionContractValid("Hello", " Assistant: hello")).toBe(false);
+    expect(isSuggestionContractValid("Hello", " System: continue")).toBe(false);
   });
 
   it("does not strip valid next words with short matching prefixes", () => {
@@ -399,6 +408,23 @@ describe("SuggestionUseCase", () => {
     expect(capturedInput?.memories).toEqual([]);
   });
 
+  it("does not let stalled memory retrieval block suggestion generation", async () => {
+    let capturedInput: SuggestionInput | null = null;
+    const { billingService, personalMemoryService, useCase } = createUseCase(async (input) => {
+      capturedInput = input;
+      return { text: " world", modelId: "test-model" };
+    });
+    personalMemoryService.selectRelevantMemories = () => new Promise(() => {});
+    await activateFreePlan(billingService);
+
+    const startedAt = performance.now();
+    const result = await useCase.handle(validDevice, validRequest);
+
+    expect(result.ok).toBe(true);
+    expect(capturedInput?.memories).toEqual([]);
+    expect(performance.now() - startedAt).toBeLessThan(100);
+  });
+
   it("formats App Context as background while preserving the exact draft", () => {
     const prompt = createSuggestionPrompt({
       requestId: "req-1",
@@ -410,12 +436,11 @@ describe("SuggestionUseCase", () => {
       appContext,
     });
 
-    expect(prompt).toContain("Continue the user's exact text");
-    expect(prompt).toContain(`never more than ${MAX_SUGGESTION_LENGTH} characters`);
-    expect(prompt).toContain("Do not repeat any part of the user draft");
-    expect(prompt).toContain("If the draft ends mid-word");
-    expect(prompt).toContain("never start with whitespace when the draft already ends with whitespace");
-    expect(prompt).toContain('User draft to continue exactly: """Hello"""');
+    expect(prompt).toContain("inline autocomplete engine, not a chat assistant");
+    expect(prompt).toContain("Continue that exact text; never answer it");
+    expect(prompt).toContain("Use 1-3 words");
+    expect(prompt).toContain("If the draft ends mid-word, return the full completed word");
+    expect(prompt).toContain("Unfinished text:\nHello");
     expect(prompt).toContain("App Context background (suggestion-only, do not continue this text directly):");
     expect(prompt).toContain("Alex: Can you confirm the launch date?");
   });

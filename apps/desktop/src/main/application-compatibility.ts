@@ -36,7 +36,6 @@ export type ApplicationCompatibilityStore = {
     outcome: InsertionOutcome,
   ) => void;
   readonly getProfile: (activeApplication: ActiveApplication | null) => ApplicationCompatibilityProfile;
-  readonly hasStrictTriggerBehavior: (activeApplication: ActiveApplication | null) => boolean;
   readonly shouldPreferClipboardInsertion: (activeApplication: ActiveApplication | null) => boolean;
 };
 
@@ -56,9 +55,6 @@ type MutableApplicationCompatibilityProfile = {
 };
 
 export type ApplicationCompatibilityOptions = {
-  readonly strictDismissalThreshold?: number;
-  readonly strictStaleThreshold?: number;
-  readonly strictUnreliableTextSessionThreshold?: number;
   readonly preferClipboardSemanticFailureThreshold?: number;
 };
 
@@ -77,9 +73,6 @@ const EMPTY_PROFILE: ApplicationCompatibilityProfile = {
   appContextUnsupportedCount: 0,
 };
 
-const DEFAULT_STRICT_DISMISSAL_THRESHOLD = 10;
-const DEFAULT_STRICT_STALE_THRESHOLD = 6;
-const DEFAULT_STRICT_UNRELIABLE_TEXT_SESSION_THRESHOLD = 6;
 const DEFAULT_PREFER_CLIPBOARD_SEMANTIC_FAILURE_THRESHOLD = 2;
 
 const INSERTION_OUTCOME_COUNTS: Record<
@@ -117,10 +110,6 @@ function readonlyProfile(profile: MutableApplicationCompatibilityProfile | undef
 export function createApplicationCompatibilityStore(
   options: ApplicationCompatibilityOptions = {},
 ): ApplicationCompatibilityStore {
-  const strictDismissalThreshold = options.strictDismissalThreshold ?? DEFAULT_STRICT_DISMISSAL_THRESHOLD;
-  const strictStaleThreshold = options.strictStaleThreshold ?? DEFAULT_STRICT_STALE_THRESHOLD;
-  const strictUnreliableTextSessionThreshold = options.strictUnreliableTextSessionThreshold
-    ?? DEFAULT_STRICT_UNRELIABLE_TEXT_SESSION_THRESHOLD;
   const preferClipboardSemanticFailureThreshold = options.preferClipboardSemanticFailureThreshold
     ?? DEFAULT_PREFER_CLIPBOARD_SEMANTIC_FAILURE_THRESHOLD;
   const profiles = new Map<string, MutableApplicationCompatibilityProfile>();
@@ -176,12 +165,6 @@ export function createApplicationCompatibilityStore(
       incrementProfileCount(activeApplication, INSERTION_OUTCOME_COUNTS[strategy][outcome]);
     },
     getProfile,
-    hasStrictTriggerBehavior(activeApplication) {
-      const profile = getProfile(activeApplication);
-      return profile.dismissalCount >= strictDismissalThreshold
-        || profile.staleCount >= strictStaleThreshold
-        || profile.textSessionUnreliableCount >= strictUnreliableTextSessionThreshold;
-    },
     shouldPreferClipboardInsertion(activeApplication) {
       const profile = getProfile(activeApplication);
       return profile.semanticInsertionFailureCount >= preferClipboardSemanticFailureThreshold

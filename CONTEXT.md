@@ -12,6 +12,10 @@ _Avoid_: Web app, browser autocomplete
 Candidate continuation text generated from the user's current typing context.
 _Avoid_: Prediction, completion
 
+**Automatic Suggestion**:
+A Suggestion initiated from the user's typing activity without a separate explicit inference request.
+_Avoid_: Remote fallback, manual suggestion
+
 **Acceptance**:
 The user's deliberate action to insert a suggestion into the active application.
 _Avoid_: Submit, select
@@ -31,6 +35,18 @@ _Avoid_: Web popup, tooltip below the app
 **Personal Memory**:
 A durable backend-stored fact learned from the user's own typing and used to make suggestions feel personal, visible to and controllable by the user. Personal Memory is unstructured memory, not a typed profile schema or categorized record for specific fields like company, phone, or email.
 _Avoid_: Raw typing log, hidden profile, autofill profile
+
+**Personal Memory Replica**:
+A read-only local copy of backend-owned Personal Memory used to personalize local Suggestions without uploading Typing Context. The backend remains authoritative; the replica does not perform Memory Extraction or create durable memories.
+_Avoid_: Local memory authority, local profile, memory extraction cache
+
+**Local Model Catalog**:
+The curated, versioned set of local inference models that Tab can download, verify, recommend for the current Mac, and let the user select. Models outside this catalog are not supported by Tab.
+_Avoid_: Model marketplace, arbitrary model import, bring your own model
+
+**Validated Target**:
+The exact Mac hardware and system environment on which a local Suggestion configuration has passed its predeclared acceptance thresholds. Validation does not imply support for other configurations.
+_Avoid_: Apple Silicon generally, minimum requirements, estimated support
 
 **Memory Authorship**:
 Whether a Personal Memory was explicitly created by the user or created by Tab's background learning system.
