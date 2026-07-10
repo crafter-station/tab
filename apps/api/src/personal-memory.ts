@@ -4,10 +4,13 @@ import {
   type PersonalMemory,
   type PersonalMemoryCreatedBy,
 } from "@tab/contracts";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";
-import { personalMemories } from "./db/schema.ts";
+import {
+  pendingPersonalMemoryVectorDeletions,
+  personalMemories,
+} from "./db/schema.ts";
 import type { VectorizeBinding, WorkersAiBinding } from "./api-types.ts";
 
 const MEMORY_EMBEDDING_MODEL = "@cf/baai/bge-base-en-v1.5";
@@ -28,6 +31,12 @@ export type UpdateExtractedPersonalMemoryInput = {
   readonly content: string;
 };
 
+export type PendingPersonalMemoryVectorDeletion = {
+  readonly userId: string;
+  readonly memoryId: string;
+  readonly createdAt: string;
+};
+
 export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
@@ -44,6 +53,11 @@ export interface PersonalMemoryStorage {
     input: UpdateExtractedPersonalMemoryInput,
   ): Promise<PersonalMemory | null>;
   deleteMemoryForExtraction(userId: string, id: string): Promise<boolean>;
+  listPendingVectorDeletions(
+    userId: string,
+    memoryId?: string,
+  ): Promise<PendingPersonalMemoryVectorDeletion[]>;
+  acknowledgeVectorDeletion(userId: string, memoryId: string): Promise<void>;
 }
 
 export type PersonalMemoryVectorMetadata = {
@@ -191,6 +205,10 @@ function compareMemoriesByNewestUpdate(
 
 export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   private memories = new Map<string, PersonalMemory>();
+  private pendingVectorDeletions = new Map<
+    string,
+    PendingPersonalMemoryVectorDeletion
+  >();
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
     const memory = createMemoryRecord(input);
@@ -233,6 +251,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   async deleteMemory(userId: string, id: string): Promise<boolean> {
     const existing = this.memories.get(id);
     if (!existing || existing.userId !== userId) return false;
+    this.enqueueVectorDeletion(userId, id);
     return this.memories.delete(id);
   }
 
@@ -271,7 +290,36 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     ) {
       return false;
     }
+    this.enqueueVectorDeletion(userId, id);
     return this.memories.delete(id);
+  }
+
+  async listPendingVectorDeletions(
+    userId: string,
+    memoryId?: string,
+  ): Promise<PendingPersonalMemoryVectorDeletion[]> {
+    return Array.from(this.pendingVectorDeletions.values()).filter(
+      (deletion) =>
+        deletion.userId === userId &&
+        (memoryId === undefined || deletion.memoryId === memoryId),
+    );
+  }
+
+  async acknowledgeVectorDeletion(
+    userId: string,
+    memoryId: string,
+  ): Promise<void> {
+    this.pendingVectorDeletions.delete(`${userId}:${memoryId}`);
+  }
+
+  private enqueueVectorDeletion(userId: string, memoryId: string): void {
+    const key = `${userId}:${memoryId}`;
+    if (this.pendingVectorDeletions.has(key)) return;
+    this.pendingVectorDeletions.set(key, {
+      userId,
+      memoryId,
+      createdAt: toISOTimestamp(new Date()),
+    });
   }
 }
 
@@ -359,16 +407,7 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
   }
 
   async deleteMemory(userId: string, id: string): Promise<boolean> {
-    const result = await this.db
-      .delete(personalMemories)
-      .where(
-        and(
-          eq(personalMemories.userId, userId),
-          eq(personalMemories.id, id),
-        ),
-      )
-      .returning();
-    return result.length > 0;
+    return this.deleteMemoryAndEnqueueVectorCleanup(userId, id, false);
   }
 
   async updateMemoryForExtraction(
@@ -398,17 +437,74 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     userId: string,
     id: string,
   ): Promise<boolean> {
-    const result = await this.db
-      .delete(personalMemories)
+    return this.deleteMemoryAndEnqueueVectorCleanup(userId, id, true);
+  }
+
+  async listPendingVectorDeletions(
+    userId: string,
+    memoryId?: string,
+  ): Promise<PendingPersonalMemoryVectorDeletion[]> {
+    return this.db
+      .select()
+      .from(pendingPersonalMemoryVectorDeletions)
       .where(
         and(
-          eq(personalMemories.userId, userId),
-          eq(personalMemories.id, id),
-          eq(personalMemories.createdBy, "system"),
+          eq(pendingPersonalMemoryVectorDeletions.userId, userId),
+          memoryId === undefined
+            ? undefined
+            : eq(pendingPersonalMemoryVectorDeletions.memoryId, memoryId),
         ),
+      );
+  }
+
+  async acknowledgeVectorDeletion(
+    userId: string,
+    memoryId: string,
+  ): Promise<void> {
+    await this.db
+      .delete(pendingPersonalMemoryVectorDeletions)
+      .where(
+        and(
+          eq(pendingPersonalMemoryVectorDeletions.userId, userId),
+          eq(pendingPersonalMemoryVectorDeletions.memoryId, memoryId),
+        ),
+      );
+  }
+
+  private async deleteMemoryAndEnqueueVectorCleanup(
+    userId: string,
+    id: string,
+    systemCreatedOnly: boolean,
+  ): Promise<boolean> {
+    const predicate = and(
+      eq(personalMemories.userId, userId),
+      eq(personalMemories.id, id),
+      systemCreatedOnly ? eq(personalMemories.createdBy, "system") : undefined,
+    );
+    const enqueueCleanup = this.db
+      .insert(pendingPersonalMemoryVectorDeletions)
+      .select(
+        this.db
+          .select({
+            userId: personalMemories.userId,
+            memoryId: personalMemories.id,
+            createdAt: sql<string>`${toISOTimestamp(new Date())}`.as(
+              "created_at",
+            ),
+          })
+          .from(personalMemories)
+          .where(predicate),
       )
-      .returning();
-    return result.length > 0;
+      .onConflictDoNothing();
+    const deleteCanonical = this.db
+      .delete(personalMemories)
+      .where(predicate)
+      .returning({ id: personalMemories.id });
+    const [, deleted] = await this.db.batch([
+      enqueueCleanup,
+      deleteCanonical,
+    ] as const);
+    return deleted.length > 0;
   }
 }
 
@@ -541,6 +637,7 @@ export class PersonalMemoryService {
   }
 
   async listMemories(userId: string): Promise<PersonalMemory[]> {
+    await this.cleanupPendingVectorDeletions(userId);
     return this.storage.listMemoriesByUser(userId);
   }
 
@@ -552,12 +649,9 @@ export class PersonalMemoryService {
   }
 
   async deleteMemory(userId: string, id: string): Promise<boolean> {
-    const memory = await this.storage.findMemoryById(userId, id);
-    if (!memory) return false;
-
-    return this.deleteIndexedMemory(id, () =>
-      this.storage.deleteMemory(userId, id),
-    );
+    const deleted = await this.storage.deleteMemory(userId, id);
+    await this.cleanupPendingVectorDeletions(userId, id);
+    return deleted;
   }
 
   async updateMemory(
@@ -606,12 +700,35 @@ export class PersonalMemoryService {
     userId: string,
     id: string,
   ): Promise<boolean> {
-    const memory = await this.storage.findMemoryById(userId, id);
-    if (!memory || memory.createdBy !== "system") return false;
+    const deleted = await this.storage.deleteMemoryForExtraction(userId, id);
+    await this.cleanupPendingVectorDeletions(userId, id);
+    return deleted;
+  }
 
-    return this.deleteIndexedMemory(id, () =>
-      this.storage.deleteMemoryForExtraction(userId, id),
-    );
+  async cleanupPendingVectorDeletions(
+    userId: string,
+    memoryId?: string,
+  ): Promise<void> {
+    if (!this.vectorIndex) return;
+
+    let pending: PendingPersonalMemoryVectorDeletion[];
+    try {
+      pending = await this.storage.listPendingVectorDeletions(userId, memoryId);
+    } catch {
+      return;
+    }
+
+    for (const deletion of pending) {
+      try {
+        await this.vectorIndex.deleteMemory(deletion.memoryId);
+        await this.storage.acknowledgeVectorDeletion(
+          deletion.userId,
+          deletion.memoryId,
+        );
+      } catch {
+        // Canonical deletion is complete; leave the tombstone for a later retry.
+      }
+    }
   }
 
   async reindexMemoryForUser(
@@ -629,6 +746,8 @@ export class PersonalMemoryService {
     if (!input.memoryEnabled) {
       return [];
     }
+
+    await this.cleanupPendingVectorDeletions(input.userId);
 
     if (this.embeddingService && this.vectorIndex) {
       return this.selectVectorRelevantMemories(
@@ -651,6 +770,8 @@ export class PersonalMemoryService {
     if (!input.memoryEnabled) {
       return [];
     }
+
+    await this.cleanupPendingVectorDeletions(input.userId);
 
     if (this.embeddingService && this.vectorIndex) {
       return this.selectVectorMemories(
@@ -727,13 +848,5 @@ export class PersonalMemoryService {
         createdBy: memory.createdBy,
       },
     });
-  }
-
-  private async deleteIndexedMemory(
-    id: string,
-    deleteCanonicalMemory: () => Promise<boolean>,
-  ): Promise<boolean> {
-    await this.vectorIndex?.deleteMemory(id);
-    return deleteCanonicalMemory();
   }
 }

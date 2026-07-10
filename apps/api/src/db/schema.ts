@@ -106,6 +106,16 @@ export const personalMemories = sqliteTable(
   (table) => [index("idx_personal_memories_user").on(table.userId)],
 );
 
+export const pendingPersonalMemoryVectorDeletions = sqliteTable(
+  "pending_personal_memory_vector_deletions",
+  {
+    userId: text("user_id").notNull(),
+    memoryId: text("memory_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.memoryId] })],
+);
+
 export const memoryExtractionIdempotency = sqliteTable(
   "memory_extraction_idempotency",
   {

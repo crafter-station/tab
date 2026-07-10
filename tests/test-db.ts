@@ -23,6 +23,19 @@ export function createTestDatabase(db: Database) {
       db.query(sql).run(...params);
       return { rows: [] };
     },
+    async (batch) =>
+      db.transaction(() =>
+        batch.map(({ sql, params, method }) => {
+          if (method === "get") {
+            return { rows: getRows(db.query(sql).values(...params)) };
+          }
+          if (method === "all" || method === "values") {
+            return { rows: db.query(sql).values(...params) };
+          }
+          db.query(sql).run(...params);
+          return { rows: [] };
+        }),
+      )(),
     { schema },
   );
 }

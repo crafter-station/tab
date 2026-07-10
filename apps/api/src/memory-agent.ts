@@ -217,6 +217,7 @@ export class MemoryExtractionService {
     request: MemoryExtractionRequest,
   ): Promise<MemoryExtractionCounts> {
     const parsed = MemoryExtractionRequestSchema.parse(request);
+    await this.personalMemoryService.cleanupPendingVectorDeletions(userId);
     const now = new Date();
     const batchIdHash = await hashExtractionBatchId(userId, parsed.batchId);
     const prior = await this.idempotencyStorage.findResult(

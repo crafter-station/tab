@@ -195,7 +195,9 @@ function extractionModel(
   };
 }
 
-function createD1MemoryStorage(): D1PersonalMemoryStorage {
+function createD1MemoryStorage(options?: {
+  readonly includeVectorDeletionOutbox?: boolean;
+}): D1PersonalMemoryStorage {
   const sqlite = new Database(":memory:");
   sqlite.exec(`
     CREATE TABLE personal_memories (
@@ -208,7 +210,27 @@ function createD1MemoryStorage(): D1PersonalMemoryStorage {
     );
     CREATE INDEX idx_personal_memories_user ON personal_memories (user_id);
   `);
+  if (options?.includeVectorDeletionOutbox !== false) {
+    sqlite.exec(`
+      CREATE TABLE pending_personal_memory_vector_deletions (
+        user_id text NOT NULL,
+        memory_id text NOT NULL,
+        created_at text NOT NULL,
+        PRIMARY KEY (user_id, memory_id)
+      );
+    `);
+  }
   return new D1PersonalMemoryStorage(createTestDatabase(sqlite));
+}
+
+class AuthorshipFlippingMemoryStorage extends InMemoryPersonalMemoryStorage {
+  override async deleteMemoryForExtraction(
+    userId: string,
+    id: string,
+  ): Promise<boolean> {
+    await this.updateMemory(userId, id, { createdBy: "user" });
+    return super.deleteMemoryForExtraction(userId, id);
+  }
 }
 
 async function expectOwnerScopedStorage(storage: PersonalMemoryStorage) {
@@ -225,6 +247,7 @@ async function expectOwnerScopedStorage(storage: PersonalMemoryStorage) {
     }),
   ).toBeNull();
   expect(await storage.deleteMemory("user-2", memory.id)).toBe(false);
+  expect(await storage.listPendingVectorDeletions("user-2")).toEqual([]);
   expect(await storage.findMemoryById("user-1", memory.id)).toMatchObject({
     content: "Owner-scoped memory",
   });
@@ -294,6 +317,7 @@ async function expectExtractionScopedStorage(storage: PersonalMemoryStorage) {
   expect(
     await storage.findMemoryById("user-1", deleteMemory.id),
   ).toMatchObject({ content: "System delete candidate", createdBy: "user" });
+  expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
   expect(
     await storage.updateMemoryForExtraction("user-1", allowedUpdate.id, {
       content: "Updated by extraction",
@@ -374,6 +398,10 @@ describe("Personal Memory API", () => {
     expect(embeddingService.embeddedTexts[0]).toBe(
       "I now use the new launch plan.",
     );
+    expect(vectorIndex.deletes).toEqual([deleted.id]);
+    expect(
+      await personalMemoryStorage.listPendingVectorDeletions("user-1"),
+    ).toEqual([]);
   });
 
   it("returns prior extraction counts for repeated idempotency keys", async () => {
@@ -638,9 +666,10 @@ describe("Personal Memory API", () => {
     expect(embeddingService.embeddedTexts).toEqual([]);
     expect(vectorIndex.upserts).toEqual([]);
     expect(vectorIndex.deletes).toEqual([]);
+    expect(await storage.listPendingVectorDeletions("user-2")).toEqual([]);
   });
 
-  it("retains canonical memory when vector deletion fails and deletes it on retry", async () => {
+  it("keeps durable cleanup pending when vector deletion fails and drains it on retry", async () => {
     const storage = createD1MemoryStorage();
     const vectorIndex = new FakeVectorIndex();
     const personalMemoryService = new PersonalMemoryService({
@@ -657,14 +686,149 @@ describe("Personal Memory API", () => {
 
     await expect(
       personalMemoryService.deleteMemory("user-1", memory.id),
-    ).rejects.toThrow("vector delete unavailable");
-    expect(await storage.findMemoryById("user-1", memory.id)).not.toBeNull();
+    ).resolves.toBe(true);
+    expect(await storage.findMemoryById("user-1", memory.id)).toBeNull();
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([
+      expect.objectContaining({ userId: "user-1", memoryId: memory.id }),
+    ]);
 
     vectorIndex.failDeletes = false;
     await expect(
       personalMemoryService.deleteMemory("user-1", memory.id),
+    ).resolves.toBe(false);
+    expect(await storage.findMemoryById("user-1", memory.id)).toBeNull();
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
+    expect(vectorIndex.deletes).toEqual([memory.id, memory.id]);
+  });
+
+  it("acknowledges cleanup after an ordinary vector deletion succeeds", async () => {
+    const storage = createD1MemoryStorage();
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService: new FakeEmbeddingService(),
+      vectorIndex,
+    });
+    const memory = await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Ordinary successful deletion",
+      createdBy: "user",
+    });
+
+    await expect(
+      personalMemoryService.deleteMemory("user-1", memory.id),
     ).resolves.toBe(true);
     expect(await storage.findMemoryById("user-1", memory.id)).toBeNull();
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
+    expect(vectorIndex.deletes).toEqual([memory.id]);
+  });
+
+  it("does not touch vector storage when the atomic D1 deletion fails", async () => {
+    const storage = createD1MemoryStorage({
+      includeVectorDeletionOutbox: false,
+    });
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService: new FakeEmbeddingService(),
+      vectorIndex,
+    });
+    const memory = await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "Canonical memory survives D1 failure",
+      createdBy: "user",
+    });
+
+    await expect(
+      personalMemoryService.deleteMemory("user-1", memory.id),
+    ).rejects.toThrow("pending_personal_memory_vector_deletions");
+    expect(await storage.findMemoryById("user-1", memory.id)).not.toBeNull();
+    expect(vectorIndex.deletes).toEqual([]);
+  });
+
+  it("leaves the vector untouched when extraction authorship flips before atomic deletion", async () => {
+    const storage = new AuthorshipFlippingMemoryStorage();
+    const vectorIndex = new FakeVectorIndex();
+    const personalMemoryService = new PersonalMemoryService({
+      storage,
+      embeddingService: new FakeEmbeddingService(),
+      vectorIndex,
+    });
+    const memory = await storage.createMemory({
+      userId: "user-1",
+      content: "System memory before concurrent edit",
+      createdBy: "system",
+    });
+
+    await expect(
+      personalMemoryService.deleteMemoryForExtraction("user-1", memory.id),
+    ).resolves.toBe(false);
+    expect(await storage.findMemoryById("user-1", memory.id)).toMatchObject({
+      createdBy: "user",
+    });
+    expect(await storage.listPendingVectorDeletions("user-1")).toEqual([]);
+    expect(vectorIndex.deletes).toEqual([]);
+  });
+
+  it("persists successful extraction counts while retrying failed vector cleanup", async () => {
+    const embeddingService = new FakeEmbeddingService();
+    const vectorIndex = new FakeVectorIndex();
+    let modelCalls = 0;
+    const { app, token, personalMemoryStorage } =
+      await createAuthenticatedTestApp(
+        undefined,
+        { embeddingService, vectorIndex },
+        {
+          async proposeOperations(_job, memories) {
+            modelCalls += 1;
+            return [
+              { type: "delete", id: memories[0].id, reason: "Contradicted" },
+            ];
+          },
+        },
+      );
+    const memory = await personalMemoryStorage.createMemory({
+      userId: "user-1",
+      content: "Old extraction fact",
+      createdBy: "system",
+    });
+    vectorIndex.matches = [{ id: memory.id }];
+    vectorIndex.failDeletes = true;
+
+    const first = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(extractionBatch("batch-cleanup-retry", "New fact")),
+    });
+
+    expect(first.status).toBe(200);
+    expect(await first.json()).toEqual({
+      status: "ok",
+      data: { counts: { created: 0, updated: 0, deleted: 1, rejected: 0 } },
+    });
+    expect(
+      await personalMemoryStorage.findMemoryById("user-1", memory.id),
+    ).toBeNull();
+    expect(
+      await personalMemoryStorage.listPendingVectorDeletions("user-1"),
+    ).toHaveLength(1);
+
+    vectorIndex.failDeletes = false;
+    const retry = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(extractionBatch("batch-cleanup-retry", "New fact")),
+    });
+
+    expect(retry.status).toBe(200);
+    expect(await retry.json()).toEqual({
+      status: "ok",
+      data: { counts: { created: 0, updated: 0, deleted: 1, rejected: 0 } },
+    });
+    expect(modelCalls).toBe(1);
+    expect(
+      await personalMemoryStorage.listPendingVectorDeletions("user-1"),
+    ).toEqual([]);
     expect(vectorIndex.deletes).toEqual([memory.id, memory.id]);
   });
 
