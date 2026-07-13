@@ -6,7 +6,7 @@ export const env = createEnv({
     TAB_API_BASE_URL: z.url().default("http://localhost:8787"),
     TAB_APP_RENDERER_PATH: z.string().optional(),
     TAB_DEBUG_TYPING_OVERLAY: z.enum(["0", "1"]).optional(),
-    TAB_DEVICE_ID: z.string().default("device-unknown"),
+    TAB_DEVICE_ID: z.string().optional(),
     TAB_INPUT_TAP_PATH: z.string().optional(),
     TAB_LOCAL_INFERENCE_EXECUTABLE: z.string().optional(),
     TAB_LOCAL_INFERENCE_MODEL_PATH: z.string().optional(),

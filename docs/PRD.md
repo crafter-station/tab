@@ -4,17 +4,19 @@
 
 People write across many macOS applications and often repeat the same phrasing, personal details, work context, and writing patterns. Existing autocomplete experiences are usually confined to one editor, browser, or app, so they cannot help while the user writes in Mail, Slack, Notes, terminals, or terminal-based tools like OpenCode.
 
-Tab should provide native autocomplete across active macOS applications without feeling like a web app, keylogger, or intrusive assistant. It must show a lightweight floating suggestion overlay, generate suggestions from recent typing context and backend-stored Personal Memory, and insert accepted suggestions into the active application while preserving user trust.
+Tab should provide native autocomplete across active macOS applications without feeling like a web app, keylogger, or intrusive assistant. It must generate routine Suggestions locally by default, offer an explicit cloud-backed Deep Complete for harder writing moments, and insert accepted Suggestions into the active application while preserving user trust.
 
 ## Solution
 
 Build a macOS-first Native Autocomplete App with an Electron desktop app, a TanStack Start web business surface, and a Cloudflare Worker Hono API.
 
-The Electron app observes text-bearing typing context in memory, redacts obvious secrets locally, requests one short suggestion from the API after a debounce, and displays it in a semitransparent Floating Suggestion Overlay at the bottom of the screen. The user accepts with Option+Tab or by clicking the overlay, and the Electron app inserts the suggestion into the previously active application using clipboard paste.
+The Electron app observes text-bearing Typing Context in memory, suppresses secure or secret-like contexts, generates Automatic Suggestions through a local inference runtime, and displays one short Suggestion in a semitransparent Floating Suggestion Overlay. The user accepts with Option+Tab or by clicking the overlay, and the Electron app inserts the Suggestion into the previously active application using clipboard paste.
 
-The Hono API validates device authentication, checks monthly autocomplete quota, fetches relevant Personal Memory from D1, generates a non-streaming suggestion through the Vercel AI SDK and Vercel AI Gateway, and returns either one suggestion or an empty suggestions array. If a suggestion is returned, quota usage is recorded locally and ingested into Polar meters. A separate background memory workflow runs through Cloudflare Queues and may use a slower AI tool loop to read, create, or update Personal Memory after passing deterministic sensitive-data guardrails.
+Double-tapping Option explicitly invokes Deep Complete. For that action only, the desktop sends bounded, redacted context to the authenticated Hono API. The API checks the user's Deep Complete entitlement, fetches relevant Personal Memory, generates a non-streaming Suggestion through the configured cloud model provider, and returns either one Suggestion or an empty suggestions array. A successful returned Deep Complete consumes one monthly Deep Complete allowance; empty responses and failures do not consume allowance. Local inference never silently falls back to this path.
 
-The TanStack Start web app provides marketing, download, pricing, account management, Polar checkout/customer portal, device management, and the full Personal Memory control plane. The Electron app provides onboarding, permissions guidance, quick memory controls, pause/opt-out controls, and native product settings.
+A separate background memory workflow runs through Cloudflare Queues and may use a slower AI tool loop to read, create, update, or delete system-created Personal Memory after passing deterministic sensitive-data guardrails. Continuous Memory Extraction is a Pro service. Every user retains the ability to view, edit, export, and delete existing Personal Memory after trial expiration, downgrade, or cancellation.
+
+The TanStack Start web app provides marketing, download, pricing, account management, Polar checkout/customer portal, device management, product-value metrics, and the full Personal Memory control plane. The Electron app provides onboarding, permissions guidance, local and Deep Complete status, quick memory controls, pause/opt-out controls, and native product settings.
 
 ## User Stories
 
@@ -41,7 +43,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 21. As a writer, I want Tab to paste the accepted suggestion into the active application, so that it works across many macOS apps.
 22. As a writer, I want Tab to preserve my clipboard as best as possible, so that accepting a suggestion does not unexpectedly destroy clipboard contents.
 23. As a writer, I want Tab to fail silently when the network is slow, so that typing is never blocked.
-24. As a writer, I want durable status to appear in tray/settings, so that I can diagnose auth, quota, or connectivity issues without typing interruptions.
+24. As a writer, I want durable status to appear in tray/settings, so that I can diagnose auth, entitlement, or connectivity issues without typing interruptions.
 25. As a user, I want Tab to make suggestions feel personal, so that it can complete text using facts and preferences I commonly use.
 26. As a user, I want Personal Memory stored in the backend, so that personalization follows my account and not only one local machine.
 27. As a user, I want to see all stored Personal Memory, so that I know what Tab remembers about me.
@@ -57,22 +59,26 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 37. As a new user, I want to sign in through the browser, so that account authentication is familiar and secure.
 38. As a desktop user, I want the native app to stay signed in through a device token, so that I do not need browser cookies in the app.
 39. As a user, I want to revoke old devices, so that lost or unused installations stop accessing my account.
-40. As a free user, I want 100 autocompletes per month, so that I can try the product before paying.
-41. As a Pro user, I want 1,000 autocompletes per month for $10, so that I can use Tab regularly.
-42. As a Max user, I want 1,000,000 autocompletes per month for $100, so that heavy usage is supported.
-43. As a user, I want Personal Memory available on all plans, so that personalization is part of the core product.
-44. As a user, I want quota to count only returned suggestions, so that empty or failed requests do not consume my autocomplete quota.
-45. As a user, I want quota exhaustion to show an upgrade path, so that I understand why suggestions stopped.
-46. As a business owner, I want usage tracked through Polar meters, so that billing and customer usage reporting are centralized.
-47. As a developer, I want a native loop spike first, so that the riskiest macOS interaction is proven before building the full stack.
-48. As a developer, I want shared schemas and policies, so that Electron, web, and API agree on request contracts, redaction, memory, and quota behavior.
-49. As a developer, I want Effect for typed services and errors, so that cross-runtime workflows are explicit and testable.
-50. As a developer, I want the Hono API to own auth, suggestion generation, memory APIs, Polar webhooks, and device tokens, so that backend authority is centralized.
+40. As a new user, I want a 30-day Pro trial without a credit card, so that I can experience unlimited local writing, Deep Complete, and continuous personalization before choosing a plan.
+41. As a free user, I want up to 100 Accepted Words from Local Suggestions each day, so that Tab remains useful for occasional writing.
+42. As a Pro user, I want unlimited Accepted Words from Local Suggestions for $10 per month or $96 per year, so that I can use Tab throughout every writing day.
+43. As a free user, I want 10 Deep Completes per month, so that I can use the higher-capability path for occasional difficult writing.
+44. As a Pro user, I want 300 Deep Completes per month, so that the higher-capability path can become part of my regular workflow.
+45. As a user, I want local usage to count only words I deliberately accept, so that ignored, dismissed, and stale Suggestions never consume my allowance.
+46. As a user, I want Deep Complete usage to count only once when an explicit request returns a Suggestion, so that retries, empty responses, and failures never consume additional allowance.
+47. As a Pro user, I want continuous Personal Memory learning, so that Tab stays current with the facts and preferences I repeatedly write.
+48. As a user, I want to retain access to view, edit, export, and delete Personal Memory after downgrade or cancellation, so that my data is never held hostage.
+49. As a user, I want entitlement exhaustion to preserve the rest of Tab and show an upgrade path, so that reaching a limit never makes the app appear broken.
+50. As a business owner, I want local and Deep Complete usage tracked separately, so that product value, conversion, and cloud unit economics can be measured independently.
+51. As a developer, I want a native loop spike first, so that the riskiest macOS interaction is proven before building the full stack.
+52. As a developer, I want shared schemas and policies, so that Electron, web, and API agree on request contracts, redaction, memory, and entitlement behavior.
+53. As a developer, I want Effect for typed services and errors, so that cross-runtime workflows are explicit and testable.
+54. As a developer, I want the Hono API to own auth, Deep Complete generation, memory APIs, Polar webhooks, and device tokens, so that backend authority is centralized.
 
 ## Implementation Decisions
 
 - Build a three-app monorepo: Electron desktop app, TanStack Start web app, and Cloudflare Worker Hono API.
-- Use shared packages for API schemas, memory policy, sensitive-data redaction, billing quota definitions, and reusable Effect services.
+- Use shared packages for API schemas, memory policy, sensitive-data redaction, plan entitlement definitions, and reusable Effect services.
 - Use Electron as the native product surface for macOS onboarding, permissions guidance, input observation, overlay display, acceptance, clipboard paste, and quick controls.
 - Use TanStack Start as the web business surface for marketing, download, pricing, account management, Polar checkout/customer portal, memory management, and device management.
 - Use Cloudflare Workers with Hono as the backend API runtime.
@@ -84,21 +90,27 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Use Cloudflare KV for short-lived exchange, rate-limit, and cache data where appropriate.
 - Use Cloudflare Queues for background memory jobs and Polar meter ingestion retries.
 - Do not use R2 for raw typing or suggestion storage by default.
-- Use Vercel AI SDK through Vercel AI Gateway for model calls.
-- Use one fast model call for suggestion generation and a separate slower background memory generation workflow.
+- Use a local inference runtime for Automatic Suggestions and the AI SDK through the configured cloud provider for Deep Complete and Memory Extraction.
+- Never silently fall back from local inference to Deep Complete.
+- Use one explicit cloud model call for Deep Complete and a separate slower background Memory Extraction workflow.
 - Fetch relevant active Personal Memory before suggestion generation rather than using a model tool call to read memory in the hot path.
 - Return non-streaming suggestions for MVP.
 - Return `200 OK` with `suggestions: []` when no confident suggestion should be shown.
-- Reserve API errors for invalid requests, authentication failures, entitlement/quota failures, rate limits, and backend/provider failures.
+- Reserve API errors for invalid requests, authentication failures, entitlement failures, rate limits, and backend/provider failures.
 - Use an array-shaped `suggestions` response but return at most one suggestion in MVP.
-- Count an autocomplete against quota only when at least one suggestion is returned.
-- Treat quota exhaustion as an entitlement error, not an empty suggestion result.
-- Use Polar for billing, products, customer portal, monthly plan quotas, and usage metering for all plans including free.
-- Use Polar meters for monthly autocomplete usage while enforcing quota on the hot path using local D1 usage state.
-- Plans are Free with 100 autocompletes per month, Pro with 1,000 autocompletes per month for $10, and Max with 1,000,000 autocompletes per month for $100.
-- Make Personal Memory available on all plans.
-- Ingest successful returned suggestions as Polar usage events.
-- Do not call Polar synchronously on every suggestion request.
+- Count Free local allowance in Accepted Words, with a daily reset. Ignored, dismissed, stale, empty, and failed Local Suggestions do not count.
+- Count one Deep Complete when an explicit request returns at least one Suggestion. Internal retries, empty responses, and failures do not count.
+- Treat allowance exhaustion as an entitlement state with a visible upgrade path, not an empty Suggestion result.
+- Use Polar for paid products, checkout, subscription management, customer portal, and paid entitlement reconciliation.
+- Enforce Accepted Word and Deep Complete allowances from local app/backend entitlement state without calling Polar synchronously in either hot path.
+- Start every new account with one 30-day Pro trial without requiring a payment card. Reinstalling or linking another Mac does not restart the trial.
+- After the trial, Free includes 100 Accepted Words per day, 10 Deep Completes per month, one Mac, and management of existing Personal Memory.
+- Pro costs $10 per month or $96 per year and includes unlimited Accepted Words, 300 Deep Completes per month, continuous Memory Extraction, custom writing instructions, the supported model catalog, and up to three personal Macs.
+- Do not offer a Max plan until observed heavy-use behavior justifies another package.
+- Do not use Personal Memory record count as the primary pricing metric. Keep a generous technical abuse ceiling and gate continuous learning rather than access to user data.
+- Preserve view, edit, export, and delete controls for Personal Memory after trial expiration, downgrade, or cancellation.
+- Meter successful Deep Completes for cost and entitlement reporting; local Accepted Words are product-usage telemetry rather than cloud-cost events.
+- Do not call Polar synchronously on every Suggestion or Acceptance.
 - Keep the native rolling typing context buffer in process memory only.
 - Clear the local typing context buffer on app switch, pause, secure input, sleep/lock, secret-like context detection, app quit, and explicit user action.
 - Observe typing context across active applications by default after explicit macOS permissions, with a global pause/opt-out control for MVP.
@@ -111,7 +123,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Store durable Personal Memory in the backend database, not on user disk.
 - Do not store raw typing logs by default.
 - Do not store accepted suggestion text, final inserted text, or surrounding raw context by default.
-- Record suggestion telemetry as metadata only: shown, accepted, dismissed, stale, active application bundle ID, latency, suggestion length, plan, model, and timestamp.
+- Record Suggestion telemetry as metadata only: local or cloud inference, automatic or explicit trigger, generated, shown, accepted, dismissed, stale, or failed outcome, Accepted Word and character counts, app category, latency, memory-used flag/count, plan, model version, cloud cost where applicable, and timestamp.
 - Use both prompt-level and deterministic programmatic guardrails for memory creation and updates.
 - Reject memory candidates containing secrets, tokens, environment variable values, payment data, government identifiers, private keys, auth headers, cookies, high-entropy strings, and other high-risk patterns.
 - Show all active Personal Memory in both web and native surfaces, with deletion controls.
@@ -130,15 +142,18 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - The highest-value first test seam is the native macOS loop: observed typing context produces a visible fake suggestion, Option+Tab or click inserts it into the active application, and context changes clear stale suggestions.
 - Native spike testing should cover TextEdit, Notes, Mail, Slack, Ghostty, and at least one secure input/password scenario.
 - Native tests should validate external behavior rather than internal implementation details: overlay appears, overlay hides, suggestion inserts, shortcuts are ignored, app switch clears state, secure input suppresses requests.
-- API contract tests should cover successful suggestion, empty suggestions, invalid request, unauthenticated request, revoked device, quota exhausted, and provider failure.
-- API tests should assert that `suggestions: []` is a successful no-suggestion result and that quota exhaustion is an entitlement error.
-- Quota tests should assert that only returned suggestions consume quota and enqueue Polar usage events.
+- Deep Complete API contract tests should cover a successful Suggestion, empty Suggestions, invalid request, unauthenticated request, revoked device, allowance exhausted, and provider failure.
+- API tests should assert that `suggestions: []` is a successful no-Suggestion result and that Deep Complete allowance exhaustion is an entitlement error.
+- Local allowance tests should cover Accepted Word counting, word boundaries, daily reset, offline use, restart persistence, and multi-device reconciliation without counting ignored, dismissed, stale, empty, or failed Suggestions.
+- Deep Complete allowance tests should assert that one successful returned Suggestion consumes one allowance, internal retries do not double-count, and empty or failed requests do not count.
+- Trial and plan tests should cover the 30-day no-card Pro trial, Free fallback, monthly and annual Pro entitlements, one-versus-three-device enforcement, downgrade, cancellation, and removal of Max.
+- Memory entitlement tests should verify that only Pro receives continuous Memory Extraction while every user can view, edit, export, and delete existing memories.
 - Memory policy tests should focus on external policy behavior: typed text can produce memory jobs, pasted text cannot create memory by default, terminal user input is eligible, terminal output is not.
 - Redaction tests should include common environment variable values, API keys, bearer tokens, private key blocks, database URLs, auth cookies, payment data, government identifiers, and high-entropy strings.
 - Background memory workflow tests should verify that unsafe memory tool writes are rejected by deterministic validators even if the model proposes them.
-- Web app tests should cover pricing display, Polar checkout link generation, account login flow, memory list/delete controls, and device revocation.
+- Web app tests should cover pricing display, monthly/annual Polar checkout link generation, trial state, product-value metrics, allowance state, account login, retained memory controls, and device revocation.
 - Desktop auth tests should cover browser handoff, device-token exchange, Keychain storage, revoked token handling, and sign-in-required status.
-- Telemetry tests should assert that raw typing context, raw suggestion text, and accepted suggestion text are not persisted by default.
+- Telemetry tests should cover local/cloud and automatic/explicit dimensions, outcomes, Accepted Word/character counts, app category, memory-use metadata, conversion events, and cloud cost while asserting that raw Typing Context, Suggestion text, and Personal Memory contents are not persisted.
 - Tests should prefer shared schema fixtures and public API boundaries over testing private functions.
 
 ## Out of Scope
@@ -162,13 +177,15 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Storing accepted suggestion text by default.
 - R2-based raw debug/evaluation capture by default.
 - Advanced team/seat billing.
-- Offline local model suggestions.
+- Automatic cloud fallback when local inference is unavailable or returns no Suggestion.
+- A lifetime license or separate one-time local-only purchase.
 
 ## Further Notes
 
 - The riskiest assumption is that Electron plus a macOS native bridge can reliably observe text-bearing global input, filter non-text actions, identify the active application, show a non-disruptive bottom overlay, detect Option+Tab, and paste into the previously active application without stealing focus. This must be proven before the full stack is built.
 - The second riskiest assumption is trust. Tab needs explicit language and controls that distinguish Typing Context, Personal Memory, telemetry metadata, and raw logs. Raw logs are not part of the default product.
-- Polar usage-based billing requires Tab to enforce usage limits. Polar receives immutable usage events and aggregates meters, but it does not automatically block customer actions based on meter balance.
+- Polar subscription state does not enforce product allowances by itself. Tab must keep authoritative Accepted Word and Deep Complete entitlement state in the desktop/API boundary and use Polar for paid subscription lifecycle and reporting.
+- The pricing numbers are launch decisions to validate against retained usage, conversion, and cloud cost. Revisit the Deep Complete allowance only after measuring gross margin at median, 90th-percentile, and 99th-percentile usage.
 - AI SDK and AI Gateway implementation details, including current model IDs, must be verified against current docs during implementation rather than relying on memory.
 - The glossary in `CONTEXT.md` is the canonical product language for future specs, implementation, and UI copy.
 - Do not close until all subissues are closed.

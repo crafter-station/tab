@@ -1,4 +1,5 @@
 import { describe, it, expect, spyOn } from "bun:test";
+import { BillingStatusDataSchema } from "@tab/contracts";
 import {
   createDesktopAuthClient,
   type CredentialGeneration,
@@ -53,6 +54,46 @@ function makeFetch(responses: Array<() => Response>) {
   };
 }
 
+function statusPayload(deepUsed: number) {
+  return {
+    authenticated: true,
+    deviceRevoked: false,
+    entitlement: {
+      planId: "free",
+      entitlementSource: "free",
+      capabilities: {
+        localAcceptedWordsPerDay: 100,
+        deepCompletesPerMonth: 10,
+        personalDeviceLimit: 1,
+        continuousMemoryExtraction: false,
+        customWritingInstructions: false,
+        modelCatalogAccess: false,
+      },
+      trial: {
+        active: false,
+        startedAt: "2026-01-01T00:00:00.000Z",
+        endsAt: "2026-01-31T00:00:00.000Z",
+      },
+      localAcceptedWords: {
+        used: 0,
+        limit: 100,
+        remaining: 100,
+        resetAt: "2026-07-13T00:00:00.000Z",
+        exhausted: false,
+      },
+      deepCompletes: {
+        used: deepUsed,
+        limit: 10,
+        remaining: Math.max(0, 10 - deepUsed),
+        resetAt: "2026-08-01T00:00:00.000Z",
+        exhausted: deepUsed >= 10,
+      },
+      devices: { active: 1, limit: 1, canLink: false },
+      upgradeUrl: "/pricing",
+    },
+  };
+}
+
 describe("desktop status service", () => {
   it("reports sign_in_required when no authorization header is available", async () => {
     const events: StatusEvent[] = [];
@@ -69,10 +110,10 @@ describe("desktop status service", () => {
     expect(events).toHaveLength(1);
     expect(events[0].status.auth).toBe("sign_in_required");
     expect(events[0].status.connectivity).toBe("online");
-    expect(events[0].status.quota).toBeNull();
+    expect(events[0].status.entitlement).toBeNull();
   });
 
-  it("reports signed_in with quota when the API returns status", async () => {
+  it("reports signed_in with independent allowances when the API returns status", async () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
@@ -84,14 +125,7 @@ describe("desktop status service", () => {
           new Response(
             JSON.stringify({
               status: "ok",
-              data: {
-                authenticated: true,
-                deviceRevoked: false,
-                planId: "free",
-                quota: 100,
-                usage: 5,
-                resetAt: "2026-08-01T00:00:00.000Z",
-              },
+              data: statusPayload(5),
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -104,13 +138,8 @@ describe("desktop status service", () => {
     expect(events).toHaveLength(1);
     expect(events[0].status.auth).toBe("signed_in");
     expect(events[0].status.connectivity).toBe("online");
-    expect(events[0].status.quota).toEqual({
-      planId: "free",
-      quota: 100,
-      usage: 5,
-      resetAt: "2026-08-01T00:00:00.000Z",
-      exhausted: false,
-    });
+    expect(events[0].status.entitlement?.deepCompletes.used).toBe(5);
+    expect(events[0].status.entitlement?.localAcceptedWords.used).toBe(0);
   });
 
   it("reports revoked_device when the API returns a revoked_device error", async () => {
@@ -166,7 +195,7 @@ describe("desktop status service", () => {
     expect(events[0].status.auth).toBe("sign_in_required");
   });
 
-  it("reports quota_exhausted when usage reaches the quota", async () => {
+  it("reports Deep Complete exhaustion without a global status", async () => {
     const events: StatusEvent[] = [];
     const service = createDesktopStatusService({
       apiBaseUrl: "http://localhost:8787",
@@ -178,14 +207,7 @@ describe("desktop status service", () => {
           new Response(
             JSON.stringify({
               status: "ok",
-              data: {
-                authenticated: true,
-                deviceRevoked: false,
-                planId: "free",
-                quota: 100,
-                usage: 100,
-                resetAt: "2026-08-01T00:00:00.000Z",
-              },
+              data: statusPayload(10),
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -196,8 +218,8 @@ describe("desktop status service", () => {
     await service.refresh();
 
     expect(events[0].status.auth).toBe("signed_in");
-    expect(events[0].status.quota?.exhausted).toBe(true);
-    expect(events[0].status.quota?.usage).toBe(100);
+    expect(events[0].status.entitlement?.deepCompletes.exhausted).toBe(true);
+    expect(events[0].status.entitlement?.localAcceptedWords.exhausted).toBe(false);
   });
 
   it("reports offline when the network request throws", async () => {
@@ -220,6 +242,154 @@ describe("desktop status service", () => {
     expect(events).toHaveLength(1);
     expect(events[0].status.auth).toBe("signed_in"); // previous/assumed state kept
     expect(events[0].status.connectivity).toBe("offline");
+  });
+
+  it("uses a cached Pro entitlement on an offline cold start", async () => {
+    const events: StatusEvent[] = [];
+    const cached = BillingStatusDataSchema.parse({
+      ...statusPayload(0).entitlement,
+      planId: "pro",
+      entitlementSource: "trial",
+      capabilities: {
+        localAcceptedWordsPerDay: null,
+        deepCompletesPerMonth: 300,
+        personalDeviceLimit: 3,
+        continuousMemoryExtraction: true,
+        customWritingInstructions: true,
+        modelCatalogAccess: true,
+      },
+      trial: {
+        active: true,
+        startedAt: "2026-07-01T00:00:00.000Z",
+        endsAt: "2026-07-31T00:00:00.000Z",
+      },
+      localAcceptedWords: {
+        ...statusPayload(0).entitlement.localAcceptedWords,
+        limit: null,
+        remaining: null,
+      },
+      deepCompletes: {
+        ...statusPayload(0).entitlement.deepCompletes,
+        limit: 300,
+        remaining: 300,
+      },
+      devices: { active: 1, limit: 3, canLink: true },
+      upgradeUrl: undefined,
+    });
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      now: () => new Date("2026-07-12T12:00:00.000Z"),
+      getCachedEntitlement: () => ({ userId: "user-1", entitlement: cached }),
+      getAuthorizationObservation: async () =>
+        authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+      onChange: (status) => events.push({ type: "changed", status }),
+    });
+
+    await service.refresh();
+
+    expect(events[0].status.auth).toBe("signed_in");
+    expect(events[0].status.connectivity).toBe("offline");
+    expect(
+      events[0].status.entitlement?.capabilities.localAcceptedWordsPerDay,
+    ).toBeNull();
+  });
+
+  it("resets cached local usage when a new local day starts offline", async () => {
+    let currentTime = new Date(2026, 6, 12, 12);
+    const cached = BillingStatusDataSchema.parse({
+      ...statusPayload(0).entitlement,
+      localAcceptedWords: {
+        period: "2026-07-12",
+        used: 75,
+        limit: 100,
+        remaining: 25,
+        resetAt: new Date(2026, 6, 13).toISOString(),
+        exhausted: false,
+      },
+    });
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      now: () => currentTime,
+      getCachedEntitlement: () => ({ userId: "user-1", entitlement: cached }),
+      getAuthorizationObservation: async () =>
+        authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+
+    currentTime = new Date(2026, 6, 13, 12);
+    const status = await service.refresh();
+
+    expect(status.entitlement?.localAcceptedWords).toMatchObject({
+      period: "2026-07-13",
+      used: 0,
+      limit: 100,
+      remaining: 100,
+      exhausted: false,
+    });
+    expect(status.entitlement?.localAcceptedWords.resetAt).toBe(
+      new Date(2026, 6, 14).toISOString(),
+    );
+  });
+
+  it("expires a cached Pro trial while offline", async () => {
+    const cached = BillingStatusDataSchema.parse({
+      ...statusPayload(0).entitlement,
+      planId: "pro",
+      entitlementSource: "trial",
+      capabilities: {
+        localAcceptedWordsPerDay: null,
+        deepCompletesPerMonth: 300,
+        personalDeviceLimit: 3,
+        continuousMemoryExtraction: true,
+        customWritingInstructions: true,
+        modelCatalogAccess: true,
+      },
+      trial: {
+        active: true,
+        startedAt: "2026-06-01T00:00:00.000Z",
+        endsAt: "2026-07-01T00:00:00.000Z",
+      },
+      localAcceptedWords: {
+        ...statusPayload(0).entitlement.localAcceptedWords,
+        limit: null,
+        remaining: null,
+      },
+      deepCompletes: {
+        ...statusPayload(0).entitlement.deepCompletes,
+        limit: 300,
+        remaining: 300,
+      },
+      devices: { active: 1, limit: 3, canLink: true },
+      upgradeUrl: undefined,
+    });
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      now: () => new Date("2026-07-12T12:00:00.000Z"),
+      getCachedEntitlement: () => ({ userId: "user-1", entitlement: cached }),
+      getAuthorizationObservation: async () =>
+        authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+
+    const status = await service.refresh();
+
+    expect(status.entitlement?.planId).toBe("free");
+    expect(status.entitlement?.entitlementSource).toBe("free");
+    expect(status.entitlement?.localAcceptedWords.limit).toBe(100);
+    expect(status.entitlement?.deepCompletes.limit).toBe(10);
   });
 
   it("does not surface transient failures in the overlay-focused status", async () => {
@@ -443,40 +613,26 @@ describe("desktop status service", () => {
     await secondFetchStarted.promise;
     secondResponse.resolve(Response.json({
       status: "ok",
-      data: {
-        authenticated: true,
-        deviceRevoked: false,
-        planId: "free",
-        quota: 100,
-        usage: 2,
-        resetAt: "2026-08-01T00:00:00.000Z",
-      },
+       data: statusPayload(2),
     }));
     const newerStatus = await newerRefresh;
     firstResponse.resolve(Response.json({
       status: "ok",
-      data: {
-        authenticated: true,
-        deviceRevoked: false,
-        planId: "free",
-        quota: 100,
-        usage: 1,
-        resetAt: "2026-08-01T00:00:00.000Z",
-      },
+       data: statusPayload(1),
     }));
     const olderStatus = await olderRefresh;
 
     expect(events).toHaveLength(1);
     expect(events[0].credentialGeneration).toBe(credentialGeneration);
-    expect(events[0].status.quota?.usage).toBe(2);
+    expect(events[0].status.entitlement?.deepCompletes.used).toBe(2);
     expect(olderStatus).toBe(newerStatus);
     expect(service.getCurrentStatus()).toBe(newerStatus);
     expect(Object.keys(events[0].status).sort()).toEqual([
       "auth",
       "connectivity",
+      "entitlement",
       "lastUpdatedAt",
       "overlay",
-      "quota",
       "userId",
     ]);
   });

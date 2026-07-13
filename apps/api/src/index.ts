@@ -55,6 +55,7 @@ import { registerMemoryRoutes } from "./routes/memory.ts";
 import { registerBillingRoutes } from "./routes/billing.ts";
 import { registerSuggestionRoutes } from "./routes/suggestions.ts";
 import { registerTelemetryRoutes } from "./routes/telemetry.ts";
+import { registerUsageRoutes } from "./routes/usage.ts";
 
 export { MAX_SUGGESTION_LENGTH, createSuggestionPrompt, normalizeGeneratedSuggestion };
 export type { SuggestionGenerator, SuggestionInput };
@@ -162,17 +163,29 @@ export function createApp(deps: ApiDependencies = {}) {
   app.use("/api/memory/*", authenticateDevice);
   app.use("/suggestions", authenticateDevice);
   app.use("/telemetry/events", authenticateDevice);
+  app.use("/api/usage/*", authenticateDevice);
 
-  registerStatusRoutes(app, { billingService, telemetryService });
+  registerStatusRoutes(app, {
+    billingService,
+    telemetryService,
+    deviceTokenService,
+  });
   registerMemoryRoutes(app, {
     auth,
     personalMemoryService,
     memoryExtractionService,
     telemetryService,
+    billingService,
   });
-  registerBillingRoutes(app, { auth, billingService, billingCheckoutClient });
+  registerBillingRoutes(app, {
+    auth,
+    billingService,
+    billingCheckoutClient,
+    deviceTokenService,
+  });
   registerSuggestionRoutes(app, { suggestionUseCase });
   registerTelemetryRoutes(app, { telemetryService, auth });
+  registerUsageRoutes(app, { billingService });
 
   return app;
 }

@@ -53,6 +53,7 @@ export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeD
 
   return {
     appendText(text: string): void {
+      if (session.isPaused()) return;
       const activeApplication = activeApplicationFromState(deps.typingContext);
       if (activeApplication) {
         deps.memoryExtraction.append({

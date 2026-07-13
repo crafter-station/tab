@@ -1,8 +1,8 @@
-import { planQuotas, type PlanId } from "@tab/billing";
+import { planCapabilities, type PlanId } from "@tab/billing";
 import {
   buttonVariants,
 } from "@tab/ui";
-import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
+import { PageKicker, formatMonthlyPrice } from "./shared.tsx";
 
 export { HomePage } from "./home.tsx";
 
@@ -24,10 +24,10 @@ const downloadSteps = [
   },
 ] as const;
 
-type PlanEntry = [PlanId, (typeof planQuotas)[PlanId]];
+type PlanEntry = [PlanId, (typeof planCapabilities)[PlanId]];
 
 function getPlanEntries(): PlanEntry[] {
-  return Object.entries(planQuotas) as PlanEntry[];
+  return Object.entries(planCapabilities) as PlanEntry[];
 }
 
 function planCheckoutLabel(authenticated: boolean): string {
@@ -36,7 +36,9 @@ function planCheckoutLabel(authenticated: boolean): string {
 }
 
 function checkoutPlanHref(planId: PlanId): string {
-  return `/billing/checkout?plan=${planId}`;
+  return planId === "free"
+    ? "/dashboard"
+    : "/billing/checkout?plan=pro&interval=monthly";
 }
 
 function checkoutAuthHref(planId: PlanId): string {
@@ -50,14 +52,13 @@ function checkoutHref(planId: PlanId, authenticated: boolean): string {
 }
 
 function checkoutCtaLabel(planId: PlanId, planName: string): string {
-  if (planId === "free") return "Start free";
+  if (planId === "free") return "Start 30-day Pro trial";
   return `Choose ${planName}`;
 }
 
 function planDescription(planId: PlanId): string {
-  if (planId === "free") return "For trying Tab and lighter writing.";
-  if (planId === "pro") return "For writing with Tab every day.";
-  return "For the heaviest writing workflows.";
+  if (planId === "free") return "Private local help for lighter writing.";
+  return "Unlimited local writing with deeper cloud help when you ask.";
 }
 
 export function PricingPage({ authenticated = false }: { authenticated?: boolean }) {
@@ -71,11 +72,11 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       <div className="grid gap-4 sm:grid-cols-[minmax(0,0.8fr)_minmax(280px,1.2fr)] sm:items-end sm:gap-12">
         <div>
           <PageKicker>Simple pricing</PageKicker>
-          <h1 className="mt-3 text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em]">Choose by how much you write.</h1>
+          <h1 className="mt-3 text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em]">Local by default. Deeper when you ask.</h1>
         </div>
-        <p className="max-w-[56ch] text-pretty text-lg leading-relaxed text-muted-foreground">Every plan includes suggestions across your Mac and control over saved memories. The only difference is monthly volume.</p>
+        <p className="max-w-[56ch] text-pretty text-lg leading-relaxed text-muted-foreground">Automatic Suggestions stay on your Mac. Double-tap Option for Deep Complete, which sends bounded, redacted context to the cloud only after that explicit action.</p>
       </div>
-      <div className="grid border-y border-border md:grid-cols-3">
+      <div className="grid border-y border-border md:grid-cols-2">
         {plans.map((plan) => (
           <article key={plan.planId} className={`flex flex-col border-b border-border py-7 last:border-b-0 md:border-b-0 md:border-l md:px-7 md:first:border-l-0 md:first:pl-0 md:last:pr-0 ${plan.planId === "pro" ? "bg-muted/25" : ""}`}>
             <div className="flex min-h-7 items-center justify-between gap-3">
@@ -86,12 +87,12 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             <p className="mt-7 font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em] tabular-nums">{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
             <div className="my-6 border-t border-border" />
             <div className="flex-1">
-              <p className="text-xs font-semibold uppercase text-muted-foreground">Monthly suggestions</p>
-              <p className="mt-2 text-2xl font-bold tabular-nums">{formatCount(plan.monthlyAutocompleteSuggestions)}</p>
+              <p className="text-xs font-semibold uppercase text-muted-foreground">Local Accepted Words</p>
+              <p className="mt-2 text-2xl font-bold tabular-nums">{plan.localAcceptedWordsPerDay === null ? "Unlimited" : `${plan.localAcceptedWordsPerDay} / day`}</p>
               <ul className="mt-5 grid gap-3 text-sm text-muted-foreground">
-                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Use Tab across supported Mac apps</span></li>
-                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Saved memories you can review and delete</span></li>
-                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>Change plans whenever you need</span></li>
+                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>{plan.deepCompletesPerMonth} Deep Completes / month</span></li>
+                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>{plan.personalDeviceLimit} personal {plan.personalDeviceLimit === 1 ? "Mac" : "Macs"}</span></li>
+                <li className="flex gap-2"><span className="text-foreground" aria-hidden="true">+</span><span>{plan.continuousMemoryExtraction ? "Continuous Memory Extraction" : "Manage and export existing memories"}</span></li>
               </ul>
             </div>
             <p className="mt-7 text-xs font-semibold text-muted-foreground">{planCheckoutLabel(authenticated)}</p>
@@ -103,7 +104,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
           </article>
         ))}
       </div>
-      <p className="text-center text-sm text-muted-foreground">No long-term contract. You can upgrade or downgrade from your account.</p>
+      <p className="text-center text-sm text-muted-foreground">Every new account starts with 30 days of Pro, no card required. Pro is $10 monthly or $96 annually.</p>
     </section>
   );
 }

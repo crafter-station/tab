@@ -90,7 +90,7 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
   const loginHref = `/login${preserveAuthSearchParams(search)}`;
 
   return (
-    <AuthShell eyebrow="Account access" title="Create your account" description="Start Tab with an account for billing, connected Macs, monthly suggestions, and saved memories." handoff={hasDesktopHandoff(search)}>
+    <AuthShell eyebrow="Account access" title="Create your account" description="Start a 30-day Pro trial with one identity for connected Macs, Deep Complete, and saved memories. No card required." handoff={hasDesktopHandoff(search)}>
       <form className="flex flex-col gap-4" method="post" action="/signup">
         <ErrorMessage message={error} />
         <HandoffFields search={search} />

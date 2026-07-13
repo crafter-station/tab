@@ -1,7 +1,7 @@
 import {
   BillingCheckoutResponseSchema,
   BillingPortalResponseSchema,
-  BillingQuotaResponseSchema,
+  BillingStatusResponseSchema,
   DeviceAuthorizeResponseSchema,
   DeviceListResponseSchema,
   MemoryDeleteResponseSchema,
@@ -50,9 +50,11 @@ export function cookieHeaderFromSetCookie(source: Response) {
   return pairs.length > 0 ? pairs.join("; ") : undefined;
 }
 
-export async function parseBillingQuota(response: Response) {
-  return BillingQuotaResponseSchema.parse(await response.json());
+export async function parseBillingStatus(response: Response) {
+  return BillingStatusResponseSchema.parse(await response.json());
 }
+
+export const parseBillingQuota = parseBillingStatus;
 
 export async function parseDevices(response: Response) {
   return DeviceListResponseSchema.parse(await response.json());

@@ -155,6 +155,31 @@ describe("desktop API suggestion client", () => {
     expect(request.memoryEnabled).toBe(true);
   });
 
+  it("sends bounded custom writing instructions when enabled by the caller", async () => {
+    const captured: { body?: unknown } = {};
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      captured.body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      return new Response(
+        JSON.stringify({ status: "ok", data: { suggestions: [] } }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    };
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      getCustomWritingInstructions: () => "Keep it concise.",
+      fetch,
+    });
+
+    await requestSuggestion(makeSnapshot());
+
+    expect(
+      SuggestionRequestSchema.parse(captured.body).customWritingInstructions,
+    ).toBe("Keep it concise.");
+  });
+
   it("excludes memories for pasted text even when memory usage is enabled", async () => {
     const captured: { body?: unknown } = {};
     const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
@@ -245,6 +270,34 @@ describe("desktop API suggestion client", () => {
 
     const suggestion = await requestSuggestion(makeSnapshot());
     expect(suggestion).toBeNull();
+  });
+
+  it("surfaces Deep Complete exhaustion through the entitlement callback", async () => {
+    let exhausted = false;
+    const fetch = async () =>
+      new Response(
+        JSON.stringify({
+          status: "error",
+          error: {
+            code: "quota_exhausted",
+            message: "Monthly allowance exhausted.",
+          },
+        }),
+        { status: 402, headers: { "Content-Type": "application/json" } },
+      );
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787",
+      deviceId: "device-1",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      fetch,
+      onEntitlementError: () => {
+        exhausted = true;
+      },
+    });
+
+    expect(await requestSuggestion(makeSnapshot())).toBeNull();
+    expect(exhausted).toBe(true);
   });
 
   it("fails silently when the network request throws", async () => {

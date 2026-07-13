@@ -14,7 +14,7 @@ import {
   Plus,
   ShieldCheck,
 } from "@phosphor-icons/react";
-import { planQuotas } from "@tab/billing";
+import { planCapabilities } from "@tab/billing";
 import { SuggestionCommand, buttonVariants } from "@tab/ui";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
@@ -135,7 +135,7 @@ const faqs = [
   },
   {
     question: "Can I try it before paying?",
-    answer: `Yes. The Free plan includes ${formatCount(planQuotas.free.monthlyAutocompleteSuggestions)} suggestions each month. Upgrade only when you need more volume.`,
+    answer: `Yes. Every account starts with a 30-day Pro trial, no card required. Afterward, Free includes ${formatCount(planCapabilities.free.localAcceptedWordsPerDay)} Accepted Words from Local Suggestions each day and ${planCapabilities.free.deepCompletesPerMonth} Deep Completes each month.`,
   },
   {
     question: "What Mac do I need?",
@@ -405,8 +405,8 @@ function MemoryShowcase() {
 
 function PrivacyPipeline() {
   const featureDetails = [
-    { icon: Keyboard, title: "Bounded recent context", description: "Tab uses the recent text-bearing input needed to form a useful suggestion." },
-    { icon: ShieldCheck, title: "Local guardrails first", description: "Secure input and obvious secret-like text are suppressed before a request." },
+    { icon: Keyboard, title: "Automatic stays local", description: "Routine Automatic Suggestions run on your Mac without sending Typing Context to Tab." },
+    { icon: ShieldCheck, title: "Explicit cloud boundary", description: "Deep Complete sends bounded, redacted context only after you double-tap Option." },
     { icon: Eye, title: "No raw typing log", description: "Suggestion telemetry records product events and metadata, not your draft text." },
   ] as const;
 
@@ -415,13 +415,13 @@ function PrivacyPipeline() {
       <div className="max-w-3xl">
         <PageKicker>Privacy by construction</PageKicker>
         <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Useful context in. Raw typing logs out.</h2>
-        <p className="mt-6 max-w-[40rem] text-pretty text-lg leading-relaxed text-muted-foreground">The request path is deliberately narrow: recent Typing Context is checked locally, obvious secrets are removed, and only the bounded suggestion request moves forward.</p>
+        <p className="mt-6 max-w-[40rem] text-pretty text-lg leading-relaxed text-muted-foreground">Automatic Suggestions never need a cloud request. When you explicitly invoke Deep Complete, obvious secrets are removed and only bounded, redacted context moves forward.</p>
         <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8" })} href="/privacy">Read the privacy design <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
       </div>
 
       <div className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false">
         <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
-          <div><p className="text-sm font-bold">Live request boundary</p><p className="text-xs text-muted-foreground">What moves from your Mac to a suggestion</p></div>
+          <div><p className="text-sm font-bold">Deep Complete boundary</p><p className="text-xs text-muted-foreground">What moves only after your explicit action</p></div>
           <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
             <ArrowClockwise aria-hidden="true" /> Replay
           </button>
@@ -451,7 +451,7 @@ function PrivacyPipeline() {
           <div className="tab-privacy-transfer relative mx-auto h-10 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-privacy-transfer-dot tab-privacy-transfer-dot-delayed absolute size-2 rounded-full bg-foreground" /></div>
 
           <div className="tab-privacy-request relative overflow-hidden rounded-[var(--radius-card)] border border-border bg-background p-4 shadow-[var(--tab-shadow-card)] sm:p-5">
-            <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Suggestion request</p><span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success)]"><span className="size-1.5 rounded-full bg-[var(--success)]" /> Ready</span></div>
+            <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Deep Complete request</p><span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success)]"><span className="size-1.5 rounded-full bg-[var(--success)]" /> Explicit</span></div>
             <dl className="mt-5 grid gap-2 font-[var(--font-code)] text-xs">
               <div className="flex justify-between gap-3 border-b border-border pb-2"><dt className="text-muted-foreground">typing_context</dt><dd>bounded</dd></div>
               <div className="flex justify-between gap-3 border-b border-border pb-2"><dt className="text-muted-foreground">secret_like_text</dt><dd>redacted</dd></div>
@@ -484,12 +484,12 @@ export function HomePage() {
         <div className="marketing-intro grid content-center gap-6">
           <a className="marketing-announcement flex w-fit items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-2 pr-3 text-xs font-semibold text-foreground no-underline shadow-[var(--tab-shadow-control)] transition-[background-color,transform] duration-150 ease-[var(--tab-ease-out)] hover:bg-secondary active:scale-[0.97]" href="#pricing">
             <span className="rounded-full bg-foreground px-2 py-0.5 text-[0.625rem] uppercase text-background">Free</span>
-            {formatCount(planQuotas.free.monthlyAutocompleteSuggestions)} suggestions every month
+            30 days of Pro, no card
             <ArrowRight aria-hidden="true" />
           </a>
           <PageKicker>Native Autocomplete for your Mac</PageKicker>
           <h1 className="max-w-[10ch] text-balance font-[var(--font-display)] text-[clamp(3.25rem,7vw,6.4rem)] font-bold leading-[0.88] tracking-[-0.035em]">Keep the thought. Skip the typing.</h1>
-          <p className="max-w-[36rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next few words in Mail, Slack, Notes, and terminals. Preview the phrase, press Option+Tab, and finish without opening another AI chat.</p>
+          <p className="max-w-[36rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Copilot handles the code. Tab handles everything around it, with private Local Suggestions as you type and Deep Complete when you explicitly ask.</p>
           <div className="flex flex-col gap-3 min-[420px]:flex-row">
             <a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg">
               <DownloadSimple data-icon="inline-start" aria-hidden="true" />
@@ -502,7 +502,7 @@ export function HomePage() {
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> macOS 14+</span>
-            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> {formatCount(planQuotas.free.monthlyAutocompleteSuggestions)} suggestions free</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> {formatCount(planCapabilities.free.localAcceptedWordsPerDay)} Accepted Words free each day</span>
             <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> You approve every insertion</span>
           </div>
         </div>
@@ -649,12 +649,12 @@ export function HomePage() {
       <section id="pricing" className="scroll-mt-24 py-20 sm:py-28">
         <div className="text-center">
           <PageKicker>Start small, move when you need to</PageKicker>
-          <h2 className="mx-auto mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Pay for the writing volume you actually use.</h2>
-          <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">The same native autocomplete and Personal Memory controls are included on every plan.</p>
+          <h2 className="mx-auto mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Private for the routine. Pro for the hard parts.</h2>
+          <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">Local Suggestions and Deep Complete solve different writing moments. Your memories always remain visible, editable, exportable, and deletable.</p>
         </div>
         <div className="mx-auto mt-12 grid max-w-4xl gap-4 md:grid-cols-2">
           {(["free", "pro"] as const).map((planId) => {
-            const plan = planQuotas[planId];
+            const plan = planCapabilities[planId];
             const featured = planId === "pro";
             return (
               <article className={`flex flex-col rounded-[var(--radius-card)] border p-6 sm:p-8 ${featured ? "border-foreground bg-foreground text-background" : "border-border bg-card"}`} key={planId}>
@@ -663,18 +663,18 @@ export function HomePage() {
                   {featured ? <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/70">Daily writing</span> : null}
                 </div>
                 <p className={`mt-8 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] ${featured ? "text-background" : "text-foreground"}`}>{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
-                <p className={`mt-3 text-sm ${featured ? "text-background/65" : "text-muted-foreground"}`}>{formatCount(plan.monthlyAutocompleteSuggestions)} suggestions each month</p>
+                <p className={`mt-3 text-sm ${featured ? "text-background/65" : "text-muted-foreground"}`}>{plan.localAcceptedWordsPerDay === null ? "Unlimited Local Accepted Words" : `${formatCount(plan.localAcceptedWordsPerDay)} Local Accepted Words / day`}</p>
                 <ul className={`mt-8 grid flex-1 gap-3 text-sm ${featured ? "text-background/75" : "text-muted-foreground"}`}>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> Works across supported Mac apps</li>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> Personal Memory controls</li>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> Change plans from your account</li>
+                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.deepCompletesPerMonth} Deep Completes / month</li>
+                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.personalDeviceLimit} personal {plan.personalDeviceLimit === 1 ? "Mac" : "Macs"}</li>
+                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.continuousMemoryExtraction ? "Continuous Memory Extraction" : "Manage existing memories"}</li>
                 </ul>
-                <a className={buttonVariants({ variant: featured ? "secondary" : "default", size: "lg", className: "mt-8 w-full" })} href={planId === "free" ? "/signup" : "/billing/checkout?plan=pro"}>{planId === "free" ? `Start with ${formatCount(plan.monthlyAutocompleteSuggestions)} free suggestions` : "Choose Pro"}</a>
+                <a className={buttonVariants({ variant: featured ? "secondary" : "default", size: "lg", className: "mt-8 w-full" })} href={planId === "free" ? "/signup" : "/billing/checkout?plan=pro&interval=monthly"}>{planId === "free" ? "Start 30-day Pro trial" : "Choose Pro monthly"}</a>
               </article>
             );
           })}
         </div>
-        <p className="mt-6 text-center text-sm text-muted-foreground">Need much more volume? <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare every plan</a>.</p>
+        <p className="mt-6 text-center text-sm text-muted-foreground">Pro is also available for $96/year. <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare plans</a>.</p>
       </section>
 
       <section className="border-t border-border py-20 sm:py-24">

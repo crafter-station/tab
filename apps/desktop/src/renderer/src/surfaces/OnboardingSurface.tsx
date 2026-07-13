@@ -294,8 +294,8 @@ export function OnboardingSurface() {
           <div className="onboarding-trust-note">
             <LockIcon />
             <div>
-              <strong>No screen or file access</strong>
-              <span>Tab asks only for what autocomplete needs.</span>
+              <strong>No Screen Recording or Full Disk Access</strong>
+              <span>Supported nearby context is read locally and bounded.</span>
             </div>
           </div>
           <Button className="onboarding-later" onClick={() => window.tab?.skipOnboarding?.()} variant="ghost">
@@ -475,8 +475,8 @@ export function OnboardingSurface() {
                   <div>
                     <span>02</span>
                     <p>
-                      <strong>Suggest now with two taps of Option</strong>
-                      <small>Use it whenever you want Tab to generate a suggestion immediately.</small>
+                      <strong>Deep Complete with two taps of Option</strong>
+                      <small>This explicit action sends bounded, redacted context to the cloud for a harder writing moment.</small>
                     </p>
                   </div>
                   <div>

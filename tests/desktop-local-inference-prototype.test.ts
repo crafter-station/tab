@@ -76,6 +76,15 @@ describe("local inference prototype", () => {
       modelExists: () => true,
       verifyModelArtifact: async () => true,
       getRuntimeVersion: async () => "version: 9910 (f5525f7e7)",
+      getMemories: () => [{
+        id: "memory-1",
+        userId: "user-1",
+        content: "Prefers concise replies",
+        createdBy: "user",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      }],
+      getCustomWritingInstructions: () => "Keep the tone concise and direct.",
       spawnHelper: (executable, args) => {
         spawnCalls.push({ executable, args });
         return { pid: 123, kill: () => true, once: () => {} };
@@ -116,6 +125,10 @@ describe("local inference prototype", () => {
       cache_prompt: true,
       chat_template_kwargs: { enable_thinking: false },
     });
+    expect(JSON.stringify(requestBodies[0])).toContain("Prefers concise replies");
+    expect(JSON.stringify(requestBodies[0])).toContain(
+      "Keep the tone concise and direct.",
+    );
     expect(partialSuggestions).toEqual([" world"]);
     expect(suggestion?.text).toBe(" world peace");
     expect(suggestion?.id).toStartWith("sg-local-");

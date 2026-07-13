@@ -27,6 +27,7 @@ export type SuggestionPromptInput = {
   readonly activeApplication: ActiveApplication;
   readonly memories: readonly PersonalMemory[];
   readonly appContext?: AppContext;
+  readonly customWritingInstructions?: string;
 };
 
 export type SuggestionMessage = {
@@ -113,8 +114,16 @@ export function createSuggestionPrompt(input: SuggestionPromptInput): string {
 export function createSuggestionMessages(input: SuggestionPromptInput): SuggestionMessage[] {
   const typingContext = input.typingContext.slice(-MAX_TYPING_CONTEXT_LENGTH);
   const context = `${formatAppContext(input.appContext)}${formatRelevantMemories(input.memories)}`;
+  const customWritingInstructions = input.customWritingInstructions
+    ?.trim()
+    .slice(0, 1_000);
   return [
-    { role: "system", content: SUGGESTION_SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: customWritingInstructions
+        ? `${SUGGESTION_SYSTEM_PROMPT}\nFollow these user writing preferences when they do not conflict with the output contract: ${customWritingInstructions}`
+        : SUGGESTION_SYSTEM_PROMPT,
+    },
     ...SUGGESTION_EXAMPLES,
     {
       role: "user",

@@ -12,8 +12,10 @@ export type ApiSuggestionClientDependencies = {
   appVersion: string;
   platform: string;
   memoryEnabled?: boolean | (() => boolean);
+  getCustomWritingInstructions?: () => string | undefined;
   fetch?: typeof globalThis.fetch;
   getAuthorizationHeader?: () => Promise<string | null>;
+  onEntitlementError?: () => void;
 };
 
 function getMemoryEnabledPreference(deps: ApiSuggestionClientDependencies): boolean {
@@ -35,6 +37,7 @@ function buildSuggestionRequest(
   return {
     requestId: crypto.randomUUID(),
     deviceId: deps.deviceId,
+    mode: "deep_complete",
     typingContext: snapshot.sanitizedContext,
     contextSource: snapshot.contextSource,
     redaction: snapshot.redaction,
@@ -42,6 +45,7 @@ function buildSuggestionRequest(
     memoryEnabled: getMemoryEnabledPreference(deps) && snapshot.memoryEligible,
     contextHash: snapshot.contextHash,
     appContext: snapshot.appContext,
+    customWritingInstructions: deps.getCustomWritingInstructions?.(),
     clientMetadata: {
       appVersion: deps.appVersion,
       platform: deps.platform,
@@ -79,6 +83,18 @@ export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies)
       });
 
       if (!response.ok) {
+        if (response.status === 402) {
+          const error = ApiResponseSchema.safeParse(
+            (await response.json()) as unknown,
+          );
+          if (
+            error.success &&
+            error.data.status === "error" &&
+            error.data.error.code === "quota_exhausted"
+          ) {
+            deps.onEntitlementError?.();
+          }
+        }
         return null;
       }
 

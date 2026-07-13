@@ -82,7 +82,7 @@ async function signUpAndAuthorize(
 }
 
 describe("API status endpoint", () => {
-  it("returns signed-in status with quota for an authenticated device", async () => {
+  it("returns trial capabilities and independent allowances for an authenticated device", async () => {
     const { app, deviceTokenService, billingStorage, billingService } = await createApiFixture();
     const { token } = await signUpAndAuthorize(app, deviceTokenService, billingService);
 
@@ -97,10 +97,12 @@ describe("API status endpoint", () => {
     expect(body.data.deviceRevoked).toBe(false);
     expect(typeof body.data.userId).toBe("string");
     expect(body.data.userId.length).toBeGreaterThan(0);
-    expect(body.data.planId).toBe("free");
-    expect(body.data.quota).toBe(100);
-    expect(body.data.usage).toBe(0);
-    expect(typeof body.data.resetAt).toBe("string");
+    const entitlement = body.data.entitlement as Record<string, any>;
+    expect(entitlement.planId).toBe("pro");
+    expect(entitlement.entitlementSource).toBe("trial");
+    expect(entitlement.localAcceptedWords.limit).toBeNull();
+    expect(entitlement.deepCompletes.limit).toBe(300);
+    expect(entitlement.devices.limit).toBe(3);
   });
 
   it("returns unauthenticated without a device token", async () => {

@@ -1,23 +1,58 @@
-export const planQuotas = {
+export const PLAN_IDS = ["free", "pro"] as const;
+
+export const planCapabilities = {
   free: {
     name: "Free",
-    monthlyAutocompleteSuggestions: 100,
     monthlyPriceUsd: 0,
+    annualPriceUsd: 0,
+    trialDays: 30,
+    localAcceptedWordsPerDay: 100,
+    deepCompletesPerMonth: 10,
+    personalDeviceLimit: 1,
+    continuousMemoryExtraction: false,
+    customWritingInstructions: false,
+    modelCatalogAccess: false,
   },
   pro: {
     name: "Pro",
-    monthlyAutocompleteSuggestions: 1_000,
     monthlyPriceUsd: 10,
-  },
-  max: {
-    name: "Max",
-    monthlyAutocompleteSuggestions: 1_000_000,
-    monthlyPriceUsd: 100,
+    annualPriceUsd: 96,
+    trialDays: 0,
+    localAcceptedWordsPerDay: null,
+    deepCompletesPerMonth: 300,
+    personalDeviceLimit: 3,
+    continuousMemoryExtraction: true,
+    customWritingInstructions: true,
+    modelCatalogAccess: true,
   },
 } as const;
 
-export type PlanId = keyof typeof planQuotas;
+export type PlanId = keyof typeof planCapabilities;
+export type BillingInterval = "monthly" | "annual";
 
-export function shouldCountSuggestionResponse(suggestionsReturned: number): boolean {
+export function isPlanId(value: string | undefined): value is PlanId {
+  return Boolean(value && value in planCapabilities);
+}
+
+export function shouldCountDeepComplete(
+  suggestionsReturned: number,
+): boolean {
   return suggestionsReturned > 0;
+}
+
+export function countAcceptedWords(text: string): number {
+  if (typeof Intl.Segmenter === "function") {
+    const segments = new Intl.Segmenter(undefined, {
+      granularity: "word",
+    }).segment(text);
+    let count = 0;
+    for (const segment of segments) {
+      if (segment.isWordLike) count += 1;
+    }
+    return count;
+  }
+
+  // Older runtimes conservatively count Unicode letter/number runs and keep
+  // apostrophe contractions together. CJK runs count as one fallback word.
+  return text.match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu)?.length ?? 0;
 }

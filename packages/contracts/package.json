@@ -7,6 +7,8 @@
     ".": "./src/index.ts"
   },
   "dependencies": {
-    "@tab/memory-policy": "workspace:*"
+    "@tab/billing": "workspace:*",
+    "@tab/memory-policy": "workspace:*",
+    "zod": "^4.4.3"
   }
 }

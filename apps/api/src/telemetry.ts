@@ -2,7 +2,7 @@ import {
   TelemetryEventSchema,
   type TelemetryEvent,
 } from "@tab/contracts";
-import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
+import { and, eq, gte, sql } from "drizzle-orm";
 import type { AppDatabase } from "./db/index.ts";
 import { telemetryEvents } from "./db/schema.ts";
 
@@ -13,7 +13,10 @@ export interface TelemetryStorage {
 }
 
 export type LocalSuggestionActivity = {
-  readonly accepted: number;
+  readonly acceptedSuggestions: number;
+  readonly acceptedWords: number;
+  readonly acceptedCharacters: number;
+  readonly activeWritingDays: number;
   readonly averageAcceptanceLatencyMs: number | null;
 };
 
@@ -31,10 +34,12 @@ export class TelemetryService {
     this.storage = deps.storage;
   }
 
-  async record(event: Omit<TelemetryEvent, "id">): Promise<TelemetryEvent> {
+  async record(
+    event: Omit<TelemetryEvent, "id"> & { id?: string },
+  ): Promise<TelemetryEvent> {
     const record: TelemetryEvent = TelemetryEventSchema.parse({
       ...event,
-      id: crypto.randomUUID(),
+      id: event.id ?? crypto.randomUUID(),
     });
     await this.storage.recordEvent(record);
     return record;
@@ -65,12 +70,23 @@ export class InMemoryTelemetryStorage implements TelemetryStorage {
     const events = this.events.filter((event) =>
       event.userId === userId &&
       event.eventType === "suggestion_accepted" &&
-      event.modelId !== undefined &&
+      event.inferenceSource === "local" &&
       event.timestamp >= since
     );
     const latencies = events.flatMap((event) => event.latencyMs === undefined ? [] : [event.latencyMs]);
     return {
-      accepted: events.length,
+      acceptedSuggestions: events.length,
+      acceptedWords: events.reduce(
+        (total, event) => total + (event.acceptedWordCount ?? 0),
+        0,
+      ),
+      acceptedCharacters: events.reduce(
+        (total, event) => total + (event.acceptedCharacterCount ?? 0),
+        0,
+      ),
+      activeWritingDays: new Set(
+        events.map((event) => event.timestamp.slice(0, 10)),
+      ).size,
       averageAcceptanceLatencyMs: latencies.length === 0
         ? null
         : Math.round(latencies.reduce((total, latency) => total + latency, 0) / latencies.length),
@@ -112,6 +128,15 @@ function rowToTelemetryEvent(
     memoryUpdatedCount: optionalNumber(row.memoryUpdatedCount),
     memoryDeletedCount: optionalNumber(row.memoryDeletedCount),
     memoryRejectedCount: optionalNumber(row.memoryRejectedCount),
+    inferenceSource: row.inferenceSource ?? undefined,
+    trigger: row.trigger ?? undefined,
+    acceptedWordCount: optionalNumber(row.acceptedWordCount),
+    acceptedCharacterCount: optionalNumber(row.acceptedCharacterCount),
+    applicationCategory: row.applicationCategory ?? undefined,
+    memoryUsed: optionalBoolean(row.memoryUsed),
+    memoryCount: optionalNumber(row.memoryCount),
+    providerId: row.providerId ?? undefined,
+    cloudCostUsdMicros: optionalNumber(row.cloudCostUsdMicros),
   });
 }
 
@@ -146,6 +171,15 @@ export class D1TelemetryStorage implements TelemetryStorage {
       memoryUpdatedCount: event.memoryUpdatedCount ?? null,
       memoryDeletedCount: event.memoryDeletedCount ?? null,
       memoryRejectedCount: event.memoryRejectedCount ?? null,
+      inferenceSource: event.inferenceSource ?? null,
+      trigger: event.trigger ?? null,
+      acceptedWordCount: event.acceptedWordCount ?? null,
+      acceptedCharacterCount: event.acceptedCharacterCount ?? null,
+      applicationCategory: event.applicationCategory ?? null,
+      memoryUsed: event.memoryUsed ?? null,
+      memoryCount: event.memoryCount ?? null,
+      providerId: event.providerId ?? null,
+      cloudCostUsdMicros: event.cloudCostUsdMicros ?? null,
     });
   }
 
@@ -160,18 +194,24 @@ export class D1TelemetryStorage implements TelemetryStorage {
   async getLocalSuggestionActivity(userId: string, since: string): Promise<LocalSuggestionActivity> {
     const [row] = await this.db
       .select({
-        accepted: sql<number>`count(*)`,
+        acceptedSuggestions: sql<number>`count(*)`,
+        acceptedWords: sql<number>`coalesce(sum(${telemetryEvents.acceptedWordCount}), 0)`,
+        acceptedCharacters: sql<number>`coalesce(sum(${telemetryEvents.acceptedCharacterCount}), 0)`,
+        activeWritingDays: sql<number>`count(distinct substr(${telemetryEvents.timestamp}, 1, 10))`,
         averageAcceptanceLatencyMs: sql<number | null>`round(avg(${telemetryEvents.latencyMs}))`,
       })
       .from(telemetryEvents)
       .where(and(
         eq(telemetryEvents.userId, userId),
         eq(telemetryEvents.eventType, "suggestion_accepted"),
-        isNotNull(telemetryEvents.modelId),
+        eq(telemetryEvents.inferenceSource, "local"),
         gte(telemetryEvents.timestamp, since),
       ));
     return {
-      accepted: Number(row?.accepted ?? 0),
+      acceptedSuggestions: Number(row?.acceptedSuggestions ?? 0),
+      acceptedWords: Number(row?.acceptedWords ?? 0),
+      acceptedCharacters: Number(row?.acceptedCharacters ?? 0),
+      activeWritingDays: Number(row?.activeWritingDays ?? 0),
       averageAcceptanceLatencyMs: row?.averageAcceptanceLatencyMs === null || row?.averageAcceptanceLatencyMs === undefined
         ? null
         : Number(row.averageAcceptanceLatencyMs),

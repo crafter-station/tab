@@ -32,6 +32,10 @@ export type SuggestionLoopDependencies = {
   onRequestFinished?: (suggestion: Suggestion | null) => void;
   onAutomaticRequestFinished?: (suggestion: Suggestion | null) => void;
   onSuggestionStale?: (suggestion: Suggestion) => void;
+  onSuggestionGenerated?: (suggestion: Suggestion) => void;
+  onLocalSuggestionFailed?: (
+    snapshot: RequestableTypingContextSnapshot,
+  ) => void;
   onSecretLikeContextDetected?: () => void;
   onDiagnostic?: (event: string, details: Record<string, unknown>) => void;
   triggerPolicy?: TriggerPolicy;
@@ -120,6 +124,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
       const suggestion = await deps.getLocalSuggestion(snapshot, {
         signal: controller.signal,
         onPartialSuggestion: (suggestion) => {
+          deps.onSuggestionGenerated?.(suggestion);
           if (!isCurrentDebouncedContext(snapshot.contextHash)) {
             diagnose("local_partial_skipped", { ...contextDetails(snapshot), reason: "context_changed" });
             return;
@@ -145,6 +150,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
         aborted: controller.signal.aborted,
         ...(suggestion ? { suggestionLength: suggestion.text.length } : {}),
       });
+      if (suggestion) deps.onSuggestionGenerated?.(suggestion);
       return suggestion;
     } catch (error) {
       diagnose("local_failed", {
@@ -152,6 +158,9 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
         aborted: controller.signal.aborted,
         error: error instanceof Error ? error.message : String(error),
       });
+      if (!controller.signal.aborted) {
+        deps.onLocalSuggestionFailed?.(snapshot);
+      }
       return null;
     } finally {
       if (activeLocalController === controller) {

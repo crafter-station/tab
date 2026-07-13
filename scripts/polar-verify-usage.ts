@@ -6,14 +6,14 @@ if (!accessToken) {
   throw new Error("POLAR_ACCESS_TOKEN is required");
 }
 
-const meterId = env.POLAR_AUTOCOMPLETE_METER_ID;
+const meterId = env.POLAR_DEEP_COMPLETE_METER_ID ?? env.POLAR_AUTOCOMPLETE_METER_ID;
 if (!meterId) {
-  throw new Error("POLAR_AUTOCOMPLETE_METER_ID is required");
+  throw new Error("POLAR_DEEP_COMPLETE_METER_ID is required");
 }
 
-const productId = env.POLAR_PRODUCT_ID_FREE;
+const productId = env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? env.POLAR_PRODUCT_ID_PRO;
 if (!productId) {
-  throw new Error("POLAR_PRODUCT_ID_FREE is required");
+  throw new Error("POLAR_PRODUCT_ID_PRO_MONTHLY is required");
 }
 
 const polar = new Polar({ accessToken, server: env.POLAR_SERVER });
@@ -89,7 +89,7 @@ try {
   await polar.events.ingest({
     events: [
       {
-        name: "autocomplete.used",
+        name: "deep_complete.used",
         externalCustomerId,
         externalId: requestId,
         timestamp,

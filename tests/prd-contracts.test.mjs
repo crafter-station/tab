@@ -22,7 +22,11 @@ const prdRequiredSections = [
 const canonicalGlossaryTerms = [
   "Native Autocomplete App",
   "Suggestion",
+  "Automatic Suggestion",
+  "Local Suggestion",
+  "Deep Complete",
   "Acceptance",
+  "Accepted Word",
   "Active Application",
   "Typing Context",
   "Floating Suggestion Overlay",
@@ -32,18 +36,15 @@ const canonicalGlossaryTerms = [
 const billingPlanExpectations = [
   {
     planDefinition: /free:/,
-    quotaDefinition: /monthlyAutocompleteSuggestions:\s*100/,
-    prdDescription: /Free with 100 autocompletes per month/,
+    localAllowance: /localAcceptedWordsPerDay:\s*100/,
+    deepAllowance: /deepCompletesPerMonth:\s*10/,
+    prdDescription: /100 Accepted Words from Local Suggestions each day/,
   },
   {
     planDefinition: /pro:/,
-    quotaDefinition: /monthlyAutocompleteSuggestions:\s*1[_,]000/,
-    prdDescription: /Pro user.*1,000 autocompletes per month for \$10/,
-  },
-  {
-    planDefinition: /max:/,
-    quotaDefinition: /monthlyAutocompleteSuggestions:\s*1[_,]000[_,]000/,
-    prdDescription: /Max user.*1,000,000 autocompletes per month for \$100/,
+    localAllowance: /localAcceptedWordsPerDay:\s*null/,
+    deepAllowance: /deepCompletesPerMonth:\s*300/,
+    prdDescription: /Pro costs \$10 per month or \$96 per year/,
   },
 ];
 
@@ -95,15 +96,17 @@ describe("Tab MVP PRD contracts", () => {
     assert.match(contributorDocs, /Effect/, "CONTRIBUTING.md references Effect");
   });
 
-  it("keeps PRD plan definitions aligned with shared billing quotas", () => {
+  it("keeps PRD plan definitions aligned with shared billing capabilities", () => {
     const prd = readText(prdPath);
     const billing = readText("packages/billing/src/index.ts");
 
     for (const expectation of billingPlanExpectations) {
       assert.match(billing, expectation.planDefinition);
-      assert.match(billing, expectation.quotaDefinition);
+      assert.match(billing, expectation.localAllowance);
+      assert.match(billing, expectation.deepAllowance);
       assert.match(prd, expectation.prdDescription);
     }
+    assert.doesNotMatch(billing, /^\s*max:/m);
   });
 
   it("keeps PRD context sources aligned with shared request schema", () => {

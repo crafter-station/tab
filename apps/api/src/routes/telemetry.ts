@@ -51,15 +51,23 @@ export function registerTelemetryRoutes(
 
     try {
       await deps.telemetryService.record({
+        id: request.eventId,
         eventType: request.eventType,
         requestId: request.requestId,
         userId: device.userId,
         deviceId: device.deviceId,
         timestamp: request.timestamp,
-        activeApplicationBundleId: request.activeApplicationBundleId,
         suggestionLength: request.suggestionLength,
         latencyMs: request.latencyMs,
+        errorCode: request.errorCode,
         modelId: request.modelId,
+        inferenceSource: request.inferenceSource,
+        trigger: request.trigger,
+        acceptedWordCount: request.acceptedWordCount,
+        acceptedCharacterCount: request.acceptedCharacterCount,
+        applicationCategory: request.applicationCategory,
+        memoryUsed: request.memoryUsed,
+        memoryCount: request.memoryCount,
       });
     } catch {
       // Telemetry ingestion is best-effort; still return success to the client

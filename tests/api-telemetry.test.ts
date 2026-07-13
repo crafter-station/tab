@@ -48,7 +48,7 @@ async function createAuthenticatedTestApp(
     status: "active",
     cachedAt: new Date(),
   });
-  return { app, token, telemetryService };
+  return { app, token, telemetryService, billingService };
 }
 
 function authHeaders(token: string) {
@@ -62,6 +62,7 @@ function buildRequest(typingContext: string) {
   return {
     requestId: `req-${crypto.randomUUID()}`,
     deviceId: "device-1",
+    mode: "deep_complete",
     typingContext,
     contextSource: "typed_text" as const,
     redaction: { applied: false, redactionCount: 0, kinds: [] as string[] },
@@ -121,6 +122,15 @@ function assertNoRawText(events: readonly Record<string, unknown>[], rawContext:
     "memoryUpdatedCount",
     "memoryDeletedCount",
     "memoryRejectedCount",
+    "inferenceSource",
+    "trigger",
+    "acceptedWordCount",
+    "acceptedCharacterCount",
+    "applicationCategory",
+    "memoryUsed",
+    "memoryCount",
+    "providerId",
+    "cloudCostUsdMicros",
   ]);
 
   for (const event of events) {
@@ -148,9 +158,11 @@ describe("Metadata-only suggestion telemetry", () => {
     const events = await telemetryService.listEvents();
     const shown = events.find((e) => e.eventType === "suggestion_shown");
     expect(shown).toBeDefined();
-    expect(shown?.activeApplicationBundleId).toBe("com.apple.TextEdit");
+    expect(shown?.activeApplicationBundleId).toBeUndefined();
     expect(shown?.suggestionLength).toBe(suggestionText.length);
-    expect(shown?.planId).toBe("free");
+    expect(shown?.planId).toBe("pro");
+    expect(shown?.inferenceSource).toBe("deep_complete");
+    expect(shown?.trigger).toBe("explicit");
     expect(shown?.modelId).toBe("gpt-4o-mini");
     expect(typeof shown?.latencyMs).toBe("number");
     expect((shown?.latencyMs ?? -1)).toBeGreaterThanOrEqual(0);
@@ -159,7 +171,7 @@ describe("Metadata-only suggestion telemetry", () => {
     assertNoRawText(events, suggestionText);
   });
 
-  it("records shown metadata for an empty suggestion without raw text", async () => {
+  it("records generated metadata without shown metadata for an empty suggestion", async () => {
     const rawContext = "Hello telemetry-empty-raw-context";
     const { app, token, telemetryService } = await createAuthenticatedTestApp(
       async () => ({ text: "", modelId: "gpt-4o-mini" }),
@@ -175,10 +187,15 @@ describe("Metadata-only suggestion telemetry", () => {
     const body = (await response.json()) as { data: { suggestions: unknown[] } };
     expect(body.data.suggestions).toHaveLength(0);
     const events = await telemetryService.listEvents();
-    const shown = events.find((e) => e.eventType === "suggestion_shown");
-    expect(shown).toBeDefined();
-    expect(shown?.suggestionLength).toBe(0);
-    expect(shown?.modelId).toBe("gpt-4o-mini");
+    const generated = events.find(
+      (event) => event.eventType === "suggestion_generated",
+    );
+    expect(generated).toBeDefined();
+    expect(generated?.suggestionLength).toBe(0);
+    expect(generated?.modelId).toBe("gpt-4o-mini");
+    expect(events.some((event) => event.eventType === "suggestion_shown")).toBe(
+      false,
+    );
     assertNoRawText(events, rawContext);
   });
 
@@ -201,7 +218,7 @@ describe("Metadata-only suggestion telemetry", () => {
     const errorEvent = events.find((e) => e.eventType === "suggestion_error");
     expect(errorEvent).toBeDefined();
     expect(errorEvent?.errorCode).toBe("provider_failure");
-    expect(errorEvent?.activeApplicationBundleId).toBe("com.apple.TextEdit");
+    expect(errorEvent?.activeApplicationBundleId).toBeUndefined();
     expect(typeof errorEvent?.latencyMs).toBe("number");
     assertNoRawText(events, rawContext);
   });
@@ -240,13 +257,20 @@ describe("Metadata-only suggestion telemetry", () => {
         headers: authHeaders(token),
         body: JSON.stringify({
           eventType,
+          eventId: crypto.randomUUID(),
           requestId: crypto.randomUUID(),
           timestamp: new Date().toISOString(),
-          activeApplicationBundleId: "com.apple.Mail",
+          inferenceSource: "local",
+          trigger: "automatic",
+          applicationCategory: "communication",
           suggestionLength: 5,
           latencyMs: 12,
           ...(eventType === "suggestion_accepted"
-            ? { modelId: "qwen2.5-3b-instruct-q4_k_m" }
+            ? {
+                modelId: "qwen2.5-3b-instruct-q4_k_m",
+                acceptedWordCount: 2,
+                acceptedCharacterCount: 11,
+              }
             : {}),
         }),
       });
@@ -260,10 +284,41 @@ describe("Metadata-only suggestion telemetry", () => {
     expect(events.some((e) => e.eventType === "suggestion_stale")).toBe(true);
     expect(events.every((e) => e.latencyMs === 12)).toBe(true);
     expect(await telemetryService.getLocalSuggestionActivity("user-1")).toEqual({
-      accepted: 1,
+      acceptedSuggestions: 1,
+      acceptedWords: 2,
+      acceptedCharacters: 11,
+      activeWritingDays: 1,
       averageAcceptanceLatencyMs: 12,
     });
     assertNoRawText(events, "accepted suggestion text");
+  });
+
+  it("records client suggestion failure error codes", async () => {
+    const { app, token, telemetryService } = await createAuthenticatedTestApp(
+      async () => ({ text: " world" }),
+    );
+
+    const response = await app.request("/telemetry/events", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({
+        eventType: "suggestion_error",
+        eventId: crypto.randomUUID(),
+        requestId: crypto.randomUUID(),
+        timestamp: new Date().toISOString(),
+        inferenceSource: "local",
+        trigger: "automatic",
+        errorCode: "provider_failure",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(await telemetryService.listEvents()).toEqual([
+      expect.objectContaining({
+        eventType: "suggestion_error",
+        errorCode: "provider_failure",
+      }),
+    ]);
   });
 
   it("rejects client telemetry payloads that include raw suggestion text", async () => {
@@ -276,9 +331,12 @@ describe("Metadata-only suggestion telemetry", () => {
       headers: authHeaders(token),
       body: JSON.stringify({
         eventType: "suggestion_accepted",
+        eventId: crypto.randomUUID(),
         requestId: crypto.randomUUID(),
         timestamp: new Date().toISOString(),
-        activeApplicationBundleId: "com.apple.Mail",
+        inferenceSource: "local",
+        trigger: "automatic",
+        applicationCategory: "communication",
         suggestionLength: 5,
         rawSuggestionText: "super secret suggestion",
       }),
@@ -292,6 +350,42 @@ describe("Metadata-only suggestion telemetry", () => {
 });
 
 describe("Metadata-only memory extraction telemetry", () => {
+  it("denies only continuous extraction after trial expiry", async () => {
+    const { app, token, billingService } = await createAuthenticatedTestApp(
+      async () => ({ text: " world" }),
+    );
+    await billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "free",
+      status: "inactive",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
+      cachedAt: new Date(),
+    });
+
+    const extraction = await app.request("/api/memory/extract", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(buildExtractionRequest("free-batch", "Eligible writing")),
+    });
+    expect(extraction.status).toBe(403);
+    expect((await extraction.json()).error.details.capability).toBe(
+      "memory_extraction",
+    );
+
+    const create = await app.request("/api/memory", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ content: "A memory I control" }),
+    });
+    expect(create.status).toBe(200);
+    const exportResponse = await app.request("/api/memory/export", {
+      headers: authHeaders(token),
+    });
+    expect(exportResponse.status).toBe(200);
+    expect((await exportResponse.json()).data.memories).toHaveLength(1);
+  });
+
   it("records attempts and successful operation counts without memory or window content", async () => {
     const rawWindowText = "My memory extraction raw window text is private";
     const createdMemoryContent = "Prefers concise launch updates";
@@ -318,7 +412,6 @@ describe("Metadata-only memory extraction telemetry", () => {
     ]);
     expect(events[0]).toMatchObject({
       requestId: "batch-telemetry",
-      activeApplicationBundleId: "com.apple.TextEdit",
       contextSource: "typed_text",
       modelId: "openai/gpt-5.5",
       clientAppVersion: "0.0.1",

@@ -1,6 +1,6 @@
 import { generateText } from "ai";
 import { groq } from "@ai-sdk/groq";
-import { shouldCountSuggestionResponse } from "@tab/billing";
+import { shouldCountDeepComplete } from "@tab/billing";
 import { getMemoryEligibility } from "@tab/memory-policy";
 import {
   createSuggestionPrompt,
@@ -22,7 +22,7 @@ import type {
 } from "@tab/contracts";
 import type {
   BillingService,
-  QuotaCheckResult,
+  DeepCompleteCheckResult,
   UsageMeterService,
 } from "./billing.ts";
 import type { Device } from "./device-tokens.ts";
@@ -42,6 +42,7 @@ export type SuggestionInput = {
   readonly memoryEnabled: boolean;
   readonly memories: readonly PersonalMemory[];
   readonly appContext?: AppContext;
+  readonly customWritingInstructions?: string;
 };
 
 export type SuggestionGenerator = (
@@ -60,9 +61,9 @@ export type SuggestionUseCaseResult =
   | { readonly ok: true; readonly suggestions: Suggestion[] }
   | {
       readonly ok: false;
-      readonly status: 402 | 503;
+      readonly status: 402 | 409 | 503;
       readonly code:
-        "billing_required" | "quota_exhausted" | "provider_failure";
+        "invalid_request" | "quota_exhausted" | "provider_failure";
       readonly message: string;
       readonly details?: EntitlementErrorDetails;
     };
@@ -80,13 +81,7 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    const prompt = createSuggestionPrompt(input);
     const [systemMessage, ...messages] = createSuggestionMessages(input);
-    console.log("[suggestions] groq request prompt", {
-      requestId: input.requestId,
-      modelId,
-      prompt,
-    });
 
     const { text } = await generateText({
       model: groq(modelId),
@@ -100,13 +95,6 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       input.typingContext,
       text,
     );
-    console.log("[suggestions] groq response", {
-      requestId: input.requestId,
-      modelId,
-      rawOutput: text,
-      normalizedOutput: suggestionText,
-    });
-
     if (!isSuggestionContractValid(input.typingContext, suggestionText)) {
       return null;
     }
@@ -124,34 +112,22 @@ function createQuotaExhaustedDetails(quotaCheck: {
   readonly resetAt: Date;
 }): EntitlementErrorDetails {
   return {
-    quota: quotaCheck.quota,
-    usage: quotaCheck.usage,
+    capability: "deep_completes",
+    limit: quotaCheck.quota,
+    used: quotaCheck.usage,
     resetAt: quotaCheck.resetAt.toISOString(),
     upgradeUrl: "/pricing",
   };
 }
 
 function createEntitlementError(
-  quotaCheck: Extract<QuotaCheckResult, { readonly ok: false }>,
+  quotaCheck: DeepCompleteCheckResult,
 ): SuggestionUseCaseResult {
-  if (quotaCheck.reason === "billing_required") {
-    return {
-      ok: false,
-      status: 402,
-      code: "billing_required",
-      message: "Choose the free plan in Polar to continue using Tab.",
-      details: {
-        ...createQuotaExhaustedDetails(quotaCheck),
-        upgradeUrl: "/billing/checkout?plan=free",
-      },
-    };
-  }
-
   return {
     ok: false,
     status: 402,
     code: "quota_exhausted",
-    message: "Monthly autocomplete quota exhausted. Upgrade to continue.",
+    message: "Monthly Deep Complete allowance exhausted. Local Suggestions remain available.",
     details: createQuotaExhaustedDetails(quotaCheck),
   };
 }
@@ -164,9 +140,20 @@ export class SuggestionUseCase {
     request: SuggestionRequest,
     options: SuggestionUseCaseOptions = {},
   ): Promise<SuggestionUseCaseResult> {
-    const quotaCheck = await this.deps.billingService.checkQuota(device.userId);
+    const quotaCheck = await this.deps.billingService.consumeDeepComplete(
+      device.userId,
+      request.requestId,
+    );
     if (!quotaCheck.ok) {
       return createEntitlementError(quotaCheck);
+    }
+    if (!quotaCheck.recorded) {
+      return {
+        ok: false,
+        status: 409,
+        code: "invalid_request",
+        message: "This Deep Complete request id has already been used.",
+      };
     }
 
     const suggestionStart = performance.now();
@@ -197,37 +184,49 @@ export class SuggestionUseCase {
         memoryEnabled: request.memoryEnabled,
         memories,
         appContext: request.appContext,
+        customWritingInstructions: quotaCheck.status.capabilities
+          .customWritingInstructions
+          ? request.customWritingInstructions
+          : undefined,
       });
 
       const latencyMs = Math.round(performance.now() - suggestionStart);
       const suggestions: Suggestion[] = generated?.text
         ? [{ id: `sg-${request.requestId}`, text: generated.text }]
         : [];
-      const shouldConsume = shouldCountSuggestionResponse(suggestions.length);
-
-      if (shouldConsume) {
-        const consumption = await this.deps.billingService.consumeSuggestion(
+      const shouldConsume = shouldCountDeepComplete(suggestions.length);
+      if (!shouldConsume) {
+        await this.deps.billingService.releaseDeepComplete(
           device.userId,
+          request.requestId,
         );
-        if (!consumption.ok) {
-          return createEntitlementError(consumption);
-        }
       }
 
-      await recordSuggestionEvent({
-        eventType: "suggestion_shown",
+      const suggestionEvent: Parameters<typeof recordSuggestionEvent>[0] = {
+        eventType: "suggestion_generated" as const,
         timestamp: new Date().toISOString(),
-        activeApplicationBundleId: request.activeApplication.bundleId,
         contextSource: request.contextSource,
         suggestionLength: suggestions[0]?.text.length ?? 0,
         planId: quotaCheck.entitlement.planId,
         modelId: generated?.modelId,
+        inferenceSource: "deep_complete",
+        trigger: "explicit",
+        memoryUsed: memories.length > 0,
+        memoryCount: memories.length,
+        providerId: "groq",
         latencyMs,
         redactionApplied: request.redaction.applied,
         redactionCount: request.redaction.redactionCount,
         clientAppVersion: request.clientMetadata?.appVersion,
         clientPlatform: request.clientMetadata?.platform,
-      });
+      };
+      await recordSuggestionEvent(suggestionEvent);
+      if (suggestions.length > 0) {
+        await recordSuggestionEvent({
+          ...suggestionEvent,
+          eventType: "suggestion_shown",
+        });
+      }
 
       if (shouldConsume) {
         const usageMeterPromise = this.deps.usageMeterService
@@ -247,6 +246,10 @@ export class SuggestionUseCase {
 
       return { ok: true, suggestions };
     } catch (error) {
+      await this.deps.billingService.releaseDeepComplete(
+        device.userId,
+        request.requestId,
+      );
       const latencyMs = Math.round(performance.now() - suggestionStart);
       const message =
         error instanceof Error
@@ -256,9 +259,10 @@ export class SuggestionUseCase {
       await recordSuggestionEvent({
         eventType: "suggestion_error",
         timestamp: new Date().toISOString(),
-        activeApplicationBundleId: request.activeApplication.bundleId,
         contextSource: request.contextSource,
         planId: quotaCheck.entitlement.planId,
+        inferenceSource: "deep_complete",
+        trigger: "explicit",
         latencyMs,
         errorCode: "provider_failure",
         redactionApplied: request.redaction.applied,

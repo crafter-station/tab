@@ -1,10 +1,20 @@
 import { readFileSync, writeFileSync } from "node:fs";
+import {
+  BillingStatusDataSchema,
+  type BillingStatusData,
+} from "@tab/contracts";
 import type { OnboardingPreferences } from "./onboarding.ts";
 
 export type DesktopPreferences = {
   onboarding: OnboardingPreferences;
   suggestions: {
     usePersonalMemory: boolean;
+    continuousMemoryExtraction: boolean;
+    customWritingInstructions: string;
+  };
+  cachedEntitlement?: {
+    userId: string;
+    entitlement: BillingStatusData;
   };
   deviceId?: string;
 };
@@ -20,7 +30,11 @@ export type PreferencesStorage = {
 
 const DEFAULT_PREFERENCES: DesktopPreferences = {
   onboarding: { completed: false },
-  suggestions: { usePersonalMemory: false },
+  suggestions: {
+    usePersonalMemory: false,
+    continuousMemoryExtraction: false,
+    customWritingInstructions: "",
+  },
 };
 
 function normalizeDesktopPreferences(value: StoredDesktopPreferences): DesktopPreferences {
@@ -48,13 +62,32 @@ function isStoredDesktopPreferences(value: unknown): value is StoredDesktopPrefe
     return false;
   }
 
+  if ("cachedEntitlement" in value) {
+    const cached = value.cachedEntitlement;
+    if (
+      !cached ||
+      typeof cached !== "object" ||
+      !("userId" in cached) ||
+      typeof cached.userId !== "string" ||
+      !("entitlement" in cached) ||
+      !BillingStatusDataSchema.safeParse(cached.entitlement).success
+    ) {
+      return false;
+    }
+  }
+
   if ("suggestions" in value) {
     const suggestions = value.suggestions;
     const hasValidSuggestions =
       !!suggestions &&
       typeof suggestions === "object" &&
       "usePersonalMemory" in suggestions &&
-      typeof suggestions.usePersonalMemory === "boolean";
+      typeof suggestions.usePersonalMemory === "boolean" &&
+      (!("continuousMemoryExtraction" in suggestions) ||
+        typeof suggestions.continuousMemoryExtraction === "boolean") &&
+      (!("customWritingInstructions" in suggestions) ||
+        (typeof suggestions.customWritingInstructions === "string" &&
+          suggestions.customWritingInstructions.length <= 1_000));
     if (!hasValidSuggestions) return false;
   }
 

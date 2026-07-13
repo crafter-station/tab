@@ -1383,6 +1383,15 @@ describe("desktop native suggestion loop", () => {
       localSuggestionModelId?: string;
       maxVisibleMs?: number;
       recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
+      canAcceptLocalSuggestion?: () => boolean;
+      onLocalAllowanceExhausted?: () => void;
+      recordAcceptedUsage?: (event: {
+        acceptanceId: string;
+        acceptedAt: string;
+        wordCount: number;
+        characterCount: number;
+      }) => void | Promise<void>;
+      sendPaste?: () => Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
       insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
       compatibilityStore?: ReturnType<typeof createApplicationCompatibilityStore>;
@@ -1426,7 +1435,10 @@ describe("desktop native suggestion loop", () => {
             calls.push({ type: "setClipboard", value: text });
             return "previous-clipboard";
           },
-          sendPaste: async () => calls.push({ type: "sendPaste" }),
+          sendPaste: async () => {
+            calls.push({ type: "sendPaste" });
+            await overrides.sendPaste?.();
+          },
           restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
           insertSemantically: overrides.insertSemantically
             ? async (text, target) => {
@@ -1438,6 +1450,9 @@ describe("desktop native suggestion loop", () => {
         debounceMs: 5,
         maxVisibleMs: overrides.maxVisibleMs,
         recordInteractionTelemetry: overrides.recordInteractionTelemetry,
+        canAcceptLocalSuggestion: overrides.canAcceptLocalSuggestion,
+        onLocalAllowanceExhausted: overrides.onLocalAllowanceExhausted,
+        recordAcceptedUsage: overrides.recordAcceptedUsage,
         localSuggestionModelId: overrides.localSuggestionModelId,
         triggerPolicy: overrides.triggerPolicy,
         compatibilityStore: overrides.compatibilityStore,
@@ -2323,7 +2338,11 @@ describe("desktop native suggestion loop", () => {
       ]);
       expect(telemetry[0]).toMatchObject({
         requestId: "req-1",
-        activeApplicationBundleId: "com.apple.TextEdit",
+        inferenceSource: "deep_complete",
+        trigger: "explicit",
+        applicationCategory: "productivity",
+        acceptedWordCount: 3,
+        acceptedCharacterCount: rawSuggestionText.length,
         suggestionLength: rawSuggestionText.length,
       });
       expect(telemetry.every((event) => typeof event.timestamp === "string")).toBe(true);
@@ -2342,10 +2361,12 @@ describe("desktop native suggestion loop", () => {
 
     it("marks accepted local suggestions with their model without sending text", async () => {
       const telemetry: RecordTelemetryEventRequest[] = [];
+      const usage: Array<{ wordCount: number; characterCount: number }> = [];
       const { session } = makeSession({
-        getLocalSuggestion: async () => ({ id: "sg-local-request-1", text: " private completion" }),
+        getLocalSuggestion: async () => ({ id: "sg-local-request-1", text: " hello, world!" }),
         localSuggestionModelId: "local-model-1",
         recordInteractionTelemetry: (event) => telemetry.push(event),
+        recordAcceptedUsage: (event) => usage.push(event),
       });
 
       session.setActiveApplication("com.apple.TextEdit", "window:1");
@@ -2353,14 +2374,72 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
       await session.acceptCurrentSuggestion();
 
-      expect(telemetry).toHaveLength(1);
-      expect(telemetry[0]).toMatchObject({
+      expect(telemetry.map((event) => event.eventType)).toEqual([
+        "suggestion_generated",
+        "suggestion_shown",
+        "suggestion_accepted",
+      ]);
+      expect(
+        telemetry.find((event) => event.eventType === "suggestion_accepted"),
+      ).toMatchObject({
         eventType: "suggestion_accepted",
         requestId: "local-request-1",
         modelId: "local-model-1",
+        inferenceSource: "local",
+        trigger: "automatic",
+        acceptedWordCount: 2,
       });
-      expect(JSON.stringify(telemetry)).not.toContain("private completion");
+      expect(usage).toEqual([
+        expect.objectContaining({ wordCount: 2, characterCount: 14 }),
+      ]);
+      expect(JSON.stringify(telemetry)).not.toContain("hello, world");
       expect(JSON.stringify(telemetry)).not.toContain("private context");
+    });
+
+    it("does not insert or count a later local Acceptance after its allowance is exhausted", async () => {
+      const usage: unknown[] = [];
+      let allowanceExhausted = false;
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => ({
+          id: "sg-local-blocked",
+          text: " blocked words",
+        }),
+        canAcceptLocalSuggestion: () => false,
+        onLocalAllowanceExhausted: () => {
+          allowanceExhausted = true;
+        },
+        recordAcceptedUsage: (event) => usage.push(event),
+      });
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Private context");
+      await wait(10);
+      await session.acceptCurrentSuggestion();
+
+      expect(calls.some((call) => call.type === "setClipboard")).toBe(false);
+      expect(calls.some((call) => call.type === "hideOverlay")).toBe(true);
+      expect(allowanceExhausted).toBe(true);
+      expect(usage).toEqual([]);
+    });
+
+    it("does not count local words when insertion fails", async () => {
+      const usage: unknown[] = [];
+      const { session } = makeSession({
+        getLocalSuggestion: async () => ({
+          id: "sg-local-failed",
+          text: " failed words",
+        }),
+        sendPaste: async () => {
+          throw new Error("paste failed");
+        },
+        recordAcceptedUsage: (event) => usage.push(event),
+      });
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("Private context");
+      await wait(10);
+      await expect(session.acceptCurrentSuggestion()).rejects.toThrow(
+        "paste failed",
+      );
+      expect(usage).toEqual([]);
     });
 
     it("continues suggesting after repeated dismissals", async () => {

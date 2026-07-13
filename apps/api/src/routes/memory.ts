@@ -2,6 +2,7 @@ import {
   MemoryDeleteResponseSchema,
   MemoryExtractionRequestSchema,
   MemoryExtractionResponseSchema,
+  MemoryExportResponseSchema,
   MemoryListResponseSchema,
   MemoryWriteRequestSchema,
   MemoryWriteResponseSchema,
@@ -12,6 +13,7 @@ import { summarizeMemoryExtractionWindow } from "@tab/memory-policy";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
+import type { BillingService } from "../billing.ts";
 import type { PersonalMemoryService } from "../personal-memory.ts";
 import {
   MEMORY_EXTRACTION_MODEL_ID,
@@ -28,6 +30,7 @@ export function registerMemoryRoutes(
     personalMemoryService: PersonalMemoryService;
     memoryExtractionService: MemoryExtractionService;
     telemetryService: TelemetryService;
+    billingService: BillingService;
   },
 ) {
   type MemoryContext = Context<{ Bindings: ApiBindings; Variables: ApiVariables }>;
@@ -138,6 +141,21 @@ export function registerMemoryRoutes(
   }
 
   async function extractMemory(c: MemoryContext, userId: string) {
+    const entitlement = await deps.billingService.getStatus(userId);
+    if (!entitlement.capabilities.continuousMemoryExtraction) {
+      return c.json(
+        createErrorResponse(
+          "feature_unavailable",
+          "Continuous Memory Extraction requires Pro.",
+          {
+            capability: "memory_extraction",
+            upgradeUrl: "/pricing",
+          },
+        ),
+        403,
+      );
+    }
+
     const body = await readMemoryExtractionBody(c);
     if (!body) {
       return c.json(
@@ -156,7 +174,6 @@ export function registerMemoryRoutes(
     const device = c.get("device");
     const startedAt = performance.now();
     const extractionTelemetry = {
-      activeApplicationBundleId: extractionWindow.activeApplication.bundleId,
       contextSource: extractionWindow.contextSource,
       modelId: MEMORY_EXTRACTION_MODEL_ID,
       redactionApplied: extractionWindow.redaction.applied,
@@ -217,6 +234,18 @@ export function registerMemoryRoutes(
   }
 
   app.get("/api/memory", async (c) => listMemories(c, c.get("device").userId));
+  app.get("/api/memory/export", async (c) => {
+    const memories = await deps.personalMemoryService.listMemories(
+      c.get("device").userId,
+    );
+    return c.json(
+      MemoryExportResponseSchema.parse({
+        status: "ok",
+        data: { exportedAt: new Date().toISOString(), memories },
+      }),
+      200,
+    );
+  });
   app.post("/api/memory/extract", async (c) =>
     extractMemory(c, c.get("device").userId),
   );
@@ -232,6 +261,21 @@ export function registerMemoryRoutes(
     const sessionCheck = await requireSession(c, deps.auth);
     if (!sessionCheck.ok) return sessionCheck.response;
     return listMemories(c, sessionCheck.session.user.id);
+  });
+
+  app.get("/api/account/memory/export", async (c) => {
+    const sessionCheck = await requireSession(c, deps.auth);
+    if (!sessionCheck.ok) return sessionCheck.response;
+    const memories = await deps.personalMemoryService.listMemories(
+      sessionCheck.session.user.id,
+    );
+    return c.json(
+      MemoryExportResponseSchema.parse({
+        status: "ok",
+        data: { exportedAt: new Date().toISOString(), memories },
+      }),
+      200,
+    );
   });
 
   app.delete("/api/account/memory/:id", async (c) => {

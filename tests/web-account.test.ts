@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import type { PlanId } from "@tab/billing";
+import type { BillingInterval, PlanId } from "@tab/billing";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import {
@@ -19,19 +19,23 @@ import type { Hono } from "hono";
 
 const TEST_ORIGIN = "http://localhost:8787";
 const WEB_ORIGIN = "http://localhost:3000";
-const USED_SUGGESTION_COUNT = 1000;
-
 class TestBillingCheckoutClient implements BillingCheckoutClient {
-  readonly checkoutRequests: PlanId[] = [];
+  readonly checkoutRequests: Array<{
+    planId: PlanId;
+    interval: BillingInterval;
+    userId: string;
+  }> = [];
   readonly portalRequests: Array<{ userId: string; customerId?: string }> = [];
   failPortalRequests = false;
 
   async createCheckoutUrl(
     planId: PlanId,
+    interval: BillingInterval,
     user: { id: string; email?: string; name?: string },
   ): Promise<string> {
-    this.checkoutRequests.push(planId);
+    this.checkoutRequests.push({ planId, interval, userId: user.id });
     const url = new URL(`https://checkout.test/${planId}`);
+    url.searchParams.set("interval", interval);
     url.searchParams.set("customer", user.id);
     if (user.email) url.searchParams.set("email", user.email);
     return url.toString();
@@ -150,6 +154,7 @@ async function activatePaidPlan(
   billingService: BillingService,
   userId: string,
   planId: Exclude<PlanId, "free">,
+  billingInterval: BillingInterval = "monthly",
 ) {
   await billingService.applyEntitlement({
     userId,
@@ -157,18 +162,9 @@ async function activatePaidPlan(
     polarCustomerId: `polar-customer-${planId}`,
     polarSubscriptionId: `polar-sub-${planId}`,
     status: "active",
+    billingInterval,
     cachedAt: new Date(),
   });
-}
-
-async function consumeSuggestions(
-  billingService: BillingService,
-  userId: string,
-  count: number,
-) {
-  for (let i = 0; i < count; i++) {
-    await billingService.consumeSuggestion(userId);
-  }
 }
 
 function webRequest(
@@ -228,7 +224,7 @@ describe("Web account surface", () => {
     );
   });
 
-  it("displays pricing with accurate Free, Pro, and Max quotas and prices", async () => {
+  it("displays accurate Free and Pro allowances and prices", async () => {
     const { webApp } = await createWebTestEnv();
     const response = await webRequest(webApp, "/pricing");
 
@@ -236,21 +232,21 @@ describe("Web account surface", () => {
     const body = await response.text();
     expect(body).toInclude("Free");
     expect(body).toInclude("Pro");
-    expect(body).toInclude("Max");
-    expect(body).toInclude("100");
-    expect(body).toInclude("1,000");
-    expect(body).toInclude("1,000,000");
+    expect(body).not.toInclude("Max");
+    expect(body).toInclude("100 / day");
+    expect(body).toInclude("10 Deep Completes / month");
+    expect(body).toInclude("300 Deep Completes / month");
     expect(body).toInclude("$10/mo");
-    expect(body).toInclude("$100/mo");
+    expect(body).toInclude("$96 annually");
     expect(body).toInclude("Simple pricing");
-    expect(body).toInclude("Monthly suggestions");
-    expect(body).toInclude("Saved memories");
+    expect(body).toInclude("Local Accepted Words");
+    expect(body).toInclude("Continuous Memory Extraction");
     expect(body).toInclude("Sign in to choose this plan");
-    expect(body).toInclude("Start free");
+    expect(body).toInclude("Start 30-day Pro trial");
     expect(body).toInclude(
-      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro"',
+      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dmonthly"',
     );
-    expect(body).not.toInclude('href="/billing/checkout?plan=pro"');
+    expect(body).not.toInclude('href="/billing/checkout?plan=pro&amp;interval=monthly"');
   });
 
   it("exposes light and dark theme controls on pricing and dashboard surfaces", async () => {
@@ -299,9 +295,9 @@ describe("Web account surface", () => {
     expect(body).toInclude('href="/dashboard"');
     expect(body).toInclude("Dashboard");
     expect(body).not.toInclude('href="/login">Sign in</a>');
-    expect(body).toInclude('href="/billing/checkout?plan=pro"');
+    expect(body).toInclude('href="/billing/checkout?plan=pro&amp;interval=monthly"');
     expect(body).not.toInclude(
-      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro"',
+      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dmonthly"',
     );
   });
 
@@ -323,7 +319,7 @@ describe("Web account surface", () => {
     expect(response.headers.get("set-cookie")).toBeTruthy();
   });
 
-  it("redirects signed-in users without a Polar entitlement to the free checkout", async () => {
+  it("starts signed-in users without a Polar entitlement on a Pro trial", async () => {
     const { apiApp, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
@@ -331,8 +327,11 @@ describe("Web account surface", () => {
 
     const response = await webRequest(webApp, "/dashboard", {}, cookie);
 
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/billing/checkout?plan=free");
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude("Trial ends");
+    expect(body).toInclude("0 of 300");
+    expect(body).toInclude("Deep Completes this month");
   });
 
   it("renders the sign-in entry point", async () => {
@@ -385,11 +384,11 @@ describe("Web account surface", () => {
     const usageBody = await usageResponse.text();
     expect(usageBody).toInclude("Usage and billing");
     expect(usageBody).toInclude("Current plan");
-    expect(usageBody).toInclude("Suggestions this month");
-    expect(usageBody).toInclude("Suggestions available");
+    expect(usageBody).toInclude("Local Accepted Words today");
+    expect(usageBody).toInclude("Deep Completes this month");
     expect(usageBody).toInclude("Change plan");
-    expect(usageBody).toInclude("Upgrade to Pro");
-    expect(usageBody).toInclude("Upgrade to Max");
+    expect(usageBody).toInclude("Pro monthly");
+    expect(usageBody).toInclude("Pro annual");
     expect(usageBody).toInclude("Manage billing");
 
     const configResponse = await webRequest(webApp, "/dashboard/account", {}, setCookie!);
@@ -426,20 +425,20 @@ describe("Web account surface", () => {
     const location = response.headers.get("location");
     expect(location).toBeTruthy();
     expect(location).toInclude("checkout.test/pro");
+    expect(location).toInclude("interval=monthly");
   });
 
-  it("sends active Pro subscribers choosing Max to billing management", async () => {
+  it("sends active monthly Pro subscribers choosing annual to billing management", async () => {
     const { apiApp, billingCheckoutClient, billingService, database, webApp } =
       await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
     await activatePaidPlan(billingService, userId, "pro");
-    await consumeSuggestions(billingService, userId, USED_SUGGESTION_COUNT);
 
     const response = await webRequest(
       webApp,
-      "/billing/checkout?plan=max",
+      "/billing/checkout?plan=pro&interval=annual",
       {},
       cookie,
     );
@@ -455,13 +454,9 @@ describe("Web account surface", () => {
 
     const entitlement = await billingService.getEntitlement(userId);
     expect(entitlement.planId).toBe("pro");
+    expect(entitlement.billingInterval).toBe("monthly");
     expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
-
-    const quota = await billingService.checkQuota(userId);
-    expect(quota.ok).toBe(false);
-    expect(quota.quota).toBe(1_000);
-    expect(quota.usage).toBe(USED_SUGGESTION_COUNT);
   });
 
   it("treats active paid subscribers choosing their current plan as a no-op", async () => {
@@ -485,44 +480,7 @@ describe("Web account surface", () => {
     expect(billingCheckoutClient.portalRequests).toEqual([]);
   });
 
-  it("sends active Max subscribers choosing Pro to billing management", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
-      await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activatePaidPlan(billingService, userId, "max");
-    await consumeSuggestions(billingService, userId, USED_SUGGESTION_COUNT);
-
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=pro",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(
-      "https://portal.test/polar-customer-max",
-    );
-    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([
-      { userId, customerId: "polar-customer-max" },
-    ]);
-
-    const entitlement = await billingService.getEntitlement(userId);
-    expect(entitlement.planId).toBe("max");
-    expect(entitlement.status).toBe("active");
-    expect(entitlement.polarCustomerId).toBe("polar-customer-max");
-    expect(entitlement.polarSubscriptionId).toBe("polar-sub-max");
-
-    const quota = await billingService.checkQuota(userId);
-    expect(quota.ok).toBe(true);
-    expect(quota.quota).toBe(1_000_000);
-    expect(quota.usage).toBe(USED_SUGGESTION_COUNT);
-  });
-
-  it("falls back to the local billing management route for paid plan portal failures", async () => {
+  it("falls back to the local billing management route for interval-change portal failures", async () => {
     const { apiApp, billingCheckoutClient, billingService, database, webApp } =
       await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
@@ -533,7 +491,7 @@ describe("Web account surface", () => {
 
     const response = await webRequest(
       webApp,
-      "/billing/checkout?plan=max",
+      "/billing/checkout?plan=pro&interval=annual",
       {},
       cookie,
     );
@@ -551,61 +509,26 @@ describe("Web account surface", () => {
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
   });
 
-  it("sends active paid subscribers choosing Free to billing management", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+  it("rejects retired plan checkout requests", async () => {
+    const { apiApp, billingCheckoutClient, database, webApp } =
       await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activatePaidPlan(billingService, userId, "pro");
+    const { cookie } = await signUpUser(apiApp, database, email, password);
 
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=free",
-      {},
-      cookie,
-    );
+    for (const plan of ["free", "max"]) {
+      const response = await webRequest(
+        webApp,
+        `/billing/checkout?plan=${plan}`,
+        {},
+        cookie,
+      );
 
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(
-      "https://portal.test/polar-customer-pro",
-    );
+      expect(response.status).toBe(200);
+      expect(await response.text()).toInclude("Billing error");
+    }
     expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([
-      { userId, customerId: "polar-customer-pro" },
-    ]);
-    const entitlement = await billingService.getEntitlement(userId);
-    expect(entitlement.planId).toBe("pro");
-    expect(entitlement.status).toBe("active");
-    expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
-    expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
-  });
-
-  it("falls back to the local billing management route for paid-to-free portal failures", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
-      await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activatePaidPlan(billingService, userId, "max");
-    billingCheckoutClient.failPortalRequests = true;
-
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=free",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/billing/portal");
-    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([
-      { userId, customerId: "polar-customer-max" },
-    ]);
-    const entitlement = await billingService.getEntitlement(userId);
-    expect(entitlement.planId).toBe("max");
-    expect(entitlement.status).toBe("active");
+    expect(billingCheckoutClient.portalRequests).toEqual([]);
   });
 
   it("blocks checkout until the signed-in user verifies email", async () => {
@@ -636,7 +559,7 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
-      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
+      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dmonthly",
     );
   });
 
@@ -648,12 +571,12 @@ describe("Web account surface", () => {
 
     const loginPageResponse = await webRequest(
       webApp,
-      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dmax",
+      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dannual",
     );
     expect(loginPageResponse.status).toBe(200);
     const loginPageBody = await loginPageResponse.text();
     expect(loginPageBody).toInclude('name="next"');
-    expect(loginPageBody).toInclude('/billing/checkout?plan=max');
+    expect(loginPageBody).toInclude('/billing/checkout?plan=pro&amp;interval=annual');
 
     const loginResponse = await webRequest(webApp, "/login", {
       method: "POST",
@@ -661,23 +584,24 @@ describe("Web account surface", () => {
       body: new URLSearchParams({
         email,
         password,
-        next: "/billing/checkout?plan=max",
+        next: "/billing/checkout?plan=pro&interval=annual",
       }),
     });
 
     expect(loginResponse.status).toBe(302);
     expect(loginResponse.headers.get("location")).toBe(
-      "/billing/checkout?plan=max",
+      "/billing/checkout?plan=pro&interval=annual",
     );
 
     const checkoutResponse = await webRequest(
       webApp,
-      "/billing/checkout?plan=max",
+      "/billing/checkout?plan=pro&interval=annual",
       {},
       loginResponse.headers.get("set-cookie")!,
     );
     expect(checkoutResponse.status).toBe(302);
-    expect(checkoutResponse.headers.get("location")).toInclude("checkout.test/max");
+    expect(checkoutResponse.headers.get("location")).toInclude("checkout.test/pro");
+    expect(checkoutResponse.headers.get("location")).toInclude("interval=annual");
   });
 
   it("redirects authenticated login and signup page visits to the dashboard", async () => {

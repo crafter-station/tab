@@ -1,9 +1,9 @@
-import { planQuotas, type PlanId } from "@tab/billing";
+import { isPlanId, planCapabilities, type PlanId } from "@tab/billing";
 import { ArrowLeft, Brain, CaretDown, ChartBar, Copy, Desktop, DotsThree, House, Moon, SidebarSimple, Sun, TextT, UserCircle } from "@phosphor-icons/react";
 import { Outlet } from "@tanstack/react-router";
 import { createContext, useContext, type ReactNode } from "react";
 import type {
-  BillingQuotaResponse,
+  BillingStatusResponse,
   DeviceListItem,
   PersonalMemory,
   LocalSuggestionActivity,
@@ -50,7 +50,7 @@ import { formatCount, formatDate, type User } from "./shared.tsx";
 
 export type DashboardData = {
   user: User;
-  quota: BillingQuotaResponse["data"];
+  billing: BillingStatusResponse["data"];
   devices: readonly DeviceListItem[];
   memories: readonly PersonalMemory[];
   localSuggestionActivity: LocalSuggestionActivity;
@@ -58,7 +58,7 @@ export type DashboardData = {
 
 export type DashboardSection = "overview" | "account" | "usage" | "devices" | "memories";
 
-type PlanEntry = [PlanId, (typeof planQuotas)[PlanId]];
+type PlanEntry = [PlanId, (typeof planCapabilities)[PlanId]];
 type StatusPresentation = { value: string; tone: SemanticTone };
 
 const bulkDeleteMemoriesFormId = "bulk-delete-memories";
@@ -75,7 +75,7 @@ const dashboardSections = [
     id: "usage",
     href: "/dashboard/usage",
     title: "Usage and billing",
-    description: "Monthly suggestions, current plan, checkout, and billing settings.",
+    description: "Product value, independent allowances, and billing settings.",
   },
   {
     id: "devices",
@@ -92,9 +92,9 @@ const dashboardSections = [
 ] as const;
 
 const dashboardDescriptions: Record<DashboardSection, string> = {
-  overview: "A quick read on your plan, suggestions, connected Macs, and saved details.",
+  overview: "A quick read on completed writing, your plan, connected Macs, and saved details.",
   account: "Your sign-in identity and email status.",
-  usage: "See this month's suggestions and change your plan.",
+  usage: "See Local Suggestion and Deep Complete value, then manage Pro.",
   devices: "Review the Macs connected to your account and remove old access.",
   memories: "Review the details Tab can reuse when personalizing suggestions.",
 };
@@ -108,20 +108,18 @@ const metricToneClasses: Record<SemanticTone, string> = {
 };
 
 function getPlanEntries(): PlanEntry[] {
-  return Object.entries(planQuotas) as PlanEntry[];
-}
-
-function isPlanId(planId: string): planId is PlanId {
-  return planId in planQuotas;
+  return Object.entries(planCapabilities) as PlanEntry[];
 }
 
 function formatPlanName(planId: string): string {
-  if (isPlanId(planId)) return planQuotas[planId].name;
+  if (isPlanId(planId)) return planCapabilities[planId].name;
   return planId.charAt(0).toUpperCase() + planId.slice(1);
 }
 
-function checkoutPlanHref(planId: PlanId): string {
-  return `/billing/checkout?plan=${planId}`;
+function checkoutPlanHref(planId: PlanId, interval: "monthly" | "annual" = "monthly"): string {
+  return planId === "free"
+    ? "/dashboard"
+    : `/billing/checkout?plan=pro&interval=${interval}`;
 }
 
 function planActionLabel(planName: string, monthlyPriceUsd: number): string {
@@ -137,12 +135,12 @@ function emailStatus(emailVerified: boolean | undefined): StatusPresentation {
   return { value: "Email verified", tone: "success" };
 }
 
-function quotaStatus(quotaExhausted: boolean): StatusPresentation {
-  if (quotaExhausted) {
-    return { value: "Monthly suggestions used", tone: "warning" };
+function quotaStatus(exhausted: boolean): StatusPresentation {
+  if (exhausted) {
+    return { value: "Allowance used", tone: "warning" };
   }
 
-  return { value: "Suggestions available", tone: "success" };
+  return { value: "Available", tone: "success" };
 }
 
 function DashboardMetric({
@@ -168,19 +166,19 @@ function DashboardMetric({
   );
 }
 
-function QuotaProgressPanel({ title, usage, quota, resetAt }: { title: string; usage: number; quota: number; resetAt: string }) {
-  const quotaUsed = Math.min(usage, quota);
-  const quotaPercent = quota > 0 ? Math.round((quotaUsed / quota) * 100) : 0;
+function QuotaProgressPanel({ title, usage, quota, resetAt }: { title: string; usage: number; quota: number | null; resetAt: string }) {
+  const quotaUsed = quota === null ? 0 : Math.min(usage, quota);
+  const quotaPercent = quota && quota > 0 ? Math.round((quotaUsed / quota) * 100) : 0;
 
   return (
     <div className="grid gap-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-semibold text-foreground">{title}</p>
-        <p className="font-[var(--font-code)] text-sm tabular-nums text-muted-foreground">{formatCount(usage)} of {formatCount(quota)}</p>
+        <p className="font-[var(--font-code)] text-sm tabular-nums text-muted-foreground">{formatCount(usage)} of {quota === null ? "unlimited" : formatCount(quota)}</p>
       </div>
-      <Progress value={quotaPercent} aria-label={`${title} progress`} className="h-1.5 bg-border" />
+      {quota === null ? null : <Progress value={quotaPercent} aria-label={`${title} progress`} className="h-1.5 bg-border" />}
       <div className="flex items-center justify-between gap-4 text-xs font-medium text-muted-foreground">
-        <span>{quotaPercent}% used</span>
+        <span>{quota === null ? "Unlimited on Pro" : `${quotaPercent}% used`}</span>
         <span>Resets {formatDate(resetAt)}</span>
       </div>
     </div>
@@ -194,7 +192,7 @@ function deviceStatus(device: DeviceListItem): string {
 
 function memorySourceLabel(createdBy: PersonalMemory["createdBy"]): string {
   if (createdBy === "user") return "Saved by you";
-  return "Saved from accepted writing";
+  return "Learned from your writing";
 }
 
 function MemoryDate({ value }: { value: string }) {
@@ -491,23 +489,25 @@ export function useDashboardData(): DashboardData {
 export function DashboardOverviewPage({ data }: { data: DashboardData }) {
   const connectedDevices = data.devices.filter((device) => !device.revoked).length;
   const accountEmailStatus = emailStatus(data.user.emailVerified);
+  const typingSaved = Math.round(data.localSuggestionActivity.acceptedCharacters / 5);
 
   return (
     <div className="grid gap-8">
       <section className="grid gap-px border-y border-border bg-border sm:grid-cols-2 lg:grid-cols-5 [&>*]:bg-background">
-        <DashboardMetric label="Plan" value={formatPlanName(data.quota.planId)} />
-        <DashboardMetric label="Connected Macs" value={formatCount(connectedDevices)} description={`${formatCount(data.devices.length)} device records`} />
-        <DashboardMetric label="Saved memories" value={formatCount(data.memories.length)} description="Available when enabled" />
-        <DashboardMetric label="Local accepted" value={formatCount(data.localSuggestionActivity.accepted)} description="This month" />
-        <DashboardMetric label="Account" value={accountEmailStatus.value} tone={accountEmailStatus.tone} description={data.user.email ?? data.user.name ?? data.user.id} />
+        <DashboardMetric label="Completed words" value={formatCount(data.localSuggestionActivity.acceptedWords)} description="From Local Suggestions" />
+        <DashboardMetric label="Typing saved" value={`~${formatCount(typingSaved)} sec`} description="Approximation from accepted characters" />
+        <DashboardMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} description="Since value metrics launched" />
+        <DashboardMetric label="Deep Completes" value={formatCount(data.billing.deepCompletes.used)} description="Successful results this month" />
+        <DashboardMetric label="Plan" value={formatPlanName(data.billing.planId)} description={data.billing.entitlementSource === "trial" ? `Trial ends ${formatDate(data.billing.trial.endsAt)}` : undefined} />
       </section>
       <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-        <div className="border-y border-border py-6">
-          <QuotaProgressPanel title="Suggestions this month" usage={data.quota.usage} quota={data.quota.quota} resetAt={data.quota.resetAt} />
+        <div className="grid gap-6 border-y border-border py-6">
+          <QuotaProgressPanel title="Local Accepted Words today" usage={data.billing.localAcceptedWords.used} quota={data.billing.localAcceptedWords.limit} resetAt={data.billing.localAcceptedWords.resetAt} />
+          <QuotaProgressPanel title="Deep Completes this month" usage={data.billing.deepCompletes.used} quota={data.billing.deepCompletes.limit} resetAt={data.billing.deepCompletes.resetAt} />
         </div>
         <div className="grid gap-3 lg:border-l lg:border-border lg:pl-7">
-          <p className="text-sm font-semibold text-foreground">{data.quota.usage >= data.quota.quota ? "You have reached this month's limit." : "Your plan is ready when you are."}</p>
-          <p className="text-sm leading-relaxed text-muted-foreground">{data.quota.usage >= data.quota.quota ? "Choose a larger plan to keep using suggestions this month." : "See your allowance or make a billing change."}</p>
+          <p className="text-sm font-semibold text-foreground">{formatCount(connectedDevices)} of {formatCount(data.billing.devices.limit)} Macs connected</p>
+          <p className="text-sm leading-relaxed text-muted-foreground">{accountEmailStatus.value}. Allowances are independent, so reaching one does not disable the other mode.</p>
           <p><a className={buttonVariants({ variant: "secondary", size: "sm" })} href="/dashboard/usage">View usage and billing</a></p>
         </div>
       </section>
@@ -542,16 +542,16 @@ export function DashboardAccountPage({ data }: { data: DashboardData }) {
 }
 
 export function DashboardUsagePage({ data }: { data: DashboardData }) {
-  const quota = data.quota;
-  const upgradePlans = getPlanEntries().filter(([planId]) => planId !== quota.planId);
-  const quotaExhausted = quota.usage >= quota.quota;
-  const accountQuotaStatus = quotaStatus(quotaExhausted);
+  const billing = data.billing;
+  const localStatus = quotaStatus(billing.localAcceptedWords.exhausted);
+  const deepStatus = quotaStatus(billing.deepCompletes.exhausted);
 
   return (
     <div className="grid gap-9">
       <section className="grid gap-5 border-y border-border py-6">
-        <div className="grid gap-px border-b border-border bg-border sm:grid-cols-2 [&>*]:bg-background">
-          <DashboardMetric label="Local accepted" value={formatCount(data.localSuggestionActivity.accepted)} description="Successful local insertions this month" />
+        <div className="grid gap-px border-b border-border bg-border sm:grid-cols-3 [&>*]:bg-background">
+          <DashboardMetric label="Completed words" value={formatCount(data.localSuggestionActivity.acceptedWords)} description="Accepted Local Suggestion words" />
+          <DashboardMetric label="Active days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} description="Writing days in this metric period" />
           <DashboardMetric
             label="Average time to accept"
             value={data.localSuggestionActivity.averageAcceptanceLatencyMs === null
@@ -563,19 +563,17 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase text-muted-foreground">Current plan</p>
-            <p className="mt-2 text-xl font-bold">{formatPlanName(quota.planId)}</p>
+            <p className="mt-2 text-xl font-bold">{formatPlanName(billing.planId)}{billing.entitlementSource === "trial" ? " trial" : ""}</p>
           </div>
-          <p className="flex items-center gap-2 text-sm font-semibold">
-            <span className={`size-2 rounded-full ${metricToneClasses[accountQuotaStatus.tone]}`} aria-hidden="true" />
-            {accountQuotaStatus.value}
-          </p>
+          <p className="text-sm text-muted-foreground">{billing.entitlementSource === "trial" ? `Ends ${formatDate(billing.trial.endsAt)}` : billing.billingInterval ? `${billing.billingInterval} billing` : "Free account"}</p>
         </div>
-        <QuotaProgressPanel title="Suggestions this month" usage={quota.usage} quota={quota.quota} resetAt={quota.resetAt} />
-        {quotaExhausted ? (
+        <QuotaProgressPanel title="Local Accepted Words today" usage={billing.localAcceptedWords.used} quota={billing.localAcceptedWords.limit} resetAt={billing.localAcceptedWords.resetAt} />
+        <QuotaProgressPanel title="Deep Completes this month" usage={billing.deepCompletes.used} quota={billing.deepCompletes.limit} resetAt={billing.deepCompletes.resetAt} />
+        {billing.localAcceptedWords.exhausted || billing.deepCompletes.exhausted ? (
           <Alert variant="destructive">
-            <AlertTitle>Monthly suggestions used</AlertTitle>
+            <AlertTitle>One allowance is used</AlertTitle>
             <AlertDescription>
-              You have used {formatCount(quota.usage)} of {formatCount(quota.quota)} suggestions this month. <a className="underline" href="/pricing">Upgrade to continue</a>.
+              Local Suggestions and Deep Complete remain independent. {billing.localAcceptedWords.exhausted ? `Local Accepted Words: ${localStatus.value}. ` : ""}{billing.deepCompletes.exhausted ? `Deep Complete: ${deepStatus.value}. ` : ""}<a className="underline" href="/pricing">Compare Pro</a>.
             </AlertDescription>
           </Alert>
         ) : null}
@@ -584,20 +582,19 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <h2 className="text-xl font-bold">Change plan</h2>
-            <p className="mt-1 text-sm text-muted-foreground">A new allowance applies after checkout.</p>
+            <p className="mt-1 text-sm text-muted-foreground">Pro includes unlimited Local Accepted Words and 300 Deep Completes per month.</p>
           </div>
           <a className={buttonVariants({ variant: "secondary", size: "sm" })} href="/billing/portal">Manage billing</a>
         </div>
         <div className="mt-5 grid border-y border-border sm:grid-cols-2">
-            {upgradePlans.map(([planId, plan]) => (
-              <div key={planId} className="grid gap-4 border-b border-border py-5 sm:border-b-0 sm:border-l sm:px-5 sm:first:border-l-0 sm:first:pl-0 sm:last:pr-0">
-                <div>
-                  <p className="font-semibold">{plan.name}</p>
-                  <p className="mt-1 text-sm tabular-nums text-muted-foreground">{formatCount(plan.monthlyAutocompleteSuggestions)} suggestions / month</p>
-                </div>
-                <p><a className={buttonVariants({ variant: "secondary", size: "sm" })} href={checkoutPlanHref(planId)}>{planActionLabel(plan.name, plan.monthlyPriceUsd)}</a></p>
-              </div>
-            ))}
+          <div className="grid gap-4 py-5 sm:pr-5">
+            <div><p className="font-semibold">Pro monthly</p><p className="mt-1 text-sm text-muted-foreground">$10/month, cancel through the billing portal</p></div>
+            <p><a className={buttonVariants({ variant: "secondary", size: "sm" })} href={checkoutPlanHref("pro")}>Choose monthly</a></p>
+          </div>
+          <div className="grid gap-4 border-t border-border py-5 sm:border-l sm:border-t-0 sm:pl-5">
+            <div><p className="font-semibold">Pro annual</p><p className="mt-1 text-sm text-muted-foreground">$96/year, saving $24</p></div>
+            <p><a className={buttonVariants({ variant: "secondary", size: "sm" })} href={checkoutPlanHref("pro", "annual")}>Choose annual</a></p>
+          </div>
         </div>
       </section>
     </div>
@@ -676,11 +673,11 @@ export function DashboardMemoriesPage({ data }: { data: DashboardData }) {
       <div className="grid gap-px border-y border-border bg-border sm:grid-cols-3 [&>*]:bg-background">
         <DashboardMetric label="Saved" value={memoryCountLabel} description="Ready when memory is enabled" />
         <DashboardMetric label="Added by you" value={formatCount(savedByUserCount)} description="Created or updated manually" />
-        <DashboardMetric label="Learned from writing" value={formatCount(savedFromWritingCount)} description="From suggestions you accepted" />
+        <DashboardMetric label="Learned from writing" value={formatCount(savedFromWritingCount)} description="From eligible user-authored writing" />
       </div>
       <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
         <p className="max-w-[65ch] leading-relaxed text-muted-foreground">Saved memories can personalize suggestions when memory is enabled in the Mac app.</p>
-        <span className="w-max text-xs font-semibold text-muted-foreground">Controlled on each Mac</span>
+        <a className={buttonVariants({ variant: "secondary", size: "sm" })} href="/dashboard/memories/export">Export JSON</a>
       </div>
       <details className="border-y border-border py-4">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-control)] py-1 text-sm font-semibold text-foreground hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">

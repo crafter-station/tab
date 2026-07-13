@@ -6,15 +6,15 @@ if (!accessToken) {
   throw new Error("POLAR_ACCESS_TOKEN is required");
 }
 
-const meterId = env.POLAR_AUTOCOMPLETE_METER_ID;
+const meterId = env.POLAR_DEEP_COMPLETE_METER_ID ?? env.POLAR_AUTOCOMPLETE_METER_ID;
 if (!meterId) {
-  throw new Error("POLAR_AUTOCOMPLETE_METER_ID is required");
+  throw new Error("POLAR_DEEP_COMPLETE_METER_ID is required");
 }
 
 const planProductIds = {
-  free: env.POLAR_PRODUCT_ID_FREE,
-  pro: env.POLAR_PRODUCT_ID_PRO,
-  max: env.POLAR_PRODUCT_ID_MAX,
+  pro_monthly: env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? env.POLAR_PRODUCT_ID_PRO,
+  pro_annual: env.POLAR_PRODUCT_ID_PRO_ANNUAL,
+  legacy_max: env.POLAR_PRODUCT_ID_MAX,
 };
 
 type EntitlementRow = {
@@ -251,7 +251,7 @@ async function main() {
       await polar.events.ingest({
         events: [
           {
-            name: "autocomplete.used",
+            name: "deep_complete.used",
             externalCustomerId,
             externalId,
             metadata: {

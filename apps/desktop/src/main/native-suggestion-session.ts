@@ -1,10 +1,16 @@
 import type {
+  ApplicationCategory,
   ActiveApplication,
   RecordTelemetryEventRequest,
   Suggestion,
   SuggestionContextSource,
 } from "@tab/contracts";
-import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
+import { countAcceptedWords } from "@tab/billing";
+import {
+  acceptAndInsertSuggestion,
+  type InsertionDependencies,
+  type InsertionResult,
+} from "./acceptance.ts";
 import type { AppContextSnapshot } from "./app-context.ts";
 import { createHash } from "node:crypto";
 import type { AppContextSnapshotState } from "./app-context-extractor.ts";
@@ -54,6 +60,14 @@ export type NativeSuggestionSessionDependencies = {
   readonly debounceMs: number;
   readonly maxVisibleMs?: number;
   readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
+  readonly canAcceptLocalSuggestion?: () => boolean;
+  readonly onLocalAllowanceExhausted?: () => void;
+  readonly recordAcceptedUsage?: (event: {
+    readonly acceptanceId: string;
+    readonly acceptedAt: string;
+    readonly wordCount: number;
+    readonly characterCount: number;
+  }) => void | Promise<void>;
   readonly localSuggestionModelId?: string;
   readonly triggerPolicy?: TriggerPolicy;
   readonly onSuggestionDiagnostic?: (event: string, details: Record<string, unknown>) => void;
@@ -70,6 +84,9 @@ type VisibleSuggestionTelemetry = {
   readonly suggestionLength: number;
   readonly visibleSinceMs: number;
   readonly modelId?: string;
+  readonly inferenceSource: "local" | "deep_complete";
+  readonly trigger: "automatic" | "explicit";
+  readonly applicationCategory: ApplicationCategory;
 };
 
 type InteractionTelemetryEventType = RecordTelemetryEventRequest["eventType"];
@@ -81,6 +98,33 @@ function activeApplicationKey(app: ActiveApplication | null): string | null {
 
 const SUGGESTION_ID_PREFIX = "sg-";
 const GHOSTTY_BUNDLE_ID = "com.mitchellh.ghostty";
+
+function applicationCategory(bundleId: string | undefined): ApplicationCategory {
+  const normalized = bundleId?.toLowerCase() ?? "";
+  if (normalized.includes("terminal") || normalized.includes("ghostty")) {
+    return "terminal";
+  }
+  if (
+    normalized.includes("slack") ||
+    normalized.includes("mail") ||
+    normalized.includes("messages") ||
+    normalized.includes("whatsapp")
+  ) {
+    return "communication";
+  }
+  if (
+    normalized.includes("xcode") ||
+    normalized.includes("code") ||
+    normalized.includes("zed") ||
+    normalized.includes("github")
+  ) {
+    return "development";
+  }
+  if (normalized.includes("notes") || normalized.includes("obsidian")) {
+    return "documents";
+  }
+  return normalized ? "productivity" : "other";
+}
 
 export function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
   let currentSuggestion: Suggestion | null = null;
@@ -95,6 +139,8 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let appContextGraceTimer: ReturnType<typeof setTimeout> | null = null;
   let explicitRequestInFlight = false;
   let appContextChangedDuringExplicitRequest = false;
+  let acceptanceInFlight = false;
+  let lastGeneratedLocalRequestId: string | null = null;
   const { outputs } = deps;
   const compatibilityStore = deps.compatibilityStore ?? createApplicationCompatibilityStore();
   const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy();
@@ -109,12 +155,16 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   function buildTelemetry(suggestion: Suggestion): VisibleSuggestionTelemetry {
     const activeApplication = deps.typingContext.getState().activeApplication;
+    const local = suggestion.id.startsWith("sg-local-");
     return {
       requestId: requestIdFromSuggestion(suggestion),
       activeApplicationBundleId: activeApplication?.bundleId,
       suggestionLength: suggestion.text.length,
       visibleSinceMs: Date.now(),
-      ...(suggestion.id.startsWith("sg-local-") && deps.localSuggestionModelId
+      inferenceSource: local ? "local" : "deep_complete",
+      trigger: local ? "automatic" : "explicit",
+      applicationCategory: applicationCategory(activeApplication?.bundleId),
+      ...(local && deps.localSuggestionModelId
         ? { modelId: deps.localSuggestionModelId }
         : {}),
     };
@@ -132,19 +182,28 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   function buildTelemetryEvent(
     eventType: InteractionTelemetryEventType,
+    options: {
+      eventId?: string;
+      acceptedText?: string;
+    } = {},
   ): RecordTelemetryEventRequest | null {
     if (!visibleSuggestionTelemetry) return null;
 
     const event: RecordTelemetryEventRequest = {
       eventType,
+      eventId: options.eventId ?? crypto.randomUUID(),
       requestId: visibleSuggestionTelemetry.requestId,
       timestamp: new Date().toISOString(),
       suggestionLength: visibleSuggestionTelemetry.suggestionLength,
       latencyMs: interactionLatencyMs(visibleSuggestionTelemetry),
+      inferenceSource: visibleSuggestionTelemetry.inferenceSource,
+      trigger: visibleSuggestionTelemetry.trigger,
+      applicationCategory: visibleSuggestionTelemetry.applicationCategory,
     };
 
-    if (visibleSuggestionTelemetry.activeApplicationBundleId) {
-      event.activeApplicationBundleId = visibleSuggestionTelemetry.activeApplicationBundleId;
+    if (options.acceptedText !== undefined) {
+      event.acceptedWordCount = countAcceptedWords(options.acceptedText);
+      event.acceptedCharacterCount = options.acceptedText.length;
     }
 
     if (visibleSuggestionTelemetry.modelId) {
@@ -154,15 +213,57 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     return event;
   }
 
-  function recordInteractionTelemetry(eventType: InteractionTelemetryEventType): void {
+  function recordInteractionTelemetry(
+    eventType: InteractionTelemetryEventType,
+    options?: { eventId?: string; acceptedText?: string },
+  ): void {
     if (!deps.recordInteractionTelemetry) return;
 
-    const event = buildTelemetryEvent(eventType);
+    const event = buildTelemetryEvent(eventType, options);
     if (!event) return;
 
     Promise.resolve(deps.recordInteractionTelemetry(event)).catch(() => {
       // Interaction telemetry is best-effort and must never interrupt typing or acceptance.
     });
+  }
+
+  function recordLocalGenerated(suggestion: Suggestion): void {
+    if (!deps.recordInteractionTelemetry) return;
+    const telemetry = buildTelemetry(suggestion);
+    if (telemetry.inferenceSource !== "local") return;
+    if (lastGeneratedLocalRequestId === telemetry.requestId) return;
+    lastGeneratedLocalRequestId = telemetry.requestId;
+    Promise.resolve(
+      deps.recordInteractionTelemetry({
+        eventType: "suggestion_generated",
+        eventId: crypto.randomUUID(),
+        requestId: telemetry.requestId,
+        timestamp: new Date().toISOString(),
+        suggestionLength: telemetry.suggestionLength,
+        latencyMs: 0,
+        modelId: telemetry.modelId,
+        inferenceSource: "local",
+        trigger: "automatic",
+        applicationCategory: telemetry.applicationCategory,
+      }),
+    ).catch(() => {});
+  }
+
+  function recordLocalFailure(): void {
+    if (!deps.recordInteractionTelemetry) return;
+    const activeApplication = deps.typingContext.getState().activeApplication;
+    Promise.resolve(
+      deps.recordInteractionTelemetry({
+        eventType: "suggestion_error",
+        eventId: crypto.randomUUID(),
+        requestId: `local-${crypto.randomUUID()}`,
+        timestamp: new Date().toISOString(),
+        inferenceSource: "local",
+        trigger: "automatic",
+        applicationCategory: applicationCategory(activeApplication?.bundleId),
+        errorCode: "provider_failure",
+      }),
+    ).catch(() => {});
   }
 
   function recordDismissal(snapshot: SafeTypingContextSnapshot): void {
@@ -178,9 +279,22 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   }
 
   function presentSuggestion(suggestion: Suggestion): void {
+    const previousTelemetry = visibleSuggestionTelemetry;
     currentSuggestion = suggestion;
     visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
-    visibleSuggestionTelemetry = buildTelemetry(suggestion);
+    const nextTelemetry = buildTelemetry(suggestion);
+    const sameRequest =
+      previousTelemetry?.requestId === nextTelemetry.requestId &&
+      previousTelemetry.inferenceSource === nextTelemetry.inferenceSource;
+    visibleSuggestionTelemetry = sameRequest
+      ? { ...nextTelemetry, visibleSinceMs: previousTelemetry.visibleSinceMs }
+      : nextTelemetry;
+    if (
+      visibleSuggestionTelemetry.inferenceSource === "local" &&
+      !sameRequest
+    ) {
+      recordInteractionTelemetry("suggestion_shown");
+    }
     outputs.showSuggestion(suggestion);
     finishReplacement();
   }
@@ -224,6 +338,8 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       recordInteractionTelemetry("suggestion_stale");
       clearVisibleSuggestion();
     },
+    onSuggestionGenerated: recordLocalGenerated,
+    onLocalSuggestionFailed: recordLocalFailure,
     onSecretLikeContextDetected: () => {
       deps.clearAppContext?.();
       deps.typingContext.clear();
@@ -474,26 +590,59 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       outputs.showDebugContext();
     },
     async acceptCurrentSuggestion(): Promise<void> {
-      if (replacingSuggestion) return;
+      if (replacingSuggestion || acceptanceInFlight) return;
       const acceptedSuggestion = currentSuggestion;
+      if (
+        acceptedSuggestion?.id.startsWith("sg-local-") &&
+        deps.canAcceptLocalSuggestion &&
+        !deps.canAcceptLocalSuggestion()
+      ) {
+        clearVisibleSuggestion();
+        outputs.hideOverlay();
+        deps.onLocalAllowanceExhausted?.();
+        return;
+      }
+      acceptanceInFlight = true;
       const acceptedFromTextSession = textSessionSnapshot !== null;
       const insertionDeps = deps.createAcceptanceDependencies(
         () => currentSuggestion,
         () => previouslyActiveApplication,
       );
-      const result = await acceptAndInsertSuggestion({
-        ...insertionDeps,
-        getVisibleTextSessionTarget: () => visibleTextSessionTarget,
-        getCurrentTextSessionTarget: () => textSessionSnapshot,
-        shouldPreferClipboardFallback: (targetApp) => compatibilityStore.shouldPreferClipboardInsertion(targetApp),
-        recordInsertionOutcome: (strategy, outcome, targetApp) => {
-          compatibilityStore.recordInsertionOutcome(targetApp, strategy, outcome);
-        },
-      });
+      let result: InsertionResult;
+      try {
+        result = await acceptAndInsertSuggestion({
+          ...insertionDeps,
+          getVisibleTextSessionTarget: () => visibleTextSessionTarget,
+          getCurrentTextSessionTarget: () => textSessionSnapshot,
+          shouldPreferClipboardFallback: (targetApp) => compatibilityStore.shouldPreferClipboardInsertion(targetApp),
+          recordInsertionOutcome: (strategy, outcome, targetApp) => {
+            compatibilityStore.recordInsertionOutcome(targetApp, strategy, outcome);
+          },
+        });
+      } finally {
+        acceptanceInFlight = false;
+      }
 
       if (result === "inserted") {
+        const acceptanceId = crypto.randomUUID();
+        const acceptedAt = new Date().toISOString();
         compatibilityStore.recordAcceptance(currentSafeSnapshot());
-        recordInteractionTelemetry("suggestion_accepted");
+        recordInteractionTelemetry("suggestion_accepted", {
+          eventId: acceptanceId,
+          acceptedText: acceptedSuggestion?.text,
+        });
+        if (acceptedSuggestion?.id.startsWith("sg-local-")) {
+          Promise.resolve(
+            deps.recordAcceptedUsage?.({
+              acceptanceId,
+              acceptedAt,
+              wordCount: countAcceptedWords(acceptedSuggestion.text),
+              characterCount: acceptedSuggestion.text.length,
+            }),
+          ).catch(() => {
+            // The durable ledger callback owns retry behavior and cannot block insertion.
+          });
+        }
         outputs.hideOverlay();
         if (acceptedSuggestion && !acceptedFromTextSession) {
           suggestionLoop.invalidate();

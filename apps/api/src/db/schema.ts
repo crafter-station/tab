@@ -80,7 +80,10 @@ export const deviceTokens = sqliteTable(
     lastSeenAt: text("last_seen_at").notNull(),
     revoked: integer("revoked", { mode: "boolean" }).notNull().default(false),
   },
-  (table) => [index("idx_device_tokens_user").on(table.userId)],
+  (table) => [
+    index("idx_device_tokens_user").on(table.userId),
+    index("idx_device_tokens_user_revoked").on(table.userId, table.revoked),
+  ],
 );
 
 export const deviceExchangeCodes = sqliteTable("device_exchange_codes", {
@@ -182,6 +185,11 @@ export const userEntitlements = sqliteTable("user_entitlements", {
   polarSubscriptionId: text("polar_subscription_id"),
   status: text("status").notNull(),
   currentPeriodEnd: text("current_period_end"),
+  billingInterval: text("billing_interval"),
+  trialStartedAt: text("trial_started_at"),
+  trialEndsAt: text("trial_ends_at"),
+  lastWebhookEventId: text("last_webhook_event_id"),
+  lastWebhookOccurredAt: text("last_webhook_occurred_at"),
   cachedAt: text("cached_at").notNull(),
 });
 
@@ -196,6 +204,28 @@ export const usageRecords = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [primaryKey({ columns: [table.userId, table.month] })],
+);
+
+export const allowanceUsageEvents = sqliteTable(
+  "allowance_usage_events",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    metric: text("metric").notNull(),
+    eventId: text("event_id").notNull(),
+    period: text("period").notNull(),
+    amount: integer("amount").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.userId, table.metric, table.eventId] }),
+    index("idx_allowance_usage_period").on(
+      table.userId,
+      table.metric,
+      table.period,
+    ),
+  ],
 );
 
 export const telemetryEvents = sqliteTable(
@@ -225,10 +255,24 @@ export const telemetryEvents = sqliteTable(
     memoryUpdatedCount: integer("memory_updated_count"),
     memoryDeletedCount: integer("memory_deleted_count"),
     memoryRejectedCount: integer("memory_rejected_count"),
+    inferenceSource: text("inference_source"),
+    trigger: text("trigger"),
+    acceptedWordCount: integer("accepted_word_count"),
+    acceptedCharacterCount: integer("accepted_character_count"),
+    applicationCategory: text("application_category"),
+    memoryUsed: integer("memory_used", { mode: "boolean" }),
+    memoryCount: integer("memory_count"),
+    providerId: text("provider_id"),
+    cloudCostUsdMicros: integer("cloud_cost_usd_micros"),
   },
   (table) => [
     index("idx_telemetry_events_user").on(table.userId),
     index("idx_telemetry_events_request").on(table.requestId),
+    index("idx_telemetry_events_source_time").on(
+      table.userId,
+      table.inferenceSource,
+      table.timestamp,
+    ),
   ],
 );
 
@@ -239,6 +283,7 @@ export const userRelations = relations(user, ({ many }) => ({
   memories: many(personalMemories),
   memoryExtractionIdempotency: many(memoryExtractionIdempotency),
   usage: many(usageRecords),
+  allowanceUsageEvents: many(allowanceUsageEvents),
   telemetryEvents: many(telemetryEvents),
 }));
 
