@@ -108,7 +108,8 @@ describe("shared app patterns", () => {
     expect(styles).toInclude("--tab-overlay-deep-bg: rgba(27, 26, 24, 0.97)");
     expect(styles).toInclude("radial-gradient(circle at 26px 50%, var(--tab-overlay-deep-wash), transparent 104px)");
     expect(styles).toInclude('.tab-suggestion-command[data-source="cloud"]::before');
-    expect(styles).toInclude("background-color: rgba(255, 255, 255, 0.07)");
+    expect(styles).toInclude("--tab-overlay-deep-shortcut-bg: rgba(255, 255, 255, 0.07)");
+    expect(styles).toInclude("background-color: var(--tab-overlay-deep-shortcut-bg)");
   });
 
   it("keeps suggestion content mounted and blurred while a replacement refreshes", () => {

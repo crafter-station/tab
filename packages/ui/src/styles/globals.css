@@ -124,6 +124,11 @@
   --tab-overlay-deep-accent: #ff6a2b;
   --tab-overlay-deep-accent-bg: rgba(255, 106, 43, 0.12);
   --tab-overlay-deep-wash: rgba(255, 106, 43, 0.16);
+  --tab-overlay-deep-highlight: rgba(255, 255, 255, 0.065);
+  --tab-overlay-deep-highlight-edge: rgba(255, 255, 255, 0.055);
+  --tab-overlay-deep-shortcut-text: rgba(255, 255, 255, 0.62);
+  --tab-overlay-deep-shortcut-bg: rgba(255, 255, 255, 0.07);
+  --tab-overlay-deep-shortcut-border: rgba(255, 255, 255, 0.12);
   --tab-overlay-deep-shadow: 0 10px 30px rgba(0, 0, 0, 0.42), 0 2px 7px rgba(0, 0, 0, 0.3);
   --tab-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --tab-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
@@ -387,9 +392,9 @@ details[open] > summary .tab-disclosure-chevron {
   inset: 0;
   background:
     radial-gradient(circle at 26px 50%, var(--tab-overlay-deep-wash), transparent 104px),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.065), transparent 42%);
+    linear-gradient(180deg, var(--tab-overlay-deep-highlight), transparent 42%);
   border-radius: inherit;
-  box-shadow: inset 0 1px rgba(255, 255, 255, 0.055);
+  box-shadow: inset 0 1px var(--tab-overlay-deep-highlight-edge);
   content: "";
   opacity: 0;
   pointer-events: none;
@@ -435,9 +440,9 @@ details[open] > summary .tab-disclosure-chevron {
 }
 
 .tab-suggestion-command[data-source="cloud"] .tab-suggestion-shortcut {
-  color: rgba(255, 255, 255, 0.62);
-  background-color: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.12);
+  color: var(--tab-overlay-deep-shortcut-text);
+  background-color: var(--tab-overlay-deep-shortcut-bg);
+  border-color: var(--tab-overlay-deep-shortcut-border);
 }
 
 @media (prefers-reduced-motion: reduce) {
