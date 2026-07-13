@@ -1,63 +1,150 @@
-import { DesktopReleaseFeedSchema } from "@tab/contracts";
+export type DesktopUpdateState =
+  | { status: "idle"; currentVersion: string }
+  | { status: "checking"; currentVersion: string }
+  | { status: "not-available"; currentVersion: string }
+  | { status: "available"; currentVersion: string; version: string }
+  | { status: "downloading"; currentVersion: string; version: string; percent: number }
+  | { status: "downloaded"; currentVersion: string; version: string }
+  | { status: "error"; currentVersion: string; message: string };
 
-export type UpdateCheckerDependencies = {
-  currentVersion: string;
-  feedUrl: string;
-  fetch?: typeof globalThis.fetch;
-  onUpdateAvailable?: (version: string, url: string) => void;
+type UpdateInfo = { version: string };
+type DownloadProgress = { percent: number };
+
+export type NativeUpdater = {
+  autoDownload: boolean;
+  autoInstallOnAppQuit: boolean;
+  allowPrerelease: boolean;
+  allowDowngrade: boolean;
+  on(event: "checking-for-update", listener: () => void): unknown;
+  on(event: "update-not-available", listener: (info: UpdateInfo) => void): unknown;
+  on(event: "update-available", listener: (info: UpdateInfo) => void): unknown;
+  on(event: "download-progress", listener: (progress: DownloadProgress) => void): unknown;
+  on(event: "update-downloaded", listener: (info: UpdateInfo) => void): unknown;
+  on(event: "error", listener: (error: Error) => void): unknown;
+  checkForUpdates(): Promise<unknown>;
+  downloadUpdate(): Promise<string[]>;
+  quitAndInstall(): void;
 };
 
-function parseVersion(version: string): number[] {
-  return version
-    .split(".")
-    .map((part) => parseInt(part, 10))
-    .filter((part) => !Number.isNaN(part));
-}
+export type DesktopUpdaterDependencies = {
+  currentVersion: string;
+  nativeUpdater: NativeUpdater;
+  onChange?: (state: DesktopUpdateState) => void;
+  onError?: (error: Error) => void;
+};
 
-function compareVersions(a: string, b: string): number {
-  const aParts = parseVersion(a);
-  const bParts = parseVersion(b);
-  const length = Math.max(aParts.length, bParts.length);
+export function createDesktopUpdater(deps: DesktopUpdaterDependencies) {
+  const { nativeUpdater } = deps;
+  let state: DesktopUpdateState = {
+    status: "idle",
+    currentVersion: deps.currentVersion,
+  };
+  let availableVersion: string | null = null;
+  let operation: "checking" | "downloading" | null = null;
+  const handledErrors = new WeakSet<Error>();
 
-  for (let i = 0; i < length; i++) {
-    const aPart = aParts[i] ?? 0;
-    const bPart = bParts[i] ?? 0;
-    if (aPart > bPart) return 1;
-    if (aPart < bPart) return -1;
+  nativeUpdater.autoDownload = false;
+  nativeUpdater.autoInstallOnAppQuit = true;
+  nativeUpdater.allowPrerelease = false;
+  nativeUpdater.allowDowngrade = false;
+
+  function publish(nextState: DesktopUpdateState): void {
+    state = nextState;
+    deps.onChange?.(nextState);
   }
 
-  return 0;
-}
+  function fail(error: Error): void {
+    if (handledErrors.has(error)) return;
+    handledErrors.add(error);
+    deps.onError?.(error);
+    const message = operation === "downloading"
+      ? "The update could not be downloaded. Check your connection and try again."
+      : "Tab could not check for updates. Check your connection and try again.";
+    operation = null;
+    publish({ status: "error", currentVersion: deps.currentVersion, message });
+  }
 
-export function createUpdateChecker(deps: UpdateCheckerDependencies) {
-  const http = deps.fetch ?? globalThis.fetch;
+  nativeUpdater.on("checking-for-update", () => {
+    operation = "checking";
+    publish({ status: "checking", currentVersion: deps.currentVersion });
+  });
+  nativeUpdater.on("update-not-available", () => {
+    operation = null;
+    availableVersion = null;
+    publish({ status: "not-available", currentVersion: deps.currentVersion });
+  });
+  nativeUpdater.on("update-available", (info) => {
+    operation = null;
+    availableVersion = info.version;
+    publish({
+      status: "available",
+      currentVersion: deps.currentVersion,
+      version: info.version,
+    });
+  });
+  nativeUpdater.on("download-progress", (progress) => {
+    if (!availableVersion) return;
+    publish({
+      status: "downloading",
+      currentVersion: deps.currentVersion,
+      version: availableVersion,
+      percent: Math.min(100, Math.max(0, progress.percent)),
+    });
+  });
+  nativeUpdater.on("update-downloaded", (info) => {
+    operation = null;
+    availableVersion = info.version;
+    publish({
+      status: "downloaded",
+      currentVersion: deps.currentVersion,
+      version: info.version,
+    });
+  });
+  nativeUpdater.on("error", fail);
 
   return {
-    async checkForUpdates(): Promise<boolean> {
+    getState(): DesktopUpdateState {
+      return state;
+    },
+
+    async checkForUpdates(): Promise<void> {
+      if (["checking", "downloading", "downloaded"].includes(state.status)) return;
+      operation = "checking";
+      publish({ status: "checking", currentVersion: deps.currentVersion });
       try {
-        const response = await http(deps.feedUrl);
-        if (!response.ok) {
-          return false;
-        }
-
-        const raw = (await response.json()) as unknown;
-        const parsed = DesktopReleaseFeedSchema.safeParse(raw);
-        if (!parsed.success) {
-          return false;
-        }
-
-        const feed = parsed.data;
-        if (compareVersions(feed.version, deps.currentVersion) > 0) {
-          deps.onUpdateAvailable?.(feed.version, feed.url);
-          return true;
-        }
-
-        return false;
-      } catch {
-        return false;
+        await nativeUpdater.checkForUpdates();
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+        throw error;
       }
+    },
+
+    async downloadUpdate(): Promise<void> {
+      if (!availableVersion || state.status !== "available") {
+        throw new Error("No update is available to download");
+      }
+      operation = "downloading";
+      publish({
+        status: "downloading",
+        currentVersion: deps.currentVersion,
+        version: availableVersion,
+        percent: 0,
+      });
+      try {
+        await nativeUpdater.downloadUpdate();
+      } catch (error) {
+        fail(error instanceof Error ? error : new Error(String(error)));
+        throw error;
+      }
+    },
+
+    quitAndInstall(): void {
+      if (state.status !== "downloaded") {
+        throw new Error("No downloaded update is ready to install");
+      }
+      nativeUpdater.quitAndInstall();
     },
   };
 }
 
-export type UpdateChecker = ReturnType<typeof createUpdateChecker>;
+export type DesktopUpdater = ReturnType<typeof createDesktopUpdater>;

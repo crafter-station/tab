@@ -17,7 +17,7 @@ async function buildEntry(entrypoint: string, outfile: string, format: "esm" | "
     naming: path.basename(outfile),
     target: "node",
     format,
-    external: ["electron"],
+    external: ["electron", "electron-updater"],
     sourcemap: "external",
   });
 

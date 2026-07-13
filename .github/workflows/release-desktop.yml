@@ -74,6 +74,8 @@ jobs:
             "$release/Tab.dmg" \
             "$release/Tab-$VERSION-universal.dmg" \
             "$release/Tab-$VERSION-universal.zip" \
+            "$release/Tab-$VERSION-universal.zip.blockmap" \
+            "$release/latest-mac.yml" \
             > "$release/SHA256SUMS.txt"
 
       - name: Publish GitHub release
@@ -86,7 +88,11 @@ jobs:
             "$release/Tab.dmg" \
             "$release/Tab-$VERSION-universal.dmg" \
             "$release/Tab-$VERSION-universal.zip" \
+            "$release/Tab-$VERSION-universal.zip.blockmap" \
+            "$release/latest-mac.yml" \
             "$release/SHA256SUMS.txt" \
             --title "Tab $VERSION" \
             --generate-notes \
+            --draft \
             --verify-tag
+          gh release edit "$GITHUB_REF_NAME" --draft=false

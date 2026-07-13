@@ -1,10 +1,12 @@
-import { BrowserWindow, nativeTheme } from "electron";
+import { BrowserWindow, nativeTheme, type WebFrameMain } from "electron";
+import { pathToFileURL } from "node:url";
 import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopPreferences } from "./preferences.ts";
 import type { LocalInferenceStatus } from "./local-inference-prototype.ts";
 import type { CompletionHistoryEntry } from "./completion-history.ts";
+import type { DesktopUpdateState } from "./release.ts";
 
 export type ControlWindowRoute = "settings" | "onboarding" | "sign-in";
 
@@ -125,15 +127,26 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     }
   }
 
+  function sendUpdateState(state: DesktopUpdateState): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("update-state-changed", state);
+    }
+  }
+
   return {
     show,
     close,
     isOpen: () => win !== null && !win.isDestroyed(),
+    ownsFrame: (frame: WebFrameMain | null) => {
+      if (!win || win.isDestroyed() || !frame || frame !== win.webContents.mainFrame) return false;
+      return frame.url.split("#", 1)[0] === pathToFileURL(deps.rendererPath).toString();
+    },
     sendStatus,
     sendMemories,
     sendPaused,
     sendPreferences,
     sendLocalInferenceStatus,
     sendCompletionHistory,
+    sendUpdateState,
   };
 }

@@ -4,6 +4,7 @@ import type { DesktopPreferences } from "../main/preferences.ts";
 import type { PersonalMemory } from "@tab/contracts";
 import type { LocalInferenceStatus } from "../main/local-inference-prototype.ts";
 import type { CompletionHistoryEntry } from "../main/completion-history.ts";
+import type { DesktopUpdateState } from "../main/release.ts";
 
 type DebugApiState =
   | { status: "idle" }
@@ -62,12 +63,16 @@ export type TabPreloadApi = {
   onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => () => void;
   onLocalInferenceStatusChanged: (callback: (status: LocalInferenceStatus) => void) => () => void;
   onCompletionHistoryChanged: (callback: (entries: readonly CompletionHistoryEntry[]) => void) => () => void;
-  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences; localInferenceStatus: LocalInferenceStatus; completionHistory: readonly CompletionHistoryEntry[] }>;
+  onUpdateStateChanged: (callback: (state: DesktopUpdateState) => void) => () => void;
+  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences; localInferenceStatus: LocalInferenceStatus; completionHistory: readonly CompletionHistoryEntry[]; updateState: DesktopUpdateState }>;
   signIn: () => void;
   signOut: () => void;
   openPricing: () => void;
   togglePause: () => void;
   downloadLocalModel: () => Promise<void>;
+  checkForUpdates: () => Promise<void>;
+  downloadUpdate: () => Promise<void>;
+  installUpdate: () => Promise<void>;
   setUsePersonalMemoryForSuggestions: (enabled: boolean) => void;
   setContinuousMemoryExtraction: (enabled: boolean) => void;
   setCustomWritingInstructions: (value: string) => void;
@@ -159,6 +164,11 @@ contextBridge.exposeInMainWorld("tab", {
     ipcRenderer.on("completion-history-changed", listener);
     return () => ipcRenderer.off("completion-history-changed", listener);
   },
+  onUpdateStateChanged: (callback: (state: DesktopUpdateState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: DesktopUpdateState) => callback(state);
+    ipcRenderer.on("update-state-changed", listener);
+    return () => ipcRenderer.off("update-state-changed", listener);
+  },
   getInitialState: () => ipcRenderer.invoke("get-initial-state"),
   signIn: () => {
     ipcRenderer.send("sign-in");
@@ -173,6 +183,9 @@ contextBridge.exposeInMainWorld("tab", {
     ipcRenderer.send("toggle-pause");
   },
   downloadLocalModel: () => ipcRenderer.invoke("download-local-model"),
+  checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
+  downloadUpdate: () => ipcRenderer.invoke("download-update"),
+  installUpdate: () => ipcRenderer.invoke("install-update"),
   setUsePersonalMemoryForSuggestions: (enabled: boolean) => {
     ipcRenderer.send("set-use-personal-memory-for-suggestions", enabled);
   },

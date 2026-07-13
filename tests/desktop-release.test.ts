@@ -1,6 +1,30 @@
 import { describe, it, expect } from "bun:test";
-import { createUpdateChecker } from "../apps/desktop/src/main/release.ts";
-import { DesktopReleaseFeedSchema } from "../packages/contracts/src/index.ts";
+import { EventEmitter } from "node:events";
+import { createDesktopUpdater } from "../apps/desktop/src/main/release.ts";
+
+class FakeUpdater extends EventEmitter {
+  autoDownload = true;
+  autoInstallOnAppQuit = false;
+  allowPrerelease = true;
+  allowDowngrade = true;
+  checkCount = 0;
+  downloadCount = 0;
+  installCount = 0;
+
+  async checkForUpdates() {
+    this.checkCount += 1;
+    return null;
+  }
+
+  async downloadUpdate() {
+    this.downloadCount += 1;
+    return ["/tmp/Tab.zip"];
+  }
+
+  quitAndInstall() {
+    this.installCount += 1;
+  }
+}
 
 describe("Desktop release packaging", () => {
   it("has an electron-builder config that targets macOS direct distribution", async () => {
@@ -14,6 +38,9 @@ describe("Desktop release packaging", () => {
     expect(config).toInclude('artifactName: "${productName}-${version}-${arch}.${ext}"');
     expect(config).toInclude("protocols:");
     expect(config).toInclude("- tab");
+    expect(config).toInclude("provider: github");
+    expect(config).toInclude("owner: crafter-station");
+    expect(config).toInclude("repo: tab");
   });
 
   it("publishes signed tags with a stable universal download asset", async () => {
@@ -23,7 +50,10 @@ describe("Desktop release packaging", () => {
     expect(workflow).toInclude("MACOS_CERTIFICATE");
     expect(workflow).toInclude("APPLE_APP_SPECIFIC_PASSWORD");
     expect(workflow).toInclude("Tab.dmg");
-    expect(workflow).toInclude("gh release create");
+    expect(workflow).toInclude("latest-mac.yml");
+    expect(workflow).toInclude(".zip.blockmap");
+    expect(workflow).toInclude("--draft");
+    expect(workflow).toInclude("gh release edit");
   });
 
   it("has macOS entitlements that do not request Screen Recording or Full Disk Access", async () => {
@@ -51,76 +81,110 @@ describe("Desktop release packaging", () => {
   });
 });
 
-describe("Desktop update checker", () => {
-  function makeFeed(version: string, url: string) {
-    return { version, url, notes: "Bug fixes and improvements." };
-  }
-
-  it("reports an update when the feed version is newer", async () => {
-    const calls: Array<{ version: string; url: string }> = [];
-    const checker = createUpdateChecker({
+describe("Desktop updater", () => {
+  it("checks without automatically downloading stable updates", async () => {
+    const nativeUpdater = new FakeUpdater();
+    const updater = createDesktopUpdater({
       currentVersion: "0.1.0",
-      feedUrl: "https://example.com/latest.json",
-      fetch: async () =>
-        new Response(
-          JSON.stringify(makeFeed("0.2.0", "https://example.com/tab.dmg")),
-        ),
-      onUpdateAvailable: (version, url) => calls.push({ version, url }),
+      nativeUpdater,
     });
 
-    const result = await checker.checkForUpdates();
+    await updater.checkForUpdates();
 
-    expect(result).toBe(true);
-    expect(calls).toEqual([
-      { version: "0.2.0", url: "https://example.com/tab.dmg" },
-    ]);
+    expect(nativeUpdater.checkCount).toBe(1);
+    expect(nativeUpdater.autoDownload).toBe(false);
+    expect(nativeUpdater.autoInstallOnAppQuit).toBe(true);
+    expect(nativeUpdater.allowPrerelease).toBe(false);
+    expect(nativeUpdater.allowDowngrade).toBe(false);
+    expect(updater.getState()).toEqual({ status: "checking", currentVersion: "0.1.0" });
   });
 
-  it("does not report an update when the feed version is the same", async () => {
-    const calls: Array<{ version: string; url: string }> = [];
-    const checker = createUpdateChecker({
-      currentVersion: "0.2.0",
-      feedUrl: "https://example.com/latest.json",
-      fetch: async () =>
-        new Response(
-          JSON.stringify(makeFeed("0.2.0", "https://example.com/tab.dmg")),
-        ),
-      onUpdateAvailable: (version, url) => calls.push({ version, url }),
-    });
-
-    const result = await checker.checkForUpdates();
-
-    expect(result).toBe(false);
-    expect(calls).toHaveLength(0);
-  });
-
-  it("does not report an update when the feed cannot be reached", async () => {
-    const calls: Array<{ version: string; url: string }> = [];
-    const checker = createUpdateChecker({
+  it("publishes availability, progress, and downloaded states", async () => {
+    const nativeUpdater = new FakeUpdater();
+    const states: string[] = [];
+    const updater = createDesktopUpdater({
       currentVersion: "0.1.0",
-      feedUrl: "https://example.com/latest.json",
-      fetch: async () => new Response("not json", { status: 500 }),
-      onUpdateAvailable: (version, url) => calls.push({ version, url }),
+      nativeUpdater,
+      onChange: (state) => states.push(state.status),
     });
 
-    const result = await checker.checkForUpdates();
-
-    expect(result).toBe(false);
-    expect(calls).toHaveLength(0);
-  });
-
-  it("validates feed responses with the shared schema", () => {
-    const valid = {
+    nativeUpdater.emit("update-available", { version: "0.2.0" });
+    expect(updater.getState()).toEqual({
+      status: "available",
+      currentVersion: "0.1.0",
       version: "0.2.0",
-      url: "https://example.com/tab.dmg",
-      notes: "Bug fixes.",
+    });
+
+    await updater.downloadUpdate();
+    nativeUpdater.emit("download-progress", { percent: 42.4 });
+    nativeUpdater.emit("update-downloaded", { version: "0.2.0" });
+
+    expect(nativeUpdater.downloadCount).toBe(1);
+    expect(states).toEqual(["available", "downloading", "downloading", "downloaded"]);
+    expect(updater.getState()).toEqual({
+      status: "downloaded",
+      currentVersion: "0.1.0",
+      version: "0.2.0",
+    });
+  });
+
+  it("only installs an update after it has downloaded", () => {
+    const nativeUpdater = new FakeUpdater();
+    const updater = createDesktopUpdater({ currentVersion: "0.1.0", nativeUpdater });
+
+    expect(() => updater.quitAndInstall()).toThrow("No downloaded update is ready to install");
+    nativeUpdater.emit("update-downloaded", { version: "0.2.0" });
+    updater.quitAndInstall();
+
+    expect(nativeUpdater.installCount).toBe(1);
+  });
+
+  it("reports an up-to-date result and clamps download progress", () => {
+    const nativeUpdater = new FakeUpdater();
+    const updater = createDesktopUpdater({ currentVersion: "0.1.0", nativeUpdater });
+
+    nativeUpdater.emit("update-not-available", { version: "0.1.0" });
+    expect(updater.getState()).toEqual({ status: "not-available", currentVersion: "0.1.0" });
+
+    nativeUpdater.emit("update-available", { version: "0.2.0" });
+    nativeUpdater.emit("download-progress", { percent: 120 });
+    expect(updater.getState()).toEqual({
+      status: "downloading",
+      currentVersion: "0.1.0",
+      version: "0.2.0",
+      percent: 100,
+    });
+  });
+
+  it("publishes a retryable user-facing error", async () => {
+    const nativeUpdater = new FakeUpdater();
+    const updater = createDesktopUpdater({ currentVersion: "0.1.0", nativeUpdater });
+
+    nativeUpdater.emit("error", new Error("provider token and URL details"));
+
+    expect(updater.getState()).toEqual({
+      status: "error",
+      currentVersion: "0.1.0",
+      message: "Tab could not check for updates. Check your connection and try again.",
+    });
+
+    await updater.checkForUpdates();
+    expect(updater.getState()).toEqual({ status: "checking", currentVersion: "0.1.0" });
+  });
+
+  it("uses a download-specific error without exposing provider details", async () => {
+    const nativeUpdater = new FakeUpdater();
+    nativeUpdater.downloadUpdate = async () => {
+      throw new Error("private provider response");
     };
-    expect(DesktopReleaseFeedSchema.safeParse(valid).success).toBe(true);
-    expect(
-      DesktopReleaseFeedSchema.safeParse({
-        version: "0.2.0",
-        url: "not-a-url",
-      }).success,
-    ).toBe(false);
+    const updater = createDesktopUpdater({ currentVersion: "0.1.0", nativeUpdater });
+    nativeUpdater.emit("update-available", { version: "0.2.0" });
+
+    await expect(updater.downloadUpdate()).rejects.toThrow("private provider response");
+    expect(updater.getState()).toEqual({
+      status: "error",
+      currentVersion: "0.1.0",
+      message: "The update could not be downloaded. Check your connection and try again.",
+    });
   });
 });

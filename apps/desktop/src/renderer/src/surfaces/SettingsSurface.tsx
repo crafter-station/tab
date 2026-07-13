@@ -26,11 +26,12 @@ import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
 import type { LocalInferenceStatus } from "../../../main/local-inference-prototype";
 import type { CompletionHistoryEntry } from "../../../main/completion-history";
+import type { DesktopUpdateState } from "../../../main/release";
 import { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 import { describePauseState, describePersonalMemorySource } from "./settingsCopy";
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitialState"]>>;
-type SettingsTab = "account" | "completions" | "controls" | "appearance" | "permissions" | "memory";
+type SettingsTab = "account" | "completions" | "controls" | "appearance" | "permissions" | "memory" | "updates";
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
   { value: "account", label: "Account", description: "Plan, usage, and connection status." },
@@ -39,6 +40,7 @@ const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[
   { value: "appearance", label: "Appearance", description: "Choose how Tab looks on this Mac." },
   { value: "permissions", label: "Permissions", description: "Review the macOS access Tab needs." },
   { value: "memory", label: "Personal Memory", description: "Control saved details used in Suggestions." },
+  { value: "updates", label: "Updates", description: "Keep Tab secure and up to date." },
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
@@ -93,6 +95,25 @@ function describeLocalInference(status: LocalInferenceStatus, error: string | nu
   }
 }
 
+function describeUpdate(state: DesktopUpdateState): { label: string; description: string; tone: "brand" | "neutral" | "warning" } {
+  switch (state.status) {
+    case "idle":
+      return { label: "Ready to check", description: "Check GitHub Releases for a newer signed version of Tab.", tone: "neutral" };
+    case "checking":
+      return { label: "Checking", description: "Looking for the latest version of Tab.", tone: "neutral" };
+    case "not-available":
+      return { label: "Up to date", description: `Tab ${state.currentVersion} is the latest version.`, tone: "brand" };
+    case "available":
+      return { label: "Available", description: `Tab ${state.version} is ready to download.`, tone: "warning" };
+    case "downloading":
+      return { label: `${Math.round(state.percent)}%`, description: `Downloading Tab ${state.version}. Keep Tab open.`, tone: "brand" };
+    case "downloaded":
+      return { label: "Ready to install", description: `Restart Tab to install version ${state.version}.`, tone: "brand" };
+    case "error":
+      return { label: "Try again", description: state.message, tone: "warning" };
+  }
+}
+
 function createFallbackStatus(): DesktopStatus {
   return {
     auth: "sign_in_required",
@@ -120,9 +141,11 @@ export function SettingsSurface() {
   const [completionHistory, setCompletionHistory] = useState<readonly CompletionHistoryEntry[]>([]);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
+  const [updateState, setUpdateState] = useState<DesktopUpdateState>({ status: "idle", currentVersion: "0.0.0" });
   const activeTabConfig = SETTINGS_TABS.find((tab) => tab.value === activeTab);
   const pauseState = describePauseState(paused);
   const localInference = describeLocalInference(localInferenceStatus, modelDownloadError);
+  const update = describeUpdate(updateState);
 
   const refreshAccessibility = useCallback(async () => {
     if (!window.tab?.checkAccessibilityPermission) return false;
@@ -154,6 +177,11 @@ export function SettingsSurface() {
       receivedCompletionHistory = true;
       setCompletionHistory(entries);
     }) ?? (() => {});
+    let receivedUpdateState = false;
+    const unsubscribeUpdateState = window.tab.onUpdateStateChanged((nextState) => {
+      receivedUpdateState = true;
+      setUpdateState(nextState);
+    });
 
     window.tab
       .getInitialState()
@@ -166,6 +194,7 @@ export function SettingsSurface() {
         setCustomWritingInstructions(initialState.preferences.suggestions.customWritingInstructions);
         if (!receivedLocalInferenceStatus) setLocalInferenceStatus(initialState.localInferenceStatus);
         if (!receivedCompletionHistory) setCompletionHistory(initialState.completionHistory ?? []);
+        if (!receivedUpdateState) setUpdateState(initialState.updateState);
       })
       .catch(() => {});
 
@@ -177,6 +206,7 @@ export function SettingsSurface() {
       unsubscribePreferences();
       unsubscribeLocalInference();
       unsubscribeCompletionHistory();
+      unsubscribeUpdateState();
     };
   }, [refreshAccessibility]);
 
@@ -235,6 +265,20 @@ export function SettingsSurface() {
       await window.tab.downloadLocalModel();
     } catch {
       setModelDownloadError("The model could not be downloaded. Check your connection and try again.");
+    }
+  }
+
+  async function handleUpdateAction() {
+    try {
+      if (updateState.status === "available") {
+        await window.tab.downloadUpdate();
+      } else if (updateState.status === "downloaded") {
+        await window.tab.installUpdate();
+      } else {
+        await window.tab.checkForUpdates();
+      }
+    } catch {
+      // The main process publishes a user-facing error state.
     }
   }
 
@@ -509,6 +553,35 @@ export function SettingsSurface() {
             </SettingsGroup>
           </>
         );
+
+      case "updates": {
+        const busy = updateState.status === "checking" || updateState.status === "downloading";
+        const actionLabel = updateState.status === "available"
+          ? "Download Update"
+          : updateState.status === "downloaded"
+            ? "Restart and Install"
+            : updateState.status === "checking"
+              ? "Checking..."
+              : updateState.status === "downloading"
+                ? `Downloading ${Math.round(updateState.percent)}%`
+                : "Check for Updates";
+
+        return (
+          <SettingsGroup title="Software updates" description="Updates are downloaded from signed Tab releases on GitHub.">
+            <StatusRow
+              label="Installed version"
+              value={updateState.currentVersion}
+              description="The version currently running on this Mac."
+            />
+            <SettingsRow label="Update status" description={update.description}>
+              <StatusBadge tone={update.tone}>{update.label}</StatusBadge>
+            </SettingsRow>
+            <div className="settings-group__actions">
+              <Button disabled={busy} onClick={handleUpdateAction}>{actionLabel}</Button>
+            </div>
+          </SettingsGroup>
+        );
+      }
     }
   }
 
@@ -553,6 +626,27 @@ export function SettingsSurface() {
             </header>
 
             <div className="settings-tabs__content">
+              {["available", "downloading", "downloaded"].includes(updateState.status) ? (
+                <div className="settings-paused">
+                  <div>
+                    <strong>{updateState.status === "downloaded" ? "Update ready to install" : "A Tab update is available"}</strong>
+                    <span>{update.description}</span>
+                  </div>
+                  <Button
+                    disabled={updateState.status === "downloading"}
+                    size="sm"
+                    onClick={handleUpdateAction}
+                  >
+                    {updateState.status === "available"
+                      ? "Download Update"
+                      : updateState.status === "downloaded"
+                        ? "Restart and Install"
+                        : "percent" in updateState
+                          ? `${Math.round(updateState.percent)}%`
+                          : "Update"}
+                  </Button>
+                </div>
+              ) : null}
               {paused && activeTab !== "controls" ? (
                 <div className="settings-paused">
                   <div>

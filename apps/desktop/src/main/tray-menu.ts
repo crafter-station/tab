@@ -6,12 +6,13 @@ import {
   type NativeImage,
 } from "electron";
 import type { DesktopStatus } from "./status.ts";
+import type { DesktopUpdateState } from "./release.ts";
 
 export type TrayMenuState = {
   paused: boolean;
   auth: DesktopStatus["auth"];
   quotaExhausted: boolean;
-  updateAvailable?: boolean;
+  update: DesktopUpdateState;
 };
 
 export type TrayMenuActions = {
@@ -20,7 +21,8 @@ export type TrayMenuActions = {
   signIn(): void;
   signOut(): void;
   checkForUpdates(): void;
-  openDownloadPage(): void;
+  downloadUpdate(): void;
+  installUpdate(): void;
   quit(): void;
 };
 
@@ -37,7 +39,7 @@ const INITIAL_TRAY_STATE: TrayMenuState = {
   paused: false,
   auth: "sign_in_required",
   quotaExhausted: false,
-  updateAvailable: false,
+  update: { status: "idle", currentVersion: "0.0.0" },
 };
 
 export function createTrayMenu(deps: CreateTrayMenuDependencies): TabTray {
@@ -60,10 +62,25 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabTray {
     const isSignedIn = state.auth === "signed_in";
     const pauseLabel = state.paused ? "Resume Suggestions" : "Pause Suggestions";
     let updateItem: MenuItemConstructorOptions;
-    if (state.updateAvailable) {
+    if (state.update.status === "available") {
       updateItem = {
-        label: "Download Update...",
-        click: deps.actions.openDownloadPage,
+        label: `Download Update ${state.update.version}...`,
+        click: deps.actions.downloadUpdate,
+      };
+    } else if (state.update.status === "downloading") {
+      updateItem = {
+        label: `Downloading Update... ${Math.round(state.update.percent)}%`,
+        enabled: false,
+      };
+    } else if (state.update.status === "downloaded") {
+      updateItem = {
+        label: `Restart to Install ${state.update.version}`,
+        click: deps.actions.installUpdate,
+      };
+    } else if (state.update.status === "checking") {
+      updateItem = {
+        label: "Checking for Updates...",
+        enabled: false,
       };
     } else {
       updateItem = {

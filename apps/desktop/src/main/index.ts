@@ -6,6 +6,7 @@ import {
   ipcMain,
   screen,
   powerMonitor,
+  Notification,
   shell,
   systemPreferences,
 } from "electron";
@@ -55,12 +56,13 @@ import { createOnboardingWindowManager } from "./onboarding-window.ts";
 import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
-import { createUpdateChecker } from "./release.ts";
+import { createDesktopUpdater } from "./release.ts";
 import { createLocalInferencePrototype, QWEN_25_3B_Q4_K_M } from "./local-inference-prototype.ts";
 import { createCompletionHistory } from "./completion-history.ts";
 import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
+import { autoUpdater } from "electron-updater";
 
 let authCallbackHandlingReady = false;
 const pendingAuthCallbackUrls: string[] = [];
@@ -269,20 +271,31 @@ const memoryExtractionDispatcher = createMemoryExtractionDispatcher({
   },
 });
 
-let updateAvailable = false;
-
 const authSession = createDesktopAuthSession({
   authClient,
   onSignedOut: showSignedOutSurface,
 });
 
-const updateChecker = createUpdateChecker({
+const notifiedUpdateVersions = new Set<string>();
+const desktopUpdater = createDesktopUpdater({
   currentVersion: APP_VERSION,
-  feedUrl: `${WEB_BASE_URL}/download/latest.json`,
-  onUpdateAvailable: () => {
-    updateAvailable = true;
+  nativeUpdater: autoUpdater,
+  onChange: (state) => {
+    settingsWindowManager.sendUpdateState(state);
     updateTray();
+    if (state.status === "available" && !notifiedUpdateVersions.has(state.version)) {
+      notifiedUpdateVersions.add(state.version);
+      if (Notification.isSupported()) {
+        const notification = new Notification({
+          title: "Tab update available",
+          body: `Version ${state.version} is ready to download.`,
+        });
+        notification.on("click", () => settingsWindowManager.show());
+        notification.show();
+      }
+    }
   },
+  onError: (error) => console.error("Desktop updater error:", error),
 });
 
 const statusService = createDesktopStatusService({
@@ -540,7 +553,7 @@ function createTrayState(status: DesktopStatus) {
     paused: nativeAutocompleteApp.isPaused(),
     auth: status.auth,
     quotaExhausted: false,
-    updateAvailable,
+    update: desktopUpdater.getState(),
   };
 }
 
@@ -1047,7 +1060,8 @@ function clearContextAndHide(): void {
 }
 
 function checkForUpdates(errorMessage: string): void {
-  updateChecker.checkForUpdates().catch((error) => {
+  if (!app.isPackaged) return;
+  desktopUpdater.checkForUpdates().catch((error) => {
     console.error(errorMessage, error);
   });
 }
@@ -1194,6 +1208,25 @@ async function bootstrap(): Promise<void> {
     togglePause().catch((error) => console.error("Failed to toggle pause:", error));
   });
   ipcMain.handle("download-local-model", () => localInference.downloadModel());
+  ipcMain.handle("check-for-updates", (event) => {
+    if (!settingsWindowManager.ownsFrame(event.senderFrame)) {
+      throw new Error("Update controls are only available from the control window");
+    }
+    if (!app.isPackaged) return;
+    return desktopUpdater.checkForUpdates();
+  });
+  ipcMain.handle("download-update", (event) => {
+    if (!settingsWindowManager.ownsFrame(event.senderFrame)) {
+      throw new Error("Update controls are only available from the control window");
+    }
+    return desktopUpdater.downloadUpdate();
+  });
+  ipcMain.handle("install-update", (event) => {
+    if (!settingsWindowManager.ownsFrame(event.senderFrame)) {
+      throw new Error("Update controls are only available from the control window");
+    }
+    desktopUpdater.quitAndInstall();
+  });
 
   ipcMain.on("delete-memory", (_event, id: string) => {
     memoryClient
@@ -1223,6 +1256,7 @@ async function bootstrap(): Promise<void> {
     preferences: preferencesManager.get(),
     localInferenceStatus: localInference.getStatus(),
     completionHistory: completionHistory.getEntries(),
+    updateState: desktopUpdater.getState(),
   }));
 
   // Packaged macOS builds declare this scheme in electron-builder.yml. During
@@ -1263,11 +1297,12 @@ async function bootstrap(): Promise<void> {
       checkForUpdates: () => {
         checkForUpdates("Failed to check for updates:");
       },
-      openDownloadPage: () => {
-        shell.openExternal(`${WEB_BASE_URL}/download`).catch((error) => {
-          console.error("Failed to open download page:", error);
+      downloadUpdate: () => {
+        desktopUpdater.downloadUpdate().catch((error) => {
+          console.error("Failed to download update:", error);
         });
       },
+      installUpdate: () => desktopUpdater.quitAndInstall(),
       quit: () => app.quit(),
     },
   });

@@ -98,11 +98,13 @@ export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 
 ## Update behavior
 
-1. Publish a new version by updating `apps/desktop/package.json` version and `TAB_DESKTOP_LATEST_VERSION`.
-2. Build and upload the new DMG to `TAB_MAC_DOWNLOAD_URL`.
-3. Launch the old build and select **Check for Updates** from the tray menu (or wait for the periodic hourly check).
-4. The tray should show **Update Available**; selecting it opens `/download` in the default browser.
-5. Confirm the download page links to the latest DMG and that `/download/latest.json` returns the new version.
+1. Publish a new version by updating `apps/desktop/package.json`. Update `TAB_DESKTOP_LATEST_VERSION` separately for the public web download feed.
+2. Confirm the GitHub release contains the DMG, ZIP, ZIP blockmap, and `latest-mac.yml`. The release workflow publishes these together from a draft.
+3. Launch the previous installed build and select **Check for Updates** from the tray menu (or wait for the periodic hourly check).
+4. Confirm the tray and **Settings > Updates** show the new version without downloading it automatically.
+5. Select **Download Update**, confirm progress appears, and keep using the app while the ZIP downloads.
+6. Select **Restart and Install**, then confirm Tab relaunches on the new version. Also verify that postponing the restart installs the downloaded update on the next normal quit.
+7. Confirm the public download page still links to the stable `Tab.dmg` asset and `/download/latest.json` reports the current public version.
 
 ## Post-release
 
@@ -119,4 +121,4 @@ git tag v0.1.0
 git push origin v0.1.0
 ```
 
-`.github/workflows/release-desktop.yml` validates the tag, runs the full checks, builds a universal app, signs and notarizes it, verifies Gatekeeper and stapling, and creates the GitHub release. Missing signing secrets fail the workflow before packaging or publishing.
+`.github/workflows/release-desktop.yml` validates the tag, runs the full checks, builds a universal app, signs and notarizes it, verifies Gatekeeper and stapling, creates a draft GitHub release with the installer and updater metadata, and publishes the release only after every asset uploads. Missing signing secrets fail the workflow before packaging or publishing.

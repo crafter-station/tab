@@ -38,4 +38,8 @@ export { createLocalAcceptanceUsageClient } from "./main/usage-client.ts";
 export { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "./main/app-context.ts";
 export { createOnboardingManager, ONBOARDING_PERMISSIONS_COPY, type OnboardingPreferences } from "./main/onboarding.ts";
 export { createPreferencesManager, createMemoryPreferencesStorage, type DesktopPreferences } from "./main/preferences.ts";
-export { createUpdateChecker, type UpdateChecker } from "./main/release.ts";
+export {
+  createDesktopUpdater,
+  type DesktopUpdater,
+  type DesktopUpdateState,
+} from "./main/release.ts";

@@ -34,4 +34,7 @@ mac:
 dmg:
   sign: false
 afterSign: scripts/notarize.cjs
-publish: null
+publish:
+  provider: github
+  owner: crafter-station
+  repo: tab

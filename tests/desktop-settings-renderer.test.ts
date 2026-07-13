@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { describePauseState, describePersonalMemorySource } from "../apps/desktop/src/renderer/src/surfaces/settingsCopy";
+import { readFileSync } from "node:fs";
 
 describe("desktop settings renderer", () => {
   it("uses plain-language pause copy for suggestions", () => {
@@ -19,5 +20,19 @@ describe("desktop settings renderer", () => {
   it("uses plain-language memory row sources", () => {
     expect(describePersonalMemorySource("user")).toBe("Created by you");
     expect(describePersonalMemorySource("system")).toBe("Learned from accepted writing");
+  });
+
+  it("offers user-controlled update download and installation", () => {
+    const source = readFileSync(
+      "apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx",
+      "utf8",
+    );
+
+    expect(source).toInclude('label: "Updates"');
+    expect(source).toInclude("Download Update");
+    expect(source).toInclude("Restart and Install");
+    expect(source).toInclude("A Tab update is available");
+    expect(source).toInclude("window.tab.downloadUpdate()");
+    expect(source).toInclude("window.tab.installUpdate()");
   });
 });
