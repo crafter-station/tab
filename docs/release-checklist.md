@@ -9,6 +9,14 @@ This checklist covers producing a signed, notarized, direct-download macOS build
 - Apple ID, app-specific password, and Team ID for notarization.
 - `TAB_MAC_DOWNLOAD_URL` and `TAB_DESKTOP_LATEST_VERSION` set for the web surface.
 
+For GitHub releases, configure these Actions secrets:
+
+- `MACOS_CERTIFICATE`: base64-encoded Developer ID Application `.p12` certificate.
+- `MACOS_CERTIFICATE_PASSWORD`: password for the `.p12` certificate.
+- `APPLE_ID`: Apple Developer account email.
+- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password used by `notarytool`.
+- `APPLE_TEAM_ID`: Apple Developer team ID.
+
 ## Environment variables
 
 ```sh
@@ -36,10 +44,8 @@ export TAB_DESKTOP_LATEST_VERSION="0.1.0"
    bun run dist:mac
    ```
 4. Verify artifacts exist in `apps/desktop/release/`:
-   - `Tab-0.1.0-x64.dmg`
-   - `Tab-0.1.0-arm64.dmg`
-   - `Tab-0.1.0-x64.zip`
-   - `Tab-0.1.0-arm64.zip`
+   - `Tab-0.1.0-universal.dmg`
+   - `Tab-0.1.0-universal.zip`
 
 ## Signing and notarization
 
@@ -59,7 +65,7 @@ export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 
 ## Download surface
 
-1. Upload the DMG artifact to the location configured in `TAB_MAC_DOWNLOAD_URL`.
+1. Upload the universal DMG as both its versioned filename and `Tab.dmg`. The stable production URL is `https://github.com/crafter-station/tab/releases/latest/download/Tab.dmg`.
 2. Confirm the web download page shows the current version:
    ```sh
    curl -I https://tab.app/download/tab.dmg
@@ -103,3 +109,14 @@ export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 - Tag the release in Git.
 - Attach the DMG and ZIP artifacts to the GitHub release notes.
 - Note any blockers or follow-ups in the release issue.
+
+## GitHub release workflow
+
+After the required Actions secrets are configured, publish a release by pushing a tag that matches the desktop package version:
+
+```sh
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+`.github/workflows/release-desktop.yml` validates the tag, runs the full checks, builds a universal app, signs and notarizes it, verifies Gatekeeper and stapling, and creates the GitHub release. Missing signing secrets fail the workflow before packaging or publishing.

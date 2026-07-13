@@ -31,6 +31,7 @@ import {
 export type WebAppConfig = {
   apiBaseUrl: string;
   fetch?: typeof globalThis.fetch;
+  assets?: { fetch(request: Request): Promise<Response> };
   appName?: string;
   macDownloadUrl?: string;
   latestVersion?: string;
@@ -104,6 +105,15 @@ function json(body: unknown, status = 200): Response {
     status,
     headers: { "content-type": "application/json; charset=utf-8" },
   });
+}
+
+function isPublicAsset(path: string): boolean {
+  return path === "/styles.css" ||
+    path === "/marketing-demo.js" ||
+    path.startsWith("/assets/") ||
+    path.startsWith("/brand/") ||
+    path.startsWith("/files/") ||
+    path.startsWith("/logos/");
 }
 
 async function stylesheet(): Promise<Response> {
@@ -781,6 +791,10 @@ export function createWebApp(config: WebAppConfig) {
       const path = url.pathname;
       const cookieHeader = request.headers.get("cookie") ?? undefined;
 
+      if (request.method === "GET" && config.assets && isPublicAsset(path)) {
+        return config.assets.fetch(request);
+      }
+
       if (path === "/styles.css" && request.method === "GET") {
         return stylesheet();
       }
@@ -986,10 +1000,11 @@ export function createWebApp(config: WebAppConfig) {
 
 export type WebApp = ReturnType<typeof createWebApp>;
 
-const devServerApp = createWebApp({
-  apiBaseUrl: env.TAB_API_BASE_URL,
-});
-
 export default {
-  fetch: devServerApp.fetch,
+  fetch(request: Request, runtimeEnv?: { ASSETS?: { fetch(request: Request): Promise<Response> }; TAB_API_BASE_URL?: string }) {
+    return createWebApp({
+      apiBaseUrl: runtimeEnv?.TAB_API_BASE_URL ?? env.TAB_API_BASE_URL,
+      assets: runtimeEnv?.ASSETS,
+    }).fetch(request);
+  },
 };

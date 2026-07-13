@@ -10,6 +10,7 @@ files:
 asarUnpack:
   - dist/macos-input-tap
 mac:
+  icon: ../web/public/brand/tab-mark.png
   category: public.app-category.productivity
   protocols:
     - name: Tab
@@ -18,12 +19,10 @@ mac:
   target:
     - target: dmg
       arch:
-        - x64
-        - arm64
+        - universal
     - target: zip
       arch:
-        - x64
-        - arm64
+        - universal
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist

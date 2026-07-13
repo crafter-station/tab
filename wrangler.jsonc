@@ -4,6 +4,19 @@
   "main": "apps/api/src/worker.ts",
   "compatibility_date": "2026-07-07",
   "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "api.tab.cueva.io",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "BETTER_AUTH_URL": "https://api.tab.cueva.io",
+    "TAB_WEB_BASE_URL": "https://tab.cueva.io",
+    "POLAR_CHECKOUT_SUCCESS_URL": "https://tab.cueva.io/dashboard",
+    "POLAR_SERVER": "sandbox",
+    "POLAR_SEND_ORGANIZATION_ID": "false"
+  },
   "d1_databases": [
     {
       "binding": "DB",

@@ -3,7 +3,7 @@ import { z } from "zod";
 
 export const env = createEnv({
   server: {
-    TAB_API_BASE_URL: z.url().default("http://localhost:8787"),
+    TAB_API_BASE_URL: z.url().default("https://api.tab.cueva.io"),
     TAB_APP_RENDERER_PATH: z.string().optional(),
     TAB_DEBUG_TYPING_OVERLAY: z.enum(["0", "1"]).optional(),
     TAB_DEVICE_ID: z.string().optional(),
@@ -16,7 +16,7 @@ export const env = createEnv({
     TAB_PRELOAD_PATH: z.string().optional(),
     TAB_SHOW_SETTINGS_ON_START: z.enum(["0", "1"]).default("0"),
     TAB_TRAY_ICON_PATH: z.string().optional(),
-    TAB_WEB_BASE_URL: z.url().default("http://localhost:3000"),
+    TAB_WEB_BASE_URL: z.url().default("https://tab.cueva.io"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

@@ -9,8 +9,21 @@ describe("Desktop release packaging", () => {
     expect(config).toInclude("hardenedRuntime: true");
     expect(config).toInclude("gatekeeperAssess: false");
     expect(config).toInclude("entitlements: build/entitlements.mac.plist");
+    expect(config).toInclude("icon: ../web/public/brand/tab-mark.png");
+    expect(config).toInclude("- universal");
+    expect(config).toInclude('artifactName: "${productName}-${version}-${arch}.${ext}"');
     expect(config).toInclude("protocols:");
     expect(config).toInclude("- tab");
+  });
+
+  it("publishes signed tags with a stable universal download asset", async () => {
+    const workflow = await Bun.file(".github/workflows/release-desktop.yml").text();
+    expect(workflow).toInclude("tags:");
+    expect(workflow).toInclude('"v*"');
+    expect(workflow).toInclude("MACOS_CERTIFICATE");
+    expect(workflow).toInclude("APPLE_APP_SPECIFIC_PASSWORD");
+    expect(workflow).toInclude("Tab.dmg");
+    expect(workflow).toInclude("gh release create");
   });
 
   it("has macOS entitlements that do not request Screen Recording or Full Disk Access", async () => {
@@ -29,6 +42,12 @@ describe("Desktop release packaging", () => {
     expect(script).toInclude("notarize");
     expect(script).toInclude("APPLE_ID");
     expect(script).toInclude("APPLE_TEAM_ID");
+  });
+
+  it("defaults packaged builds to the production web and API origins", async () => {
+    const source = await Bun.file("apps/desktop/src/main/env.ts").text();
+    expect(source).toInclude('TAB_API_BASE_URL: z.url().default("https://api.tab.cueva.io")');
+    expect(source).toInclude('TAB_WEB_BASE_URL: z.url().default("https://tab.cueva.io")');
   });
 });
 

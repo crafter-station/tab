@@ -1,0 +1,26 @@
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "tab-web",
+  "main": "dist/server/server.js",
+  "compatibility_date": "2026-07-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "tab.cueva.io",
+      "custom_domain": true
+    }
+  ],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "dist/client",
+    "run_worker_first": true
+  },
+  "vars": {
+    "TAB_API_BASE_URL": "https://api.tab.cueva.io",
+    "TAB_MAC_DOWNLOAD_URL": "https://github.com/crafter-station/tab/releases/latest/download/Tab.dmg",
+    "TAB_DESKTOP_LATEST_VERSION": "0.1.0"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
