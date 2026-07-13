@@ -1131,9 +1131,16 @@ export class PersonalMemoryService {
         tokenMemories,
         this.maxRelevantMemories,
       );
-    } catch {
-      // Memory retrieval is best-effort on the hot suggestion path.
-      return [];
+    } catch (error) {
+      console.warn("[memory] vector retrieval failed; using lexical fallback", {
+        userId: input.userId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return selectTokenRelevantMemories(
+        await this.storage.listMemoriesByUser(input.userId),
+        input,
+        this.maxRelevantMemories,
+      );
     }
   }
 

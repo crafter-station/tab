@@ -408,21 +408,27 @@ describe("SuggestionUseCase", () => {
     expect(capturedInput?.memories).toEqual([]);
   });
 
-  it("does not let stalled memory retrieval block suggestion generation", async () => {
+  it("waits for remote memory retrieval before generating a cloud suggestion", async () => {
     let capturedInput: SuggestionInput | null = null;
     const { billingService, personalMemoryService, useCase } = createUseCase(async (input) => {
       capturedInput = input;
       return { text: " world", modelId: "test-model" };
     });
-    personalMemoryService.selectRelevantMemories = () => new Promise(() => {});
+    const memory = await personalMemoryService.createMemory({
+      userId: "user-1",
+      content: "My name is Anthony",
+      createdBy: "user",
+    });
+    personalMemoryService.selectRelevantMemories = async () => {
+      await new Promise((resolve) => setTimeout(resolve, 550));
+      return [memory];
+    };
     await activateFreePlan(billingService);
 
-    const startedAt = performance.now();
     const result = await useCase.handle(validDevice, validRequest);
 
     expect(result.ok).toBe(true);
-    expect(capturedInput?.memories).toEqual([]);
-    expect(performance.now() - startedAt).toBeLessThan(100);
+    expect(capturedInput?.memories).toEqual([memory]);
   });
 
   it("formats App Context as background while preserving the exact draft", () => {

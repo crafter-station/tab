@@ -31,7 +31,6 @@ import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
 
 const SUGGESTION_MODEL_ID = "llama-3.1-8b-instant";
-const MEMORY_RETRIEVAL_BUDGET_MS = 35;
 
 export { createSuggestionPrompt, MAX_SUGGESTION_LENGTH, normalizeGeneratedSuggestion };
 
@@ -72,20 +71,6 @@ export type SuggestionUseCaseOptions = {
   readonly waitUntil?: (promise: Promise<unknown>) => void;
 };
 
-async function withDeadline<T>(promise: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      promise,
-      new Promise<T>((resolve) => {
-        timer = setTimeout(resolve, timeoutMs, fallback);
-      }),
-    ]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 export function createRealSuggestionGenerator(): SuggestionGenerator {
   const apiKey = env.GROQ_API_KEY;
   const modelId = SUGGESTION_MODEL_ID;
@@ -95,7 +80,14 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
+    const prompt = createSuggestionPrompt(input);
     const [systemMessage, ...messages] = createSuggestionMessages(input);
+    console.log("[suggestions] groq request prompt", {
+      requestId: input.requestId,
+      modelId,
+      prompt,
+    });
+
     const { text } = await generateText({
       model: groq(modelId),
       instructions: systemMessage?.content,
@@ -108,14 +100,16 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       input.typingContext,
       text,
     );
+    console.log("[suggestions] groq response", {
+      requestId: input.requestId,
+      modelId,
+      rawOutput: text,
+      normalizedOutput: suggestionText,
+    });
+
     if (!isSuggestionContractValid(input.typingContext, suggestionText)) {
       return null;
     }
-    console.log("[suggestions] groq generated suggestion", {
-      requestId: input.requestId,
-      modelId,
-      text: suggestionText,
-    });
 
     return {
       text: suggestionText,
@@ -295,23 +289,25 @@ export class SuggestionUseCase {
     }
 
     try {
-      const retrieval = this.deps.personalMemoryService.selectRelevantMemories({
+      const retrievalStartedAt = performance.now();
+      const memories = await this.deps.personalMemoryService.selectRelevantMemories({
         userId: device.userId,
         typingContext: request.typingContext,
         activeApplication: request.activeApplication,
         memoryEnabled: true,
       });
-      const memories = await withDeadline(retrieval, MEMORY_RETRIEVAL_BUDGET_MS, []);
       console.log("[suggestions] memory selected", {
         requestId: request.requestId,
         count: memories.length,
+        latencyMs: Math.round(performance.now() - retrievalStartedAt),
       });
       return memories;
-    } catch {
+    } catch (error) {
       // Memory retrieval is best-effort; suggestions continue without memory.
-      console.log("[suggestions] memory skipped", {
+      console.warn("[suggestions] memory skipped", {
         requestId: request.requestId,
         reason: "retrieval_failed",
+        error: error instanceof Error ? error.message : String(error),
       });
       return [];
     }

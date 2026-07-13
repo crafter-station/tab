@@ -3111,7 +3111,7 @@ describe("Personal Memory API", () => {
     expect(extractionModelCalls).toBe(0);
   });
 
-  it("continues suggestions without memory when vector retrieval fails", async () => {
+  it("uses lexical memory retrieval when vector retrieval fails", async () => {
     let capturedInput: SuggestionInput | null = null;
     const embeddingService = new FakeEmbeddingService();
     const vectorIndex = new FakeVectorIndex();
@@ -3125,7 +3125,7 @@ describe("Personal Memory API", () => {
         { embeddingService, vectorIndex },
       );
 
-    await personalMemoryStorage.createMemory({
+    const memory = await personalMemoryStorage.createMemory({
       userId: "user-1",
       content: "Acme Corp is a customer",
       createdBy: "system",
@@ -3138,7 +3138,7 @@ describe("Personal Memory API", () => {
     });
 
     expect(response.status).toBe(200);
-    expect(capturedInput?.memories).toEqual([]);
+    expect(capturedInput?.memories.map((item) => item.id)).toEqual([memory.id]);
   });
 
   it("matches relevant memories without requiring exact accent marks", async () => {
