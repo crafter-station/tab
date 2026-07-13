@@ -70,8 +70,9 @@
 }
 
 .tab-app-marquee-viewport {
-  -webkit-mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
-  mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
+  color: var(--foreground);
+  -webkit-mask-image: linear-gradient(to right, transparent, currentColor 7%, currentColor 93%, transparent);
+  mask-image: linear-gradient(to right, transparent, currentColor 7%, currentColor 93%, transparent);
 }
 
 .tab-app-marquee-track {
@@ -79,11 +80,17 @@
   will-change: transform;
 }
 
+.tab-app-icon-glyph {
+  background: var(--tab-app-icon-foreground);
+  -webkit-mask: var(--tab-app-icon-mask) center / contain no-repeat;
+  mask: var(--tab-app-icon-mask) center / contain no-repeat;
+}
+
 .tab-workflow-map {
   background-image:
-    radial-gradient(circle at 50% 48%, color-mix(in srgb, var(--card) 94%, transparent) 0, transparent 62%),
-    linear-gradient(color-mix(in srgb, var(--border) 58%, transparent) 1px, transparent 1px),
-    linear-gradient(90deg, color-mix(in srgb, var(--border) 58%, transparent) 1px, transparent 1px);
+    radial-gradient(circle at 50% 48%, var(--tab-illustration-wash) 0, transparent 62%),
+    linear-gradient(var(--tab-illustration-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--tab-illustration-grid-line) 1px, transparent 1px);
   background-size: auto, 3rem 3rem, 3rem 3rem;
 }
 
@@ -92,7 +99,7 @@
 }
 
 .tab-workflow-signal {
-  filter: drop-shadow(0 0 4px color-mix(in srgb, var(--foreground) 35%, transparent));
+  filter: drop-shadow(0 0 4px var(--tab-illustration-signal));
 }
 
 .tab-workflow-completion {
@@ -124,8 +131,8 @@
 
 .tab-showcase-canvas {
   background-image:
-    radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--card) 92%, transparent) 0, transparent 68%),
-    radial-gradient(color-mix(in srgb, var(--foreground) 11%, transparent) 0.75px, transparent 0.75px);
+    radial-gradient(circle at 50% 50%, var(--tab-showcase-wash) 0, transparent 68%),
+    radial-gradient(var(--tab-showcase-dot) 0.75px, transparent 0.75px);
   background-size: auto, 0.85rem 0.85rem;
 }
 

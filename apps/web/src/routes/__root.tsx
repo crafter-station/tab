@@ -1,6 +1,6 @@
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from "@tanstack/react-router";
 import "../styles.css";
-import { Button } from "@tab/ui";
+import { Button, PLATFORM_COLORS } from "@tab/ui";
 import { SiteFooter, SiteHeader } from "../components/site-shell.tsx";
 import { ThemeModeToggle } from "../components/theme-mode-toggle.tsx";
 import { ThemeProvider } from "../components/theme-provider.tsx";
@@ -12,8 +12,8 @@ function RootComponent() {
     <html lang="en" suppressHydrationWarning>
       <head>
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#f2f3f0" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#171917" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content={PLATFORM_COLORS.theme.light.background} media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content={PLATFORM_COLORS.theme.dark.background} media="(prefers-color-scheme: dark)" />
         <HeadContent />
       </head>
       <body className="tab-web">

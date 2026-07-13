@@ -61,6 +61,7 @@ describe("Private Utility Grid documentation and styling contract", () => {
     expect(desktopCss).not.toContain("--text-subtle");
     expect(dashboardSource).not.toContain("amber-");
     expect(desktopCss).toInclude("--tab-grid-bg");
-    expect(desktopCss).toInclude("--tab-shadow-soft");
+    expect(desktopCss).toInclude("--tab-scrollbar-thumb");
+    expect(desktopCss).not.toContain("color-mix(");
   });
 });

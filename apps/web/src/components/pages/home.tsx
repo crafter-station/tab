@@ -12,6 +12,7 @@ import {
 } from "@phosphor-icons/react";
 import { planCapabilities } from "@tab/billing";
 import { SuggestionCommand, buttonVariants, cn } from "@tab/ui";
+import type { CSSProperties } from "react";
 import { PageKicker, formatCount, formatMonthlyPrice, formatUsd } from "./shared.tsx";
 
 const appLogos = [
@@ -28,6 +29,17 @@ const appLogos = [
   { name: "Obsidian", src: "/logos/obsidian.svg" },
   { name: "Zed", src: "/logos/zed.svg" },
 ] as const;
+
+function AppIcon({ src, className, glyphClassName }: { src: string; className: string; glyphClassName: string }) {
+  return (
+    <span className={cn("grid place-items-center bg-[var(--tab-app-icon-bg)]", className)} aria-hidden="true">
+      <span
+        className={cn("tab-app-icon-glyph block", glyphClassName)}
+        style={{ "--tab-app-icon-mask": `url("${src}")` } as CSSProperties}
+      />
+    </span>
+  );
+}
 
 const steps = [
   {
@@ -148,7 +160,7 @@ function AutocompleteDemo() {
       <div className="flex gap-2 border-b border-border p-3" role="tablist" aria-label="Choose an app example">
         {(["mail", "slack", "notes"] as const).map((app, index) => (
           <button className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border border-border bg-background px-3 py-1.5 text-xs font-semibold capitalize transition-[background-color,border-color,color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-demo-target={app} id={`demo-tab-${app}`} key={app} tabIndex={index === 0 ? 0 : -1} type="button" role="tab" aria-controls={`demo-panel-${app}`} aria-selected={index === 0}>
-            <span className="grid size-5 place-items-center rounded-sm bg-white" aria-hidden="true"><img className="size-3" src={app === "slack" ? "/logos/slack.svg" : "/logos/apple.svg"} alt="" /></span>
+            <AppIcon className="size-5 rounded-sm" glyphClassName="size-3" src={app === "slack" ? "/logos/slack.svg" : "/logos/apple.svg"} />
             {app}
           </button>
         ))}
@@ -225,7 +237,7 @@ function AppMarquee() {
             <div className={cn("flex items-center gap-7 pr-7", duplicate ? "tab-app-marquee-copy" : "tab-app-marquee-group")} aria-hidden={duplicate || undefined} key={String(duplicate)}>
               {appLogos.map((app) => (
                 <div className="flex items-center gap-3 whitespace-nowrap text-sm font-semibold" key={app.name}>
-                  <span className="grid size-9 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src={app.src} alt="" /></span>
+                  <AppIcon className="size-9 rounded-[var(--radius-media)] border border-border" glyphClassName="size-4" src={app.src} />
                   {app.name}
                 </div>
               ))}
@@ -267,7 +279,7 @@ function WorkflowMap() {
 
         {[{ name: "Mail", src: "/logos/apple.svg", side: "left-[7%]" }, { name: "Slack", src: "/logos/slack.svg", side: "right-[7%]" }].map((app) => (
           <div className={cn("absolute top-[40%] flex w-[28%] max-w-40 items-center gap-2 rounded-[var(--radius-card)] border border-border bg-card p-2.5 shadow-[var(--tab-shadow-card)] sm:gap-3 sm:p-3", app.side)} key={app.name}>
-            <span className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src={app.src} alt="" /></span>
+            <AppIcon className="size-8 shrink-0 rounded-[var(--radius-media)] border border-border" glyphClassName="size-4" src={app.src} />
             <span className="min-w-0"><span className="block truncate text-sm font-bold">{app.name}</span><span className="hidden truncate text-xs text-muted-foreground min-[460px]:block">Active app</span></span>
           </div>
         ))}

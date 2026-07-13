@@ -29,6 +29,7 @@
         "@react-email/render": "^2.0.10",
         "@tab/billing": "workspace:*",
         "@tab/suggestion-policy": "workspace:*",
+        "@tab/ui": "workspace:*",
         "ai": "^7.0.15",
         "better-auth": "^1.6.23",
         "drizzle-orm": "^0.45.2",
@@ -101,7 +102,9 @@
     "packages/contracts": {
       "name": "@tab/contracts",
       "dependencies": {
+        "@tab/billing": "workspace:*",
         "@tab/memory-policy": "workspace:*",
+        "zod": "^4.4.3",
       },
     },
     "packages/effect-services": {

@@ -21,7 +21,7 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
-      "tab-sheet-overlay fixed inset-0 z-50 bg-black/80",
+      "tab-sheet-overlay fixed inset-0 z-50 bg-[var(--tab-scrim)]",
       className
     )}
     {...props}
@@ -31,7 +31,7 @@ const SheetOverlay = React.forwardRef<
 SheetOverlay.displayName = SheetPrimitive.Overlay.displayName
 
 const sheetVariants = cva(
-  "tab-sheet-content fixed z-50 gap-4 bg-background p-6 shadow-lg",
+  "tab-sheet-content fixed z-50 gap-4 bg-background p-6 shadow-[var(--tab-shadow-window)]",
   {
     variants: {
       side: {

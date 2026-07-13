@@ -194,7 +194,7 @@ summary {
   gap: 14px;
   padding: 20px 24px 26px;
   overflow: auto;
-  scrollbar-color: color-mix(in srgb, var(--foreground) 18%, transparent) transparent;
+  scrollbar-color: var(--tab-scrollbar-thumb) transparent;
   scrollbar-width: thin;
 }
 
@@ -236,7 +236,7 @@ summary {
   gap: 16px;
   padding: 11px 12px 11px 14px;
   background: var(--tab-warning-tint);
-  border: 1px solid color-mix(in srgb, var(--warning) 28%, transparent);
+  border: 1px solid var(--tab-warning-border);
   border-radius: var(--radius-card);
 }
 

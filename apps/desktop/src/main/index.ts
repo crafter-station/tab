@@ -14,6 +14,7 @@ import { fileURLToPath } from "node:url";
 import { exec, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { promisify } from "node:util";
+import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import {
   createTypingContextBuffer,
   getLastWords,
@@ -787,7 +788,7 @@ function createOverlayWindow(): BrowserWindow {
     fullscreenable: false,
     hiddenInMissionControl: true,
     type: process.platform === "darwin" ? "panel" : undefined,
-    backgroundColor: "#00000000",
+    backgroundColor: PLATFORM_COLORS.transparentWindow,
     webPreferences: {
       preload: PRELOAD_PATH,
       contextIsolation: true,
@@ -824,7 +825,7 @@ function createDebugOverlayWindow(): BrowserWindow {
     fullscreenable: false,
     hiddenInMissionControl: true,
     type: process.platform === "darwin" ? "panel" : undefined,
-    backgroundColor: "#00000000",
+    backgroundColor: PLATFORM_COLORS.transparentWindow,
     webPreferences: {
       preload: PRELOAD_PATH,
       contextIsolation: true,

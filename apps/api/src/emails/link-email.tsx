@@ -9,6 +9,7 @@ import {
   Text,
 } from "@react-email/components";
 import { render } from "@react-email/render";
+import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 
 type LinkEmailProps = {
   message: string;
@@ -44,7 +45,8 @@ export function renderLinkEmail(props: LinkEmailProps): Promise<string> {
 }
 
 const body = {
-  color: "#141414",
+  backgroundColor: PLATFORM_COLORS.theme.light.background,
+  color: PLATFORM_COLORS.theme.light.foreground,
   fontFamily:
     '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   lineHeight: "1.5",
@@ -66,22 +68,22 @@ const buttonSection = {
 };
 
 const button = {
-  backgroundColor: "#141414",
+  backgroundColor: PLATFORM_COLORS.theme.light.primary,
   borderRadius: "8px",
-  color: "#ffffff",
+  color: PLATFORM_COLORS.theme.light.primaryForeground,
   display: "inline-block",
   padding: "10px 14px",
   textDecoration: "none",
 };
 
 const fallbackText = {
-  color: "#666666",
+  color: PLATFORM_COLORS.theme.light.mutedForeground,
   fontSize: "14px",
   margin: "0 0 4px",
 };
 
 const linkText = {
-  color: "#666666",
+  color: PLATFORM_COLORS.theme.light.mutedForeground,
   fontSize: "14px",
   margin: "0",
   wordBreak: "break-all" as const,

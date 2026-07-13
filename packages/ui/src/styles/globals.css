@@ -34,6 +34,14 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
+  --color-sidebar: var(--tab-sidebar);
+  --color-sidebar-foreground: var(--foreground);
+  --color-sidebar-primary: var(--primary);
+  --color-sidebar-primary-foreground: var(--primary-foreground);
+  --color-sidebar-accent: var(--accent);
+  --color-sidebar-accent-foreground: var(--accent-foreground);
+  --color-sidebar-border: var(--border);
+  --color-sidebar-ring: var(--ring);
   --radius-sm: var(--radius-control);
   --radius-md: var(--radius-media);
   --radius-lg: var(--radius-card);
@@ -48,9 +56,9 @@
   --background: #f2f3f0;
   --foreground: #1a1c1a;
   --card: #fbfcf9;
-  --card-foreground: #1a1c1a;
+  --card-foreground: var(--foreground);
   --popover: #ffffff;
-  --popover-foreground: #1a1c1a;
+  --popover-foreground: var(--foreground);
   --primary: #c83f00;
   --primary-hover: #b93a00;
   --primary-foreground: #fffaf7;
@@ -85,7 +93,7 @@
   --tab-emphasis-tint: rgba(200, 63, 0, 0.12);
   --tab-canvas: #eef0ec;
   --tab-sidebar: #e9ebe7;
-  --tab-surface-raised: #fbfcf9;
+  --tab-surface-raised: var(--card);
   --tab-surface-sunken: #eceeea;
   --tab-hover: rgba(26, 28, 26, 0.055);
   --tab-active: var(--tab-emphasis-tint);
@@ -98,13 +106,17 @@
   --tab-shadow-control: 0 1px 1px rgba(28, 31, 27, 0.05);
   --tab-shadow-card: 0 1px 2px rgba(28, 31, 27, 0.05), 0 8px 24px rgba(28, 31, 27, 0.06);
   --tab-shadow-window: 0 24px 64px rgba(28, 31, 27, 0.14), 0 2px 8px rgba(28, 31, 27, 0.08);
-  --tab-shadow-soft: var(--tab-shadow-card);
+  --tab-scrim: rgba(0, 0, 0, 0.8);
+  --tab-app-icon-bg: #ffffff;
+  --tab-app-icon-foreground: #000000;
+  --tab-inline-suggestion-text: CanvasText;
   --tab-overlay-bg: rgba(30, 32, 29, 0.94);
   --tab-overlay-border: rgba(255, 255, 255, 0.14);
   --tab-overlay-text: rgba(255, 255, 252, 0.94);
   --tab-overlay-muted: rgba(255, 255, 252, 0.58);
   --tab-overlay-key-bg: rgba(255, 255, 255, 0.09);
   --tab-overlay-divider: rgba(255, 255, 255, 0.11);
+  --tab-overlay-focus-ring: rgba(255, 255, 252, 0.7);
   --tab-overlay-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.24);
   --tab-overlay-deep-bg: rgba(48, 39, 21, 0.96);
   --tab-overlay-deep-border: rgba(242, 200, 103, 0.42);
@@ -113,6 +125,7 @@
   --tab-overlay-deep-accent-bg: rgba(242, 200, 103, 0.14);
   --tab-overlay-deep-accent-muted: rgba(252, 225, 161, 0.78);
   --tab-overlay-deep-wash: rgba(242, 200, 103, 0.12);
+  --tab-overlay-deep-highlight: rgba(255, 244, 211, 0.08);
   --tab-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --tab-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --tab-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -130,9 +143,9 @@
   --background: #171917;
   --foreground: rgba(246, 247, 243, 0.94);
   --card: #202320;
-  --card-foreground: rgba(246, 247, 243, 0.94);
+  --card-foreground: var(--foreground);
   --popover: #242724;
-  --popover-foreground: rgba(246, 247, 243, 0.94);
+  --popover-foreground: var(--foreground);
   --primary: #c83f00;
   --primary-hover: #cc4000;
   --primary-foreground: #fffaf7;
@@ -162,7 +175,7 @@
   --tab-emphasis-tint: rgba(255, 106, 43, 0.16);
   --tab-canvas: #151715;
   --tab-sidebar: #1b1e1b;
-  --tab-surface-raised: #202320;
+  --tab-surface-raised: var(--card);
   --tab-surface-sunken: #181b18;
   --tab-hover: rgba(246, 247, 243, 0.055);
   --tab-active: var(--tab-emphasis-tint);
@@ -175,7 +188,6 @@
   --tab-shadow-control: 0 1px 1px rgba(0, 0, 0, 0.18);
   --tab-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 10px 28px rgba(0, 0, 0, 0.18);
   --tab-shadow-window: 0 28px 72px rgba(0, 0, 0, 0.42), 0 2px 10px rgba(0, 0, 0, 0.32);
-  --tab-shadow-soft: var(--tab-shadow-card);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -183,9 +195,9 @@
     --background: #171917;
     --foreground: rgba(246, 247, 243, 0.94);
     --card: #202320;
-    --card-foreground: rgba(246, 247, 243, 0.94);
+    --card-foreground: var(--foreground);
     --popover: #242724;
-    --popover-foreground: rgba(246, 247, 243, 0.94);
+    --popover-foreground: var(--foreground);
     --primary: #c83f00;
     --primary-hover: #cc4000;
     --primary-foreground: #fffaf7;
@@ -215,7 +227,7 @@
     --tab-emphasis-tint: rgba(255, 106, 43, 0.16);
     --tab-canvas: #151715;
     --tab-sidebar: #1b1e1b;
-    --tab-surface-raised: #202320;
+    --tab-surface-raised: var(--card);
     --tab-surface-sunken: #181b18;
     --tab-hover: rgba(246, 247, 243, 0.055);
     --tab-active: var(--tab-emphasis-tint);
@@ -228,8 +240,31 @@
     --tab-shadow-control: 0 1px 1px rgba(0, 0, 0, 0.18);
     --tab-shadow-card: 0 1px 2px rgba(0, 0, 0, 0.24), 0 10px 28px rgba(0, 0, 0, 0.18);
     --tab-shadow-window: 0 28px 72px rgba(0, 0, 0, 0.42), 0 2px 10px rgba(0, 0, 0, 0.32);
-    --tab-shadow-soft: var(--tab-shadow-card);
   }
+}
+
+:root,
+.pug-theme-light,
+.dark,
+.pug-theme-dark {
+  --tab-emphasis-border: color-mix(in srgb, var(--emphasis) 28%, transparent);
+  --tab-success-border: color-mix(in srgb, var(--success) 26%, transparent);
+  --tab-warning-border: color-mix(in srgb, var(--warning) 30%, transparent);
+  --tab-info-border: color-mix(in srgb, var(--info) 28%, transparent);
+  --tab-destructive-border: color-mix(in srgb, var(--destructive) 28%, transparent);
+  --tab-success-strong-border: color-mix(in srgb, var(--success) 70%, var(--background));
+  --tab-strong-border: color-mix(in srgb, var(--border) 70%, var(--foreground));
+  --tab-control-hairline: color-mix(in srgb, var(--foreground) 8%, transparent);
+  --tab-scrollbar-thumb: color-mix(in srgb, var(--foreground) 18%, transparent);
+  --tab-focus-border: color-mix(in srgb, var(--ring) 62%, var(--border));
+  --tab-focus-ring-soft: color-mix(in srgb, var(--ring) 10%, transparent);
+  --tab-focus-outline: color-mix(in srgb, var(--ring) 70%, transparent);
+  --tab-action-bar-bg: color-mix(in srgb, var(--tab-surface-raised) 94%, transparent);
+  --tab-illustration-wash: color-mix(in srgb, var(--card) 94%, transparent);
+  --tab-illustration-grid-line: color-mix(in srgb, var(--border) 58%, transparent);
+  --tab-illustration-signal: color-mix(in srgb, var(--foreground) 35%, transparent);
+  --tab-showcase-wash: color-mix(in srgb, var(--card) 92%, transparent);
+  --tab-showcase-dot: color-mix(in srgb, var(--foreground) 11%, transparent);
 }
 
 @layer base {
@@ -356,7 +391,7 @@ details[open] > summary .tab-disclosure-chevron {
   background:
     linear-gradient(110deg, var(--tab-overlay-deep-wash), transparent 56%),
     var(--tab-overlay-deep-bg);
-  box-shadow: inset 0 1px rgba(255, 244, 211, 0.08);
+  box-shadow: inset 0 1px var(--tab-overlay-deep-highlight);
   content: "";
   opacity: 0;
   pointer-events: none;
@@ -533,28 +568,5 @@ a:not([class]) {
     .tab-sheet-content[data-state="open"][data-side] {
       opacity: 0;
     }
-  }
-}
-
-@layer base {
-  :root {
-    --sidebar-background: 30 4% 91%;
-    --sidebar-foreground: 24 8% 11%;
-    --sidebar-primary: 19 100% 39%;
-    --sidebar-primary-foreground: 20 100% 98%;
-    --sidebar-accent: 18 42% 89%;
-    --sidebar-accent-foreground: 20 30% 16%;
-    --sidebar-border: 24 8% 82%;
-    --sidebar-ring: 19 100% 39%;
-  }
-  .dark {
-    --sidebar-background: 24 5% 11%;
-    --sidebar-foreground: 20 20% 95%;
-    --sidebar-primary: 19 100% 39%;
-    --sidebar-primary-foreground: 20 100% 98%;
-    --sidebar-accent: 18 28% 20%;
-    --sidebar-accent-foreground: 20 24% 95%;
-    --sidebar-border: 24 5% 23%;
-    --sidebar-ring: 17 100% 58%;
   }
 }

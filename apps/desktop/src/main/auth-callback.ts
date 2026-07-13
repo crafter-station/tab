@@ -1,4 +1,5 @@
 import { createServer, type Server, type ServerResponse } from "node:http";
+import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 
 export type LoopbackAuthCallbackServer = {
   readonly callbackUrl: string;
@@ -10,12 +11,14 @@ type LoopbackAuthCallbackServerDependencies = {
 };
 
 function sendHtml(serverResponse: ServerResponse, status: number, title: string, message: string): void {
+  const light = PLATFORM_COLORS.theme.light;
+  const dark = PLATFORM_COLORS.theme.dark;
   serverResponse.writeHead(status, {
     "Cache-Control": "no-store",
     "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
     "Content-Type": "text/html; charset=utf-8",
   });
-  serverResponse.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><title>${title}</title><style>body{font:16px system-ui;margin:4rem auto;max-width:32rem;padding:0 1rem;color:#18181b}h1{font-size:1.5rem}</style></head><body><h1>${title}</h1><p>${message}</p></body></html>`);
+  serverResponse.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><meta name="color-scheme" content="light dark"><title>${title}</title><style>body{font:16px system-ui;margin:4rem auto;max-width:32rem;padding:0 1rem;color:${light.foreground};background:${light.background}}h1{font-size:1.5rem}@media(prefers-color-scheme:dark){body{color:${dark.foreground};background:${dark.background}}}</style></head><body><h1>${title}</h1><p>${message}</p></body></html>`);
 }
 
 export function isAuthCallbackUrl(candidate: string, expectedCallbackUrl: string): boolean {

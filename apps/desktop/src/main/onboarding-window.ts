@@ -1,4 +1,5 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, nativeTheme } from "electron";
+import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
 
 export type CreateOnboardingWindowDependencies = {
@@ -22,7 +23,7 @@ export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies)
     title: "Welcome to Tab",
     titleBarStyle: "hiddenInset",
     trafficLightPosition: { x: 16, y: 16 },
-    backgroundColor: "#11110f",
+    backgroundColor: PLATFORM_COLORS.theme[nativeTheme.shouldUseDarkColors ? "dark" : "light"].canvas,
     webPreferences: {
       preload: deps.preloadPath,
       contextIsolation: true,

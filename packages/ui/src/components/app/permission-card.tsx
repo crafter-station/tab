@@ -19,8 +19,8 @@ export function PermissionCard({ title, description, status, state, className, c
     <article
       className={cn(
         "grid gap-3 border-b border-border py-4 last:border-b-0",
-        state === "granted" && "border-[color-mix(in_srgb,var(--success)_24%,transparent)]",
-        state === "pending" && "border-[color-mix(in_srgb,var(--warning)_22%,transparent)]",
+        state === "granted" && "border-[var(--tab-success-border)]",
+        state === "pending" && "border-[var(--tab-warning-border)]",
         className,
       )}
     >

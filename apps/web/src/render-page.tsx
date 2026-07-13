@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   Avatar,
   AvatarFallback,
+  PLATFORM_COLORS,
   Separator,
   THEME_MODES,
   buttonVariants,
@@ -40,18 +41,6 @@ const dashboardSidebarControlScript = `(() => {
   document.addEventListener('click', function(event) {
     var target = event.target instanceof Element ? event.target.closest('[data-dashboard-sidebar-toggle]') : null;
     if (target) toggle(false);
-    var copyLogo = event.target instanceof Element ? event.target.closest('[data-copy-tab-logo]') : null;
-    if (copyLogo) {
-      var svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tab logo"><rect width="32" height="32" rx="8" fill="#20221f"/><path fill="#f8f9f6" d="M9 8h14v4h-5v12h-4V12H9z"/></svg>';
-      navigator.clipboard.writeText(svg).then(function() {
-        var label = copyLogo.querySelector('span');
-        if (label) {
-          var previous = label.textContent;
-          label.textContent = 'Copied Logo SVG';
-          setTimeout(function() { label.textContent = previous; }, 1400);
-        }
-      }).catch(function() {});
-    }
   });
   document.addEventListener('keydown', function(event) {
     if (event.key.toLowerCase() === 'b' && (event.metaKey || event.ctrlKey)) {
@@ -162,8 +151,8 @@ function WebDocument({
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="color-scheme" content="light dark" />
-        <meta name="theme-color" content="#f2f3f0" media="(prefers-color-scheme: light)" />
-        <meta name="theme-color" content="#171917" media="(prefers-color-scheme: dark)" />
+        <meta name="theme-color" content={PLATFORM_COLORS.theme.light.background} media="(prefers-color-scheme: light)" />
+        <meta name="theme-color" content={PLATFORM_COLORS.theme.dark.background} media="(prefers-color-scheme: dark)" />
         <meta name="description" content={pageDescription} />
         <meta property="og:type" content="website" />
         <meta property="og:title" content={title} />

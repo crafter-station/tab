@@ -11,7 +11,7 @@
   display: block;
   overflow: hidden;
   padding-left: 4px;
-  color: CanvasText;
+  color: var(--tab-inline-suggestion-text);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   font-size: var(--inline-font-size, 16px);
   font-weight: 400;

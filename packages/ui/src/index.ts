@@ -1,5 +1,6 @@
 export * from "./lib/utils";
 export * from "./theme";
+export * from "./platform-colors";
 export * from "./components/ui/alert";
 export * from "./components/ui/badge";
 export * from "./components/ui/avatar";

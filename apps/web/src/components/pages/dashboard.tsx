@@ -18,6 +18,7 @@ import {
   Field,
   FieldDescription,
   FieldLabel,
+  PLATFORM_COLORS,
   Progress,
   Sidebar,
   SidebarContent,
@@ -245,7 +246,7 @@ const dashboardNavigation = [
   { id: "memories", href: "/dashboard/memories", label: "Memories", icon: Brain },
 ] as const;
 
-const tabLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tab logo"><rect width="32" height="32" rx="8" fill="#20221f"/><path fill="#f8f9f6" d="M9 8h14v4h-5v12h-4V12H9z"/></svg>`;
+const tabLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tab logo"><rect width="32" height="32" rx="8" fill="${PLATFORM_COLORS.theme.light.primary}"/><path fill="${PLATFORM_COLORS.theme.light.primaryForeground}" d="M9 8h14v4h-5v12h-4V12H9z"/></svg>`;
 
 function DashboardBrandMenu() {
   const modes = [

@@ -1,4 +1,5 @@
-import { BrowserWindow } from "electron";
+import { BrowserWindow, nativeTheme } from "electron";
+import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopPreferences } from "./preferences.ts";
@@ -40,7 +41,7 @@ export function createSettingsWindow(deps: CreateSettingsWindowDependencies, rou
     fullscreenable: false,
     show: false,
     title: "Tab Settings",
-    backgroundColor: "#11110f",
+    backgroundColor: PLATFORM_COLORS.theme[nativeTheme.shouldUseDarkColors ? "dark" : "light"].canvas,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
     trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,
     webPreferences: {

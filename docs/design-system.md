@@ -4,7 +4,7 @@ Tab uses the shared `@tab/ui` package as the source of truth for visual tokens, 
 
 ## Palette
 
-Use the warm-neutral surfaces from `packages/ui/src/styles/globals.css`: `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--border`, and `--input`. Orange is the shared product accent, split by role so contrast does not depend on one color doing every job: `--primary` and `--primary-hover` are solid control fills with `--primary-foreground`; `--emphasis` is the brighter decorative and focus color; `--emphasis-text` is the accessible small-text color; and `--accent` is the quiet interaction wash used for hover and selected surfaces. Use `--tab-emphasis-tint` for tinted brand treatments. Do not add one-off brand hex values or local duplicate variables when a shared token exists.
+Use the warm-neutral surfaces from `packages/ui/src/styles/globals.css`: `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--border`, and `--input`. Orange is the shared product accent, split by role so contrast does not depend on one color doing every job: `--primary` and `--primary-hover` are solid control fills with `--primary-foreground`; `--emphasis` is the brighter decorative and focus color; `--emphasis-text` is the accessible small-text color; and `--accent` is the quiet interaction wash used for hover and selected surfaces. Use `--tab-emphasis-tint` for tinted brand treatments. All product colors, translucent blends, scrims, and color-bearing shadows must be declared in the shared token layer before use. Component, page, landing, and overlay code may use semantic variables, `transparent`, and `currentColor`, but must not contain palette literals, raw Tailwind color utilities, local `color-mix()` recipes, or default Tailwind shadows. Platform APIs and email markup that cannot consume CSS variables use the synchronized constants in `packages/ui/src/platform-colors.ts`.
 
 ## Typography
 
@@ -24,7 +24,7 @@ Use shared radius tokens: `--radius-control` for buttons and inputs, `--radius-m
 
 ## Grid And Surface Treatments
 
-Use `--tab-canvas`, `--tab-sidebar`, `--tab-surface-raised`, and `--tab-surface-sunken` to establish hierarchy before adding borders or shadows. Use `--tab-hover` and `--tab-active` for interactive states, and the shared control, card, and window shadows only at their corresponding elevation. Large app surfaces remain opaque; reserve blur for the small Floating Suggestion Overlay, which uses the dedicated `--tab-overlay-*` tokens for reliable contrast over third-party applications.
+Use `--tab-canvas`, `--tab-sidebar`, `--tab-surface-raised`, and `--tab-surface-sunken` to establish hierarchy before adding borders or shadows. Sidebar utilities are aliases of these canonical roles rather than a separate palette, so review surfaces and explicit theme boundaries stay consistent. Use `--tab-hover` and `--tab-active` for interactive states, and the shared control, card, and window shadows only at their corresponding elevation. Large app surfaces remain opaque; reserve blur for the small Floating Suggestion Overlay, which uses the dedicated `--tab-overlay-*` tokens for reliable contrast over third-party applications.
 
 ## Motion
 
