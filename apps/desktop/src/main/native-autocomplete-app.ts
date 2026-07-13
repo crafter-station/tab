@@ -6,6 +6,7 @@ import type {
   SuggestionContextSource,
 } from "@tab/contracts";
 import { countAcceptedWords } from "@tab/billing";
+import { classifyTypingContextSource } from "@tab/memory-policy";
 import {
   acceptAndInsertSuggestion,
   type InsertionDependencies,
@@ -14,6 +15,11 @@ import {
 import type { AppContextSnapshot } from "./app-context.ts";
 import { createHash } from "node:crypto";
 import type { AppContextSnapshotState } from "./app-context-extractor.ts";
+import type {
+  AppContextAccessibilityTree,
+  AppContextExtractor,
+} from "./app-context-extractor.ts";
+import type { MemoryExtractionDispatcher } from "./memory-extraction-dispatcher.ts";
 import {
   createApplicationCompatibilityStore,
   type ApplicationCompatibilityStore,
@@ -46,7 +52,7 @@ export type NativeSuggestionSessionOutputs = {
 
 type RecordInteractionTelemetry = (event: RecordTelemetryEventRequest) => void | Promise<void>;
 
-export type NativeSuggestionSessionDependencies = {
+type NativeSuggestionSessionDependencies = {
   readonly typingContext: TypingContextBuffer;
   readonly getLocalSuggestion?: SuggestionSource;
   readonly fallbackToCloudOnLocalMiss?: boolean;
@@ -76,6 +82,16 @@ export type NativeSuggestionSessionDependencies = {
   readonly getAppContextState?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshotState;
   readonly clearAppContext?: () => void;
   readonly appContextGraceMs?: number;
+};
+
+export type NativeAutocompleteAppDependencies = Omit<
+  NativeSuggestionSessionDependencies,
+  "getContextSource" | "getAppContext" | "getAppContextState" | "clearAppContext"
+> & {
+  readonly typingContext: TypingContextBuffer;
+  readonly appContext: AppContextExtractor;
+  readonly memoryExtraction: MemoryExtractionDispatcher;
+  readonly getContextSource?: () => SuggestionContextSource;
 };
 
 type VisibleSuggestionTelemetry = {
@@ -126,7 +142,7 @@ function applicationCategory(bundleId: string | undefined): ApplicationCategory 
   return normalized ? "productivity" : "other";
 }
 
-export function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
+function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
   let currentSuggestion: Suggestion | null = null;
   let visibleSuggestionTelemetry: VisibleSuggestionTelemetry | null = null;
   let replacingSuggestion = false;
@@ -699,3 +715,94 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     getLoopState: () => suggestionLoop.getState(),
   };
 }
+
+function activeApplicationFromState(
+  typingContext: TypingContextBuffer,
+): ActiveApplication | null {
+  return typingContext.getState().activeApplication;
+}
+
+export function createNativeAutocompleteApp(
+  deps: NativeAutocompleteAppDependencies,
+) {
+  const getContextSource =
+    deps.getContextSource ??
+    (() =>
+      classifyTypingContextSource(
+        activeApplicationFromState(deps.typingContext),
+      ));
+  let clearingAppContext = false;
+  const session = createNativeSuggestionSession({
+    ...deps,
+    getContextSource,
+    getAppContext: (snapshot) => deps.appContext.getSnapshot(snapshot),
+    getAppContextState: deps.appContext.getSnapshotState
+      ? (snapshot) => deps.appContext.getSnapshotState!(snapshot)
+      : undefined,
+    clearAppContext: () => {
+      clearingAppContext = true;
+      try {
+        deps.appContext.clear();
+      } finally {
+        clearingAppContext = false;
+      }
+    },
+  });
+  deps.appContext.subscribe?.(() => {
+    if (!clearingAppContext) session.appContextChanged();
+  });
+
+  return {
+    appendText(text: string): void {
+      if (session.isPaused()) return;
+      const activeApplication = activeApplicationFromState(deps.typingContext);
+      if (activeApplication) {
+        deps.memoryExtraction.append({
+          text,
+          source: getContextSource(),
+          activeApplication,
+        });
+      }
+      session.appendText(text);
+    },
+    appendPastedText: (text: string) => session.appendPastedText(text),
+    deleteBackward: (unit: TypingDeletionUnit = "character") =>
+      session.deleteBackward(unit),
+    invalidateContext: () => session.invalidateContext(),
+    setActiveApplication: (
+      bundleId: string | null,
+      windowId: string | null = null,
+    ) => session.setActiveApplication(bundleId, windowId),
+    setSecureInput: (active: boolean) => session.setSecureInput(active),
+    applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
+      if (!session.isPaused()) deps.appContext.ingestTextSession?.(snapshot);
+      if (snapshot.accessibilityReliability === "unavailable") {
+        deps.appContext.ingestAccessibilityTree({
+          activeApplication: snapshot.activeApplication,
+          accessibilityTree: null,
+        });
+      }
+      session.applyTextSessionSnapshot(snapshot);
+    },
+    ingestAppContextTree(accessibilityTree: AppContextAccessibilityTree): void {
+      deps.appContext.ingestAccessibilityTree({
+        activeApplication: activeApplicationFromState(deps.typingContext),
+        accessibilityTree,
+      });
+    },
+    setPaused: (active: boolean) => session.setPaused(active),
+    acceptCurrentSuggestion: () => session.acceptCurrentSuggestion(),
+    requestSuggestionNow: () => session.requestSuggestionNow(),
+    clearContext: () => session.clearContext(),
+    getCurrentSuggestion: () => session.getCurrentSuggestion(),
+    getCurrentSnapshot: () => session.getCurrentSnapshot(),
+    getPreviouslyActiveApplication: () =>
+      session.getPreviouslyActiveApplication(),
+    isPaused: () => session.isPaused(),
+    getLoopState: () => session.getLoopState(),
+  };
+}
+
+export type NativeAutocompleteApp = ReturnType<
+  typeof createNativeAutocompleteApp
+>;

@@ -445,11 +445,13 @@ export function hasActivePolarEntitlement(
 export type BillingServiceDependencies = {
   readonly storage?: BillingStorage;
   readonly now?: () => Date;
+  readonly webhookSecret?: string;
 };
 
 export class BillingService {
-  readonly storage: BillingStorage;
+  private readonly storage: BillingStorage;
   private readonly now: () => Date;
+  private readonly webhookHandler: BillingWebhookHandler;
 
   constructor(deps: BillingServiceDependencies = {}) {
     if (!deps.storage) {
@@ -457,6 +459,11 @@ export class BillingService {
     }
     this.storage = deps.storage;
     this.now = deps.now ?? (() => new Date());
+    this.webhookHandler = new BillingWebhookHandler({
+      storage: deps.storage,
+      secret: deps.webhookSecret,
+      now: this.now,
+    });
   }
 
   async getEntitlement(userId: string): Promise<UserEntitlement> {
@@ -664,19 +671,19 @@ export class BillingService {
     return this.getStatus(input.userId, { localDay: input.localDay });
   }
 
-  async checkQuota(userId: string): Promise<QuotaCheckResult> {
-    return this.checkDeepComplete(userId);
-  }
-
-  async consumeSuggestion(
-    userId: string,
-    requestId = crypto.randomUUID(),
-  ): Promise<QuotaCheckResult> {
-    return this.consumeDeepComplete(userId, requestId);
-  }
-
   async applyEntitlement(entitlement: UserEntitlement): Promise<void> {
     await this.storage.setEntitlement(this.withTrial(entitlement));
+  }
+
+  validatePaidEntitlementEvent(
+    body: string,
+    headers: Record<string, string | undefined>,
+  ): WebhookValidationResult {
+    return this.webhookHandler.validateRequest(body, headers);
+  }
+
+  async applyPaidEntitlementEvent(payload: PolarWebhookPayload): Promise<void> {
+    await this.webhookHandler.handle(payload);
   }
 
   private withTrial(entitlement: UserEntitlement): UserEntitlement {
@@ -1235,13 +1242,13 @@ export type WebhookValidationResult =
   | { readonly valid: true; readonly payload: PolarWebhookPayload }
   | { readonly valid: false; readonly reason: string };
 
-export type WebhookHandlerDependencies = {
+type WebhookHandlerDependencies = {
   readonly storage?: BillingStorage;
   readonly secret?: string;
   readonly now?: () => Date;
 };
 
-export class BillingWebhookHandler {
+class BillingWebhookHandler {
   private readonly storage: BillingStorage;
   private readonly secret: string | undefined;
   private readonly now: () => Date;

@@ -10,7 +10,7 @@ import {
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import type { SuggestionGenerator } from "../apps/api/src/index.ts";
-import type { MemoryAgentModel } from "../apps/api/src/memory-agent.ts";
+import type { MemoryAgentModel } from "../apps/api/src/personal-memory-extraction.ts";
 
 async function createAuthenticatedTestApp(
   generateSuggestion: SuggestionGenerator,

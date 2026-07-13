@@ -27,7 +27,7 @@ import {
   createFileAcceptedWordLedgerStorage,
 } from "./accepted-word-ledger.ts";
 import { createLocalAcceptanceUsageClient } from "./usage-client.ts";
-import { createNativeAutocompleteRuntime } from "./native-autocomplete-runtime.ts";
+import { createNativeAutocompleteApp } from "./native-autocomplete-app.ts";
 import {
   type AppContextSnapshot,
 } from "./app-context.ts";
@@ -334,7 +334,7 @@ const localInference = createLocalInferencePrototype({
     }
   },
 });
-const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
+const nativeAutocompleteApp = createNativeAutocompleteApp({
   typingContext: typingContextBuffer,
   appContext: appContextExtractor,
   memoryExtraction: memoryExtractionDispatcher,
@@ -503,7 +503,7 @@ function updateTray(): void {
 
 function createTrayState(status: DesktopStatus) {
   return {
-    paused: nativeAutocompleteRuntime.isPaused(),
+    paused: nativeAutocompleteApp.isPaused(),
     auth: status.auth,
     quotaExhausted: false,
     updateAvailable,
@@ -511,8 +511,8 @@ function createTrayState(status: DesktopStatus) {
 }
 
 async function togglePause(): Promise<void> {
-  const paused = !nativeAutocompleteRuntime.isPaused();
-  nativeAutocompleteRuntime.setPaused(paused);
+  const paused = !nativeAutocompleteApp.isPaused();
+  nativeAutocompleteApp.setPaused(paused);
   settingsWindowManager.sendPaused(paused);
   updateTray();
   if (paused) {
@@ -593,8 +593,8 @@ function getInlineSuggestionOverlayBounds(caretBounds: NonNullable<TextSessionSn
 }
 
 function getCurrentOverlayBounds(): Electron.Rectangle {
-  const snapshot = nativeAutocompleteRuntime.getCurrentSnapshot();
-  if (nativeAutocompleteRuntime.getCurrentSuggestion() && isObsidianInlineTarget(snapshot)) {
+  const snapshot = nativeAutocompleteApp.getCurrentSnapshot();
+  if (nativeAutocompleteApp.getCurrentSuggestion() && isObsidianInlineTarget(snapshot)) {
     return getInlineSuggestionOverlayBounds(snapshot.textSession!.caretBounds!);
   }
   return getSuggestionOverlayBounds(isUsableWindow(overlayWindow) ? overlayWindow.getBounds().height : undefined);
@@ -794,7 +794,7 @@ function resizeOverlayWindow(height: number): void {
   overlayWindow.setBounds(getSuggestionOverlayBounds(height), false);
 }
 
-function isObsidianInlineTarget(snapshot: ReturnType<typeof nativeAutocompleteRuntime.getCurrentSnapshot>): boolean {
+function isObsidianInlineTarget(snapshot: ReturnType<typeof nativeAutocompleteApp.getCurrentSnapshot>): boolean {
   return snapshot.activeApplication?.bundleId === OBSIDIAN_BUNDLE_ID
     && snapshot.textSession?.accessibilityReliability === "reliable"
     && snapshot.textSession.selectedRange?.length === 0
@@ -821,7 +821,7 @@ function registerObsidianTabAcceptance(): void {
 
 function showOverlay(suggestion: Suggestion): void {
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
-  const snapshot = nativeAutocompleteRuntime.getCurrentSnapshot();
+  const snapshot = nativeAutocompleteApp.getCurrentSnapshot();
   const inline = isObsidianInlineTarget(snapshot);
   if (inline) {
     overlayWindow.setBounds(getInlineSuggestionOverlayBounds(snapshot.textSession!.caretBounds!), false);
@@ -879,7 +879,7 @@ function hideDebugTypingOverlay(): void {
 function sendDebugContext(): void {
   if (!SHOW_DEBUG_TYPING_OVERLAY || !isUsableWebContents(debugOverlayWindow)) return;
 
-  const snapshot = nativeAutocompleteRuntime.getCurrentSnapshot();
+  const snapshot = nativeAutocompleteApp.getCurrentSnapshot();
   const context = getLastWords(snapshot.sanitizedContext, DEBUG_TYPING_WORD_LIMIT);
   debugOverlayWindow.webContents.send("debug-context", {
     context,
@@ -956,11 +956,11 @@ function showDebugTypingOverlay(): void {
 }
 
 async function acceptCurrentSuggestion(): Promise<void> {
-  await nativeAutocompleteRuntime.acceptCurrentSuggestion();
+  await nativeAutocompleteApp.acceptCurrentSuggestion();
 }
 
 async function requestSuggestionNow(): Promise<void> {
-  await nativeAutocompleteRuntime.requestSuggestionNow();
+  await nativeAutocompleteApp.requestSuggestionNow();
 }
 
 function handleSuggestNow(): void {
@@ -970,7 +970,7 @@ function handleSuggestNow(): void {
 }
 
 function clearContextAndHide(): void {
-  nativeAutocompleteRuntime.clearContext();
+  nativeAutocompleteApp.clearContext();
   debugApiState = { status: "idle" };
   if (debugTypingTimer) {
     clearTimeout(debugTypingTimer);
@@ -993,7 +993,7 @@ function handleInputTapMessage(message: unknown): void {
 }
 
 function handleAppContextTree(accessibilityTree: AppContextAccessibilityTree): void {
-  nativeAutocompleteRuntime.ingestAppContextTree(accessibilityTree);
+  nativeAutocompleteApp.ingestAppContextTree(accessibilityTree);
 }
 
 function startMacOSInputTap(): void {
@@ -1042,7 +1042,7 @@ async function bootstrap(): Promise<void> {
     if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
 
     overlayRendererReady = true;
-    const currentSuggestion = nativeAutocompleteRuntime.getCurrentSuggestion();
+    const currentSuggestion = nativeAutocompleteApp.getCurrentSuggestion();
     if (currentSuggestion) {
       showOverlay(currentSuggestion);
     }
@@ -1154,7 +1154,7 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle("get-initial-state", () => ({
     status: statusService.getCurrentStatus(),
     memories: currentMemories,
-    paused: nativeAutocompleteRuntime.isPaused(),
+    paused: nativeAutocompleteApp.isPaused(),
     preferences: preferencesManager.get(),
     localInferenceStatus: localInference.getStatus(),
     completionHistory: completionHistory.getEntries(),
@@ -1289,7 +1289,7 @@ export function handleTextInput(text: string): void {
     codePointCount: Array.from(text).length,
     containsNonAscii: /[^\x00-\x7F]/u.test(text),
   });
-  nativeAutocompleteRuntime.appendText(text);
+  nativeAutocompleteApp.appendText(text);
 }
 
 export function handlePastedText(text: string): void {
@@ -1298,32 +1298,32 @@ export function handlePastedText(text: string): void {
     return;
   }
   pendingSyntheticPaste = null;
-  nativeAutocompleteRuntime.appendPastedText(text);
+  nativeAutocompleteApp.appendPastedText(text);
 }
 
 export function handleContextInvalidated(reason: string): void {
   console.log("[local-suggestions] input.context-invalidated", { reason });
-  nativeAutocompleteRuntime.invalidateContext();
+  nativeAutocompleteApp.invalidateContext();
 }
 
 export function handleDeleteBackward(unit: TypingDeletionUnit = "character"): void {
   console.log("[local-suggestions] input.delete", { unit });
-  nativeAutocompleteRuntime.deleteBackward(unit);
+  nativeAutocompleteApp.deleteBackward(unit);
 }
 
 export function handleActiveApplicationChanged(bundleId: string | null, windowId: string | null = null): void {
-  nativeAutocompleteRuntime.setActiveApplication(bundleId, windowId);
+  nativeAutocompleteApp.setActiveApplication(bundleId, windowId);
 }
 
 export function handleSecureInputChanged(active: boolean): void {
-  nativeAutocompleteRuntime.setSecureInput(active);
+  nativeAutocompleteApp.setSecureInput(active);
 }
 
 export function handleTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
-  nativeAutocompleteRuntime.applyTextSessionSnapshot(snapshot);
+  nativeAutocompleteApp.applyTextSessionSnapshot(snapshot);
   if (
-    nativeAutocompleteRuntime.getCurrentSuggestion()
-    && isObsidianInlineTarget(nativeAutocompleteRuntime.getCurrentSnapshot())
+    nativeAutocompleteApp.getCurrentSuggestion()
+    && isObsidianInlineTarget(nativeAutocompleteApp.getCurrentSnapshot())
     && isUsableWindow(overlayWindow)
   ) {
     overlayWindow.setBounds(getInlineSuggestionOverlayBounds(snapshot.caretBounds!), false);
@@ -1331,9 +1331,9 @@ export function handleTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
 }
 
 export function handlePauseChanged(active: boolean): void {
-  nativeAutocompleteRuntime.setPaused(active);
+  nativeAutocompleteApp.setPaused(active);
 }
 
 export function getCurrentSuggestionForTest(): Suggestion | null {
-  return nativeAutocompleteRuntime.getCurrentSuggestion();
+  return nativeAutocompleteApp.getCurrentSuggestion();
 }

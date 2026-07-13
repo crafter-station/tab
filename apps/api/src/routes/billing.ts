@@ -8,7 +8,6 @@ import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { AuthInstance } from "../auth.ts";
 import {
-  BillingWebhookHandler,
   hasActivePolarEntitlement,
   type BillingCheckoutClient,
   type BillingService,
@@ -150,11 +149,8 @@ export function registerBillingRoutes(
   });
 
   app.post("/api/billing/webhook", async (c) => {
-    const webhookHandler = new BillingWebhookHandler({
-      storage: deps.billingService.storage,
-    });
     const body = await c.req.text();
-    const validation = webhookHandler.validateRequest(body, {
+    const validation = deps.billingService.validatePaidEntitlementEvent(body, {
       "webhook-id": c.req.header("webhook-id"),
       "webhook-timestamp": c.req.header("webhook-timestamp"),
       "webhook-signature": c.req.header("webhook-signature"),
@@ -165,7 +161,7 @@ export function registerBillingRoutes(
         400,
       );
     }
-    await webhookHandler.handle(validation.payload);
+    await deps.billingService.applyPaidEntitlementEvent(validation.payload);
     return c.json({ ok: true }, 200);
   });
 }

@@ -20,6 +20,7 @@ import {
   PersonalMemoryService,
   WorkersAiPersonalMemoryEmbeddingService,
   type PersonalMemoryEmbeddingService,
+  type PersonalMemoryExtractionCommitter,
   type PersonalMemoryStorage,
   type PersonalMemoryVectorIndex,
 } from "./personal-memory.ts";
@@ -30,7 +31,7 @@ import {
   createAiGatewayMemoryAgentModel,
   type MemoryAgentModel,
   type MemoryExtractionIdempotencyStorage,
-} from "./memory-agent.ts";
+} from "./personal-memory-extraction.ts";
 import {
   D1TelemetryStorage,
   TelemetryService,
@@ -82,7 +83,8 @@ export type ApiDependencies = {
   readonly embeddingService?: PersonalMemoryEmbeddingService;
   readonly vectorIndex?: PersonalMemoryVectorIndex;
   readonly memoryExtractionModel?: MemoryAgentModel;
-  readonly memoryExtractionIdempotencyStorage?: MemoryExtractionIdempotencyStorage;
+  readonly memoryExtractionIdempotencyStorage?: MemoryExtractionIdempotencyStorage &
+    PersonalMemoryExtractionCommitter;
   readonly telemetryService?: TelemetryService;
   readonly telemetryStorage?: TelemetryStorage;
 };
@@ -137,7 +139,6 @@ export function createApp(deps: ApiDependencies = {}) {
     new InMemoryMemoryExtractionIdempotencyStorage();
   const memoryExtractionService = new MemoryExtractionService({
     personalMemoryService,
-    personalMemoryStorage,
     idempotencyStorage: memoryExtractionIdempotencyStorage,
     model: deps.memoryExtractionModel,
   });

@@ -1,6 +1,6 @@
 import { createDatabase, type AppDatabase } from "./db/index.ts";
 import handler from "./index.ts";
-import { D1MemoryExtractionIdempotencyStorage } from "./memory-agent.ts";
+import { D1MemoryExtractionIdempotencyStorage } from "./personal-memory-extraction.ts";
 
 export async function cleanupExpiredMemoryExtractionRecords(
   db: AppDatabase,

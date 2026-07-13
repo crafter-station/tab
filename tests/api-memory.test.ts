@@ -37,12 +37,12 @@ import type {
   MemoryExtractionClock,
   MemoryExtractionIdempotencyStorage,
   ProposedMemoryOperation,
-} from "../apps/api/src/memory-agent.ts";
+} from "../apps/api/src/personal-memory-extraction.ts";
 import {
   D1MemoryExtractionIdempotencyStorage,
   InMemoryMemoryExtractionIdempotencyStorage,
   MemoryExtractionService,
-} from "../apps/api/src/memory-agent.ts";
+} from "../apps/api/src/personal-memory-extraction.ts";
 import { cleanupExpiredMemoryExtractionRecords } from "../apps/api/src/worker.ts";
 import { createTestDatabase } from "./test-db.ts";
 import type {
@@ -664,23 +664,25 @@ describe("Personal Memory API", () => {
       const replayOutcomes = [];
       for (const [operationIndex, operation] of operations.entries()) {
         firstOutcomes.push(
-          await extractionStorage.applyOperation({
+          await extractionStorage.commitExtractionOperation({
             ...claimInput,
             operationIndex,
             operation,
             maxMemoriesPerUser: 500,
-            personalMemoryStorage,
+            commitCanonicalOperation: (input) =>
+              personalMemoryStorage.applyExtractionOperationAtomically!(input),
           }),
         );
       }
       for (const [operationIndex, operation] of operations.entries()) {
         replayOutcomes.push(
-          await extractionStorage.applyOperation({
+          await extractionStorage.commitExtractionOperation({
             ...claimInput,
             operationIndex,
             operation,
             maxMemoriesPerUser: 500,
-            personalMemoryStorage,
+            commitCanonicalOperation: (input) =>
+              personalMemoryStorage.applyExtractionOperationAtomically!(input),
           }),
         );
       }
@@ -768,21 +770,23 @@ describe("Personal Memory API", () => {
       ).toBe(true);
 
       await expect(
-        extractionStorage.applyOperation({
+        extractionStorage.commitExtractionOperation({
           ...claimInput,
           operationIndex: 0,
           operation: { ...operation, content: "Caller-substituted content" },
           maxMemoriesPerUser: 500,
-          personalMemoryStorage,
+          commitCanonicalOperation: (input) =>
+            personalMemoryStorage.applyExtractionOperationAtomically!(input),
         }),
       ).rejects.toThrow("does not match its durable plan");
       await expect(
-        extractionStorage.applyOperation({
+        extractionStorage.commitExtractionOperation({
           ...claimInput,
           operationIndex: 1,
           operation,
           maxMemoriesPerUser: 500,
-          personalMemoryStorage,
+          commitCanonicalOperation: (input) =>
+            personalMemoryStorage.applyExtractionOperationAtomically!(input),
         }),
       ).rejects.toThrow("does not match its durable plan");
       expect(
@@ -799,12 +803,13 @@ describe("Personal Memory API", () => {
       ).toEqual([]);
 
       expect(
-        await extractionStorage.applyOperation({
+        await extractionStorage.commitExtractionOperation({
           ...claimInput,
           operationIndex: 0,
           operation,
           maxMemoriesPerUser: 500,
-          personalMemoryStorage,
+          commitCanonicalOperation: (input) =>
+            personalMemoryStorage.applyExtractionOperationAtomically!(input),
         }),
       ).toEqual({ status: "applied", outcome: "created" });
       const completed = await extractionStorage.complete({
@@ -935,12 +940,13 @@ describe("Personal Memory API", () => {
       ...claimInput,
       plan: { version: 1, operations: [operation] },
     });
-    await storage.applyOperation({
+    await storage.commitExtractionOperation({
       ...claimInput,
       operationIndex: 0,
       operation,
       maxMemoriesPerUser: 500,
-      personalMemoryStorage,
+      commitCanonicalOperation: (input) =>
+        personalMemoryStorage.applyExtractionOperationAtomically!(input),
     });
     await storage.release(claimInput);
 
@@ -1494,7 +1500,7 @@ describe("Personal Memory API", () => {
       throw new Error("Expected replacement claim");
     }
     await expect(
-      staleStorage.applyOperation({
+      staleStorage.commitExtractionOperation({
         userId: "user-1",
         batchIdHash: "statement-fence",
         claimId: staleClaim.claimId,
@@ -1502,7 +1508,8 @@ describe("Personal Memory API", () => {
         operationIndex: 0,
         operation,
         maxMemoriesPerUser: 500,
-        personalMemoryStorage,
+        commitCanonicalOperation: (input) =>
+          personalMemoryStorage.applyExtractionOperationAtomically!(input),
       }),
     ).resolves.toEqual({ status: "claim_lost" });
     expect(
@@ -1518,7 +1525,7 @@ describe("Personal Memory API", () => {
     ).toEqual([]);
 
     await expect(
-      replacementStorage.applyOperation({
+      replacementStorage.commitExtractionOperation({
         userId: "user-1",
         batchIdHash: "statement-fence",
         claimId: replacementClaim.claimId,
@@ -1526,7 +1533,8 @@ describe("Personal Memory API", () => {
         operationIndex: 0,
         operation,
         maxMemoriesPerUser: 500,
-        personalMemoryStorage,
+        commitCanonicalOperation: (input) =>
+          personalMemoryStorage.applyExtractionOperationAtomically!(input),
       }),
     ).resolves.toEqual({ status: "applied", outcome: "created" });
     expect(
@@ -1549,7 +1557,6 @@ describe("Personal Memory API", () => {
       personalMemoryService: new PersonalMemoryService({
         storage: personalMemoryStorage,
       }),
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1607,7 +1614,6 @@ describe("Personal Memory API", () => {
         embeddingService,
         vectorIndex,
       }),
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1668,7 +1674,6 @@ describe("Personal Memory API", () => {
     ]);
     const replacement = new MemoryExtractionService({
       personalMemoryService,
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1684,7 +1689,6 @@ describe("Personal Memory API", () => {
     let injected = false;
     const stale = new MemoryExtractionService({
       personalMemoryService,
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1766,7 +1770,6 @@ describe("Personal Memory API", () => {
     const request = extractionBatch("batch-operation-resume", "Resume plan");
     const replacement = new MemoryExtractionService({
       personalMemoryService,
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1777,7 +1780,6 @@ describe("Personal Memory API", () => {
     let injected = false;
     const stale = new MemoryExtractionService({
       personalMemoryService,
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1831,7 +1833,6 @@ describe("Personal Memory API", () => {
       personalMemoryService: new PersonalMemoryService({
         storage: personalMemoryStorage,
       }),
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -1903,7 +1904,6 @@ describe("Personal Memory API", () => {
       personalMemoryService: new PersonalMemoryService({
         storage: personalMemoryStorage,
       }),
-      personalMemoryStorage,
       idempotencyStorage,
       clock,
       claimLeaseMs: 100,
@@ -2386,7 +2386,6 @@ describe("Personal Memory API", () => {
     const createService = (beforeOperationCommit?: () => Promise<void>) =>
       new MemoryExtractionService({
         personalMemoryService,
-        personalMemoryStorage,
         idempotencyStorage,
         clock,
         claimLeaseMs: 100,

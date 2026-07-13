@@ -9,7 +9,6 @@ import { createDatabase } from "../apps/api/src/db/index.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import {
   BillingService,
-  BillingWebhookHandler,
   D1BillingStorage,
   InMemoryBillingStorage,
   InMemoryUsageMeterClient,
@@ -77,7 +76,7 @@ async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
     trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
     cachedAt: new Date(),
   });
-  return { app, token, billingService, usageMeterClient };
+  return { app, token, billingService, billingStorage, usageMeterClient };
 }
 
 async function parseApiResponse(response: Response) {
@@ -167,7 +166,7 @@ describe("Billing and allowance enforcement", () => {
   });
 
   it("counts only returned Deep Completes against allowance", async () => {
-    const { app, token, billingService } = await createBillingTestApp(
+    const { app, token, billingStorage } = await createBillingTestApp(
       async () => ({ text: " world" }),
     );
 
@@ -185,13 +184,13 @@ describe("Billing and allowance enforcement", () => {
     });
     expect(second.status).toBe(200);
 
-    const usage = await billingService.storage.getUsage("user-1", currentMonth());
+    const usage = await billingStorage.getUsage("user-1", currentMonth());
     expect(usage).toBe(2);
   });
 
   it("does not regenerate a Deep Complete for a consumed request id", async () => {
     let generationCount = 0;
-    const { app, token, billingService } = await createBillingTestApp(
+    const { app, token, billingStorage } = await createBillingTestApp(
       async () => {
         generationCount += 1;
         return { text: " world" };
@@ -213,12 +212,12 @@ describe("Billing and allowance enforcement", () => {
     expect(replay.status).toBe(409);
     expect(generationCount).toBe(1);
     expect(
-      await billingService.storage.getUsage("user-1", currentMonth()),
+      await billingStorage.getUsage("user-1", currentMonth()),
     ).toBe(1);
   });
 
   it("does not consume allowance for empty Deep Completes", async () => {
-    const { app, token, billingService } = await createBillingTestApp(
+    const { app, token, billingStorage } = await createBillingTestApp(
       async () => null,
     );
 
@@ -234,12 +233,12 @@ describe("Billing and allowance enforcement", () => {
     if (body.status !== "ok") throw new Error("Expected ok response");
     expect(body.data.suggestions).toHaveLength(0);
 
-    const usage = await billingService.storage.getUsage("user-1", currentMonth());
+    const usage = await billingStorage.getUsage("user-1", currentMonth());
     expect(usage).toBe(0);
   });
 
   it("does not consume allowance when generation fails", async () => {
-    const { app, token, billingService } = await createBillingTestApp(async () => {
+    const { app, token, billingStorage } = await createBillingTestApp(async () => {
       throw new Error("model timeout");
     });
 
@@ -250,7 +249,7 @@ describe("Billing and allowance enforcement", () => {
     });
 
     expect(response.status).toBe(503);
-    const usage = await billingService.storage.getUsage("user-1", currentMonth());
+    const usage = await billingStorage.getUsage("user-1", currentMonth());
     expect(usage).toBe(0);
   });
 
@@ -429,11 +428,7 @@ describe("Billing and allowance enforcement", () => {
       cachedAt: new Date(),
     });
 
-    const webhookHandler = new BillingWebhookHandler({
-      storage: billingService.storage,
-    });
-
-    await webhookHandler.handle({
+    await billingService.applyPaidEntitlementEvent({
       type: "subscription.created",
       data: {
         customer: { external_id: "user-1" },
@@ -485,11 +480,7 @@ describe("Billing and allowance enforcement", () => {
       cachedAt: new Date(),
     });
 
-    const webhookHandler = new BillingWebhookHandler({
-      storage: billingService.storage,
-    });
-
-    await webhookHandler.handle({
+    await billingService.applyPaidEntitlementEvent({
       type: "subscription.updated",
       data: {
         customer: { external_id: "user-1" },
@@ -525,11 +516,7 @@ describe("Billing and allowance enforcement", () => {
       cachedAt: new Date(),
     });
 
-    const webhookHandler = new BillingWebhookHandler({
-      storage: billingService.storage,
-    });
-
-    await webhookHandler.handle({
+    await billingService.applyPaidEntitlementEvent({
       type: "subscription.updated",
       data: {
         customer: {
@@ -631,9 +618,9 @@ describe("Billing and allowance enforcement", () => {
     const db = new Database(":memory:");
     bootstrapBillingTestSchema(db);
     const storage = new D1BillingStorage(createTestDatabase(db));
-    const webhookHandler = new BillingWebhookHandler({ storage });
+    const billingService = new BillingService({ storage });
 
-    await webhookHandler.handle({
+    await billingService.applyPaidEntitlementEvent({
       type: "subscription.created",
       data: {
         customer: { external_id: "missing-user" },
@@ -644,7 +631,7 @@ describe("Billing and allowance enforcement", () => {
       },
     });
 
-    await webhookHandler.handle({
+    await billingService.applyPaidEntitlementEvent({
       type: "subscription.canceled",
       data: {
         customer: { external_id: "missing-user" },

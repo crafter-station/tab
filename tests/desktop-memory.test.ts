@@ -6,7 +6,7 @@ import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { PersonalMemoryService, InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
-import type { MemoryAgentModel, MemoryJob } from "../apps/api/src/memory-agent.ts";
+import type { MemoryAgentModel, MemoryJob } from "../apps/api/src/personal-memory-extraction.ts";
 import { createDesktopMemoryClient } from "../apps/desktop/src/main/memory-client.ts";
 import { createMemoryExtractionDispatcher } from "../apps/desktop/src/main/memory-extraction-dispatcher.ts";
 import { createMemoryExtractionWindow } from "../apps/desktop/src/main/memory-extraction-window.ts";

@@ -12,8 +12,10 @@ import {
 import { generateText, Output } from "ai";
 import type {
   ExtractionOperationOutcome,
+  PersonalMemoryExtractionCommitInput,
+  PersonalMemoryExtractionCommitResult,
+  PersonalMemoryExtractionCommitter,
   PersonalMemoryService,
-  PersonalMemoryStorage,
 } from "./personal-memory.ts";
 import {
   PersonalMemoryPolicy,
@@ -210,12 +212,6 @@ export interface MemoryExtractionIdempotencyStorage {
   savePlan(input: MemoryExtractionClaimInput & {
     readonly plan: MemoryExtractionPlan;
   }): Promise<boolean>;
-  applyOperation(input: MemoryExtractionClaimInput & {
-    readonly operationIndex: number;
-    readonly operation: PlannedMemoryOperation;
-    readonly maxMemoriesPerUser: number;
-    readonly personalMemoryStorage: PersonalMemoryStorage;
-  }): Promise<MemoryExtractionOperationApplyResult>;
   readProgress(
     input: MemoryExtractionClaimInput,
   ): Promise<MemoryExtractionCounts | null>;
@@ -232,13 +228,6 @@ type MemoryExtractionPlanRead =
   | { readonly status: "claim_lost" }
   | { readonly status: "missing" }
   | { readonly status: "ready"; readonly plan: MemoryExtractionPlan };
-
-type MemoryExtractionOperationApplyResult =
-  | { readonly status: "claim_lost" }
-  | {
-      readonly status: "applied";
-      readonly outcome: ExtractionOperationOutcome;
-    };
 
 export type MemoryExtractionClaim =
   | { readonly status: "claimed"; readonly claimId: string }
@@ -307,7 +296,7 @@ function extractionCountsFromRow(row: {
 }
 
 export class InMemoryMemoryExtractionIdempotencyStorage
-  implements MemoryExtractionIdempotencyStorage
+  implements MemoryExtractionIdempotencyStorage, PersonalMemoryExtractionCommitter
 {
   private readonly records = new Map<
     string,
@@ -478,14 +467,9 @@ export class InMemoryMemoryExtractionIdempotencyStorage
     return true;
   }
 
-  async applyOperation(
-    input: MemoryExtractionClaimInput & {
-      readonly operationIndex: number;
-      readonly operation: PlannedMemoryOperation;
-      readonly maxMemoriesPerUser: number;
-      readonly personalMemoryStorage: PersonalMemoryStorage;
-    },
-  ): Promise<MemoryExtractionOperationApplyResult> {
+  async commitExtractionOperation(
+    input: PersonalMemoryExtractionCommitInput,
+  ): Promise<PersonalMemoryExtractionCommitResult> {
     const record = this.getOwnedRecord(input);
     if (!record) return { status: "claim_lost" };
     const existing = record.operations.get(input.operationIndex);
@@ -496,15 +480,12 @@ export class InMemoryMemoryExtractionIdempotencyStorage
       throw new Error("Extraction operation does not match its durable plan");
     }
     if (existing) return { status: "applied", outcome: existing };
-    const applyAtomically =
-      input.personalMemoryStorage.applyExtractionOperationAtomically;
-    if (!applyAtomically) {
+    if (!input.commitCanonicalOperation) {
       throw new Error(
         "In-memory extraction requires an atomic Personal Memory storage adapter",
       );
     }
-
-    const outcome = applyAtomically.call(input.personalMemoryStorage, {
+    const outcome = input.commitCanonicalOperation({
       userId: input.userId,
       operation: input.operation,
       maxMemoriesPerUser: input.maxMemoriesPerUser,
@@ -559,7 +540,7 @@ function incrementExtractionCount(
 }
 
 export class D1MemoryExtractionIdempotencyStorage
-  implements MemoryExtractionIdempotencyStorage
+  implements MemoryExtractionIdempotencyStorage, PersonalMemoryExtractionCommitter
 {
   constructor(
     private readonly db: AppDatabase,
@@ -838,14 +819,9 @@ export class D1MemoryExtractionIdempotencyStorage
     return saved.length > 0;
   }
 
-  async applyOperation(
-    input: MemoryExtractionClaimInput & {
-      readonly operationIndex: number;
-      readonly operation: PlannedMemoryOperation;
-      readonly maxMemoriesPerUser: number;
-      readonly personalMemoryStorage: PersonalMemoryStorage;
-    },
-  ): Promise<MemoryExtractionOperationApplyResult> {
+  async commitExtractionOperation(
+    input: PersonalMemoryExtractionCommitInput,
+  ): Promise<PersonalMemoryExtractionCommitResult> {
     const operation = PlannedMemoryOperationSchema.parse(input.operation);
     if (!Number.isSafeInteger(input.operationIndex) || input.operationIndex < 0) {
       throw new Error("Extraction operation does not match its durable plan");
@@ -1342,8 +1318,8 @@ export class D1MemoryExtractionIdempotencyStorage
 
 export type MemoryExtractionServiceDependencies = {
   readonly personalMemoryService: PersonalMemoryService;
-  readonly personalMemoryStorage: PersonalMemoryStorage;
-  readonly idempotencyStorage: MemoryExtractionIdempotencyStorage;
+  readonly idempotencyStorage: MemoryExtractionIdempotencyStorage &
+    PersonalMemoryExtractionCommitter;
   readonly model?: MemoryAgentModel;
   readonly personalMemoryPolicy?: PersonalMemoryPolicy;
   readonly clock?: MemoryExtractionClock;
@@ -1454,7 +1430,6 @@ function isNoOpExtractionResult(counts: MemoryExtractionCounts): boolean {
 
 export class MemoryExtractionService {
   private readonly personalMemoryService: PersonalMemoryService;
-  private readonly personalMemoryStorage: PersonalMemoryStorage;
   private readonly idempotencyStorage: MemoryExtractionIdempotencyStorage;
   private readonly model: MemoryAgentModel;
   private readonly personalMemoryPolicy: PersonalMemoryPolicy;
@@ -1466,7 +1441,7 @@ export class MemoryExtractionService {
 
   constructor(deps: MemoryExtractionServiceDependencies) {
     this.personalMemoryService = deps.personalMemoryService;
-    this.personalMemoryStorage = deps.personalMemoryStorage;
+    this.personalMemoryService.setExtractionCommitter(deps.idempotencyStorage);
     this.idempotencyStorage = deps.idempotencyStorage;
     this.model = deps.model ?? new NoOpMemoryAgentModel();
     this.personalMemoryPolicy = deps.personalMemoryPolicy ?? new PersonalMemoryPolicy(deps.personalMemoryService);
@@ -1575,12 +1550,11 @@ export class MemoryExtractionService {
           operationIndex,
           claimId: claim.claimId,
         });
-        const applied = await this.idempotencyStorage.applyOperation({
+        const applied = await this.personalMemoryService.commitExtractionOperation({
           ...claimInput(),
           operationIndex,
           operation: planRead.plan.operations[operationIndex]!,
           maxMemoriesPerUser: this.personalMemoryPolicy.memoryLimit,
-          personalMemoryStorage: this.personalMemoryStorage,
         });
         if (applied.status === "claim_lost") {
           throw new MemoryExtractionClaimLostError();

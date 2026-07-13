@@ -18,7 +18,7 @@ import type { PersonalMemoryService } from "../personal-memory.ts";
 import {
   MEMORY_EXTRACTION_MODEL_ID,
   type MemoryExtractionService,
-} from "../memory-agent.ts";
+} from "../personal-memory-extraction.ts";
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
 import type { TelemetryService } from "../telemetry.ts";

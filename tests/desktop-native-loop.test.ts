@@ -23,8 +23,9 @@ import {
 } from "../apps/desktop/src/main/app-context.ts";
 import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
-import { createNativeAutocompleteRuntime } from "../apps/desktop/src/main/native-autocomplete-runtime.ts";
-import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
+import {
+  createNativeAutocompleteApp,
+} from "../apps/desktop/src/main/native-autocomplete-app.ts";
 import { createAppContextExtractor, type AppContextSnapshotState } from "../apps/desktop/src/main/app-context-extractor.ts";
 import { createOpenCodeConversationContext, type OpenCodeContextRow } from "../apps/desktop/src/main/opencode-session-context.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
@@ -1165,12 +1166,12 @@ describe("desktop native suggestion loop", () => {
     });
   });
 
-  describe("native autocomplete runtime", () => {
+  describe("Native Autocomplete App", () => {
     it("routes desktop input through Typing Context, Memory Extraction Window, App Context, and Suggestion seams", () => {
       const buffer = createTypingContextBuffer();
       const memoryAppends: unknown[] = [];
       const appContextTrees: unknown[] = [];
-      const runtime = createNativeAutocompleteRuntime({
+      const runtime = createNativeAutocompleteApp({
         typingContext: buffer,
         appContext: {
           ingestAccessibilityTree: (input) => appContextTrees.push(input),
@@ -1230,7 +1231,7 @@ describe("desktop native suggestion loop", () => {
         revision: 1,
       };
       const localSnapshots: RequestableTypingContextSnapshot[] = [];
-      const runtime = createNativeAutocompleteRuntime({
+      const runtime = createNativeAutocompleteApp({
         typingContext: buffer,
         appContext: {
           ingestAccessibilityTree: () => {},
@@ -1299,7 +1300,7 @@ describe("desktop native suggestion loop", () => {
       expect(localSnapshots[0]?.appContext?.fragments[0]?.text).toContain("asynchronous context");
     });
 
-    it("carries matched OpenCode database context through runtime into local inference", async () => {
+    it("carries matched OpenCode database context through the Native Autocomplete App into local inference", async () => {
       const rows: OpenCodeContextRow[] = [{
         session_id: "session-1",
         title: "End-to-end local context",
@@ -1318,7 +1319,7 @@ describe("desktop native suggestion loop", () => {
         }),
       });
       const localSnapshots: RequestableTypingContextSnapshot[] = [];
-      const runtime = createNativeAutocompleteRuntime({
+      const runtime = createNativeAutocompleteApp({
         typingContext: createTypingContextBuffer(),
         appContext,
         memoryExtraction: {
@@ -1402,8 +1403,27 @@ describe("desktop native suggestion loop", () => {
     } = {}) {
       const buffer = createTypingContextBuffer();
       const calls: Array<{ type: string; value?: unknown }> = [];
-      const session = createNativeSuggestionSession({
+      let appContextListener: (() => void) | undefined;
+      const session = createNativeAutocompleteApp({
         typingContext: buffer,
+        appContext: {
+          ingestAccessibilityTree: () => {},
+          getSnapshot: overrides.getAppContext ?? (() => ({
+            fragments: [],
+            metadata: { status: "empty" },
+          })),
+          getSnapshotState: overrides.getAppContextState,
+          subscribe: (listener) => {
+            appContextListener = listener;
+            return () => {};
+          },
+          clear: overrides.clearAppContext ?? (() => {}),
+        },
+        memoryExtraction: {
+          append: () => true,
+          flush: async () => {},
+          stop: () => {},
+        },
         getLocalSuggestion: overrides.getLocalSuggestion,
         requestSuggestion: async (snapshot, options) => {
           calls.push({
@@ -1456,12 +1476,14 @@ describe("desktop native suggestion loop", () => {
         localSuggestionModelId: overrides.localSuggestionModelId,
         triggerPolicy: overrides.triggerPolicy,
         compatibilityStore: overrides.compatibilityStore,
-        getAppContext: overrides.getAppContext,
-        getAppContextState: overrides.getAppContextState,
-        clearAppContext: overrides.clearAppContext,
         appContextGraceMs: overrides.appContextGraceMs,
       });
-      return { buffer, calls, session };
+      return {
+        buffer,
+        calls,
+        session,
+        publishAppContextChange: () => appContextListener?.(),
+      };
     }
 
     it("owns context changes and current suggestion state behind one session seam", async () => {
@@ -1575,7 +1597,7 @@ describe("desktop native suggestion loop", () => {
 
     it("requests another local suggestion after accepting into fallback terminal context", async () => {
       const requestedContexts: string[] = [];
-      const { session } = makeSession({
+      const { session, publishAppContextChange } = makeSession({
         getLocalSuggestion: async (snapshot) => {
           requestedContexts.push(snapshot.sanitizedContext);
           return snapshot.sanitizedContext === "hello"
@@ -1665,7 +1687,7 @@ describe("desktop native suggestion loop", () => {
     it("records App Context compatibility metadata without raw context", async () => {
       const compatibilityStore = createApplicationCompatibilityStore();
       const rawAppContext = "Dana: The launch room is Atlas 417";
-      const { session } = makeSession({
+      const { session, publishAppContextChange } = makeSession({
         compatibilityStore,
         getAppContext: () => ({
           fragments: [
@@ -1984,7 +2006,7 @@ describe("desktop native suggestion loop", () => {
         revision: 1,
       };
       const localSnapshots: RequestableTypingContextSnapshot[] = [];
-      const { session } = makeSession({
+      const { session, publishAppContextChange } = makeSession({
         appContextGraceMs: 30,
         getAppContextState: () => contextState,
         getLocalSuggestion: async (snapshot) => {
@@ -2015,7 +2037,7 @@ describe("desktop native suggestion loop", () => {
         pending: false,
         revision: 2,
       };
-      session.appContextChanged();
+      publishAppContextChange();
       await wait(10);
 
       expect(localSnapshots).toHaveLength(1);
@@ -2030,7 +2052,7 @@ describe("desktop native suggestion loop", () => {
       };
       const signals: AbortSignal[] = [];
       const hashes: string[] = [];
-      const { session } = makeSession({
+      const { session, publishAppContextChange } = makeSession({
         appContextGraceMs: 2,
         getAppContextState: () => contextState,
         getLocalSuggestion: (snapshot, options) => {
@@ -2063,7 +2085,7 @@ describe("desktop native suggestion loop", () => {
         pending: false,
         revision: 2,
       };
-      session.appContextChanged();
+      publishAppContextChange();
       await wait(10);
 
       expect(signals[0]?.aborted).toBe(true);
@@ -2089,7 +2111,7 @@ describe("desktop native suggestion loop", () => {
         pending: false,
         revision: 1,
       };
-      const { calls, session } = makeSession({
+      const { calls, session, publishAppContextChange } = makeSession({
         getAppContextState: () => contextState,
         getLocalSuggestion: async () => ({ id: "sg-local-original", text: " next" }),
       });
@@ -2103,7 +2125,7 @@ describe("desktop native suggestion loop", () => {
         pending: true,
         revision: 2,
       };
-      session.appContextChanged();
+      publishAppContextChange();
 
       expect(session.getCurrentSuggestion()).toBeNull();
       expect(calls.map((call) => call.type)).toContain("clearSuggestion");
@@ -2117,7 +2139,7 @@ describe("desktop native suggestion loop", () => {
       };
       const snapshots: RequestableTypingContextSnapshot[] = [];
       const signals: AbortSignal[] = [];
-      const { session } = makeSession({
+      const { session, publishAppContextChange } = makeSession({
         getAppContextState: () => contextState,
         requestSuggestion: (snapshot, options) => {
           snapshots.push(snapshot);
@@ -2148,7 +2170,7 @@ describe("desktop native suggestion loop", () => {
         pending: false,
         revision: 2,
       };
-      session.appContextChanged();
+      publishAppContextChange();
       await request;
 
       expect(signals[0]?.aborted).toBe(true);

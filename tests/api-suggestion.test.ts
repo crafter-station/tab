@@ -372,7 +372,7 @@ describe("SuggestionUseCase", () => {
 
     expect(result).toEqual({ ok: true, suggestions: [{ id: "sg-req-1", text: " world" }] });
     expect(capturedInput?.memories).toHaveLength(1);
-    expect((await billingService.checkQuota("user-1")).usage).toBe(1);
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(1);
     expect((await telemetryService.listEvents()).map((event) => event.eventType)).toEqual([
       "suggestion_generated",
       "suggestion_shown",
@@ -490,7 +490,7 @@ describe("SuggestionUseCase", () => {
     await activateFreePlan(billingService);
 
     for (let i = 0; i < 10; i += 1) {
-      await billingService.consumeSuggestion("user-1");
+      await billingService.consumeDeepComplete("user-1", `seed-${i}`);
     }
 
     const result = await useCase.handle(validDevice, validRequest);
@@ -526,7 +526,7 @@ describe("SuggestionUseCase", () => {
     });
     await activateFreePlan(billingService);
     for (let i = 0; i < 9; i += 1) {
-      await billingService.consumeSuggestion("user-1");
+      await billingService.consumeDeepComplete("user-1", `seed-${i}`);
     }
 
     const firstResult = useCase.handle(validDevice, validRequest);
@@ -550,7 +550,7 @@ describe("SuggestionUseCase", () => {
       details: { capability: "deep_completes", limit: 10, used: 10 },
     });
     expect(generationCount).toBe(1);
-    expect((await billingService.checkQuota("user-1")).usage).toBe(10);
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(10);
     expect(usageMeterClient.getEvents()).toEqual([
       expect.objectContaining({ requestId: winningRequestId }),
     ]);
@@ -603,7 +603,7 @@ describe("SuggestionUseCase", () => {
       ok: true,
       suggestions: [{ id: "sg-req-1", text: " world" }],
     });
-    expect((await billingService.checkQuota("user-1")).usage).toBe(1);
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(1);
     expect(usageMeterClient.getEvents()).toEqual([
       expect.objectContaining({ requestId: "req-1" }),
     ]);
