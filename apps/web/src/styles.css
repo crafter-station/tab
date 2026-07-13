@@ -69,7 +69,7 @@
   animation-delay: 160ms;
 }
 
-.tab-app-marquee {
+.tab-app-marquee-viewport {
   -webkit-mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
   mask-image: linear-gradient(to right, transparent, black 7%, black 93%, transparent);
 }
@@ -206,6 +206,16 @@
   pointer-events: none;
   transform: translate3d(0, 0, 0);
   animation: tab-privacy-scan 5.6s linear infinite;
+}
+
+[data-motion-region][data-motion-paused="true"] .tab-app-marquee-track,
+[data-motion-region][data-motion-paused="true"] .tab-memory-row,
+[data-motion-region][data-motion-paused="true"] .tab-memory-output,
+[data-motion-region][data-motion-paused="true"] .tab-memory-transfer-dot,
+[data-motion-region][data-motion-paused="true"] .tab-privacy-transfer-dot,
+[data-motion-region][data-motion-paused="true"] .tab-privacy-check,
+[data-motion-region][data-motion-paused="true"] .tab-privacy-request::after {
+  animation-play-state: paused;
 }
 
 [data-animated-showcase][data-restarting="true"] .tab-memory-row,
@@ -474,6 +484,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tab-motion-toggle {
+    display: none;
+  }
+
   .tab-app-marquee-track {
     width: 100%;
     animation: none;

@@ -43,6 +43,15 @@
     }));
   }
 
+  function setMotionPaused(region, paused) {
+    region.dataset.motionPaused = String(paused);
+    region.querySelectorAll("[data-motion-toggle]").forEach((button) => {
+      button.setAttribute("aria-pressed", String(paused));
+      const label = button.querySelector("[data-motion-toggle-label]");
+      if (label) label.textContent = paused ? "Resume animation" : "Pause animation";
+    });
+  }
+
   function activateTab(demo, button, moveFocus = false) {
     const target = button.getAttribute("data-demo-target");
     if (!target) return;
@@ -63,8 +72,14 @@
 
   document.addEventListener("click", (event) => {
     if (!(event.target instanceof Element)) return;
-    const control = event.target.closest("[data-demo-target], [data-demo-replay], [data-demo-accept], [data-workflow-accept], [data-showcase-replay]");
+    const control = event.target.closest("[data-demo-target], [data-demo-replay], [data-demo-accept], [data-workflow-accept], [data-showcase-replay], [data-motion-toggle]");
     if (!control) return;
+
+    if (control.hasAttribute("data-motion-toggle")) {
+      const region = control.closest("[data-motion-region]");
+      if (region) setMotionPaused(region, region.dataset.motionPaused !== "true");
+      return;
+    }
 
     if (control.hasAttribute("data-showcase-replay")) {
       const showcase = control.closest("[data-animated-showcase]");
@@ -123,5 +138,9 @@
   document.querySelectorAll("[data-tab-demo]").forEach((demo) => {
     const active = demo.querySelector('[data-demo-target][aria-selected="true"]');
     if (active) activateTab(demo, active);
+  });
+
+  document.querySelectorAll("[data-motion-region]").forEach((region) => {
+    setMotionPaused(region, region.dataset.motionPaused === "true");
   });
 })();

@@ -15,7 +15,7 @@ import {
   ShieldCheck,
 } from "@phosphor-icons/react";
 import { planQuotas } from "@tab/billing";
-import { SuggestionCommand, buttonVariants } from "@tab/ui";
+import { SuggestionCommand, buttonVariants, cn } from "@tab/ui";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
 const appLogos = [
@@ -242,17 +242,37 @@ function AppLogo({ name, src }: (typeof appLogos)[number]) {
   );
 }
 
+function MotionToggle({ controls, className }: { controls: string; className?: string }) {
+  return (
+    <button
+      className={cn(
+        "tab-motion-toggle inline-flex cursor-pointer items-center rounded-[var(--radius-control)] border border-border bg-background/90 px-2 py-1 text-xs font-semibold text-muted-foreground shadow-[var(--tab-shadow-control)] transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
+      type="button"
+      data-motion-toggle
+      aria-controls={controls}
+      aria-pressed="false"
+    >
+      <span data-motion-toggle-label>Pause animation</span>
+    </button>
+  );
+}
+
 function AppMarquee() {
   return (
-    <div className="tab-app-marquee overflow-hidden border-y border-border py-4" aria-label="Autocomplete that works anywhere you write on your Mac" role="region">
-      <div className="tab-app-marquee-track flex w-max items-center">
-        <div className="tab-app-marquee-group flex items-center gap-7 pr-7">
-          {appLogos.map((app) => <AppLogo key={app.name} {...app} />)}
-        </div>
-        <div className="tab-app-marquee-copy flex items-center gap-7 pr-7" aria-hidden="true">
-          {appLogos.map((app) => <AppLogo key={app.name} {...app} />)}
+    <div id="app-marquee-animation" className="tab-app-marquee relative border-y border-border py-4" aria-label="Autocomplete that works anywhere you write on your Mac" role="region" data-motion-region data-motion-paused="false">
+      <div className="tab-app-marquee-viewport overflow-hidden">
+        <div className="tab-app-marquee-track flex w-max items-center">
+          <div className="tab-app-marquee-group flex items-center gap-7 pr-7">
+            {appLogos.map((app) => <AppLogo key={app.name} {...app} />)}
+          </div>
+          <div className="tab-app-marquee-copy flex items-center gap-7 pr-7" aria-hidden="true">
+            {appLogos.map((app) => <AppLogo key={app.name} {...app} />)}
+          </div>
         </div>
       </div>
+      <MotionToggle controls="app-marquee-animation" className="absolute right-3 top-1/2 z-10 -translate-y-1/2" />
     </div>
   );
 }
@@ -339,12 +359,15 @@ function MemoryShowcase() {
         <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8" })} href="/signup">Start free <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
       </div>
 
-      <div className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false">
+      <div id="memory-showcase-animation" className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false" data-motion-region data-motion-paused="false">
         <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
           <div><p className="text-sm font-bold">Live relevance demo</p><p className="text-xs text-muted-foreground">A matching memory shapes the next phrase</p></div>
-          <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
-            <ArrowClockwise aria-hidden="true" /> Replay
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <MotionToggle controls="memory-showcase-animation" />
+            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
+              <ArrowClockwise aria-hidden="true" /> Replay
+            </button>
+          </div>
         </div>
 
         <div className="tab-showcase-canvas tab-memory-stage grid items-center gap-5 p-5 md:grid-cols-[minmax(0,0.9fr)_4rem_minmax(0,1.1fr)] md:p-10 lg:gap-8 lg:p-14">
@@ -419,12 +442,15 @@ function PrivacyPipeline() {
         <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8" })} href="/privacy">Read the privacy design <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
       </div>
 
-      <div className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false">
+      <div id="privacy-showcase-animation" className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false" data-motion-region data-motion-paused="false">
         <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
           <div><p className="text-sm font-bold">Live request boundary</p><p className="text-xs text-muted-foreground">What moves from your Mac to a suggestion</p></div>
-          <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
-            <ArrowClockwise aria-hidden="true" /> Replay
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <MotionToggle controls="privacy-showcase-animation" />
+            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
+              <ArrowClockwise aria-hidden="true" /> Replay
+            </button>
+          </div>
         </div>
 
         <div className="tab-showcase-canvas tab-privacy-stage grid items-center gap-4 p-5 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,0.9fr)_3rem_minmax(0,1fr)] md:p-8 lg:gap-6 lg:p-12">

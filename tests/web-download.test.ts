@@ -76,6 +76,12 @@ describe("Web download surface", () => {
     expect(body).toInclude("Useful context in. Raw typing logs out.");
     expect(body).toInclude("data-animated-showcase");
     expect(body).toInclude("data-showcase-replay");
+    expect(body).toInclude('id="app-marquee-animation"');
+    expect(body).toInclude('id="memory-showcase-animation"');
+    expect(body).toInclude('id="privacy-showcase-animation"');
+    expect(body).toInclude("data-motion-toggle");
+    expect(body).toInclude('data-motion-paused="false"');
+    expect(body).toInclude('aria-pressed="false"');
     expect(body).toInclude('id="pricing"');
   });
 });
