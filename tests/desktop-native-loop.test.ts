@@ -178,6 +178,16 @@ describe("desktop native suggestion loop", () => {
       expect(buffer.getState().context).toBe("Hello brave");
     });
 
+    it("preserves terminal source classification after deletion", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty" });
+      buffer.appendText("hola", "terminal_input");
+      buffer.deleteBackward("character", "terminal_input");
+
+      expect(buffer.getState().context).toBe("hol");
+      expect(buffer.getState().contextSource).toBe("terminal_input");
+    });
+
     it("rolls off old context beyond max length", () => {
       const buffer = createTypingContextBuffer(10);
       buffer.appendText("0123456789");
@@ -1387,8 +1397,28 @@ describe("desktop native suggestion loop", () => {
       expect(calls.map((call) => call.type)).toContain("setClipboard");
       expect(calls).toContainEqual({ type: "setClipboard", value: " world" });
       expect(calls.map((call) => call.type)).toContain("sendPaste");
-      expect(buffer.getState().context).toBe("");
-      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(buffer.getState().context).toBe("Hello world");
+    });
+
+    it("requests another local suggestion after accepting into fallback terminal context", async () => {
+      const requestedContexts: string[] = [];
+      const { session } = makeSession({
+        getLocalSuggestion: async (snapshot) => {
+          requestedContexts.push(snapshot.sanitizedContext);
+          return snapshot.sanitizedContext === "hello"
+            ? { id: "sg-local-first", text: " there" }
+            : { id: "sg-local-second", text: " friend" };
+        },
+      });
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("hello");
+      await wait(10);
+      await session.acceptCurrentSuggestion();
+      await wait(10);
+
+      expect(requestedContexts).toEqual(["hello", "hello there"]);
+      expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-second", text: " friend" });
     });
 
     it("accepts through semantic insertion and clears only after insertion succeeds", async () => {
@@ -1680,6 +1710,47 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
 
       expect(calls).toContainEqual({ type: "requestSuggestion", value: "Fallback" });
+    });
+
+    it("falls back to terminal input when Accessibility reports a reliable but contextless Text Session", async () => {
+      const { calls, session } = makeSession();
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.mitchellh.ghostty", windowId: "window:1" },
+        focusedElementId: "ghostty:text-area",
+        textElementId: "ghostty:text-area",
+        selectedRange: { location: 0, length: 0 },
+        caretIdentity: "range:0:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "", afterCaret: "" },
+      });
+      session.appendText("Analyze this");
+      await wait(10);
+
+      expect(session.getCurrentSnapshot().sanitizedContext).toBe("Analyze this");
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: "Analyze this" });
+    });
+
+    it("keeps terminal input authoritative when Ghostty exposes intermittent Accessibility text", async () => {
+      const { buffer, session } = makeSession();
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("Analyze this");
+      session.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.mitchellh.ghostty", windowId: "window:1" },
+        focusedElementId: "ghostty:text-area",
+        textElementId: "ghostty:text-area",
+        selectedRange: { location: 5, length: 0 },
+        caretIdentity: "range:5:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "shell", afterCaret: "" },
+      });
+
+      expect(session.getCurrentSnapshot().sanitizedContext).toBe("Analyze this");
+      expect(buffer.getState().context).toBe("Analyze this");
     });
 
     it("does not let raw dead-key fallback text overwrite a reliable Text Session snapshot", async () => {

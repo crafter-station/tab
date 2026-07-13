@@ -87,6 +87,7 @@ export type LocalInferencePrototypeOptions = {
   readonly readinessTimeoutMs?: number;
   readonly model?: LocalModelConfiguration;
   readonly onStatusChange?: (status: LocalInferenceStatus) => void;
+  readonly onDiagnostic?: (event: string, details: Record<string, unknown>) => void;
   readonly spawnHelper?: SpawnHelper;
   readonly fetch?: typeof globalThis.fetch;
   readonly modelExists?: (path: string) => boolean;
@@ -127,8 +128,13 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
   let stopping = false;
   let lastTiming: LocalInferenceTiming | null = null;
 
+  function contextId(contextHash: string): string {
+    return createHash("sha256").update(contextHash).digest("hex").slice(0, 12);
+  }
+
   function publish(next: LocalInferenceStatus): void {
     status = next;
+    options.onDiagnostic?.("status_changed", next);
     options.onStatusChange?.(next);
   }
 
@@ -280,9 +286,19 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
 
   const getSuggestion: SuggestionSource = async (snapshot, requestOptions) => {
     if (SECRET_LIKE_CONTEXT_PATTERNS.some((pattern) => pattern.test(snapshot.sanitizedContext))) {
+      options.onDiagnostic?.("request_skipped", {
+        reason: "secret_like_context",
+        contextId: contextId(snapshot.contextHash),
+        contextLength: snapshot.sanitizedContext.length,
+      });
       return null;
     }
     if (status.status !== "ready") {
+      options.onDiagnostic?.("request_skipped", {
+        reason: "local_inference_not_ready",
+        status: status.status,
+        contextId: contextId(snapshot.contextHash),
+      });
       throw new Error("Local inference is unavailable");
     }
 
@@ -294,6 +310,20 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
       appContext: snapshot.appContext,
     };
     const messages = createSuggestionMessages(promptInput);
+    options.onDiagnostic?.("request_started", {
+      contextId: contextId(snapshot.contextHash),
+      contextLength: snapshot.sanitizedContext.length,
+      typingContext: snapshot.sanitizedContext,
+      contextSource: snapshot.contextSource,
+      activeApplication: snapshot.activeApplication.bundleId,
+      messageCount: messages.length,
+      messages,
+      modelId: model.id,
+      maxTokens: model.maxTokens,
+      temperature: model.temperature,
+      stream: true,
+      cachePrompt: true,
+    });
 
     try {
       const startedAt = performance.now();
@@ -327,11 +357,37 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
       const rawText = streamed.text;
       lastTiming = streamed.timing;
       const text = normalizeGeneratedSuggestion(snapshot.sanitizedContext, rawText);
-      if (!isSuggestionContractValid(snapshot.sanitizedContext, text)) return null;
+      if (!isSuggestionContractValid(snapshot.sanitizedContext, text)) {
+        options.onDiagnostic?.("request_empty", {
+          reason: "invalid_suggestion_contract",
+          contextId: contextId(snapshot.contextHash),
+          rawOutput: rawText,
+          normalizedOutput: text,
+          rawOutputLength: rawText.length,
+          normalizedOutputLength: text.length,
+          ...streamed.timing,
+        });
+        return null;
+      }
+
+      options.onDiagnostic?.("request_completed", {
+        contextId: contextId(snapshot.contextHash),
+        rawOutput: rawText,
+        normalizedOutput: text,
+        suggestionLength: text.length,
+        ...streamed.timing,
+      });
 
       return { id: `sg-local-${crypto.randomUUID()}`, text } satisfies Suggestion;
     } catch (error) {
-      if (requestOptions?.signal?.aborted) return null;
+      if (requestOptions?.signal?.aborted) {
+        options.onDiagnostic?.("request_aborted", { contextId: contextId(snapshot.contextHash) });
+        return null;
+      }
+      options.onDiagnostic?.("request_failed", {
+        contextId: contextId(snapshot.contextHash),
+        error: error instanceof Error ? error.message : String(error),
+      });
       helper?.kill("SIGTERM");
       helper = null;
       markUnavailable("request_failed");

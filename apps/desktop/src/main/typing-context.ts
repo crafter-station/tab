@@ -23,7 +23,7 @@ export type TypingContextState = {
 export type TypingContextBuffer = {
   appendText(text: string, source?: SuggestionContextSource): void;
   appendPastedText(text: string): void;
-  deleteBackward(unit?: TypingDeletionUnit): void;
+  deleteBackward(unit?: TypingDeletionUnit, source?: SuggestionContextSource): void;
   setActiveApplication(app: ActiveApplication | null): void;
   setSecureInput(active: boolean): void;
   setPaused(active: boolean): void;
@@ -270,14 +270,14 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
       if (redactedText.length === 0) return;
       append(redactedText, "pasted_text");
     },
-    deleteBackward(unit = "character") {
+    deleteBackward(unit = "character", source = "typed_text") {
       if (paused) return;
       if (secureInput || isPasswordManagerContext()) {
         context = "";
         return;
       }
       context = unit === "token" ? removeLastToken(context) : removeLastCharacter(context);
-      lastSource = "typed_text";
+      lastSource = source;
     },
     setActiveApplication(app) {
       if (paused) return;

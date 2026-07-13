@@ -246,11 +246,16 @@ type DebugAppContextState = {
   messageCount: number;
 };
 let debugApiState: DebugApiState = { status: "idle" };
+function logLocalSuggestion(event: string, details: Record<string, unknown>): void {
+  console.log(`[local-suggestions] ${event}`, details);
+}
+
 const localInference = createLocalInferencePrototype({
   executablePath: env.TAB_LOCAL_INFERENCE_EXECUTABLE ?? "/opt/homebrew/bin/llama-server",
   modelPath: LOCAL_INFERENCE_MODEL_PATH,
   modelUrl: LOCAL_INFERENCE_MODEL_URL,
   port: env.TAB_LOCAL_INFERENCE_PORT,
+  onDiagnostic: (event, details) => logLocalSuggestion(`inference.${event}`, details),
   onStatusChange: (status) => {
     settingsWindowManager.sendLocalInferenceStatus(status);
     if (status.status === "unavailable") {
@@ -290,6 +295,7 @@ const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
     }
   },
   fallbackToCloudOnLocalMiss: false,
+  onSuggestionDiagnostic: (event, details) => logLocalSuggestion(`loop.${event}`, details),
   requestSuggestion,
   outputs: {
     showSuggestion: showOverlay,
@@ -1151,6 +1157,11 @@ app.on("activate", () => {
 
 // Exposed for the native input bridge and for tests.
 export function handleTextInput(text: string): void {
+  console.log("[local-suggestions] input.text", {
+    utf16Length: text.length,
+    codePointCount: Array.from(text).length,
+    containsNonAscii: /[^\x00-\x7F]/u.test(text),
+  });
   nativeAutocompleteRuntime.appendText(text);
 }
 
@@ -1159,6 +1170,7 @@ export function handlePastedText(text: string): void {
 }
 
 export function handleDeleteBackward(unit: TypingDeletionUnit = "character"): void {
+  console.log("[local-suggestions] input.delete", { unit });
   nativeAutocompleteRuntime.deleteBackward(unit);
 }
 

@@ -1,4 +1,5 @@
 import type { Suggestion } from "@tab/contracts";
+import { createHash } from "node:crypto";
 import {
   isRequestableTypingContextSnapshot,
   type RequestableTypingContextSnapshot,
@@ -32,6 +33,7 @@ export type SuggestionLoopDependencies = {
   onAutomaticRequestFinished?: (suggestion: Suggestion | null) => void;
   onSuggestionStale?: (suggestion: Suggestion) => void;
   onSecretLikeContextDetected?: () => void;
+  onDiagnostic?: (event: string, details: Record<string, unknown>) => void;
   triggerPolicy?: TriggerPolicy;
   debounceMs: number;
   maxVisibleMs?: number;
@@ -47,6 +49,21 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     request: Promise<Suggestion | null>;
   } | null = null;
 
+  function diagnose(event: string, details: Record<string, unknown> = {}): void {
+    deps.onDiagnostic?.(event, details);
+  }
+
+  function contextDetails(snapshot: SafeTypingContextSnapshot): Record<string, unknown> {
+    return {
+      contextId: createHash("sha256").update(snapshot.contextHash).digest("hex").slice(0, 12),
+      contextLength: snapshot.sanitizedContext.length,
+      contextSource: snapshot.contextSource,
+      activeApplication: snapshot.activeApplication?.bundleId ?? null,
+      requestable: snapshot.requestable,
+      suppressionReason: snapshot.suppressionReason,
+    };
+  }
+
   function isCurrentDebouncedContext(hash: string): boolean {
     return state.status === "debouncing" && state.contextHash === hash;
   }
@@ -58,6 +75,11 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   ): void {
     const showDecision = deps.triggerPolicy?.onSuggestionCandidate(snapshot, suggestion);
     if (showDecision && !showDecision.allow) {
+      diagnose("candidate_skipped", {
+        ...contextDetails(snapshot),
+        reason: showDecision.reason,
+        suggestionLength: suggestion.text.length,
+      });
       state = { status: "idle" };
       return;
     }
@@ -77,25 +99,59 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     }, deps.maxVisibleMs ?? 4_000);
 
     state = { status: "showing", suggestion, contextHash: hash, expiryTimer };
+    diagnose("suggestion_shown", {
+      ...contextDetails(snapshot),
+      source: suggestion.id.startsWith("sg-local-") ? "local" : "cloud",
+      suggestionLength: suggestion.text.length,
+    });
     deps.onShowSuggestion(suggestion);
   }
 
   async function requestLocalSuggestion(snapshot: RequestableTypingContextSnapshot): Promise<Suggestion | null> {
-    if (!deps.getLocalSuggestion) return null;
+    if (!deps.getLocalSuggestion) {
+      diagnose("local_skipped", { ...contextDetails(snapshot), reason: "source_not_configured" });
+      return null;
+    }
 
     const controller = new AbortController();
     activeLocalController = controller;
+    diagnose("local_started", contextDetails(snapshot));
     try {
-      return await deps.getLocalSuggestion(snapshot, {
+      const suggestion = await deps.getLocalSuggestion(snapshot, {
         signal: controller.signal,
         onPartialSuggestion: (suggestion) => {
-          if (!isCurrentDebouncedContext(snapshot.contextHash)) return;
+          if (!isCurrentDebouncedContext(snapshot.contextHash)) {
+            diagnose("local_partial_skipped", { ...contextDetails(snapshot), reason: "context_changed" });
+            return;
+          }
           const showDecision = deps.triggerPolicy?.onSuggestionCandidate(snapshot, suggestion);
-          if (showDecision && !showDecision.allow) return;
+          if (showDecision && !showDecision.allow) {
+            diagnose("local_partial_skipped", {
+              ...contextDetails(snapshot),
+              reason: showDecision.reason,
+              suggestionLength: suggestion.text.length,
+            });
+            return;
+          }
+          diagnose("local_partial_shown", {
+            ...contextDetails(snapshot),
+            suggestionLength: suggestion.text.length,
+          });
           deps.onShowPartialSuggestion?.(suggestion);
         },
       });
-    } catch {
+      diagnose(suggestion ? "local_completed" : "local_empty", {
+        ...contextDetails(snapshot),
+        aborted: controller.signal.aborted,
+        ...(suggestion ? { suggestionLength: suggestion.text.length } : {}),
+      });
+      return suggestion;
+    } catch (error) {
+      diagnose("local_failed", {
+        ...contextDetails(snapshot),
+        aborted: controller.signal.aborted,
+        error: error instanceof Error ? error.message : String(error),
+      });
       return null;
     } finally {
       if (activeLocalController === controller) {
@@ -186,11 +242,17 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     const snapshot = deps.getContext();
     const hash = snapshot.contextHash;
 
+    diagnose("context_changed", { ...contextDetails(snapshot), loopState: state.status });
+
     if (!snapshot.requestable) {
       if (snapshot.suppressionReason === "secret_like_context") {
         deps.onSecretLikeContextDetected?.();
       }
       invalidate();
+      diagnose("automatic_skipped", {
+        ...contextDetails(snapshot),
+        reason: snapshot.suppressionReason ?? "not_requestable",
+      });
       deps.onAutomaticRequestFinished?.(null);
       return;
     }
@@ -199,17 +261,21 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
       (state.status !== "idle" && state.contextHash === hash) ||
       activeCloudRequest?.contextHash === hash
     ) {
+      diagnose("automatic_skipped", { ...contextDetails(snapshot), reason: "context_already_active" });
       return;
     }
 
     const triggerDecision = deps.triggerPolicy?.onContextChanged(snapshot);
     if (triggerDecision && !triggerDecision.allow) {
       invalidate();
+      diagnose("automatic_skipped", { ...contextDetails(snapshot), reason: triggerDecision.reason });
       deps.onAutomaticRequestFinished?.(null);
       return;
     }
 
     invalidate();
+
+    diagnose("automatic_debouncing", { ...contextDetails(snapshot), debounceMs: deps.debounceMs });
 
     state = {
       status: "debouncing",
@@ -217,22 +283,29 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
       timer: setTimeout(async () => {
         const version = requestVersion;
         if (!isCurrentDebouncedContext(hash)) {
+          diagnose("automatic_skipped", { ...contextDetails(snapshot), reason: "debounce_invalidated" });
           return;
         }
 
         const latest = deps.getContext();
         if (latest.contextHash !== hash) {
+          diagnose("automatic_skipped", { ...contextDetails(latest), reason: "context_changed_during_debounce" });
           state = { status: "idle" };
           return;
         }
 
         if (!isRequestableTypingContextSnapshot(latest)) {
+          diagnose("automatic_skipped", {
+            ...contextDetails(latest),
+            reason: latest.suppressionReason ?? "not_requestable_after_debounce",
+          });
           state = { status: "idle" };
           return;
         }
 
         const localSuggestion = await requestLocalSuggestion(latest);
         if (requestVersion !== version || !isCurrentDebouncedContext(hash)) {
+          diagnose("local_result_skipped", { ...contextDetails(latest), reason: "context_invalidated" });
           return;
         }
 
@@ -243,6 +316,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
         }
 
         if (deps.getLocalSuggestion && deps.fallbackToCloudOnLocalMiss === false) {
+          diagnose("cloud_skipped", { ...contextDetails(latest), reason: "local_only_mode" });
           state = { status: "idle" };
           deps.onAutomaticRequestFinished?.(null);
           return;

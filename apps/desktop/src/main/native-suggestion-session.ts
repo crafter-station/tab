@@ -54,6 +54,7 @@ export type NativeSuggestionSessionDependencies = {
   readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
   readonly localSuggestionModelId?: string;
   readonly triggerPolicy?: TriggerPolicy;
+  readonly onSuggestionDiagnostic?: (event: string, details: Record<string, unknown>) => void;
   readonly compatibilityStore?: ApplicationCompatibilityStore;
   readonly getAppContext?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
   readonly clearAppContext?: () => void;
@@ -75,6 +76,7 @@ function activeApplicationKey(app: ActiveApplication | null): string | null {
 }
 
 const SUGGESTION_ID_PREFIX = "sg-";
+const GHOSTTY_BUNDLE_ID = "com.mitchellh.ghostty";
 
 export function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
   let currentSuggestion: Suggestion | null = null;
@@ -222,6 +224,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     debounceMs: deps.debounceMs,
     maxVisibleMs: deps.maxVisibleMs,
     triggerPolicy,
+    onDiagnostic: deps.onSuggestionDiagnostic,
   });
 
   function contextChanged(options: { suppressUnchangedTextSession?: boolean } = {}): void {
@@ -257,6 +260,11 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   function clearTextSessionSnapshot(): void {
     textSessionSnapshot = null;
+  }
+
+  function hasUsableTextSessionContext(snapshot: TextSessionSnapshot): boolean {
+    return snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID
+      && (snapshot.surroundingContext?.beforeCaret?.length ?? 0) > 0;
   }
 
   function invalidateVisibleSuggestionWithoutContextChange(): void {
@@ -325,7 +333,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     deleteBackward(unit: TypingDeletionUnit = "character"): void {
       if (observationPaused) return;
       clearTextSessionSnapshot();
-      deps.typingContext.deleteBackward(unit);
+      deps.typingContext.deleteBackward(unit, deps.getContextSource());
       contextChanged();
     },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
@@ -357,7 +365,9 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
       if (observationPaused) return;
       compatibilityStore.recordTextSessionSnapshot(snapshot);
-      textSessionSnapshot = isReliableTextSessionSnapshot(snapshot) ? snapshot : null;
+      textSessionSnapshot = isReliableTextSessionSnapshot(snapshot) && hasUsableTextSessionContext(snapshot)
+        ? snapshot
+        : null;
       if (textSessionSnapshot) {
         setPreviouslyActiveApplication(textSessionSnapshot.activeApplication);
         if (isPrivateTextSessionSnapshot(textSessionSnapshot)) {
@@ -378,6 +388,8 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     },
     async acceptCurrentSuggestion(): Promise<void> {
       if (replacingSuggestion) return;
+      const acceptedSuggestion = currentSuggestion;
+      const acceptedFromTextSession = textSessionSnapshot !== null;
       const insertionDeps = deps.createAcceptanceDependencies(
         () => currentSuggestion,
         () => previouslyActiveApplication,
@@ -396,7 +408,15 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
         compatibilityStore.recordAcceptance(currentSafeSnapshot());
         recordInteractionTelemetry("suggestion_accepted");
         outputs.hideOverlay();
-        clearContext(false);
+        if (acceptedSuggestion && !acceptedFromTextSession) {
+          suggestionLoop.invalidate();
+          clearVisibleSuggestion();
+          deps.typingContext.appendText(acceptedSuggestion.text, deps.getContextSource());
+          lastContextHash = null;
+          contextChanged();
+        } else {
+          clearContext(false);
+        }
       }
     },
     async requestSuggestionNow(): Promise<void> {
