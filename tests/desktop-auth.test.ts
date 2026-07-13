@@ -117,7 +117,7 @@ function makeSnapshot(
 }
 
 describe("desktop auth client", () => {
-  it("builds a browser login URL with device id and callback scheme", async () => {
+  it("builds a browser login URL with device id and an exact callback URL", async () => {
     const opened: string[] = [];
     const client = createDesktopAuthClient({
       apiBaseUrl: TEST_ORIGIN,
@@ -136,6 +136,10 @@ describe("desktop auth client", () => {
     expect(url).toContain("desktop-device-1");
     expect(decodeURIComponent(url)).toContain("tab://auth/callback");
     expect(opened).toEqual([url]);
+
+    const loopbackCallback = "http://127.0.0.1:43123/auth/callback";
+    const loopbackUrl = client.buildBrowserLoginUrl({ callbackUrl: loopbackCallback });
+    expect(new URL(loopbackUrl).searchParams.get("callback")).toBe(loopbackCallback);
   });
 
   it("exchanges a callback code for a device token and stores it in keychain", async () => {

@@ -1,0 +1,96 @@
+import { createServer, type Server, type ServerResponse } from "node:http";
+
+export type LoopbackAuthCallbackServer = {
+  readonly callbackUrl: string;
+  close(): Promise<void>;
+};
+
+type LoopbackAuthCallbackServerDependencies = {
+  onCallback(url: string): Promise<void>;
+};
+
+function sendHtml(serverResponse: ServerResponse, status: number, title: string, message: string): void {
+  serverResponse.writeHead(status, {
+    "Cache-Control": "no-store",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'",
+    "Content-Type": "text/html; charset=utf-8",
+  });
+  serverResponse.end(`<!doctype html><html><head><meta name="viewport" content="width=device-width"><title>${title}</title><style>body{font:16px system-ui;margin:4rem auto;max-width:32rem;padding:0 1rem;color:#18181b}h1{font-size:1.5rem}</style></head><body><h1>${title}</h1><p>${message}</p></body></html>`);
+}
+
+export function isAuthCallbackUrl(candidate: string, expectedCallbackUrl: string): boolean {
+  try {
+    const actual = new URL(candidate);
+    const expected = new URL(expectedCallbackUrl);
+    return actual.protocol === expected.protocol
+      && actual.username === expected.username
+      && actual.password === expected.password
+      && actual.host === expected.host
+      && actual.pathname === expected.pathname
+      && Boolean(actual.searchParams.get("code"));
+  } catch {
+    return false;
+  }
+}
+
+export function findAuthCallbackUrl(args: readonly string[], expectedCallbackUrl: string): string | null {
+  return args.find((arg) => isAuthCallbackUrl(arg, expectedCallbackUrl)) ?? null;
+}
+
+export async function startLoopbackAuthCallbackServer(
+  deps: LoopbackAuthCallbackServerDependencies,
+): Promise<LoopbackAuthCallbackServer> {
+  let callbackUrl: string | null = null;
+  const server: Server = createServer((request, response) => {
+    void (async () => {
+      if (!callbackUrl) {
+        sendHtml(response, 503, "Tab sign-in unavailable", "Return to Tab and try again.");
+        return;
+      }
+
+      const requestUrl = new URL(request.url ?? "/", callbackUrl);
+      if (request.method !== "GET" || requestUrl.origin !== new URL(callbackUrl).origin || requestUrl.pathname !== "/auth/callback") {
+        sendHtml(response, 404, "Not found", "This address is only used to complete Tab sign-in.");
+        return;
+      }
+      if (!requestUrl.searchParams.get("code")) {
+        sendHtml(response, 400, "Tab sign-in failed", "The authorization code is missing. Return to Tab and try again.");
+        return;
+      }
+
+      try {
+        await deps.onCallback(requestUrl.toString());
+        sendHtml(response, 200, "Signed in to Tab", "You can close this tab and return to Tab.");
+      } catch (error) {
+        console.error("Failed to complete loopback browser handoff:", error);
+        sendHtml(response, 500, "Tab sign-in failed", "Return to Tab and try again.");
+      }
+    })();
+  });
+
+  await new Promise<void>((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      resolve();
+    });
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("Failed to resolve the local auth callback address.");
+  }
+  callbackUrl = `http://127.0.0.1:${address.port}/auth/callback`;
+
+  return {
+    callbackUrl,
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+      server.closeAllConnections();
+    }),
+  };
+}

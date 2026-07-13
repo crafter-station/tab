@@ -26,6 +26,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Build desktop renderer
+        run: bun run --cwd apps/desktop build:renderer
+
       - name: Check Worker binding types
         run: bun run worker:types:check
 

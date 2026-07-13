@@ -11,6 +11,10 @@ asarUnpack:
   - dist/macos-input-tap
 mac:
   category: public.app-category.productivity
+  protocols:
+    - name: Tab
+      schemes:
+        - tab
   target:
     - target: dmg
       arch:

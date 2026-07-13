@@ -7,6 +7,7 @@ import type { DesktopAuthStatus } from "./status.ts";
 
 const TOKEN_SERVICE = "tab";
 const TOKEN_ACCOUNT = "device-token";
+export const DEFAULT_DESKTOP_AUTH_CALLBACK_URL = "tab://auth/callback";
 
 declare const credentialGenerationBrand: unique symbol;
 export type CredentialGeneration = number & {
@@ -55,9 +56,8 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
   }
 
   function buildBrowserLoginUrl({
-    callbackScheme = "tab",
-  }: { callbackScheme?: string } = {}) {
-    const callbackUrl = `${callbackScheme}://auth/callback`;
+    callbackUrl = DEFAULT_DESKTOP_AUTH_CALLBACK_URL,
+  }: { callbackUrl?: string } = {}) {
     const url = new URL("/login", deps.webBaseUrl);
     url.searchParams.set("device_id", deps.deviceId);
     url.searchParams.set("callback", callbackUrl);
@@ -65,9 +65,9 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
   }
 
   async function openBrowserLogin({
-    callbackScheme,
-  }: { callbackScheme?: string } = {}) {
-    const url = buildBrowserLoginUrl({ callbackScheme });
+    callbackUrl,
+  }: { callbackUrl?: string } = {}) {
+    const url = buildBrowserLoginUrl({ callbackUrl });
     if (deps.openExternal) {
       await deps.openExternal(url);
     }

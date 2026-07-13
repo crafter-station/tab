@@ -33,7 +33,17 @@ import {
 } from "./app-context.ts";
 import { createAppContextExtractor, type AppContextAccessibilityTree } from "./app-context-extractor.ts";
 import { createDesktopEventIngress } from "./desktop-event-ingress.ts";
-import { createDesktopAuthClient, createDesktopAuthSession } from "./auth.ts";
+import {
+  createDesktopAuthClient,
+  createDesktopAuthSession,
+  DEFAULT_DESKTOP_AUTH_CALLBACK_URL,
+} from "./auth.ts";
+import {
+  findAuthCallbackUrl,
+  isAuthCallbackUrl,
+  startLoopbackAuthCallbackServer,
+  type LoopbackAuthCallbackServer,
+} from "./auth-callback.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
 import { createDesktopMemoryClient } from "./memory-client.ts";
@@ -50,6 +60,28 @@ import { createCompletionHistory } from "./completion-history.ts";
 import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
+
+let authCallbackHandlingReady = false;
+const pendingAuthCallbackUrls: string[] = [];
+const receivedAuthCallbackUrls = new Set<string>();
+
+function dispatchPackagedAuthCallback(url: string): boolean {
+  if (!isAuthCallbackUrl(url, DEFAULT_DESKTOP_AUTH_CALLBACK_URL)) return false;
+  if (receivedAuthCallbackUrls.has(url)) return true;
+  receivedAuthCallbackUrls.add(url);
+  if (!authCallbackHandlingReady) {
+    pendingAuthCallbackUrls.push(url);
+    return true;
+  }
+  completeBrowserHandoff(url).catch((error) => {
+    console.error("Failed to complete browser handoff:", error);
+  });
+  return true;
+}
+
+app.on("open-url", (event, url) => {
+  if (dispatchPackagedAuthCallback(url)) event.preventDefault();
+});
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
@@ -73,6 +105,7 @@ let debugOverlayWindow: BrowserWindow | null = null;
 let overlayRendererReady = false;
 let tray: TabTray | null = null;
 let relaunchAfterPermissionQuit = false;
+let developmentAuthCallbackServer: Promise<LoopbackAuthCallbackServer> | null = null;
 type InputTapProcess = {
   stdout: { on(event: "data", callback: (chunk: Buffer) => void): void };
   stderr: { on(event: "data", callback: (chunk: Buffer) => void): void };
@@ -532,7 +565,37 @@ async function signOut(): Promise<void> {
 
 async function signIn(): Promise<void> {
   console.log("Opening browser sign-in for device:", DEVICE_ID);
-  await authClient.openBrowserLogin();
+  let callbackUrl = DEFAULT_DESKTOP_AUTH_CALLBACK_URL;
+  if (!app.isPackaged) {
+    developmentAuthCallbackServer ??= startLoopbackAuthCallbackServer({
+      onCallback: completeBrowserHandoff,
+    }).catch((error) => {
+      developmentAuthCallbackServer = null;
+      throw error;
+    });
+    callbackUrl = (await developmentAuthCallbackServer).callbackUrl;
+  }
+  await authClient.openBrowserLogin({ callbackUrl });
+}
+
+async function completeBrowserHandoff(url: string): Promise<void> {
+  console.log("Received auth callback");
+  await authClient.handleCallback(url);
+  console.log("Device token stored after browser handoff for device:", DEVICE_ID);
+  await statusService.refresh();
+  await refreshMemories();
+  showAuthenticatedDesktopSurface();
+}
+
+function enablePackagedAuthCallbackHandling(): void {
+  authCallbackHandlingReady = true;
+  const startupCallback = findAuthCallbackUrl(process.argv, DEFAULT_DESKTOP_AUTH_CALLBACK_URL);
+  if (startupCallback) dispatchPackagedAuthCallback(startupCallback);
+  for (const url of pendingAuthCallbackUrls.splice(0)) {
+    completeBrowserHandoff(url).catch((error) => {
+      console.error("Failed to complete browser handoff:", error);
+    });
+  }
 }
 
 function showSignedOutSurface(): void {
@@ -1050,6 +1113,7 @@ async function bootstrap(): Promise<void> {
 
   overlayWindow = createOverlayWindow();
   debugOverlayWindow = SHOW_DEBUG_TYPING_OVERLAY ? createDebugOverlayWindow() : null;
+  enablePackagedAuthCallbackHandling();
 
   const registered = globalShortcut.register("Alt+Tab", () => {
     acceptCurrentSuggestion().catch((error) => {
@@ -1160,29 +1224,18 @@ async function bootstrap(): Promise<void> {
     completionHistory: completionHistory.getEntries(),
   }));
 
-  // Register the custom URL scheme so the browser handoff can land back in the
-  // native app (ADR-0007).
+  // Packaged macOS builds declare this scheme in electron-builder.yml. During
+  // development, browser handoff uses loopback so generic Electron.app is not
+  // registered as the system handler.
   if (process.platform === "darwin") {
-    app.setAsDefaultProtocolClient("tab");
-  }
-
-  app.on("open-url", (event, url) => {
-    if (url.startsWith("tab://")) {
-      event.preventDefault();
-      console.log("Received auth callback:", url);
-      authClient
-        .handleCallback(url)
-        .then(async (token) => {
-          console.log("Device token stored after browser handoff for device:", DEVICE_ID);
-          await statusService.refresh();
-          await refreshMemories();
-          showAuthenticatedDesktopSurface();
-        })
-        .catch((error) => {
-          console.error("Failed to complete browser handoff:", error);
-        });
+    if (app.isPackaged) {
+      app.setAsDefaultProtocolClient("tab");
+    } else if (app.isDefaultProtocolClient("tab")) {
+      // Remove registrations left by older dev builds that pointed at the
+      // generic Electron.app without Tab's development app argument.
+      app.removeAsDefaultProtocolClient("tab");
     }
-  });
+  }
 
   // The local typing context buffer remains in process memory only and clears
   // on sleep/lock so sensitive context cannot sit around (ADR-0018).
@@ -1271,6 +1324,9 @@ app.on("will-quit", () => {
   localInference.stop();
   memoryExtractionDispatcher.stop();
   typingContextBuffer.clear();
+  if (developmentAuthCallbackServer) {
+    void developmentAuthCallbackServer.then((server) => server.close()).catch(() => {});
+  }
 });
 
 app.on("window-all-closed", () => {

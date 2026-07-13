@@ -35,8 +35,6 @@ export const QWEN_25_3B_Q4_K_M: LocalModelConfiguration = {
   temperature: 0.3,
 } as const;
 
-export const SUPPORTED_LOCAL_MODELS = [QWEN_25_3B_Q4_K_M] as const;
-
 export type LocalInferenceUnavailableReason =
   | "missing_model"
   | "download_failed"

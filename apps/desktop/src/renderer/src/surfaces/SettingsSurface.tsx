@@ -27,10 +27,7 @@ import {
 } from "@tab/ui";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
-import {
-  SUPPORTED_LOCAL_MODELS,
-  type LocalInferenceStatus,
-} from "../../../main/local-inference-prototype";
+import type { LocalInferenceStatus } from "../../../main/local-inference-prototype";
 import type { CompletionHistoryEntry } from "../../../main/completion-history";
 import { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 import { describePauseState, describePersonalMemorySource } from "./settingsCopy";
@@ -324,7 +321,7 @@ export function SettingsSurface() {
                 ? `Automatic Suggestions are unavailable (${localInferenceStatus.reason}). Remote inference will not be used automatically.`
                 : localInferenceStatus.status === "downloading"
                   ? "Keep Tab open while the local model downloads."
-                  : `${SUPPORTED_LOCAL_MODELS[0].id} runs on this Mac and never silently falls through to remote inference.`)}
+                  : "Automatic Suggestions run on this Mac and never silently fall through to remote inference.")}
             >
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge tone={localInferenceStatus.status === "ready" ? "success" : "warning"}>

@@ -9,6 +9,8 @@ describe("Desktop release packaging", () => {
     expect(config).toInclude("hardenedRuntime: true");
     expect(config).toInclude("gatekeeperAssess: false");
     expect(config).toInclude("entitlements: build/entitlements.mac.plist");
+    expect(config).toInclude("protocols:");
+    expect(config).toInclude("- tab");
   });
 
   it("has macOS entitlements that do not request Screen Recording or Full Disk Access", async () => {
