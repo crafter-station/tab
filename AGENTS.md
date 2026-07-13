@@ -1,23 +1,36 @@
 # Agent Instructions
 
-## Database Migrations
+## Sources Of Truth
 
-- Use Drizzle schema changes in `apps/api/src/db/schema.ts` as the source of truth.
-- Generate migration files with `bun run db:generate`; do not handwrite or hardcode migration SQL files.
-- Apply migrations with `bun run db:migrate` when Cloudflare D1 credentials are available.
-- For local D1 validation, run `bun run db:migrate:local` after generating migrations.
-- For remote D1, set `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DATABASE_ID`, and `CLOUDFLARE_D1_TOKEN`, then run `bun run db:migrate` or `bun run db:migrate:remote` as appropriate.
+- Prefer root scripts and app config over prose. In particular, ignore `CLAUDE.md`'s generic advice not to use Vite: the web app uses Vite/TanStack Start, the desktop renderer uses electron-vite, and the root test script intentionally invokes both Node and Bun.
+- `docs/PRD.md` is the product contract, `CONTEXT.md` defines canonical product terms and rejected synonyms, and `docs/adr/` records architectural constraints. Contract tests assert that these stay aligned with code.
 
-## Agent skills
+## Workspace Boundaries
 
-### Issue tracker
+- The root `index.ts` is a placeholder, not an application entrypoint.
+- The API is a Cloudflare Worker configured by root `wrangler.jsonc`: `apps/api/src/worker.ts` is the Worker entrypoint and `apps/api/src/index.ts` composes the Hono app. D1 is local-capable, but the AI and Vectorize bindings are configured as remote.
+- The web app's routes live in `apps/web/src/routes/`; `apps/web/src/dev.ts` is its Bun development server. Do not edit `apps/web/src/routeTree.gen.ts`.
+- The desktop runtime is split across `apps/desktop/src/main/`, `preload/`, and `renderer/`. Its macOS input helper is `apps/desktop/native/macos-input-tap.swift` and is compiled during desktop dev/build.
+- Put cross-runtime API schemas in `@tab/contracts` and shared UI in `packages/ui`; `components.json` points shadcn aliases and global CSS there, not into either app.
 
-GitHub Issues in `crafter-station/tab`; external pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
+## Commands
 
-### Triage labels
+- Match CI installation with `bun install --frozen-lockfile`.
+- `bun run dev` loads `.dev.vars` and starts only API plus web. `scripts/env.ts` requires non-empty `POLAR_ACCESS_TOKEN` and `POLAR_ORGANIZATION_ID` even though `.dev.vars.example` groups Polar under optional settings. Start Electron separately with `bun run desktop:dev`.
+- Run one app directly with `bun run api:dev`, `bun run web:dev`, or `bun run desktop:dev`. Build web or desktop with `bun run --cwd apps/web build` or `bun run --cwd apps/desktop build`; there is no root build script.
+- Reproduce CI in this order: `bun run typecheck`, `bun run worker:types:check`, `bun run lint`, `bun run test`. `lint` currently repeats the TypeScript check, but CI runs both.
+- The full suite must use `bun run test`; it runs `node --test tests/*.test.mjs` before `bun test`. For a focused Bun test use `bun test tests/api-suggestion.test.ts`, optionally with `--test-name-pattern "name"`; for a Node test use `node --test tests/prd-contracts.test.mjs`.
+- Tests live at root and assume the repository root as the working directory. API/web integration tests construct the apps and in-memory SQLite directly; do not start dev servers for them.
+- `bun run desktop:permissions` builds and opens an unsigned macOS app with permission/debug flags. The native desktop loop and permission flow require macOS even though non-macOS builds skip the Swift helper.
 
-Use the standard `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` labels. See `docs/agents/triage-labels.md`.
+## Generated Files And Migrations
 
-### Domain docs
+- Web dev/build generates ignored `apps/web/src/generated/styles.css`; use `bun run --cwd apps/web styles:build` when only CSS generation is needed.
+- `worker-configuration.d.ts` is generated from `wrangler.jsonc` and `.dev.vars.example`. After binding or env changes, regenerate with `bunx wrangler types --env-file=.dev.vars.example --include-runtime=false`, then run `bun run worker:types:check`.
+- Treat `apps/api/src/db/schema.ts` as the database source of truth. Run `bun run db:generate`; do not handwrite files under `apps/api/drizzle/`.
+- Validate generated migrations with `bun run db:migrate:local`. `bun run db:migrate` uses Drizzle's D1 HTTP driver and needs `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DATABASE_ID`, and `CLOUDFLARE_D1_TOKEN`; `bun run db:migrate:remote` applies the generated files through Wrangler.
 
-Single-context layout using root `CONTEXT.md` and `docs/adr/`. See `docs/agents/domain.md`.
+## Repository Workflow
+
+- Work tracking is GitHub Issues in `crafter-station/tab`; external pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
+- Use `needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, and `wontfix` as defined in `docs/agents/triage-labels.md`.
