@@ -19,12 +19,18 @@ import { SuggestionCommand, buttonVariants, cn } from "@tab/ui";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
 const appLogos = [
-  { name: "Gmail", src: "/logos/gmail.svg" },
-  { name: "Slack", src: "/logos/slack.svg" },
-  { name: "Notion", src: "/logos/notion.svg" },
-  { name: "Linear", src: "/logos/linear.svg" },
-  { name: "Ghostty", src: "/logos/ghostty.svg" },
-  { name: "Messages", src: "/logos/messages.svg" },
+  { name: "Gmail", src: "/logos/gmail.svg", href: "https://workspace.google.com/products/gmail/" },
+  { name: "Slack", src: "/logos/slack.svg", href: "https://slack.com/" },
+  { name: "Notion", src: "/logos/notion.svg", href: "https://www.notion.com/" },
+  { name: "Linear", src: "/logos/linear.svg", href: "https://linear.app/" },
+  { name: "Chrome", src: "/logos/chrome.svg", href: "https://www.google.com/chrome/" },
+  { name: "WhatsApp", src: "/logos/whatsapp.svg", href: "https://www.whatsapp.com/" },
+  { name: "Ghostty", src: "/logos/ghostty.svg", href: "https://ghostty.org/" },
+  { name: "Messages", src: "/logos/messages.svg", href: "https://support.apple.com/messages" },
+  { name: "Discord", src: "/logos/discord.svg", href: "https://discord.com/" },
+  { name: "VS Code", src: "/logos/vscode.svg", href: "https://code.visualstudio.com/" },
+  { name: "Obsidian", src: "/logos/obsidian.svg", href: "https://obsidian.md/" },
+  { name: "Zed", src: "/logos/zed.svg", href: "https://zed.dev/" },
 ] as const;
 
 const benefits = [
@@ -233,12 +239,18 @@ function AutocompleteDemo() {
   );
 }
 
-function AppLogo({ name, src }: (typeof appLogos)[number]) {
+function AppLogo({ name, src, href, duplicate = false }: (typeof appLogos)[number] & { duplicate?: boolean }) {
   return (
-    <span className="flex items-center gap-3 whitespace-nowrap text-sm font-semibold text-muted-foreground">
-      <span className="grid size-8 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src={src} alt="" /></span>
+    <a
+      className="group flex items-center gap-3 rounded-[var(--radius-control)] whitespace-nowrap text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      tabIndex={duplicate ? -1 : undefined}
+    >
+      <span className="grid size-8 place-items-center rounded-[var(--radius-media)] border border-border bg-white transition-colors group-hover:border-foreground/25"><img className="size-4" src={src} alt="" /></span>
       {name}
-    </span>
+    </a>
   );
 }
 
@@ -261,18 +273,21 @@ function MotionToggle({ controls, className }: { controls: string; className?: s
 
 function AppMarquee() {
   return (
-    <div id="app-marquee-animation" className="tab-app-marquee relative border-y border-border py-4" aria-label="Autocomplete that works anywhere you write on your Mac" role="region" data-motion-region data-motion-paused="false">
+    <div id="app-marquee-animation" className="tab-app-marquee border-y border-border py-4" aria-labelledby="app-marquee-title" role="region" data-motion-region data-motion-paused="false">
+      <div className="mb-4 flex items-center justify-between gap-4 px-3">
+        <p id="app-marquee-title" className="font-[var(--font-display)] text-sm font-bold text-foreground">Works in every app</p>
+        <MotionToggle controls="app-marquee-animation" />
+      </div>
       <div className="tab-app-marquee-viewport overflow-hidden">
         <div className="tab-app-marquee-track flex w-max items-center">
           <div className="tab-app-marquee-group flex items-center gap-7 pr-7">
             {appLogos.map((app) => <AppLogo key={app.name} {...app} />)}
           </div>
           <div className="tab-app-marquee-copy flex items-center gap-7 pr-7" aria-hidden="true">
-            {appLogos.map((app) => <AppLogo key={app.name} {...app} />)}
+            {appLogos.map((app) => <AppLogo key={app.name} {...app} duplicate />)}
           </div>
         </div>
       </div>
-      <MotionToggle controls="app-marquee-animation" className="absolute right-3 top-1/2 z-10 -translate-y-1/2" />
     </div>
   );
 }
