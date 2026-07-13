@@ -23,6 +23,7 @@ const baseFooterGroups = [
     label: "Company",
     links: [
       { href: "/about", label: "About" },
+      { href: "/brand", label: "Brand" },
       { href: "/contact", label: "Contact" },
       { href: "https://github.com/crafter-station/tab", label: "GitHub", external: true },
     ],

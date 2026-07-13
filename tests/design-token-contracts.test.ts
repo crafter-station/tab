@@ -17,6 +17,12 @@ const tokenDefinitionFiles = new Set([
   "packages/ui/src/platform-colors.ts",
   "packages/ui/src/styles/globals.css",
 ]);
+const fixedBrandExportFiles = new Set([
+  "packages/ui/src/assets/brand/tab-mark-dark.svg",
+  "packages/ui/src/assets/brand/tab-lockup-dark.svg",
+  "apps/web/public/brand/tab-mark-dark.svg",
+  "apps/web/public/brand/tab-lockup-dark.svg",
+]);
 
 function collectSourceFiles(path: string): string[] {
   if (!statSync(path).isDirectory()) return sourceExtensions.has(extname(path)) ? [path] : [];
@@ -71,10 +77,11 @@ describe("design token contracts", () => {
       const normalized = relative(".", file);
       const source = readFileSync(file, "utf8");
       const isTokenDefinition = tokenDefinitionFiles.has(normalized);
+      const isFixedBrandExport = fixedBrandExportFiles.has(normalized);
 
       source.split("\n").forEach((line, index) => {
         const isCssTokenDeclaration = normalized.endsWith("globals.css") && /^\s*--[\w-]+\s*:/.test(line);
-        if ((!isTokenDefinition && rawColor.test(line)) || (normalized.endsWith("globals.css") && !isCssTokenDeclaration && rawColor.test(line))) {
+        if ((!isTokenDefinition && !isFixedBrandExport && rawColor.test(line)) || (normalized.endsWith("globals.css") && !isCssTokenDeclaration && rawColor.test(line))) {
           violations.push(`${normalized}:${index + 1} raw color`);
         }
         if (!isTokenDefinition && rawPaletteUtility.test(line)) {
@@ -94,5 +101,11 @@ describe("design token contracts", () => {
     }
 
     expect(violations).toEqual([]);
+  });
+
+  it("keeps fixed inverse SVG exports aligned with the warm-white platform token", () => {
+    for (const file of fixedBrandExportFiles) {
+      expect(readFileSync(file, "utf8")).toInclude(`fill="${PLATFORM_COLORS.theme.light.primaryForeground}"`);
+    }
   });
 });

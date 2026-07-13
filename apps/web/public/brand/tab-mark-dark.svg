@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="tab-mark-dark-title tab-mark-dark-description">
+  <title id="tab-mark-dark-title">Tab inverse mark</title>
+  <desc id="tab-mark-dark-description">A warm-white horizontal form continues across a deliberate seam.</desc>
+  <path fill="#fffaf7" d="M1 8h10.8l-2.2 8H1Z" />
+  <path fill="#fffaf7" d="M14.4 8H23v8H12.2Z" />
+</svg>

@@ -134,6 +134,8 @@ describe("shared app patterns", () => {
     expect(markup).toInclude("Native autocomplete");
     expect(markup).toInclude("Finish the thought.");
     expect(markup).toInclude("data-suggestion-command");
+    expect(markup).toInclude('data-tab-mark="continuation-gap"');
+    expect(markup).toInclude('viewBox="0 0 24 24"');
     expect(markup).toInclude("Option+Tab");
   });
 });

@@ -241,7 +241,7 @@ function DashboardBrandMenu() {
   return (
     <details className="dashboard-brand-menu group relative" name="dashboard-brand-menu">
       <summary className={buttonVariants({ variant: "secondary", size: "icon", className: "list-none marker:hidden [&::-webkit-details-marker]:hidden" })} aria-label="Open Tab menu">
-        <TabMark className="size-6 rounded-[5px] border-0 shadow-none" />
+        <TabMark className="size-6" />
       </summary>
       <div className="dashboard-brand-menu-panel tab-disclosure-panel absolute right-0 z-50 mt-2 grid w-64 gap-1 rounded-[var(--radius-card)] border border-border bg-popover p-2 text-popover-foreground shadow-[var(--tab-shadow-card)]">
         <button
@@ -293,7 +293,7 @@ function DashboardSidebar({ active }: { active: DashboardSection }) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild size="lg" tooltip="Tab dashboard">
               <a href="/dashboard" aria-label="Tab dashboard">
-                <TabMark className="border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" />
+                <TabMark className="text-sidebar-primary" />
                 <span className="grid min-w-0 text-left leading-tight">
                   <span className="truncate font-[var(--font-display)] font-bold">Tab</span>
                   <span className="truncate text-xs text-sidebar-foreground/60">Account</span>
@@ -346,7 +346,7 @@ function DashboardStaticSidebar({ active }: { active: DashboardSection }) {
   return (
     <aside id="dashboard-sidebar" className="dashboard-static-sidebar hidden w-64 shrink-0 overflow-hidden border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex md:flex-col">
       <a className="dashboard-static-sidebar-brand flex h-16 shrink-0 items-center gap-3 border-b border-sidebar-border px-4 no-underline" href="/dashboard">
-        <TabMark className="border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" />
+        <TabMark className="text-sidebar-primary" />
         <span className="dashboard-static-sidebar-label grid min-w-0 leading-tight">
           <span className="truncate font-[var(--font-display)] font-bold">Tab</span>
           <span className="truncate text-xs text-sidebar-foreground/60">Account</span>

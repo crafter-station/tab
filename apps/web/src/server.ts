@@ -8,6 +8,7 @@ import {
   ResetPasswordPage,
   SignupPage,
 } from "./components/pages/auth.tsx";
+import { BrandPage } from "./components/pages/brand.tsx";
 import { DashboardPage, type DashboardSection } from "./components/pages/dashboard.tsx";
 import { AboutPage, ContactPage, PrivacyPage, TermsPage } from "./components/pages/information.tsx";
 import { DownloadPage, HomePage, PricingPage } from "./components/pages/marketing.tsx";
@@ -125,6 +126,8 @@ async function stylesheet(): Promise<Response> {
 async function publicAsset(path: string): Promise<Response | undefined> {
   const isMarketingScript = path === "/marketing-demo.js";
   const isLogo = /^\/logos\/[a-z0-9-]+\.svg$/.test(path);
+  const isBrandAsset = /^\/brand\/tab-(?:mark|lockup)(?:-(?:light|dark))?\.(?:svg|png|jpg|webp)$/.test(path);
+  const isBrandBundle = path === "/brand/tab-brand-assets.zip";
   const fontFile = path.match(/^\/files\/(geist|space-grotesk)-[a-z0-9-]+\.woff2$/)?.[0].slice(7);
 
   if (fontFile) {
@@ -143,15 +146,27 @@ async function publicAsset(path: string): Promise<Response | undefined> {
     });
   }
 
-  if (!isMarketingScript && !isLogo) return undefined;
+  if (!isMarketingScript && !isLogo && !isBrandAsset && !isBrandBundle) return undefined;
 
   const file = Bun.file(new URL(`../public${path}`, import.meta.url));
   if (!(await file.exists())) return undefined;
 
+  const contentType = isMarketingScript
+    ? "text/javascript; charset=utf-8"
+    : isBrandBundle
+      ? "application/zip"
+      : path.endsWith(".svg")
+        ? "image/svg+xml"
+        : path.endsWith(".png")
+          ? "image/png"
+          : path.endsWith(".webp")
+            ? "image/webp"
+            : "image/jpeg";
+
   return new Response(file, {
     headers: {
       "cache-control": "public, max-age=86400",
-      "content-type": isMarketingScript ? "text/javascript; charset=utf-8" : "image/svg+xml",
+      "content-type": contentType,
     },
   });
 }
@@ -787,6 +802,16 @@ export function createWebApp(config: WebAppConfig) {
 
       if (path === "/pricing" && request.method === "GET") {
         return pricingPage(cookieHeader);
+      }
+
+      if (path === "/brand" && request.method === "GET") {
+        return html(
+          createElement(BrandPage),
+          "Tab Brand Assets - Logos, colors, and usage",
+          200,
+          undefined,
+          "Download the Tab mark and lockup in SVG, PNG, WebP, and JPG, with light and dark variants, brand colors, typography, and usage guidance.",
+        );
       }
 
       if (path === "/about" && request.method === "GET") {

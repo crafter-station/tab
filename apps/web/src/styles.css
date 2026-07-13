@@ -250,6 +250,30 @@
   }
 }
 
+@media (min-width: 40rem) and (hover: hover) and (pointer: fine) {
+  .brand-asset-action {
+    opacity: 0;
+    transform: translate3d(0, 0.25rem, 0);
+  }
+
+  .brand-asset-card:hover .brand-asset-action,
+  .brand-asset-card:focus-within .brand-asset-action {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.brand-transparency-grid {
+  background-color: var(--background);
+  background-image:
+    linear-gradient(45deg, var(--muted) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--muted) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--muted) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--muted) 75%);
+  background-position: 0 0, 0 0.5rem, 0.5rem -0.5rem, -0.5rem 0;
+  background-size: 1rem 1rem;
+}
+
 .tab-demo {
   box-shadow: var(--tab-shadow-window);
 }
@@ -488,6 +512,10 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .brand-asset-action {
+    transition: none;
+  }
+
   .tab-motion-toggle {
     display: none;
   }

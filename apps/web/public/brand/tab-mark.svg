@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" role="img" aria-labelledby="tab-mark-title tab-mark-description">
+  <title id="tab-mark-title">Tab</title>
+  <desc id="tab-mark-description">A horizontal form continues across a deliberate seam.</desc>
+  <path fill="currentColor" d="M1 8h10.8l-2.2 8H1Z" />
+  <path fill="currentColor" d="M14.4 8H23v8H12.2Z" />
+</svg>
