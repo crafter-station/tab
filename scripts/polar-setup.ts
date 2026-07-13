@@ -18,8 +18,7 @@ function unwrap<T extends Resource>(value: unknown, key: string): T {
 }
 
 async function getOrCreateMeter(): Promise<Resource> {
-  const existing =
-    env.POLAR_DEEP_COMPLETE_METER_ID ?? env.POLAR_AUTOCOMPLETE_METER_ID;
+  const existing = env.POLAR_DEEP_COMPLETE_METER_ID;
   if (existing) return polar.meters.get({ id: existing });
   return unwrap<Resource>(
     await polar.meters.create({
@@ -41,8 +40,9 @@ async function getOrCreateMeter(): Promise<Resource> {
 }
 
 async function getOrCreateBenefit(meterId: string): Promise<Resource> {
-  if (env.POLAR_CREDITS_BENEFIT_ID_PRO) {
-    return polar.benefits.get({ id: env.POLAR_CREDITS_BENEFIT_ID_PRO });
+  const existing = env.POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY;
+  if (existing) {
+    return polar.benefits.get({ id: existing });
   }
   return unwrap<Resource>(
     await polar.benefits.create({
@@ -68,7 +68,7 @@ async function getOrCreateProduct(
 ): Promise<Resource> {
   const existing =
     interval === "monthly"
-      ? env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? env.POLAR_PRODUCT_ID_PRO
+      ? env.POLAR_PRODUCT_ID_PRO_MONTHLY
       : env.POLAR_PRODUCT_ID_PRO_ANNUAL;
   if (existing) return polar.products.get({ id: existing });
   const annual = interval === "annual";
@@ -122,14 +122,16 @@ const benefit = await getOrCreateBenefit(meter.id);
 if (!benefit.id) throw new Error("Polar Pro benefit creation did not return an id");
 
 console.log(`POLAR_DEEP_COMPLETE_METER_ID=${meter.id}`);
-console.log(`POLAR_CREDITS_BENEFIT_ID_PRO=${benefit.id}`);
+console.log(`POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY=${benefit.id}`);
 
 for (const interval of ["monthly", "annual"] as const) {
   const product = await getOrCreateProduct(interval);
   if (!product.id) throw new Error(`Polar Pro ${interval} product has no id`);
   await polar.products.updateBenefits({
     id: product.id,
-    productBenefitsUpdate: { benefits: [benefit.id] },
+    productBenefitsUpdate: {
+      benefits: interval === "monthly" ? [benefit.id] : [],
+    },
   });
   console.log(
     `POLAR_PRODUCT_ID_PRO_${interval.toUpperCase()}=${product.id}`,

@@ -9,6 +9,7 @@ export const env = createEnv({
     POLAR_CREDITS_BENEFIT_ID_FREE: z.string().optional(),
     POLAR_CREDITS_BENEFIT_ID_MAX: z.string().optional(),
     POLAR_CREDITS_BENEFIT_ID_PRO: z.string().optional(),
+    POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY: z.string().optional(),
     POLAR_ORGANIZATION_ID: z.string(),
     POLAR_PRODUCT_ID_FREE: z.string().optional(),
     POLAR_PRODUCT_ID_MAX: z.string().optional(),

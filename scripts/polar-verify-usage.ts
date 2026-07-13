@@ -6,14 +6,18 @@ if (!accessToken) {
   throw new Error("POLAR_ACCESS_TOKEN is required");
 }
 
-const meterId = env.POLAR_DEEP_COMPLETE_METER_ID ?? env.POLAR_AUTOCOMPLETE_METER_ID;
+const meterId = env.POLAR_DEEP_COMPLETE_METER_ID;
 if (!meterId) {
   throw new Error("POLAR_DEEP_COMPLETE_METER_ID is required");
 }
 
-const productId = env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? env.POLAR_PRODUCT_ID_PRO;
+const productId = env.POLAR_PRODUCT_ID_PRO_MONTHLY;
 if (!productId) {
   throw new Error("POLAR_PRODUCT_ID_PRO_MONTHLY is required");
+}
+const benefitId = env.POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY;
+if (!benefitId) {
+  throw new Error("POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY is required");
 }
 
 const polar = new Polar({ accessToken, server: env.POLAR_SERVER });
@@ -27,6 +31,9 @@ const requestId = `tab-polar-usage-request-${runId}`;
 const timestamp = new Date();
 const startTimestamp = new Date(timestamp.getTime() - 60_000);
 const endTimestamp = new Date(timestamp.getTime() + 60 * 60_000);
+const grantedCredits = 300;
+const expectedQuantity = 1 - grantedCredits;
+const expectedBalance = grantedCredits - 1;
 
 async function delay(ms: number): Promise<void> {
   await new Promise((resolve) => setTimeout(resolve, ms));
@@ -38,15 +45,6 @@ async function getCustomerMeter() {
     meterId,
     limit: 1,
   });
-
-  return customerMeters.result.items[0];
-}
-
-async function getPortalCustomerMeter(customerSession: string) {
-  const customerMeters = await polar.customerPortal.customerMeters.list(
-    { customerSession },
-    { meterId, limit: 1 },
-  );
 
   return customerMeters.result.items[0];
 }
@@ -66,6 +64,21 @@ async function getMeterQuantity(): Promise<number> {
 let customerId: string | undefined;
 
 try {
+  const [product, benefit] = await Promise.all([
+    polar.products.get({ id: productId }),
+    polar.benefits.get({ id: benefitId }),
+  ]);
+  if (!product.benefits.some((item) => item.id === benefitId)) {
+    throw new Error("The monthly Pro product does not grant the configured benefit");
+  }
+  if (
+    benefit.type !== "meter_credit" ||
+    benefit.properties.meterId !== meterId ||
+    benefit.properties.units !== grantedCredits
+  ) {
+    throw new Error("The configured Pro benefit does not match the Deep Complete meter");
+  }
+
   const customer = await polar.customers.create({
     type: "individual",
     email: `polar-usage+${runId}@cueva.io`,
@@ -76,18 +89,21 @@ try {
   });
   customerId = customer.id;
 
-  const subscription = await polar.subscriptions.create({
-    productId,
-    externalCustomerId,
-    metadata: { source: "tab-polar-verify-usage" },
-  });
-
-  const customerSession = await polar.customerSessions.create({
-    externalCustomerId,
-  });
-
   await polar.events.ingest({
     events: [
+      {
+        name: "deep_complete.used",
+        externalCustomerId,
+        externalId: `${requestId}-grant`,
+        timestamp,
+        metadata: {
+          requestId: `${requestId}-grant`,
+          creditsSpent: -grantedCredits,
+        },
+        organizationId: env.POLAR_SEND_ORGANIZATION_ID
+          ? env.POLAR_ORGANIZATION_ID
+          : undefined,
+      },
       {
         name: "deep_complete.used",
         externalCustomerId,
@@ -106,19 +122,15 @@ try {
 
   let quantity = 0;
   let customerMeter = await getCustomerMeter();
-  let portalCustomerMeter = await getPortalCustomerMeter(customerSession.token);
 
   for (let attempt = 1; attempt <= 12; attempt++) {
     quantity = await getMeterQuantity();
     customerMeter = await getCustomerMeter();
-    portalCustomerMeter = await getPortalCustomerMeter(customerSession.token);
 
     if (
-      quantity > 0 &&
+      quantity === expectedQuantity &&
       customerMeter &&
-      customerMeter.consumedUnits > 0 &&
-      portalCustomerMeter &&
-      portalCustomerMeter.consumedUnits > 0
+      customerMeter.balance === expectedBalance
     ) {
       break;
     }
@@ -126,40 +138,29 @@ try {
     await delay(2_500);
   }
 
-  if (quantity <= 0) {
-    throw new Error(`Expected Polar meter quantity > 0, got ${quantity}`);
+  if (quantity !== expectedQuantity) {
+    throw new Error(
+      `Expected Polar meter quantity ${expectedQuantity}, got ${quantity}`,
+    );
   }
 
   if (!customerMeter) {
     throw new Error("Expected Polar customer meter to exist");
   }
 
-  if (customerMeter.consumedUnits <= 0) {
+  if (customerMeter.balance !== expectedBalance) {
     throw new Error(
-      `Expected Polar customer meter consumed units > 0, got ${customerMeter.consumedUnits}`,
-    );
-  }
-
-  if (!portalCustomerMeter) {
-    throw new Error("Expected Polar portal customer meter to exist");
-  }
-
-  if (portalCustomerMeter.consumedUnits <= 0) {
-    throw new Error(
-      `Expected Polar portal customer meter consumed units > 0, got ${portalCustomerMeter.consumedUnits}`,
+      `Expected Polar customer meter balance ${expectedBalance}, got ${customerMeter.balance}`,
     );
   }
 
   console.log("Polar usage verification passed", {
     externalCustomerId,
-    subscriptionId: subscription.id,
+    grantedCredits,
     meterQuantity: quantity,
     consumedUnits: customerMeter.consumedUnits,
     creditedUnits: customerMeter.creditedUnits,
     balance: customerMeter.balance,
-    portalConsumedUnits: portalCustomerMeter.consumedUnits,
-    portalCreditedUnits: portalCustomerMeter.creditedUnits,
-    portalBalance: portalCustomerMeter.balance,
   });
 } finally {
   if (customerId) {
