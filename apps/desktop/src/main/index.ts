@@ -1243,16 +1243,13 @@ async function bootstrap(): Promise<void> {
   powerMonitor.on("suspend", clearContextAndHide);
   powerMonitor.on("lock-screen", clearContextAndHide);
 
-  // Tray menu provides always-visible access to settings, quick memory, pause,
-  // and sign-in/out without cluttering the overlay.
+  // Tray menu keeps settings, pause, updates, and account actions available
+  // without adding controls to the suggestion overlay.
   tray = createTrayMenu({
     icon: TRAY_ICON_PATH,
     actions: {
       showSettings: () => {
         showInitialDesktopSurface().catch((error) => console.error("Failed to show settings from tray:", error));
-      },
-      showQuickMemory: () => {
-        showInitialDesktopSurface().catch((error) => console.error("Failed to show quick memory from tray:", error));
       },
       togglePause: () => {
         togglePause().catch((error) => console.error("Failed to toggle pause from tray:", error));

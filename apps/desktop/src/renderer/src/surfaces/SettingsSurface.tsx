@@ -3,8 +3,6 @@ import {
   Button,
   CommandBlock,
   EmptyState,
-  Eyebrow,
-  SectionCard,
   SettingsGroup,
   SettingsRow,
   StatusBadge,
@@ -37,12 +35,12 @@ type SettingsTab = "account" | "completions" | "controls" | "appearance" | "perm
 type SidebarStatus = { label: string; detail: string; tone: SemanticTone };
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
-  { value: "account", label: "Account", description: "Plan, usage, and connection for this Mac." },
-  { value: "completions", label: "Completions", description: "Inspect this session's inference requests." },
-  { value: "controls", label: "Controls", description: "Choose when Tab can offer suggestions." },
-  { value: "appearance", label: "Appearance", description: "Set how Tab looks on this Mac." },
+  { value: "account", label: "Account", description: "Plan, usage, and connection status." },
+  { value: "completions", label: "Suggestion history", description: "Suggestions from this session." },
+  { value: "controls", label: "Suggestions", description: "Control when Tab suggests and how it writes." },
+  { value: "appearance", label: "Appearance", description: "Choose how Tab looks on this Mac." },
   { value: "permissions", label: "Permissions", description: "Review the macOS access Tab needs." },
-  { value: "memory", label: "Memory", description: "Control personal context used in suggestions." },
+  { value: "memory", label: "Personal Memory", description: "Control saved details used in Suggestions." },
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
@@ -74,16 +72,41 @@ function formatPlanName(planId: string) {
   return planId.charAt(0).toUpperCase() + planId.slice(1);
 }
 
-function getSidebarStatus(status: DesktopStatus, paused: boolean, loaded: boolean): SidebarStatus {
-  if (!loaded) return { label: "Checking Tab...", detail: "Loading current status", tone: "neutral" };
-  if (status.connectivity !== "online") return { label: "Tab is offline", detail: "Waiting for a connection", tone: "warning" };
-  if (status.auth === "revoked_device") return { label: "Reconnect Tab", detail: "Access was removed", tone: "destructive" };
-  if (status.auth !== "signed_in") return { label: "Sign in required", detail: "Connect this Mac", tone: "warning" };
-  if (status.entitlement?.localAcceptedWords.exhausted || status.entitlement?.deepCompletes.exhausted) {
-    return { label: "One allowance reached", detail: "Other Tab capabilities remain available", tone: "warning" };
+function describeLocalInference(status: LocalInferenceStatus, error: string | null): { label: string; description: string } {
+  if (error) return { label: "Download failed", description: error };
+  switch (status.status) {
+    case "ready":
+      return { label: "Ready", description: "Generated on this Mac." };
+    case "starting":
+    case "stopped":
+      return { label: "Starting", description: "Preparing Automatic Suggestions." };
+    case "downloading":
+      return {
+        label: status.progress === null ? "Downloading" : `Downloading ${Math.round(status.progress * 100)}%`,
+        description: "Keep Tab open while the local model downloads.",
+      };
+    case "unavailable":
+      return {
+        label: status.reason === "missing_model" ? "Download required" : "Unavailable",
+        description: status.reason === "missing_model"
+          ? "Download the local model to use Automatic Suggestions."
+          : "Automatic Suggestions are unavailable. Try again or relaunch Tab.",
+      };
   }
-  if (paused) return { label: "Suggestions paused", detail: "Resume from Controls", tone: "warning" };
-  return { label: "Tab is ready", detail: "Suggestions are active", tone: "success" };
+}
+
+function getSidebarStatus(status: DesktopStatus, paused: boolean, loaded: boolean): SidebarStatus {
+  if (!loaded) return { label: "Checking status...", detail: "", tone: "neutral" };
+  if (status.auth === "revoked_device") return { label: "Reconnect this Mac", detail: "Access was removed", tone: "destructive" };
+  if (status.auth !== "signed_in") return { label: "Sign in required", detail: "Connect this Mac", tone: "warning" };
+  if (status.entitlement?.localAcceptedWords.exhausted && status.entitlement.deepCompletes.exhausted) {
+    return { label: "Suggestion limits reached", detail: "Check reset times in Account", tone: "warning" };
+  }
+  if (status.entitlement?.localAcceptedWords.exhausted) return { label: "Accepted Word limit reached", detail: "Deep Complete still works", tone: "warning" };
+  if (status.entitlement?.deepCompletes.exhausted) return { label: "Deep Complete limit reached", detail: "Local Suggestions still work", tone: "warning" };
+  if (paused) return { label: "Suggestions paused", detail: "Resume in Suggestions", tone: "warning" };
+  if (status.connectivity !== "online") return { label: "Account services offline", detail: "Local Suggestions still work", tone: "warning" };
+  return { label: "Suggestions on", detail: "Tab is ready", tone: "success" };
 }
 
 function createFallbackStatus(): DesktopStatus {
@@ -117,6 +140,7 @@ export function SettingsSurface() {
   const activeTabConfig = SETTINGS_TABS.find((tab) => tab.value === activeTab);
   const pauseState = describePauseState(paused);
   const sidebarStatus = getSidebarStatus(status, paused, statusLoaded);
+  const localInference = describeLocalInference(localInferenceStatus, modelDownloadError);
 
   const refreshAccessibility = useCallback(async () => {
     if (!window.tab?.checkAccessibilityPermission) return false;
@@ -235,44 +259,26 @@ export function SettingsSurface() {
       case "account":
         return (
           <>
-            <div className="settings-summary">
-              <SummaryMetric
-                label="Account"
-                value={status.auth === "signed_in" ? "Connected" : formatAuth(status.auth)}
-                detail="This Mac"
-              />
-              <SummaryMetric label="Plan" value={status.entitlement ? formatPlanName(status.entitlement.planId) : "Not available"} detail={status.entitlement?.entitlementSource === "trial" ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}` : "Current tier"} />
-              <SummaryMetric
-                label="Local Accepted Words"
-                value={status.entitlement ? formatAllowance(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit) : "Not available"}
-                detail={status.entitlement ? `Resets ${formatDate(status.entitlement.localAcceptedWords.resetAt)}` : "Available after sign-in"}
-              />
-              <SummaryMetric
-                label="Deep Completes"
-                value={status.entitlement ? formatAllowance(status.entitlement.deepCompletes.used, status.entitlement.deepCompletes.limit) : "Not available"}
-                detail={status.entitlement ? `Resets ${formatDate(status.entitlement.deepCompletes.resetAt)}` : "Available after sign-in"}
-              />
-              <SummaryMetric
-                label="Completed words"
-                value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()}
-                detail={status.localSuggestionActivity?.averageAcceptanceLatencyMs === null || !status.localSuggestionActivity
-                  ? "This month"
-                  : `${status.localSuggestionActivity.averageAcceptanceLatencyMs.toLocaleString()} ms average to accept`}
-              />
-              <SummaryMetric label="Connected Macs" value={status.entitlement ? `${status.entitlement.devices.active} / ${status.entitlement.devices.limit}` : "Not available"} detail="Personal devices" />
-            </div>
-            <SettingsGroup title="Connection" description="Account and network state for this installation of Tab.">
+            {status.entitlement ? (
+              <div className="settings-summary">
+                <SummaryMetric label="Plan" value={formatPlanName(status.entitlement.planId)} detail={status.entitlement.entitlementSource === "trial" ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}` : "Current tier"} />
+                <SummaryMetric label="Accepted Words today" value={formatAllowance(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit)} detail={`Resets ${formatDate(status.entitlement.localAcceptedWords.resetAt)}`} />
+                <SummaryMetric label="Deep Completes" value={formatAllowance(status.entitlement.deepCompletes.used, status.entitlement.deepCompletes.limit)} detail={`Resets ${formatDate(status.entitlement.deepCompletes.resetAt)}`} />
+                <SummaryMetric label="Words completed" value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()} detail="This month" />
+              </div>
+            ) : null}
+            <SettingsGroup title="Connection" description="Account access for this Mac.">
               <StatusRow
-                label="Account status"
+                label="This Mac"
                 value={formatAuth(status.auth)}
                 tone={getAuthStatusRowTone(status.auth)}
-                description="Whether this Mac is connected to your Tab account."
+                description="Connection to your Tab account."
               />
               <StatusRow
-                label="Connectivity"
+                label="Account services"
                 value={status.connectivity === "online" ? "Online" : "Offline"}
                 tone={status.connectivity === "online" ? "success" : "warning"}
-                description="Whether Tab can reach your account and sync saved memories."
+                description="Used for Deep Complete and Personal Memory sync."
               />
               <div className="settings-group__actions">
                 {status.entitlement?.upgradeUrl ? (
@@ -294,46 +300,26 @@ export function SettingsSurface() {
 
       case "controls":
         return (
-          <SettingsGroup title="Suggestions" description="Pause autocomplete without disconnecting your account.">
-            <SettingsRow label="Pause suggestions" description={pauseState.description}>
+          <SettingsGroup title="Automatic Suggestions" description="Control Suggestions on this Mac.">
+            <SettingsRow label="Status" description={pauseState.description}>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge tone={paused ? "warning" : "brand"}>{pauseState.label}</StatusBadge>
                 <Switch
-                  aria-label="Pause suggestions"
-                  checked={paused}
-                  onCheckedChange={(nextPaused) => {
-                    if (nextPaused !== paused) window.tab?.togglePause?.();
+                  aria-label="Automatic Suggestions"
+                  checked={!paused}
+                  onCheckedChange={(nextEnabled) => {
+                    if (nextEnabled === paused) window.tab?.togglePause?.();
                   }}
                 />
               </div>
             </SettingsRow>
-            <StatusRow
-              label="While paused"
-              value={paused ? "No suggestions" : "Autocomplete active"}
-              tone={paused ? "warning" : "success"}
-              description="Your account stays connected. Tab stops checking recent typing and hides the suggestion bar."
-            />
             <SettingsRow
-              label={status.entitlement?.capabilities.modelCatalogAccess
-                ? "Supported model catalog"
-                : "Local model"}
-              description={modelDownloadError ?? (localInferenceStatus.status === "unavailable"
-                ? `Automatic Suggestions are unavailable (${localInferenceStatus.reason}). Remote inference will not be used automatically.`
-                : localInferenceStatus.status === "downloading"
-                  ? "Keep Tab open while the local model downloads."
-                  : "Automatic Suggestions run on this Mac and never silently fall through to remote inference.")}
+              label="Local model"
+              description={localInference.description}
             >
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge tone={localInferenceStatus.status === "ready" ? "success" : "warning"}>
-                  {localInferenceStatus.status === "ready"
-                    ? "Ready"
-                    : localInferenceStatus.status === "starting"
-                      ? "Starting"
-                      : localInferenceStatus.status === "downloading"
-                        ? localInferenceStatus.progress === null
-                          ? "Downloading"
-                          : `Downloading ${Math.round(localInferenceStatus.progress * 100)}%`
-                        : "Unavailable"}
+                  {localInference.label}
                 </StatusBadge>
                 {localInferenceStatus.status === "unavailable"
                   && ["missing_model", "artifact_mismatch", "download_failed"].includes(localInferenceStatus.reason) && (
@@ -344,7 +330,7 @@ export function SettingsSurface() {
             <SettingsRow
               label="Custom writing instructions"
               description={status.entitlement?.capabilities.customWritingInstructions
-                ? "Applied locally and to Deep Complete without being stored as telemetry."
+                ? "Used for Local Suggestions and Deep Complete. Not included in telemetry."
                 : "Available during the Pro trial and on Pro."}
             >
               <Textarea
@@ -363,28 +349,26 @@ export function SettingsSurface() {
       case "completions":
         return (
           <SettingsGroup
-            title="Completion history"
-            description="The latest 100 successful completions from this app session. Input and output are kept in memory only and clear when Tab quits."
+            title="This session"
+            description="Cleared when Tab quits."
           >
             {completionHistory.length === 0 ? (
-              <EmptyState title="No completions yet" description="Type in another app and pause briefly to generate a local completion." />
+              <EmptyState title="No Suggestions yet" description="Suggestions from this session will appear here." />
             ) : (
-              <div className="flex flex-col gap-3 p-4">
+              <div className="divide-y divide-border">
                 {completionHistory.map((entry) => (
-                  <article className="rounded-lg border border-border bg-background/40 p-4" key={entry.id}>
+                  <article className="p-4" key={entry.id}>
                     <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <StatusBadge tone={entry.mode === "local" ? "brand" : "neutral"}>{entry.mode}</StatusBadge>
-                      <span>{entry.model}</span>
-                      <span>{entry.latencyMs} ms</span>
+                      <StatusBadge tone={entry.mode === "local" ? "brand" : "neutral"}>{entry.mode === "local" ? "Local" : "Deep Complete"}</StatusBadge>
                       <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleTimeString()}</time>
                     </div>
                     <div className="grid gap-3">
                       <div>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Input</div>
+                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Context</div>
                         <pre className="whitespace-pre-wrap break-words font-mono text-sm">{entry.input}</pre>
                       </div>
                       <div>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Output</div>
+                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Suggestion</div>
                         <pre className="whitespace-pre-wrap break-words font-mono text-sm text-foreground">{entry.output}</pre>
                       </div>
                     </div>
@@ -397,8 +381,8 @@ export function SettingsSurface() {
 
       case "appearance":
         return (
-          <SettingsGroup title="Theme" description="Use the system appearance or keep Tab pinned to one theme.">
-            <SettingsRow label="Appearance" description="Theme preference is stored locally on this Mac.">
+          <SettingsGroup title="Theme" description="Stored on this Mac.">
+            <SettingsRow label="Theme" description={themeMode === "system" ? "Follows macOS." : `Always uses ${themeMode} mode.`}>
               <ToggleGroup
                 aria-label="Theme preference"
                 className="settings-theme-toggle"
@@ -415,18 +399,13 @@ export function SettingsSurface() {
                 ))}
               </ToggleGroup>
             </SettingsRow>
-            <StatusRow
-              label="Current preference"
-              value={formatThemeMode(themeMode)}
-              description={themeMode === "system" ? "Tab changes with macOS appearance." : `Tab stays in ${themeMode} mode.`}
-            />
           </SettingsGroup>
         );
 
       case "permissions":
         return (
           <>
-            <SettingsGroup title="macOS access" description="Tab only asks for access needed to observe typing and insert accepted suggestions.">
+            <SettingsGroup title="macOS access" description="Required to show and insert Suggestions in other apps.">
               <SettingsRow
                 label="Accessibility"
                 description="Required to read the text field you are using and add suggestions you accept."
@@ -435,9 +414,7 @@ export function SettingsSurface() {
                   <StatusBadge tone={accessibilityGranted ? "success" : "warning"}>
                     {accessibilityGranted ? "Enabled" : "Needs access"}
                   </StatusBadge>
-                  <Button disabled={permissionBusy === "accessibility"} onClick={handleAccessibility}>
-                    {accessibilityGranted ? "Reopen Settings" : "Open Settings"}
-                  </Button>
+                  {accessibilityGranted ? null : <Button disabled={permissionBusy === "accessibility"} onClick={handleAccessibility}>Open System Settings</Button>}
                 </div>
               </SettingsRow>
               <SettingsRow
@@ -445,19 +422,19 @@ export function SettingsSurface() {
                 description="Required to notice typing and make Option+Tab work when you accept a suggestion."
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <StatusBadge tone="warning">Manual</StatusBadge>
+                  <StatusBadge tone="neutral">Check in System Settings</StatusBadge>
                   <Button disabled={permissionBusy === "input-monitoring"} onClick={handleInputMonitoring}>
-                    Open Settings
+                    Open System Settings
                   </Button>
                 </div>
               </SettingsRow>
               <div className="settings-group__actions">
                 <Button variant="secondary" onClick={() => window.tab?.relaunchForPermissions?.()}>
-                  Relaunch after permission changes
+                  Relaunch Tab
                 </Button>
               </div>
             </SettingsGroup>
-            <SettingsGroup title="Privacy boundary" description="The permissions Tab does not request matter just as much.">
+            <SettingsGroup title="Privacy" description="Access Tab does not request.">
               <StatusRow
                 label="Screen and file access"
                 value="Not requested"
@@ -482,41 +459,41 @@ export function SettingsSurface() {
       case "memory":
         return (
           <>
-            <SettingsGroup title="Personalization" description="Choose whether saved details can inform suggestions on this Mac.">
+            <SettingsGroup title="Use in Suggestions" description="Choose how Personal Memory is used on this Mac.">
               <SettingsRow
-                label="Use saved memories in suggestions"
+                label="Use Personal Memory in Suggestions"
                 description={
                   usePersonalMemory
-                    ? "Tab can include saved memories when making suggestions."
-                    : "Tab will ignore saved memories when making suggestions. Your memories stay stored and editable."
+                    ? "Tab can use saved details when making Suggestions."
+                    : "Saved details stay stored and editable, but Tab will not use them."
                 }
               >
                 <div className="flex items-center justify-end gap-2">
                   <StatusBadge tone={usePersonalMemory ? "brand" : "neutral"}>{usePersonalMemory ? "On" : "Off"}</StatusBadge>
                   <Switch
-                    aria-label="Use saved memories in suggestions"
+                    aria-label="Use Personal Memory in Suggestions"
                     checked={usePersonalMemory}
                     onCheckedChange={handleUsePersonalMemory}
                   />
                 </div>
               </SettingsRow>
               <SettingsRow
-                label="Continuous Memory Extraction"
+                label="Automatically create Personal Memory"
                 description={status.entitlement?.capabilities.continuousMemoryExtraction
-                  ? "Learn new memories from eligible writing in the background."
-                  : "Available during the Pro trial and on Pro. Existing memories remain manageable."}
+                  ? "Save relevant details from eligible writing in the background."
+                  : "Available during the Pro trial and on Pro. Existing Personal Memory stays manageable."}
               >
                 <div className="flex items-center justify-end gap-2">
                   <StatusBadge tone={continuousMemoryExtraction ? "brand" : "neutral"}>{continuousMemoryExtraction ? "On" : "Off"}</StatusBadge>
                   <Switch
-                    aria-label="Continuous Memory Extraction"
+                  aria-label="Automatically create Personal Memory"
                     checked={continuousMemoryExtraction}
                     disabled={!status.entitlement?.capabilities.continuousMemoryExtraction}
                     onCheckedChange={handleContinuousMemoryExtraction}
                   />
                 </div>
               </SettingsRow>
-              <StatusRow label="Nearby app text" value="Not saved as memory" description={APP_CONTEXT_TRUST_COPY.memoryScope} />
+              <StatusRow label="Nearby app text" value="Not saved by default" description="Nearby app text is temporary and does not create Personal Memory by default." />
               {import.meta.env.DEV ? (
                 <StatusRow
                   label="Supported nearby app text"
@@ -527,21 +504,19 @@ export function SettingsSurface() {
             </SettingsGroup>
             <SettingsGroup
               title="Saved details"
-              description={`${memories.length.toLocaleString()} ${memories.length === 1 ? "memory" : "memories"} available to this account.`}
+              description={`${memories.length.toLocaleString()} saved ${memories.length === 1 ? "detail" : "details"}.`}
             >
               {memories.length === 0 ? (
                 <EmptyState
-                  title="No saved memories yet"
-                  description="When saved memories exist, each row remains readable and deletable from this Mac."
+                  title="No Personal Memory yet"
+                  description="Details Tab learns from eligible writing will appear here."
                 />
               ) : (
                 memories.map((memory) => (
                   <div className="memory-row" key={memory.id}>
                     <div className="min-w-0">
                       <p className="text-sm leading-relaxed">{memory.content}</p>
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Saved by {describePersonalMemorySource(memory.createdBy)}
-                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{describePersonalMemorySource(memory.createdBy)}</p>
                     </div>
                     <Button variant="ghost" size="sm" onClick={() => window.tab?.deleteMemory?.(memory.id)}>
                       Delete
@@ -558,7 +533,7 @@ export function SettingsSurface() {
   return (
     <main className="desktop-shell">
       <Tabs orientation="vertical" value={activeTab} onValueChange={(value) => setActiveTab(value as SettingsTab)} className="h-full">
-        <SectionCard className="settings-tabs mx-auto grid h-full max-w-5xl overflow-hidden p-0">
+        <div className="settings-tabs grid h-full overflow-hidden">
           <aside className="settings-tabs__sidebar drag-region">
             <div className="settings-tabs__brand">
               <TabMark />
@@ -592,8 +567,7 @@ export function SettingsSurface() {
 
           <section className="settings-tabs__main no-drag">
             <header className="settings-tabs__header drag-region">
-              <Eyebrow>Settings</Eyebrow>
-              <h1>{activeTabConfig?.label}</h1>
+               <h1>{activeTabConfig?.label}</h1>
               <p>{activeTabConfig?.description}</p>
             </header>
 
@@ -616,7 +590,7 @@ export function SettingsSurface() {
               ))}
             </div>
           </section>
-        </SectionCard>
+        </div>
       </Tabs>
     </main>
   );

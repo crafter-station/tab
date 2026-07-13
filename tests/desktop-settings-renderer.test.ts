@@ -5,19 +5,19 @@ describe("desktop settings renderer", () => {
   it("uses plain-language pause copy for suggestions", () => {
     expect(describePauseState(true)).toEqual({
       label: "Paused",
-      description: "Suggestions and recent typing checks are paused.",
-      action: "Resume Tab",
+      description: "Tab has stopped Suggestions and recent typing checks.",
+      action: "Resume Suggestions",
     });
 
     expect(describePauseState(false)).toEqual({
-      label: "Active",
-      description: "Suggestions and recent typing checks are running.",
-      action: "Pause Tab",
+      label: "On",
+      description: "Tab can suggest as you type.",
+      action: "Pause Suggestions",
     });
   });
 
   it("uses plain-language memory row sources", () => {
-    expect(describePersonalMemorySource("user")).toBe("Saved by you");
-    expect(describePersonalMemorySource("system")).toBe("Saved from accepted writing");
+    expect(describePersonalMemorySource("user")).toBe("Created by you");
+    expect(describePersonalMemorySource("system")).toBe("Learned from accepted writing");
   });
 });

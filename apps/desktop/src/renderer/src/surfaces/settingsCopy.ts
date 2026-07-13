@@ -10,23 +10,23 @@ export function describePauseState(paused: boolean): PauseStateDescription {
   if (paused) {
     return {
       label: "Paused",
-      description: "Suggestions and recent typing checks are paused.",
-      action: "Resume Tab",
+      description: "Tab has stopped Suggestions and recent typing checks.",
+      action: "Resume Suggestions",
     };
   }
 
   return {
-    label: "Active",
-    description: "Suggestions and recent typing checks are running.",
-    action: "Pause Tab",
+    label: "On",
+    description: "Tab can suggest as you type.",
+    action: "Pause Suggestions",
   };
 }
 
 export function describePersonalMemorySource(createdBy: PersonalMemoryCreatedBy) {
   switch (createdBy) {
     case "user":
-      return "Saved by you";
+      return "Created by you";
     case "system":
-      return "Saved from accepted writing";
+      return "Learned from accepted writing";
   }
 }

@@ -16,7 +16,6 @@ export type TrayMenuState = {
 
 export type TrayMenuActions = {
   showSettings(): void;
-  showQuickMemory(): void;
   togglePause(): void;
   signIn(): void;
   signOut(): void;
@@ -49,26 +48,26 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabTray {
   tray.setToolTip("Tab");
 
   function buildStatusLabel(state: TrayMenuState): string {
-    if (state.paused) return "Tab — Paused";
-    if (state.auth === "revoked_device") return "Tab — Device Revoked";
-    if (state.auth === "sign_in_required") return "Tab — Sign In Required";
-    if (state.quotaExhausted) return "Tab — Quota Exhausted";
-    if (state.auth === "signed_in") return "Tab — Signed In";
+    if (state.paused) return "Tab: Suggestions paused";
+    if (state.auth === "revoked_device") return "Tab: Mac disconnected";
+    if (state.auth === "sign_in_required") return "Tab: Sign in required";
+    if (state.quotaExhausted) return "Tab: Limit reached";
+    if (state.auth === "signed_in") return "Tab: Signed in";
     return "Tab";
   }
 
   function buildContextMenu(state: TrayMenuState): Menu {
     const isSignedIn = state.auth === "signed_in";
-    const pauseLabel = state.paused ? "Resume Tab" : "Pause Tab";
+    const pauseLabel = state.paused ? "Resume Suggestions" : "Pause Suggestions";
     let updateItem: MenuItemConstructorOptions;
     if (state.updateAvailable) {
       updateItem = {
-        label: "Update Available",
+        label: "Download Update...",
         click: deps.actions.openDownloadPage,
       };
     } else {
       updateItem = {
-        label: "Check for Updates",
+        label: "Check for Updates...",
         click: deps.actions.checkForUpdates,
       };
     }
@@ -97,21 +96,15 @@ export function createTrayMenu(deps: CreateTrayMenuDependencies): TabTray {
         click: deps.actions.showSettings,
       },
       {
-        label: "Quick Memory",
-        click: deps.actions.showQuickMemory,
-      },
-      { type: "separator" },
-      {
         label: pauseLabel,
         click: deps.actions.togglePause,
       },
       { type: "separator" },
       updateItem,
-      { type: "separator" },
       authItem,
       { type: "separator" },
       {
-        label: "Quit",
+        label: "Quit Tab",
         click: deps.actions.quit,
       },
     ]);

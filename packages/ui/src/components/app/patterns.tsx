@@ -139,7 +139,7 @@ type EmptyStateProps = {
 
 export function EmptyState({ title, description, action, className }: EmptyStateProps) {
   return (
-    <div className={cn("grid place-items-center rounded-[var(--radius-card)] border border-dashed border-border bg-[var(--tab-surface-sunken)] px-6 py-10 text-center", className)}>
+    <div className={cn("grid place-items-center rounded-[var(--radius-card)] bg-[var(--tab-surface-sunken)] px-6 py-9 text-center", className)}>
       <div className="grid max-w-sm gap-3">
         <h3 className="text-balance font-[var(--font-display)] text-lg font-semibold text-foreground">{title}</h3>
         <p className="text-pretty text-sm leading-relaxed text-muted-foreground">{description}</p>
@@ -218,8 +218,8 @@ type SettingsGroupProps = PropsWithChildren<{
 
 export function SettingsGroup({ title, description, className, children }: SettingsGroupProps) {
   return (
-    <Card className={cn("overflow-hidden", className)}>
-      <CardHeader className="border-b border-border bg-[var(--tab-surface-sunken)]/55">
+    <Card className={cn("overflow-hidden border-0 bg-[var(--tab-surface-sunken)]/55 shadow-none", className)}>
+      <CardHeader className="pb-3">
         <CardTitle headingLevel={2}>{title}</CardTitle>
         {description ? <CardDescription>{description}</CardDescription> : null}
       </CardHeader>
@@ -237,7 +237,7 @@ type SummaryMetricProps = {
 
 export function SummaryMetric({ label, value, detail, className }: SummaryMetricProps) {
   return (
-    <div className={cn("grid min-w-0 gap-1 rounded-[var(--radius-card)] border border-border bg-[var(--tab-surface-raised)] p-4 shadow-[var(--tab-shadow-control)]", className)}>
+    <div className={cn("grid min-w-0 gap-1 px-1 py-2", className)}>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="truncate text-xl font-semibold text-foreground tabular-nums">{value}</p>
       {detail ? <p className="truncate text-xs text-muted-foreground">{detail}</p> : null}
