@@ -199,7 +199,7 @@ describe("Web account surface", () => {
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toInclude("Autocomplete for your Mac");
-    expect(body).toInclude("Autocomplete that works anywhere you write on your Mac");
+    expect(body).toInclude("Works in every app");
     expect(body).toInclude("Download Tab free");
     expect(body).toInclude("data-theme-choice=\"system\"");
     expect(body).toInclude("Saved memories");
