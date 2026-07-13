@@ -6,6 +6,8 @@ import type {
 } from "@tab/contracts";
 import { acceptAndInsertSuggestion, type InsertionDependencies } from "./acceptance.ts";
 import type { AppContextSnapshot } from "./app-context.ts";
+import { createHash } from "node:crypto";
+import type { AppContextSnapshotState } from "./app-context-extractor.ts";
 import {
   createApplicationCompatibilityStore,
   type ApplicationCompatibilityStore,
@@ -57,7 +59,9 @@ export type NativeSuggestionSessionDependencies = {
   readonly onSuggestionDiagnostic?: (event: string, details: Record<string, unknown>) => void;
   readonly compatibilityStore?: ApplicationCompatibilityStore;
   readonly getAppContext?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
+  readonly getAppContextState?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshotState;
   readonly clearAppContext?: () => void;
+  readonly appContextGraceMs?: number;
 };
 
 type VisibleSuggestionTelemetry = {
@@ -88,6 +92,9 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let ambientTerminalSnapshot: TextSessionSnapshot | null = null;
   let visibleTextSessionTarget: TextSessionSnapshot | null = null;
   let lastContextHash: string | null = null;
+  let appContextGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  let explicitRequestInFlight = false;
+  let appContextChangedDuringExplicitRequest = false;
   const { outputs } = deps;
   const compatibilityStore = deps.compatibilityStore ?? createApplicationCompatibilityStore();
   const triggerPolicy = deps.triggerPolicy ?? createPoliteTriggerPolicy();
@@ -228,14 +235,25 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     onDiagnostic: deps.onSuggestionDiagnostic,
   });
 
-  function contextChanged(options: { suppressUnchangedTextSession?: boolean } = {}): void {
-    const snapshot = currentSafeSnapshot();
+  function clearAppContextGraceTimer(): void {
+    if (!appContextGraceTimer) return;
+    clearTimeout(appContextGraceTimer);
+    appContextGraceTimer = null;
+  }
+
+  function contextChanged(options: {
+    suppressUnchangedTextSession?: boolean;
+    forceClearVisibleSuggestion?: boolean;
+  } = {}): void {
+    const resolved = currentContextState();
+    const snapshot = resolved.snapshot;
     if (options.suppressUnchangedTextSession && snapshot.contextHash === lastContextHash) {
       return;
     }
     lastContextHash = snapshot.contextHash;
 
-    const preserveVisibleSuggestion = canRefreshVisibleSuggestionInPlace(snapshot);
+    const preserveVisibleSuggestion = !options.forceClearVisibleSuggestion
+      && canRefreshVisibleSuggestionInPlace(snapshot);
     if (currentSuggestion && !replacingSuggestion) {
       recordDismissal(snapshot);
     }
@@ -248,7 +266,22 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       clearVisibleSuggestion();
       outputs.clearSuggestion();
     }
-    suggestionLoop.onContextChanged();
+    clearAppContextGraceTimer();
+    if (resolved.pending) {
+      suggestionLoop.invalidate();
+      const heldHash = snapshot.contextHash;
+      appContextGraceTimer = setTimeout(() => {
+        appContextGraceTimer = null;
+        const latest = currentContextState();
+        if (latest.snapshot.contextHash !== heldHash) {
+          contextChanged();
+          return;
+        }
+        suggestionLoop.onContextChanged();
+      }, deps.appContextGraceMs ?? 175);
+    } else {
+      suggestionLoop.onContextChanged();
+    }
     outputs.showDebugContext();
   }
 
@@ -280,22 +313,45 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     outputs.showDebugContext();
   }
 
-  function withAppContext(snapshot: SafeTypingContextSnapshot): SafeTypingContextSnapshot {
-    if (!snapshot.requestable || !deps.getAppContext) {
-      return snapshot;
-    }
-
-    const appContextInput = ambientTerminalSnapshot ? { ...snapshot, textSession: ambientTerminalSnapshot } : snapshot;
-    const appContext = deps.getAppContext(appContextInput);
-    compatibilityStore.recordAppContextSnapshot(snapshot.activeApplication, appContext);
-    if (appContext.metadata.status !== "available" || appContext.fragments.length === 0) {
-      return snapshot;
-    }
-
-    return { ...snapshot, appContext };
+  function appContextInput(snapshot: SafeTypingContextSnapshot): SafeTypingContextSnapshot {
+    return ambientTerminalSnapshot ? { ...snapshot, textSession: ambientTerminalSnapshot } : snapshot;
   }
 
-  function currentSafeSnapshot(): SafeTypingContextSnapshot {
+  function appContextFingerprint(appContext: AppContextSnapshot, revision: number): string {
+    const value = JSON.stringify({
+      revision,
+      status: appContext.metadata.status,
+      fragments: appContext.fragments.map((fragment) => [fragment.provider, fragment.kind, fragment.text]),
+    });
+    return createHash("sha256").update(value).digest("hex").slice(0, 16);
+  }
+
+  function withAppContext(snapshot: SafeTypingContextSnapshot): {
+    snapshot: SafeTypingContextSnapshot;
+    pending: boolean;
+    revision: number;
+  } {
+    if (!snapshot.requestable || (!deps.getAppContext && !deps.getAppContextState)) {
+      return { snapshot, pending: false, revision: 0 };
+    }
+
+    const input = appContextInput(snapshot);
+    const state = deps.getAppContextState?.(input) ?? {
+      snapshot: deps.getAppContext?.(input) ?? { fragments: [], metadata: { status: "empty" } },
+      pending: false,
+      revision: 0,
+    };
+    const appContext = state.snapshot;
+    compatibilityStore.recordAppContextSnapshot(snapshot.activeApplication, appContext);
+    const contextHash = `${snapshot.contextHash}:app-context:${appContextFingerprint(appContext, state.revision)}`;
+    if (appContext.metadata.status !== "available" || appContext.fragments.length === 0) {
+      return { ...state, snapshot: { ...snapshot, contextHash } };
+    }
+
+    return { ...state, snapshot: { ...snapshot, contextHash, appContext } };
+  }
+
+  function currentContextState(): { snapshot: SafeTypingContextSnapshot; pending: boolean; revision: number } {
     const snapshot = textSessionSnapshot
       ? createSafeTextSessionSnapshot(textSessionSnapshot)
       : deps.typingContext.getSnapshot();
@@ -303,11 +359,16 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     return withAppContext(snapshot);
   }
 
+  function currentSafeSnapshot(): SafeTypingContextSnapshot {
+    return currentContextState().snapshot;
+  }
+
   function clearContext(recordDismissed = true): void {
     if (recordDismissed && currentSuggestion) {
       recordDismissal(currentSafeSnapshot());
     }
     lastContextHash = null;
+    clearAppContextGraceTimer();
     clearTextSessionSnapshot();
     deps.clearAppContext?.();
     deps.typingContext.clear();
@@ -344,6 +405,18 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       clearContext(false);
       outputs.clearSuggestion();
       outputs.showDebugContext();
+    },
+    appContextChanged(): void {
+      if (observationPaused) return;
+      if (explicitRequestInFlight) {
+        appContextChangedDuringExplicitRequest = true;
+        clearAppContextGraceTimer();
+        suggestionLoop.invalidate();
+        clearVisibleSuggestion();
+        outputs.clearSuggestion();
+        return;
+      }
+      contextChanged({ forceClearVisibleSuggestion: true });
     },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
       if (observationPaused) return;
@@ -447,8 +520,14 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       }
       outputs.resetDebugApiState();
       clearVisibleSuggestion();
+      explicitRequestInFlight = true;
       try {
-        await suggestionLoop.requestCloudSuggestionNow();
+        let contextRetryCount = 0;
+        do {
+          appContextChangedDuringExplicitRequest = false;
+          await suggestionLoop.requestCloudSuggestionNow();
+          contextRetryCount += 1;
+        } while (appContextChangedDuringExplicitRequest && !observationPaused && contextRetryCount < 3);
         if (!currentSuggestion && previousSuggestion) {
           currentSuggestion = previousSuggestion;
           visibleTextSessionTarget = previousTextSessionTarget;
@@ -456,6 +535,8 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
           outputs.showSuggestion(previousSuggestion);
         }
       } finally {
+        explicitRequestInFlight = false;
+        appContextChangedDuringExplicitRequest = false;
         replacingSuggestion = false;
         outputs.setSuggestionLoading?.(false);
       }

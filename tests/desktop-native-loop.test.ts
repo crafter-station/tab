@@ -25,7 +25,8 @@ import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeAutocompleteRuntime } from "../apps/desktop/src/main/native-autocomplete-runtime.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
-import { createAppContextExtractor } from "../apps/desktop/src/main/app-context-extractor.ts";
+import { createAppContextExtractor, type AppContextSnapshotState } from "../apps/desktop/src/main/app-context-extractor.ts";
+import { createOpenCodeConversationContext, type OpenCodeContextRow } from "../apps/desktop/src/main/opencode-session-context.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
 import type { Suggestion, ActiveApplication, RecordTelemetryEventRequest } from "@tab/contracts";
@@ -1219,14 +1220,166 @@ describe("desktop native suggestion loop", () => {
         activeApplication: { bundleId: "com.apple.Terminal", windowId: "window:1" },
       });
     });
+
+    it("re-enters the suggestion loop when asynchronous App Context publishes", async () => {
+      const buffer = createTypingContextBuffer();
+      let listener: (() => void) | null = null;
+      let contextState: AppContextSnapshotState = {
+        snapshot: { fragments: [], metadata: { status: "empty" } },
+        pending: true,
+        revision: 1,
+      };
+      const localSnapshots: RequestableTypingContextSnapshot[] = [];
+      const runtime = createNativeAutocompleteRuntime({
+        typingContext: buffer,
+        appContext: {
+          ingestAccessibilityTree: () => {},
+          ingestTextSession: () => {},
+          getSnapshot: () => contextState.snapshot,
+          getSnapshotState: () => contextState,
+          subscribe: (next) => {
+            listener = next;
+            return () => {};
+          },
+          clear: () => {},
+        },
+        memoryExtraction: {
+          append: () => true,
+          flush: async () => {},
+          stop: () => {},
+        },
+        getLocalSuggestion: async (snapshot) => {
+          localSnapshots.push(snapshot);
+          return null;
+        },
+        requestSuggestion: () => null,
+        outputs: {
+          showSuggestion: () => {},
+          clearSuggestion: () => {},
+          hideOverlay: () => {},
+          showDebugContext: () => {},
+          resetDebugApiState: () => {},
+        },
+        createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
+          getCurrentSuggestion,
+          getPreviouslyActiveApplication,
+          setClipboard: async () => "",
+          sendPaste: async () => {},
+          restoreClipboard: async () => {},
+        }),
+        debounceMs: 5,
+        appContextGraceMs: 30,
+      });
+
+      runtime.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      runtime.appendText("Explain this");
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(localSnapshots).toHaveLength(0);
+
+      contextState = {
+        snapshot: {
+          fragments: [{
+            id: "opencode-conversation",
+            provider: "opencode-local-session",
+            kind: "conversation",
+            text: "Assistant: The asynchronous context is now ready.",
+            confidence: 0.95,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          }],
+          metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+        },
+        pending: false,
+        revision: 2,
+      };
+      listener?.();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      expect(localSnapshots[0]?.appContext?.fragments[0]?.text).toContain("asynchronous context");
+    });
+
+    it("carries matched OpenCode database context through runtime into local inference", async () => {
+      const rows: OpenCodeContextRow[] = [{
+        session_id: "session-1",
+        title: "End-to-end local context",
+        directory: "/repo",
+        time_updated: 1,
+        message_id: "message-1",
+        message_time: 1,
+        role: "user",
+        text: "Use this submitted OpenCode turn as local suggestion background.",
+      }];
+      const appContext = createAppContextExtractor({
+        openCodeConversation: createOpenCodeConversationContext({
+          dataDirectory: "/missing",
+          databasePaths: ["opencode.db"],
+          queryDatabase: async () => rows,
+        }),
+      });
+      const localSnapshots: RequestableTypingContextSnapshot[] = [];
+      const runtime = createNativeAutocompleteRuntime({
+        typingContext: createTypingContextBuffer(),
+        appContext,
+        memoryExtraction: {
+          append: () => true,
+          flush: async () => {},
+          stop: () => {},
+        },
+        getLocalSuggestion: async (snapshot) => {
+          localSnapshots.push(snapshot);
+          return null;
+        },
+        fallbackToCloudOnLocalMiss: false,
+        requestSuggestion: () => null,
+        outputs: {
+          showSuggestion: () => {},
+          clearSuggestion: () => {},
+          hideOverlay: () => {},
+          showDebugContext: () => {},
+          resetDebugApiState: () => {},
+        },
+        createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
+          getCurrentSuggestion,
+          getPreviouslyActiveApplication,
+          setClipboard: async () => "",
+          sendPaste: async () => {},
+          restoreClipboard: async () => {},
+        }),
+        debounceMs: 5,
+        appContextGraceMs: 30,
+      });
+
+      runtime.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      runtime.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.mitchellh.ghostty", windowId: "window:1" },
+        focusedElementId: "ghostty:text-area",
+        textElementId: "ghostty:text-area",
+        selectedRange: { location: 0, length: 0 },
+        caretIdentity: "range:0:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        terminalTitle: "OC | End-to-end local context",
+        terminalContents: "┃ Explain this\n▣ Build · model · 1s\n╹",
+      });
+      runtime.appendText("Explain this");
+      await new Promise((resolve) => setTimeout(resolve, 20));
+
+      expect(localSnapshots).toHaveLength(1);
+      expect(localSnapshots[0]?.appContext?.fragments[0]).toMatchObject({
+        provider: "opencode-local-session",
+        kind: "conversation",
+      });
+      expect(localSnapshots[0]?.appContext?.fragments[0]?.text).toContain("submitted OpenCode turn");
+    });
   });
 
   describe("native suggestion session", () => {
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
     function makeSession(overrides: {
-      requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
-      getLocalSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+      requestSuggestion?: SuggestionSource;
+      getLocalSuggestion?: SuggestionSource;
       localSuggestionModelId?: string;
       maxVisibleMs?: number;
       recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
@@ -1234,14 +1387,16 @@ describe("desktop native suggestion loop", () => {
       insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
       compatibilityStore?: ReturnType<typeof createApplicationCompatibilityStore>;
       getAppContext?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
+      getAppContextState?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshotState;
       clearAppContext?: () => void;
+      appContextGraceMs?: number;
     } = {}) {
       const buffer = createTypingContextBuffer();
       const calls: Array<{ type: string; value?: unknown }> = [];
       const session = createNativeSuggestionSession({
         typingContext: buffer,
         getLocalSuggestion: overrides.getLocalSuggestion,
-        requestSuggestion: async (snapshot) => {
+        requestSuggestion: async (snapshot, options) => {
           calls.push({
             type: "requestSuggestion",
             value: snapshot.appContext
@@ -1253,7 +1408,7 @@ describe("desktop native suggestion loop", () => {
               }
               : snapshot.sanitizedContext,
           });
-          return overrides.requestSuggestion?.(snapshot) ?? { id: "s-1", text: " world" };
+          return overrides.requestSuggestion?.(snapshot, options) ?? { id: "s-1", text: " world" };
         },
         getContextSource: () => "typed_text",
         outputs: {
@@ -1287,7 +1442,9 @@ describe("desktop native suggestion loop", () => {
         triggerPolicy: overrides.triggerPolicy,
         compatibilityStore: overrides.compatibilityStore,
         getAppContext: overrides.getAppContext,
+        getAppContextState: overrides.getAppContextState,
         clearAppContext: overrides.clearAppContext,
+        appContextGraceMs: overrides.appContextGraceMs,
       });
       return { buffer, calls, session };
     }
@@ -1803,6 +1960,186 @@ describe("desktop native suggestion loop", () => {
         memoryEligible: false,
         metadata: { terminalApplication: "opencode" },
       });
+    });
+
+    it("waits briefly for pending OpenCode context before local inference", async () => {
+      let contextState: AppContextSnapshotState = {
+        snapshot: { fragments: [], metadata: { provider: "opencode-local-session", status: "empty" } },
+        pending: true,
+        revision: 1,
+      };
+      const localSnapshots: RequestableTypingContextSnapshot[] = [];
+      const { session } = makeSession({
+        appContextGraceMs: 30,
+        getAppContextState: () => contextState,
+        getLocalSuggestion: async (snapshot) => {
+          localSnapshots.push(snapshot);
+          return null;
+        },
+      });
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("Explain this");
+      await wait(10);
+      expect(localSnapshots).toHaveLength(0);
+
+      contextState = {
+        snapshot: {
+          fragments: [{
+            id: "opencode-conversation",
+            provider: "opencode-local-session",
+            kind: "conversation",
+            text: "User: Explain the current implementation.",
+            confidence: 0.95,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          }],
+          metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+        },
+        pending: false,
+        revision: 2,
+      };
+      session.appContextChanged();
+      await wait(10);
+
+      expect(localSnapshots).toHaveLength(1);
+      expect(localSnapshots[0]?.appContext?.fragments[0]?.text).toContain("current implementation");
+    });
+
+    it("aborts fallback local inference when OpenCode context arrives late", async () => {
+      let contextState: AppContextSnapshotState = {
+        snapshot: { fragments: [], metadata: { provider: "opencode-local-session", status: "empty" } },
+        pending: true,
+        revision: 1,
+      };
+      const signals: AbortSignal[] = [];
+      const hashes: string[] = [];
+      const { session } = makeSession({
+        appContextGraceMs: 2,
+        getAppContextState: () => contextState,
+        getLocalSuggestion: (snapshot, options) => {
+          hashes.push(snapshot.contextHash);
+          if (options?.signal) signals.push(options.signal);
+          if (signals.length > 1) return null;
+          return new Promise((resolve) => options?.signal?.addEventListener("abort", () => resolve(null), { once: true }));
+        },
+      });
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("Explain this");
+      await wait(10);
+      expect(signals).toHaveLength(1);
+
+      contextState = {
+        snapshot: {
+          fragments: [{
+            id: "opencode-conversation",
+            provider: "opencode-local-session",
+            kind: "conversation",
+            text: "Assistant: Context resolved after fallback inference began.",
+            confidence: 0.95,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          }],
+          metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+        },
+        pending: false,
+        revision: 2,
+      };
+      session.appContextChanged();
+      await wait(10);
+
+      expect(signals[0]?.aborted).toBe(true);
+      expect(hashes).toHaveLength(2);
+      expect(hashes[1]).not.toBe(hashes[0]);
+    });
+
+    it("clears a visible suggestion when only OpenCode App Context changes", async () => {
+      let contextState: AppContextSnapshotState = {
+        snapshot: {
+          fragments: [{
+            id: "opencode-conversation",
+            provider: "opencode-local-session",
+            kind: "conversation",
+            text: "Assistant: Original conversation context.",
+            confidence: 0.95,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          }],
+          metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+        },
+        pending: false,
+        revision: 1,
+      };
+      const { calls, session } = makeSession({
+        getAppContextState: () => contextState,
+        getLocalSuggestion: async () => ({ id: "sg-local-original", text: " next" }),
+      });
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("Explain this");
+      await wait(10);
+      expect(session.getCurrentSuggestion()).not.toBeNull();
+
+      contextState = {
+        snapshot: { fragments: [], metadata: { provider: "opencode-local-session", status: "empty" } },
+        pending: true,
+        revision: 2,
+      };
+      session.appContextChanged();
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).toContain("clearSuggestion");
+    });
+
+    it("retries an explicit request when OpenCode App Context changes in flight", async () => {
+      let contextState: AppContextSnapshotState = {
+        snapshot: { fragments: [], metadata: { provider: "opencode-local-session", status: "empty" } },
+        pending: true,
+        revision: 1,
+      };
+      const snapshots: RequestableTypingContextSnapshot[] = [];
+      const signals: AbortSignal[] = [];
+      const { session } = makeSession({
+        getAppContextState: () => contextState,
+        requestSuggestion: (snapshot, options) => {
+          snapshots.push(snapshot);
+          if (options?.signal) signals.push(options.signal);
+          if (snapshots.length > 1) return { id: "cloud-context-rich", text: " next" };
+          return new Promise((resolve) => options?.signal?.addEventListener("abort", () => resolve(null), { once: true }));
+        },
+      });
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("Explain this");
+      const request = session.requestSuggestionNow();
+      await wait(1);
+
+      contextState = {
+        snapshot: {
+          fragments: [{
+            id: "opencode-conversation",
+            provider: "opencode-local-session",
+            kind: "conversation",
+            text: "Assistant: Retry explicit work with current context.",
+            confidence: 0.95,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          }],
+          metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+        },
+        pending: false,
+        revision: 2,
+      };
+      session.appContextChanged();
+      await request;
+
+      expect(signals[0]?.aborted).toBe(true);
+      expect(snapshots).toHaveLength(2);
+      expect(snapshots[1]?.appContext?.fragments[0]?.text).toContain("Retry explicit work");
+      expect(session.getCurrentSuggestion()).toEqual({ id: "cloud-context-rich", text: " next" });
     });
 
     it("does not let raw dead-key fallback text overwrite a reliable Text Session snapshot", async () => {

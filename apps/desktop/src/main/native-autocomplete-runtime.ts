@@ -14,7 +14,7 @@ import type {
 
 export type NativeAutocompleteRuntimeDependencies = Omit<
   NativeSuggestionSessionDependencies,
-  "getContextSource" | "getAppContext" | "clearAppContext"
+  "getContextSource" | "getAppContext" | "getAppContextState" | "clearAppContext"
 > & {
   readonly typingContext: TypingContextBuffer;
   readonly appContext: AppContextExtractor;
@@ -30,11 +30,25 @@ function activeApplicationFromState(typingContext: TypingContextBuffer): ActiveA
 
 export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeDependencies) {
   const getContextSource = deps.getContextSource ?? (() => classifyTypingContextSource(activeApplicationFromState(deps.typingContext)));
+  let clearingAppContext = false;
   const session = createNativeSuggestionSession({
     ...deps,
     getContextSource,
     getAppContext: (snapshot) => deps.appContext.getSnapshot(snapshot),
-    clearAppContext: () => deps.appContext.clear(),
+    getAppContextState: deps.appContext.getSnapshotState
+      ? (snapshot) => deps.appContext.getSnapshotState!(snapshot)
+      : undefined,
+    clearAppContext: () => {
+      clearingAppContext = true;
+      try {
+        deps.appContext.clear();
+      } finally {
+        clearingAppContext = false;
+      }
+    },
+  });
+  deps.appContext.subscribe?.(() => {
+    if (!clearingAppContext) session.appContextChanged();
   });
 
   return {
@@ -65,7 +79,7 @@ export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeD
       session.setSecureInput(active);
     },
     applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
-      deps.appContext.ingestTextSession?.(snapshot);
+      if (!session.isPaused()) deps.appContext.ingestTextSession?.(snapshot);
       if (snapshot.accessibilityReliability === "unavailable") {
         deps.appContext.ingestAccessibilityTree({
           activeApplication: snapshot.activeApplication,
