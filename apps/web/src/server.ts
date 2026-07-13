@@ -770,7 +770,15 @@ export function createWebApp(config: WebAppConfig) {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
 
-    const signOutResponse = await apiRequest("/api/auth/sign-out", { method: "POST" }, cookieHeader);
+    const signOutResponse = await apiRequest(
+      "/api/auth/sign-out",
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      },
+      cookieHeader,
+    );
     const response = redirect("/");
     appendSetCookies(response, signOutResponse);
     return response;

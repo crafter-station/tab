@@ -51,7 +51,7 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
 
 }
 
-async function createWebTestEnv() {
+async function createWebTestEnv(options: { enforceSignOutJson?: boolean } = {}) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({
     database,
@@ -83,6 +83,14 @@ async function createWebTestEnv() {
         typeof input === "string" ? input : input.url,
         TEST_ORIGIN,
       );
+      const headers = new Headers(init?.headers);
+      if (
+        options.enforceSignOutJson &&
+        url.pathname === "/api/auth/sign-out" &&
+        headers.get("content-type") !== "application/json"
+      ) {
+        return Promise.resolve(new Response(null, { status: 415 }));
+      }
       return apiApp.request(url.pathname + url.search, init);
     },
   });
@@ -469,6 +477,28 @@ describe("Web account surface", () => {
     const memoriesResponse = await webRequest(webApp, "/dashboard/memories", {}, setCookie!);
     expect(memoriesResponse.status).toBe(200);
     await textIncludes(memoriesResponse, "No saved memories yet");
+  });
+
+  it("signs out through the web form and clears the session", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv({ enforceSignOutJson: true });
+    const { cookie } = await signUpUser(
+      apiApp,
+      database,
+      `logout-${crypto.randomUUID()}@example.com`,
+      "password123456",
+    );
+
+    const response = await webRequest(webApp, "/logout", { method: "POST" }, cookie);
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/");
+    expect(response.headers.get("set-cookie")).toBeTruthy();
+
+    const sessionResponse = await apiApp.request("/api/auth/get-session", {
+      headers: { cookie },
+    });
+    expect(sessionResponse.status).toBe(200);
+    expect(await sessionResponse.json()).toBeNull();
   });
 
   it("redirects to a checkout URL for a paid plan", async () => {
