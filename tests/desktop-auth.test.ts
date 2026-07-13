@@ -175,6 +175,40 @@ describe("desktop auth client", () => {
     );
   });
 
+  it("switches the active token while linking one installation to multiple accounts", async () => {
+    const { app, billingService } = await createApiFixture();
+    const firstAccount = await signUpAndSignIn(app, billingService);
+    const secondAccount = await signUpAndSignIn(app, billingService);
+    const keychain = createMemoryKeychain();
+    const client = createDesktopAuthClient({
+      apiBaseUrl: TEST_ORIGIN,
+      webBaseUrl: "http://localhost:3000",
+      deviceId: "desktop-device-account-switch",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      keychain,
+      fetch: makeFetch(app),
+    });
+
+    const authorize = async (cookie: string) => {
+      const response = await app.request("/api/auth/device/authorize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Cookie: cookie },
+      });
+      return ((await response.json()) as { code: string }).code;
+    };
+
+    const firstToken = await client.handleCallback(
+      `tab://auth/callback?code=${await authorize(firstAccount.cookie)}`,
+    );
+    const secondToken = await client.handleCallback(
+      `tab://auth/callback?code=${await authorize(secondAccount.cookie)}`,
+    );
+
+    expect(secondToken).not.toBe(firstToken);
+    expect(await keychain.get("tab", "device-token")).toBe(secondToken);
+  });
+
   it("uses the stored device token when calling the suggestion API", async () => {
     const { app, billingService } = await createApiFixture(async () => ({ text: " world" }));
     const { cookie } = await signUpAndSignIn(app, billingService);

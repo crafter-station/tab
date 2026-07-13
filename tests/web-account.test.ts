@@ -51,12 +51,17 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
 
 }
 
-async function createWebTestEnv(options: { enforceSignOutJson?: boolean } = {}) {
+async function createWebTestEnv(options: {
+  enforceSignOutJson?: boolean;
+  requireEmailVerification?: boolean;
+  sendVerificationEmail?: (input: { email: string; url: string }) => Promise<void>;
+} = {}) {
   const database = new Database(":memory:");
   const auth = createAuthInstance({
     database,
     baseURL: TEST_ORIGIN,
-    requireEmailVerification: false,
+    requireEmailVerification: options.requireEmailVerification ?? false,
+    sendVerificationEmail: options.sendVerificationEmail,
   });
   await migrateAuth(auth);
 
@@ -387,6 +392,41 @@ describe("Web account surface", () => {
     expect(body).toInclude("Check your email");
     expect(body).toInclude("Verify your email address before choosing a plan.");
     expect(response.headers.get("set-cookie")).toBeTruthy();
+  });
+
+  it("sends one verification email and redirects verification to the dashboard", async () => {
+    const deliveries: Array<{ email: string; url: string }> = [];
+    const { apiApp, webApp } = await createWebTestEnv({
+      requireEmailVerification: true,
+      sendVerificationEmail: async (delivery) => {
+        deliveries.push(delivery);
+      },
+    });
+    const email = `user-${crypto.randomUUID()}@example.com`;
+
+    const response = await webRequest(webApp, "/signup", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        name: "Test User",
+        email,
+        password: "password123456",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(deliveries).toHaveLength(1);
+    expect(deliveries[0]?.email).toBe(email);
+
+    const verificationUrl = new URL(deliveries[0]!.url);
+    const verificationResponse = await apiApp.request(
+      verificationUrl.pathname + verificationUrl.search,
+      { redirect: "manual" },
+    );
+    expect(verificationResponse.status).toBe(302);
+    expect(verificationResponse.headers.get("location")).toBe(
+      `${WEB_ORIGIN}/dashboard`,
+    );
   });
 
   it("starts signed-in users without a Polar entitlement on a Pro trial", async () => {

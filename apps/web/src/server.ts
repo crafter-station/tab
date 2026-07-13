@@ -422,7 +422,12 @@ export function createWebApp(config: WebAppConfig) {
       {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          callbackURL: new URL("/dashboard", request.url).toString(),
+        }),
       },
       cookieHeader,
     );
@@ -431,47 +436,28 @@ export function createWebApp(config: WebAppConfig) {
       return signupPage("We could not create that account. Check the details and try again.", "/signup", searchParams);
     }
 
-    const signInResponse = await apiRequest(
-      "/api/auth/sign-in/email",
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password, rememberMe: true }),
-      },
-      cookieHeader,
-    );
+    const signedInCookieHeader = cookieHeaderFromSetCookie(signUpResponse);
+    if (!signedInCookieHeader) return verifyEmailPage();
 
-    if (signInResponse.status === 403) {
-      return verifyEmailPage();
+    const session = await getSession(signedInCookieHeader);
+    if (session.ok && !session.user.emailVerified) {
+      const response = verifyEmailPage();
+      appendSetCookies(response, signUpResponse);
+      return response;
     }
 
-    if (signInResponse.status === 200) {
-      const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
-      if (signedInCookieHeader) {
-        const session = await getSession(signedInCookieHeader);
-        if (session.ok && !session.user.emailVerified) {
-          const response = verifyEmailPage();
-          appendSetCookies(response, signInResponse);
-          return response;
-        }
-      }
+    if (deviceId && callback) {
+      return authorizeDeviceRedirect(callback, signedInCookieHeader, signUpResponse);
     }
 
-    if (deviceId && callback && signInResponse.status === 200) {
-      const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
-      if (signedInCookieHeader) {
-        return authorizeDeviceRedirect(callback, signedInCookieHeader, signInResponse);
-      }
-    }
-
-    if (next && signInResponse.status === 200) {
+    if (next) {
       const response = redirect(next);
-      appendSetCookies(response, signInResponse);
+      appendSetCookies(response, signUpResponse);
       return response;
     }
 
     const response = redirect("/dashboard");
-    appendSetCookies(response, signInResponse.status === 200 ? signInResponse : signUpResponse);
+    appendSetCookies(response, signUpResponse);
     return response;
   }
 

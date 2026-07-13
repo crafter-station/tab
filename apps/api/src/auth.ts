@@ -27,6 +27,7 @@ export type CreateAuthInstanceOptions = {
   baseURL?: string;
   secret?: string;
   requireEmailVerification?: boolean;
+  sendVerificationEmail?: (input: { email: string; url: string }) => Promise<void>;
 };
 
 export function createAuthInstance(
@@ -40,6 +41,7 @@ export function createAuthInstance(
     secret,
     baseURL,
     basePath: "/api/auth",
+    trustedOrigins: [env.TAB_WEB_BASE_URL],
     emailAndPassword: {
       enabled: true,
       requireEmailVerification,
@@ -62,6 +64,10 @@ export function createAuthInstance(
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
+        if (options.sendVerificationEmail) {
+          await options.sendVerificationEmail({ email: user.email, url });
+          return;
+        }
         await deliverAuthEmail({
           to: user.email,
           subject: "Verify your Tab email",

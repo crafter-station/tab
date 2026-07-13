@@ -30,6 +30,7 @@ export const env = createEnv({
       .transform((value) => value === "true"),
     POLAR_WEBHOOK_SECRET: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
+    TAB_WEB_BASE_URL: z.url().default("http://localhost:3000"),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

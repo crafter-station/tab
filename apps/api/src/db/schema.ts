@@ -1,5 +1,5 @@
 import { relations } from "drizzle-orm";
-import { index, integer, primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
   id: text("id").primaryKey(),
@@ -72,7 +72,7 @@ export const deviceTokens = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    deviceId: text("device_id").notNull().unique(),
+    deviceId: text("device_id").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
     platform: text("platform").notNull(),
     appVersion: text("app_version").notNull(),
@@ -83,6 +83,7 @@ export const deviceTokens = sqliteTable(
   (table) => [
     index("idx_device_tokens_user").on(table.userId),
     index("idx_device_tokens_user_revoked").on(table.userId, table.revoked),
+    uniqueIndex("idx_device_tokens_user_device").on(table.userId, table.deviceId),
   ],
 );
 

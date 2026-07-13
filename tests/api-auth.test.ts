@@ -241,7 +241,7 @@ describe("Better Auth browser handoff and device tokens", () => {
     expect(statusResponse.status).toBe(200);
   });
 
-  it("does not move an installation id between accounts", async () => {
+  it("links the same installation id independently to multiple accounts", async () => {
     const { app, billingService, deviceTokenService } = await createAuthApp();
     const firstUser = await signUpAndSignIn(app, billingService);
     const secondUser = await signUpAndSignIn(app, billingService);
@@ -278,9 +278,9 @@ describe("Better Auth browser handoff and device tokens", () => {
       await firstExchange.json(),
     ).token;
     const secondExchange = await signInDevice(secondUser.cookie);
-    expect(secondExchange.status).toBe(409);
+    expect(secondExchange.status).toBe(200);
     expect(await deviceTokenService.listDevices(firstUser.userId)).toHaveLength(1);
-    expect(await deviceTokenService.listDevices(secondUser.userId)).toHaveLength(0);
+    expect(await deviceTokenService.listDevices(secondUser.userId)).toHaveLength(1);
 
     const oldTokenStatus = await app.request("/api/status", {
       method: "GET",

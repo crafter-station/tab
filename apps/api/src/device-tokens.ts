@@ -36,7 +36,7 @@ export interface DeviceTokenStorage {
     limit: number,
   ): Promise<Device | null>;
   findDeviceByTokenHash(tokenHash: string): Promise<Device | null>;
-  findDeviceByDeviceId(deviceId: string): Promise<Device | null>;
+  findDeviceByDeviceId(userId: string, deviceId: string): Promise<Device | null>;
   updateDevice(device: Device): Promise<Device>;
   listDevicesByUser(userId: string): Promise<Device[]>;
   createExchangeCode(
@@ -76,7 +76,7 @@ export class InMemoryDeviceTokenStorage implements DeviceTokenStorage {
     const device: Device = { ...record, id: crypto.randomUUID() };
     this.devices.set(device.id, device);
     this.devicesByHash.set(device.tokenHash, device);
-    this.devicesByDeviceId.set(device.deviceId, device);
+    this.devicesByDeviceId.set(`${device.userId}:${device.deviceId}`, device);
     return device;
   }
 
@@ -106,19 +106,19 @@ export class InMemoryDeviceTokenStorage implements DeviceTokenStorage {
     return this.devicesByHash.get(tokenHash) ?? null;
   }
 
-  async findDeviceByDeviceId(deviceId: string): Promise<Device | null> {
-    return this.devicesByDeviceId.get(deviceId) ?? null;
+  async findDeviceByDeviceId(userId: string, deviceId: string): Promise<Device | null> {
+    return this.devicesByDeviceId.get(`${userId}:${deviceId}`) ?? null;
   }
 
   async updateDevice(device: Device): Promise<Device> {
     const previous = this.devices.get(device.id);
     if (previous) {
       this.devicesByHash.delete(previous.tokenHash);
-      this.devicesByDeviceId.delete(previous.deviceId);
+      this.devicesByDeviceId.delete(`${previous.userId}:${previous.deviceId}`);
     }
     this.devices.set(device.id, device);
     this.devicesByHash.set(device.tokenHash, device);
-    this.devicesByDeviceId.set(device.deviceId, device);
+    this.devicesByDeviceId.set(`${device.userId}:${device.deviceId}`, device);
     return device;
   }
 
@@ -249,9 +249,9 @@ export class D1DeviceTokenStorage implements DeviceTokenStorage {
     return row ? deviceRowToDevice(row) : null;
   }
 
-  async findDeviceByDeviceId(deviceId: string): Promise<Device | null> {
+  async findDeviceByDeviceId(userId: string, deviceId: string): Promise<Device | null> {
     const row = await this.db.query.deviceTokens.findFirst({
-      where: eq(deviceTokens.deviceId, deviceId),
+      where: sql`${deviceTokens.userId} = ${userId} AND ${deviceTokens.deviceId} = ${deviceId}`,
     });
     return row ? deviceRowToDevice(row) : null;
   }
@@ -343,7 +343,7 @@ export class DeviceTokenService {
     const tokenHash = await hashToken(token);
     const now = new Date();
 
-    const existing = await this.storage.findDeviceByDeviceId(deviceInfo.deviceId);
+    const existing = await this.storage.findDeviceByDeviceId(userId, deviceInfo.deviceId);
     if (existing) {
       const updated: Device = {
         ...existing,
@@ -380,9 +380,8 @@ export class DeviceTokenService {
     const token = generateOpaqueToken();
     const tokenHash = await hashToken(token);
     const now = new Date();
-    const existing = await this.storage.findDeviceByDeviceId(deviceInfo.deviceId);
+    const existing = await this.storage.findDeviceByDeviceId(userId, deviceInfo.deviceId);
     if (existing) {
-      if (existing.userId !== userId) return null;
       const updated: Device = {
         ...existing,
         tokenHash,
@@ -433,8 +432,8 @@ export class DeviceTokenService {
   }
 
   async revokeDevice(userId: string, deviceId: string): Promise<boolean> {
-    const device = await this.storage.findDeviceByDeviceId(deviceId);
-    if (!device || device.userId !== userId) return false;
+    const device = await this.storage.findDeviceByDeviceId(userId, deviceId);
+    if (!device) return false;
 
     await this.storage.updateDevice({ ...device, revoked: true });
     return true;
