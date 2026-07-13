@@ -101,6 +101,7 @@
   --tab-overlay-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.24);
   --tab-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --tab-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --tab-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   color: var(--foreground);
   background: var(--background);
   font-family: var(--font-body);
@@ -336,6 +337,106 @@ a:not([class]) {
   color: inherit;
 }
 
+@keyframes tab-sheet-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes tab-sheet-fade-out {
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes tab-sheet-in-from-top {
+  from {
+    transform: translate3d(0, -100%, 0);
+  }
+}
+
+@keyframes tab-sheet-out-to-top {
+  to {
+    transform: translate3d(0, -100%, 0);
+  }
+}
+
+@keyframes tab-sheet-in-from-bottom {
+  from {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+
+@keyframes tab-sheet-out-to-bottom {
+  to {
+    transform: translate3d(0, 100%, 0);
+  }
+}
+
+@keyframes tab-sheet-in-from-left {
+  from {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+@keyframes tab-sheet-out-to-left {
+  to {
+    transform: translate3d(-100%, 0, 0);
+  }
+}
+
+@keyframes tab-sheet-in-from-right {
+  from {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+@keyframes tab-sheet-out-to-right {
+  to {
+    transform: translate3d(100%, 0, 0);
+  }
+}
+
+.tab-sheet-overlay[data-state="open"] {
+  animation: tab-sheet-fade-in 200ms var(--tab-ease-out) both;
+}
+
+.tab-sheet-overlay[data-state="closed"] {
+  animation: tab-sheet-fade-out 160ms var(--tab-ease-out) both;
+}
+
+.tab-sheet-content[data-state="open"][data-side="top"] {
+  animation: tab-sheet-in-from-top 300ms var(--tab-ease-drawer) both;
+}
+
+.tab-sheet-content[data-state="closed"][data-side="top"] {
+  animation: tab-sheet-out-to-top 240ms var(--tab-ease-drawer) both;
+}
+
+.tab-sheet-content[data-state="open"][data-side="bottom"] {
+  animation: tab-sheet-in-from-bottom 300ms var(--tab-ease-drawer) both;
+}
+
+.tab-sheet-content[data-state="closed"][data-side="bottom"] {
+  animation: tab-sheet-out-to-bottom 240ms var(--tab-ease-drawer) both;
+}
+
+.tab-sheet-content[data-state="open"][data-side="left"] {
+  animation: tab-sheet-in-from-left 300ms var(--tab-ease-drawer) both;
+}
+
+.tab-sheet-content[data-state="closed"][data-side="left"] {
+  animation: tab-sheet-out-to-left 240ms var(--tab-ease-drawer) both;
+}
+
+.tab-sheet-content[data-state="open"][data-side="right"] {
+  animation: tab-sheet-in-from-right 300ms var(--tab-ease-drawer) both;
+}
+
+.tab-sheet-content[data-state="closed"][data-side="right"] {
+  animation: tab-sheet-out-to-right 240ms var(--tab-ease-drawer) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   button:active,
   a:active,
@@ -352,6 +453,14 @@ a:not([class]) {
 
   .tab-disclosure-chevron {
     transition-duration: 0ms;
+  }
+
+  .tab-sheet-content[data-state="open"][data-side] {
+    animation: tab-sheet-fade-in 160ms var(--tab-ease-out) both;
+  }
+
+  .tab-sheet-content[data-state="closed"][data-side] {
+    animation: tab-sheet-fade-out 160ms var(--tab-ease-out) both;
   }
 }
 
