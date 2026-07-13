@@ -87,6 +87,10 @@ describe("Web download surface", () => {
     expect(body).toInclude('id="pricing"');
     expect(body).toInclude('data-pricing-plan="free"');
     expect(body).toInclude('data-pricing-plan="pro"');
-    expect(body.match(/data-pricing-plan=/g)?.length).toBe(2);
+    expect(body).toInclude('data-pricing-plan="max"');
+    expect(body).toInclude("1,000 Deep Completes each month");
+    expect(body).toInclude("$20/mo");
+    expect(body).not.toInclude("/year");
+    expect(body.match(/data-pricing-plan=/g)?.length).toBe(3);
   });
 });

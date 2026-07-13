@@ -12,3 +12,4 @@ apps/desktop/.dev/
 .apple/
 .sandcastle/*.auth.json
 apps/desktop/release
+dev.vars.prod

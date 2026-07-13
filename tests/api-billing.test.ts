@@ -153,7 +153,7 @@ describe("Billing and allowance enforcement", () => {
       polarSubscriptionId: "subscription-1",
       status: "canceled",
       currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
-      billingInterval: "annual",
+      billingInterval: "monthly",
       trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
       trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: now,
@@ -162,7 +162,36 @@ describe("Billing and allowance enforcement", () => {
     const status = await billing.getStatus("paid-user");
     expect(status.planId).toBe("pro");
     expect(status.entitlementSource).toBe("paid");
-    expect(status.billingInterval).toBe("annual");
+    expect(status.billingInterval).toBe("monthly");
+  });
+
+  it("enforces the Max allowance at 1,000 Deep Completes", async () => {
+    const now = new Date("2026-07-12T12:00:00.000Z");
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({ storage, now: () => now });
+    await billing.applyEntitlement({
+      userId: "max-user",
+      planId: "max",
+      polarCustomerId: "customer-max",
+      polarSubscriptionId: "subscription-max",
+      status: "active",
+      billingInterval: "monthly",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
+      cachedAt: now,
+    });
+    await storage.recordAllowanceUsage(
+      "max-user",
+      "deep_completes",
+      "2026-07",
+      "max-usage",
+      1_000,
+    );
+
+    const status = await billing.getStatus("max-user");
+    expect(status.planId).toBe("max");
+    expect(status.deepCompletes.limit).toBe(1_000);
+    expect(status.deepCompletes.exhausted).toBe(true);
   });
 
   it("counts only returned Deep Completes against allowance", async () => {
@@ -352,7 +381,7 @@ describe("Billing and allowance enforcement", () => {
     expect(() =>
       createBillingCheckoutClient({
         accessToken: "polar-token",
-        productIds: { monthly: "prod-pro-monthly", annual: "" },
+        productIds: { pro: "prod-pro-monthly", max: "" },
       }),
     ).toThrow("Polar checkout is partially configured");
   });
@@ -493,7 +522,7 @@ describe("Billing and allowance enforcement", () => {
     });
 
     const entitlement = await billingService.getEntitlement("user-1");
-    expect(entitlement.planId).toBe("pro");
+    expect(entitlement.planId).toBe("max");
     expect(entitlement.status).toBe("active");
     expect(entitlement.polarCustomerId).toBe("polar-customer-1");
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
@@ -538,7 +567,7 @@ describe("Billing and allowance enforcement", () => {
     });
 
     const entitlement = await billingService.getEntitlement("user-1");
-    expect(entitlement.planId).toBe("pro");
+    expect(entitlement.planId).toBe("max");
     expect(entitlement.status).toBe("active");
     expect(entitlement.polarCustomerId).toBe("polar-customer-1");
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
@@ -575,7 +604,7 @@ describe("Billing and allowance enforcement", () => {
         .run();
 
       const entitlement = await storage.getEntitlement("user-d1");
-      expect(entitlement?.planId).toBe("pro");
+      expect(entitlement?.planId).toBe("max");
       expect(entitlement!.trialStartedAt.getTime()).toBeGreaterThanOrEqual(now);
       expect(
         entitlement!.trialEndsAt.getTime() -

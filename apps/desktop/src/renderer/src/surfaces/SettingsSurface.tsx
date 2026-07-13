@@ -311,7 +311,7 @@ export function SettingsSurface() {
               <div className="settings-group__actions">
                 {status.entitlement?.upgradeUrl ? (
                   <Button onClick={() => window.tab?.openPricing?.()}>
-                    Upgrade to Pro
+                    View plans
                   </Button>
                 ) : null}
                 {status.auth === "signed_in" ? (
@@ -357,7 +357,7 @@ export function SettingsSurface() {
               label="Custom writing instructions"
               description={status.entitlement?.capabilities.customWritingInstructions
                 ? "Used for Local Suggestions and Deep Complete. Not included in telemetry."
-                : "Available during the Pro trial and on Pro."}
+                : "Available during the Pro trial and on a paid plan."}
             >
               <Textarea
                 aria-label="Custom writing instructions"
@@ -507,7 +507,7 @@ export function SettingsSurface() {
                 label="Automatically create Personal Memory"
                 description={status.entitlement?.capabilities.continuousMemoryExtraction
                   ? "Save relevant details from eligible writing in the background."
-                  : "Available during the Pro trial and on Pro. Existing Personal Memory stays manageable."}
+                  : "Available during the Pro trial and on a paid plan. Existing Personal Memory stays manageable."}
               >
                 <div className="flex items-center justify-end gap-2">
                   <StatusBadge tone={continuousMemoryExtraction ? "brand" : "neutral"}>{continuousMemoryExtraction ? "On" : "Off"}</StatusBadge>

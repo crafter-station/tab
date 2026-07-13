@@ -21,18 +21,18 @@ This audience already pays for productivity tools, understands local models and 
 
 ## Launch Plans
 
-| Entitlement | Free | Pro |
-| --- | --- | --- |
-| Price | $0 | $10/month or $96/year |
-| Trial | One 30-day account-level Pro trial, no card | Not applicable |
-| Local Suggestions | 100 Accepted Words/day | Unlimited Accepted Words |
-| Deep Complete | 10/month | 300/month |
-| Personal Memory | Manage existing memories; basic personalization | Continuous Memory Extraction and personalization |
-| Writing controls | Defaults | Custom writing instructions |
-| Local models | Recommended supported model | Supported model catalog |
-| Personal Macs | 1 | Up to 3 |
+| Entitlement | Free | Pro | Max |
+| --- | --- | --- | --- |
+| Price | $0 | $10/month | $20/month |
+| Trial | One 30-day account-level Pro trial, no card | Not applicable | Not applicable |
+| Local Suggestions | 100 Accepted Words/day | Unlimited Accepted Words | Unlimited Accepted Words |
+| Deep Complete | 10/month | 300/month | 1,000/month |
+| Personal Memory | Manage existing memories; basic personalization | Continuous Memory Extraction and personalization | Same as Pro |
+| Writing controls | Defaults | Custom writing instructions | Same as Pro |
+| Local models | Recommended supported model | Supported model catalog | Same as Pro |
+| Personal Macs | 1 | Up to 3 | Up to 3 |
 
-There is no Max plan at launch. Additional cloud packs, teams, a lifetime local license, and a separate local-only purchase are deferred until usage demonstrates demand.
+Pro and Max are monthly-only subscriptions. Tab has no annual plan and no annual customers. Max differs from Pro only in its monthly Deep Complete allowance. Additional cloud packs, teams, a lifetime local license, and a separate local-only purchase are deferred until usage demonstrates demand.
 
 ## Metering Principles
 
@@ -50,7 +50,7 @@ The exact word-boundary algorithm, reset behavior across timezone changes, offli
 
 Do not market Personal Memory count as the reason to upgrade. Storage count is difficult to predict, poorly aligned with value, and creates the impression that users must pay to retain control of their own data.
 
-- Pro pays for continuous Memory Extraction, synchronization across entitled devices, and cloud-backed personalization work.
+- Paid plans fund continuous Memory Extraction, synchronization across entitled devices, and cloud-backed personalization work.
 - Existing memories remain visible, editable, exportable, and deletable after downgrade or cancellation.
 - A generous technical record ceiling, extraction-rate limit, and semantic deduplication protect infrastructure.
 - Memory contents, Typing Context, and Suggestion text remain excluded from product analytics.
@@ -87,7 +87,7 @@ The north-star metric is **Weekly Habitual Completers**: users who accept at lea
 - W1, W4, and W8 retention among activated users.
 - Retention by local-only, Deep Complete-tried, repeat-Deep-Complete, and memory-enabled cohorts.
 - Free allowance reached, offer viewed, checkout started, paid, and retained at 30/60 days.
-- Monthly and annual conversion by trigger.
+- Monthly conversion by plan and trigger.
 - Paid gross margin at median, 90th-percentile, and 99th-percentile cloud usage.
 
 ### Trust Guardrails
@@ -111,10 +111,10 @@ User-facing statistics should emphasize completed words, approximate typing save
 ### Days 31-60: Payment
 
 - Concentrate recruitment on the strongest cohort.
-- Launch the 30-day Pro trial and the $10 monthly/$96 annual offer.
+- Launch the 30-day Pro trial, $10 monthly Pro, and $20 monthly Max.
 - Present paid conversion only after demonstrated value.
 - Compare conversion after reaching the local allowance, repeating Deep Complete, and experiencing continuous personalization.
-- Optionally sell a time-limited $72-$79 Founding Pro annual offer to validate willingness to pay without creating a lifetime cloud obligation.
+- Compare Pro and Max conversion without introducing annual-plan complexity.
 
 ### Days 61-90: Repeatable Distribution
 
@@ -132,6 +132,6 @@ Avoid scaling paid acquisition until one audience shows strong activated-user W4
 2. Is Deep Complete a distinct and repeated job, rather than a novelty?
 3. Does Personal Memory create a noticeable acceptance lift?
 4. Which trigger best predicts payment: local allowance, repeated Deep Complete, or continuous personalization?
-5. Are the Free and Pro allowances understandable without creating usage anxiety?
-6. Do users prefer monthly, annual, or a future local-only one-time license?
+5. Are the Free, Pro, and Max allowances understandable without creating usage anxiety?
+6. Does the higher Max Deep Complete allowance attract heavy users without confusing Pro buyers?
 7. Which audience has the best combination of retention, willingness to pay, and reachable distribution?

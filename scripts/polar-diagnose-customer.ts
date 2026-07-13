@@ -6,15 +6,14 @@ if (!accessToken) {
   throw new Error("POLAR_ACCESS_TOKEN is required");
 }
 
-const meterId = env.POLAR_DEEP_COMPLETE_METER_ID ?? env.POLAR_AUTOCOMPLETE_METER_ID;
+const meterId = env.POLAR_DEEP_COMPLETE_METER_ID;
 if (!meterId) {
   throw new Error("POLAR_DEEP_COMPLETE_METER_ID is required");
 }
 
 const planProductIds = {
-  pro_monthly: env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? env.POLAR_PRODUCT_ID_PRO,
-  pro_annual: env.POLAR_PRODUCT_ID_PRO_ANNUAL,
-  legacy_max: env.POLAR_PRODUCT_ID_MAX,
+  pro_monthly: env.POLAR_PRODUCT_ID_PRO_MONTHLY,
+  max_monthly: env.POLAR_PRODUCT_ID_MAX_MONTHLY,
 };
 
 type EntitlementRow = {
@@ -94,7 +93,7 @@ async function queryLocalEntitlements(
     "wrangler.jsonc",
     "--json",
     "--command",
-    `SELECT ue.user_id, ue.plan_id, ue.polar_customer_id, ue.polar_subscription_id, ue.status, ue.current_period_end, ur.count AS local_usage_count FROM user_entitlements ue LEFT JOIN usage_records ur ON ur.user_id = ue.user_id AND ur.month = strftime('%Y-%m', 'now')${whereClause ? ` WHERE ${whereClause}` : ""} ORDER BY ue.cached_at DESC LIMIT 20;`,
+    `SELECT ue.user_id, ue.plan_id, ue.polar_customer_id, ue.polar_subscription_id, ue.status, ue.current_period_end, coalesce(sum(aue.amount), 0) AS local_usage_count FROM user_entitlements ue LEFT JOIN allowance_usage_events aue ON aue.user_id = ue.user_id AND aue.metric = 'deep_completes' AND aue.period = strftime('%Y-%m', 'now')${whereClause ? ` WHERE ${whereClause}` : ""} GROUP BY ue.user_id ORDER BY ue.cached_at DESC LIMIT 20;`,
   ];
   const proc = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" });
   const [stdout, stderr, exitCode] = await Promise.all([

@@ -146,7 +146,7 @@ export function registerMemoryRoutes(
       return c.json(
         createErrorResponse(
           "feature_unavailable",
-          "Continuous Memory Extraction requires Pro.",
+          "Continuous Memory Extraction requires a paid plan.",
           {
             capability: "memory_extraction",
             upgradeUrl: "/pricing",

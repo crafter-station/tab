@@ -266,7 +266,7 @@ export function createWebApp(config: WebAppConfig) {
       `Pricing - ${appName}`,
       200,
       user,
-      "Compare Tab Free and Pro, including the 30-day Pro trial, Local Suggestion and Deep Complete allowances, monthly and annual billing, and cancellation.",
+      "Compare Tab Free, Pro, and Max, including the 30-day Pro trial, monthly pricing, Local Suggestion and Deep Complete allowances, and cancellation.",
     );
   }
 
@@ -588,12 +588,11 @@ export function createWebApp(config: WebAppConfig) {
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
     const plan = searchParams.get("plan") ?? "pro";
-    const interval = searchParams.get("interval") ?? "monthly";
-    const checkoutPath = `/billing/checkout?plan=${encodeURIComponent(plan)}&interval=${encodeURIComponent(interval)}`;
+    const checkoutPath = `/billing/checkout?plan=${encodeURIComponent(plan)}`;
     if (!sessionCheck.ok) return loginRedirect(checkoutPath);
 
     const response = await apiRequest(
-      `/api/billing/checkout?plan=${encodeURIComponent(plan)}&interval=${encodeURIComponent(interval)}`,
+      `/api/billing/checkout?plan=${encodeURIComponent(plan)}&interval=monthly`,
       {},
       cookieHeader,
     );
@@ -858,7 +857,7 @@ export function createWebApp(config: WebAppConfig) {
           `Terms of Service - ${appName}`,
           200,
           undefined,
-          "Terms governing Tab Free and Pro, the 30-day trial, billing, renewal, cancellation, and use of the native macOS app.",
+          "Terms governing Tab Free, Pro, and Max, the 30-day trial, billing, renewal, cancellation, and use of the native macOS app.",
         );
       }
 

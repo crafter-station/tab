@@ -1,149 +1,72 @@
 import { Polar } from "@polar-sh/sdk";
-import { planCapabilities, type BillingInterval } from "@tab/billing";
+import type { WebhookEventType } from "@polar-sh/sdk/models/components/webhookeventtype.js";
 import { env } from "./env.ts";
+import { getPolarEnvFile, updatePolarEnvFile } from "./polar-env-file.ts";
 
-const polar = new Polar({
-  accessToken: env.POLAR_ACCESS_TOKEN,
-  server: env.POLAR_SERVER,
-});
+const envFile = getPolarEnvFile();
+const productionWebhookUrl = "https://api.tab.cueva.io/api/billing/webhook";
+const url = env.POLAR_SERVER === "production"
+  ? productionWebhookUrl
+  : env.POLAR_WEBHOOK_URL;
+if (!url) throw new Error("POLAR_WEBHOOK_URL is required outside production");
+if (env.POLAR_SERVER === "production" && env.POLAR_WEBHOOK_URL && env.POLAR_WEBHOOK_URL !== url) {
+  throw new Error(`Production webhook URL must be ${productionWebhookUrl}`);
+}
+
+const events = [
+  "subscription.created",
+  "subscription.updated",
+  "subscription.active",
+  "subscription.canceled",
+  "subscription.uncanceled",
+  "subscription.revoked",
+  "subscription.past_due",
+] as const satisfies readonly WebhookEventType[];
+const polar = new Polar({ accessToken: env.POLAR_ACCESS_TOKEN, server: env.POLAR_SERVER });
 const organizationScope = env.POLAR_SEND_ORGANIZATION_ID
   ? { organizationId: env.POLAR_ORGANIZATION_ID }
   : {};
 
-type Resource = { id?: string; secret?: string };
-
-function unwrap<T extends Resource>(value: unknown, key: string): T {
-  const record = value as Record<string, unknown>;
-  return (record[key] ?? value) as T;
+const listed = await polar.webhooks.listWebhookEndpoints({
+  ...organizationScope,
+  limit: 100,
+});
+const matches = listed.result.items.filter(
+  (endpoint) => endpoint.url === url || endpoint.name === "Tab billing sync",
+);
+if (matches.length > 1) {
+  throw new Error(`Multiple Polar webhook endpoints already target ${url}`);
 }
 
-async function getOrCreateMeter(): Promise<Resource> {
-  const existing = env.POLAR_DEEP_COMPLETE_METER_ID;
-  if (existing) return polar.meters.get({ id: existing });
-  return unwrap<Resource>(
-    await polar.meters.create({
-      name: "Successful Deep Completes",
-      unit: "custom",
-      customLabel: "Deep Complete",
-      filter: {
-        conjunction: "and",
-        clauses: [
-          { property: "name", operator: "eq", value: "deep_complete.used" },
-        ],
+const endpoint = matches[0]
+  ? await polar.webhooks.updateWebhookEndpoint({
+      id: matches[0].id,
+      webhookEndpointUpdate: {
+        name: "Tab billing sync",
+        url,
+        format: "raw",
+        events: [...events],
+        enabled: true,
       },
-      aggregation: { func: "sum", property: "creditsSpent" },
-      metadata: { slug: "deep_complete.used" },
-      ...organizationScope,
-    }),
-    "meter",
-  );
-}
-
-async function getOrCreateBenefit(meterId: string): Promise<Resource> {
-  const existing = env.POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY;
-  if (existing) {
-    return polar.benefits.get({ id: existing });
-  }
-  return unwrap<Resource>(
-    await polar.benefits.create({
-      type: "meter_credit",
-      description: `${planCapabilities.pro.deepCompletesPerMonth} Deep Completes/mo`,
-      properties: {
-        units: planCapabilities.pro.deepCompletesPerMonth,
-        rollover: false,
-        meterId,
-      },
-      metadata: {
-        planId: "pro",
-        deepCompletesPerMonth: planCapabilities.pro.deepCompletesPerMonth,
-      },
-      ...organizationScope,
-    }),
-    "benefit",
-  );
-}
-
-async function getOrCreateProduct(
-  interval: BillingInterval,
-): Promise<Resource> {
-  const existing =
-    interval === "monthly"
-      ? env.POLAR_PRODUCT_ID_PRO_MONTHLY
-      : env.POLAR_PRODUCT_ID_PRO_ANNUAL;
-  if (existing) return polar.products.get({ id: existing });
-  const annual = interval === "annual";
-  return unwrap<Resource>(
-    await polar.products.create({
-      name: `Tab Pro ${annual ? "Annual" : "Monthly"}`,
-      description:
-        "Unlimited Local Accepted Words, 300 Deep Completes per month, continuous Memory Extraction, and up to three personal Macs.",
-      prices: [
-        {
-          amountType: "fixed",
-          priceCurrency: "usd",
-          priceAmount:
-            (annual
-              ? planCapabilities.pro.annualPriceUsd
-              : planCapabilities.pro.monthlyPriceUsd) * 100,
-        },
-      ],
-      recurringInterval: annual ? "year" : "month",
-      metadata: { planId: "pro", billingInterval: interval },
-      ...organizationScope,
-    }),
-    "product",
-  );
-}
-
-async function createWebhookEndpoint(url: string): Promise<Resource> {
-  return unwrap<Resource>(
-    await polar.webhooks.createWebhookEndpoint({
-      url,
+    })
+  : await polar.webhooks.createWebhookEndpoint({
       name: "Tab billing sync",
+      url,
       format: "raw",
-      events: [
-        "subscription.created",
-        "subscription.updated",
-        "subscription.active",
-        "subscription.canceled",
-        "subscription.uncanceled",
-        "subscription.revoked",
-        "subscription.past_due",
-      ],
+      events: [...events],
       ...organizationScope,
-    }),
-    "webhookEndpoint",
-  );
-}
+    });
 
-const meter = await getOrCreateMeter();
-if (!meter.id) throw new Error("Polar meter creation did not return an id");
-const benefit = await getOrCreateBenefit(meter.id);
-if (!benefit.id) throw new Error("Polar Pro benefit creation did not return an id");
+await updatePolarEnvFile(envFile, {
+  POLAR_WEBHOOK_URL: url,
+  POLAR_WEBHOOK_SECRET: endpoint.secret,
+});
 
-console.log(`POLAR_DEEP_COMPLETE_METER_ID=${meter.id}`);
-console.log(`POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY=${benefit.id}`);
-
-for (const interval of ["monthly", "annual"] as const) {
-  const product = await getOrCreateProduct(interval);
-  if (!product.id) throw new Error(`Polar Pro ${interval} product has no id`);
-  await polar.products.updateBenefits({
-    id: product.id,
-    productBenefitsUpdate: {
-      benefits: interval === "monthly" ? [benefit.id] : [],
-    },
-  });
-  console.log(
-    `POLAR_PRODUCT_ID_PRO_${interval.toUpperCase()}=${product.id}`,
-  );
-}
-
-if (env.POLAR_WEBHOOK_URL) {
-  const endpoint = await createWebhookEndpoint(env.POLAR_WEBHOOK_URL);
-  console.log(`POLAR_WEBHOOK_ENDPOINT_ID=${endpoint.id ?? "<unknown>"}`);
-  console.log(
-    `POLAR_WEBHOOK_SECRET=${endpoint.secret ?? "<copy from Polar dashboard>"}`,
-  );
-} else {
-  console.log("Set POLAR_WEBHOOK_URL to create the Polar webhook endpoint.");
-}
+console.log(JSON.stringify({
+  status: matches[0] ? "updated" : "created",
+  environment: env.POLAR_SERVER,
+  webhookEndpointId: endpoint.id,
+  url: endpoint.url,
+  events: endpoint.events,
+  secretStoredIn: envFile,
+}, null, 2));

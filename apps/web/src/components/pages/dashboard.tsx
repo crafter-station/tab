@@ -164,7 +164,7 @@ function QuotaProgressPanel({ title, usage, quota, resetAt }: { title: string; u
       </div>
       {quota === null ? null : <Progress value={quotaPercent} aria-label={`${title} progress`} className="h-1.5 bg-border" />}
       <div className="flex items-center justify-between gap-4 text-xs font-medium text-muted-foreground">
-        <span>{quota === null ? "Unlimited on Pro" : `${quotaPercent}% used`}</span>
+        <span>{quota === null ? "Unlimited on your plan" : `${quotaPercent}% used`}</span>
         <span>Resets {formatDate(resetAt)}</span>
       </div>
     </div>
@@ -575,17 +575,17 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
             <AlertDescription>
               {bothAllowancesExhausted
                 ? "Both allowances are used. They reset independently. "
-                : `${billing.localAcceptedWords.exhausted ? `Local Accepted Words: ${localStatus.value}. ` : ""}${billing.deepCompletes.exhausted ? `Deep Complete: ${deepStatus.value}. ` : ""}The other mode still works. `}<a className="underline" href="/pricing">View Pro</a>.
+                : `${billing.localAcceptedWords.exhausted ? `Local Accepted Words: ${localStatus.value}. ` : ""}${billing.deepCompletes.exhausted ? `Deep Complete: ${deepStatus.value}. ` : ""}The other mode still works. `}<a className="underline" href="/pricing">View plans</a>.
             </AlertDescription>
           </Alert>
         ) : null}
       </section>
       <section className="flex flex-col gap-5 rounded-[var(--radius-card)] bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
         <div>
-          <h2 className="text-xl font-bold">{billing.entitlementSource === "paid" ? "Pro subscription" : "Need higher allowances?"}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Pro includes unlimited Local Accepted Words and {formatCount(planCapabilities.pro.deepCompletesPerMonth)} Deep Completes each month.</p>
+          <h2 className="text-xl font-bold">{billing.entitlementSource === "paid" ? `${formatPlanName(billing.planId)} subscription` : "Need higher allowances?"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{billing.entitlementSource === "paid" ? `Your paid plan includes ${formatCount(billing.deepCompletes.limit ?? 0)} Deep Completes each month.` : "Compare paid plans for unlimited Local Accepted Words and higher Deep Complete allowances."}</p>
         </div>
-        <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={billing.entitlementSource === "paid" ? "/billing/portal" : "/pricing"}>{billing.entitlementSource === "paid" ? "Manage subscription" : "View Pro"}</a>
+        <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={billing.entitlementSource === "paid" ? "/billing/portal" : "/pricing"}>{billing.entitlementSource === "paid" ? "Manage subscription" : "Compare plans"}</a>
       </section>
     </div>
   );

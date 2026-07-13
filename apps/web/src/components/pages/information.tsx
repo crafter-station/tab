@@ -148,7 +148,7 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <>
-      <PageIntro eyebrow={`Terms of service · Updated ${lastUpdated}`} title="Terms for using Tab." description="These terms govern access to the Tab website, native macOS app, account dashboard, and Free and Pro plans." />
+      <PageIntro eyebrow={`Terms of service · Updated ${lastUpdated}`} title="Terms for using Tab." description="These terms govern access to the Tab website, native macOS app, account dashboard, and Free, Pro, and Max plans." />
       <div className="py-8 sm:py-12">
         <LegalSection title="Agreement">
           <p>By creating an account, downloading Tab, or using the service, you agree to these terms and the <a href="/privacy">Privacy Policy</a>. If you do not agree, do not use the service.</p>
@@ -164,11 +164,11 @@ export function TermsPage() {
           <p>One person or organization may not use the service to bypass plan limits, probe other accounts, or interfere with service operation.</p>
         </LegalSection>
         <LegalSection title="Plans and payment">
-          <p>Every new account receives one 30-day Pro trial without a payment card. The trial does not restart when you reinstall Tab or connect another Mac. When the trial ends, the account moves to Free unless you complete checkout for Pro.</p>
+          <p>Every new account receives one 30-day Pro trial without a payment card. The trial does not restart when you reinstall Tab or connect another Mac. When the trial ends, the account moves to Free unless you complete checkout for a paid plan.</p>
           <p>Plan prices, daily Local Accepted Word allowances, monthly Deep Complete allowances, device limits, and included features are shown on the <a href="/pricing">pricing page</a>. Local usage counts only words deliberately inserted through Acceptance. Deep Complete usage counts when an explicit request returns a Suggestion. Retries, empty responses, failures, and ignored Local Suggestions do not count.</p>
           <p>Tab does not charge automatic usage overages. Reaching one allowance does not disable unrelated product capabilities. Allowances become available again at their applicable daily or monthly reset.</p>
-          <p>Pro renews monthly or annually, according to the interval selected at checkout, until canceled through the <a href="/billing/portal">billing portal</a>. Canceling stops future renewal; paid benefits remain active through the end of the current paid period, then the account moves to Free.</p>
-          <p>Fees are charged in the displayed currency and may include applicable taxes. Except where required by law, charges for a billing period that has begun are non-refundable. Changing a billing interval may affect charges for the current or next billing period as shown during checkout or in the billing portal.</p>
+          <p>Paid plans renew monthly until canceled through the <a href="/billing/portal">billing portal</a>. Canceling stops future renewal; paid benefits remain active through the end of the current paid period, then the account moves to Free.</p>
+          <p>Fees are charged in the displayed currency and may include applicable taxes. Except where required by law, charges for a billing period that has begun are non-refundable.</p>
           <p>Trial expiration, downgrade, or cancellation does not remove your ability to view, edit, export, or delete existing Personal Memory. Data processing is described in the <a href="/privacy">Privacy Policy</a>.</p>
         </LegalSection>
         <LegalSection title="Acceptable use">

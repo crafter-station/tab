@@ -13,7 +13,7 @@ import {
 import { planCapabilities } from "@tab/billing";
 import { SuggestionCommand, buttonVariants, cn } from "@tab/ui";
 import type { CSSProperties } from "react";
-import { PageKicker, formatCount, formatMonthlyPrice, formatUsd } from "./shared.tsx";
+import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
 const appLogos = [
   { name: "Gmail", src: "/logos/gmail.svg" },
@@ -458,6 +458,7 @@ function PrivacyPipeline() {
 export function HomePage() {
   const free = planCapabilities.free;
   const pro = planCapabilities.pro;
+  const max = { ...pro, monthlyPriceUsd: 20, deepCompletesPerMonth: 1_000 };
 
   return (
     <>
@@ -512,10 +513,10 @@ export function HomePage() {
         <div className="max-w-3xl">
           <PageKicker>30 days of Pro, no card</PageKicker>
           <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Try Pro. Keep Free if you do not upgrade.</h2>
-          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose Pro or continue on Free.</p>
+          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose a paid plan or continue on Free.</p>
         </div>
 
-        <div className="mt-12 grid items-stretch gap-4 md:grid-cols-2" data-pricing-grid>
+        <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-3" data-pricing-grid>
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="free">
             <div className="flex min-h-7 items-center justify-between gap-3">
               <h3 className="text-xl font-bold">Free</h3>
@@ -538,12 +539,28 @@ export function HomePage() {
               <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/75">Best for daily use</span>
             </div>
             <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(pro.monthlyPriceUsd)}</p>
-            <p className="mt-2 min-h-10 text-sm leading-relaxed text-background/65">or {formatUsd(pro.annualPriceUsd)}/year</p>
+            <p className="mt-2 min-h-10 text-sm leading-relaxed text-background/65">Billed monthly</p>
             <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-background/80">
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Unlimited Accepted Words</li>
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> {pro.deepCompletesPerMonth} Deep Completes each month</li>
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Up to {pro.personalDeviceLimit} Macs</li>
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Continuous Memory Extraction</li>
+            </ul>
+            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Start 30-day Pro trial</a>
+          </article>
+
+          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="max">
+            <div className="flex min-h-7 items-center justify-between gap-3">
+              <h3 className="text-xl font-bold">Max</h3>
+              <span className="text-xs font-semibold text-muted-foreground">Most Deep Completes</span>
+            </div>
+            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(max.monthlyPriceUsd)}</p>
+            <p className="mt-2 min-h-10 text-sm leading-relaxed text-muted-foreground">Billed monthly</p>
+            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-muted-foreground">
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Unlimited Accepted Words</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {formatCount(max.deepCompletesPerMonth)} Deep Completes each month</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Up to {max.personalDeviceLimit} Macs</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Continuous Memory Extraction</li>
             </ul>
             <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Start 30-day Pro trial</a>
           </article>

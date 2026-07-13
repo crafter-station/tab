@@ -19,6 +19,15 @@ describe("desktop renderer setup surfaces", () => {
     expect(onboardingSource).toInclude("<SuggestionCommand");
   });
 
+  it("uses plan-neutral paid entitlement copy in settings", () => {
+    const settingsSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx", "utf8");
+
+    expect(settingsSource).toInclude("View plans");
+    expect(settingsSource).toInclude("on a paid plan");
+    expect(settingsSource).not.toInclude("Upgrade to Pro");
+    expect(settingsSource).not.toInclude("and on Pro.");
+  });
+
   it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {
     const setupCss = [
       readFileSync("apps/desktop/src/renderer/src/styles/sign-in.css", "utf8"),

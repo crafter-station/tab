@@ -1,4 +1,4 @@
-import { isPlanId, type BillingInterval } from "@tab/billing";
+import { isPlanId, type PaidPlanId } from "@tab/billing";
 import {
   BillingCheckoutResponseSchema,
   BillingPortalResponseSchema,
@@ -16,8 +16,8 @@ import type { DeviceTokenService } from "../device-tokens.ts";
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
 
-function isBillingInterval(value: string | undefined): value is BillingInterval {
-  return value === "monthly" || value === "annual";
+function isPaidPlanId(value: string | undefined): value is PaidPlanId {
+  return isPlanId(value) && value !== "free";
 }
 
 export function registerBillingRoutes(
@@ -67,7 +67,7 @@ export function registerBillingRoutes(
 
     const planId = c.req.query("plan");
     const interval = c.req.query("interval") ?? "monthly";
-    if (!isPlanId(planId) || planId !== "pro" || !isBillingInterval(interval)) {
+    if (!isPaidPlanId(planId) || interval !== "monthly") {
       return c.json(
         createErrorResponse("invalid_request", "Invalid plan or billing interval."),
         400,
@@ -77,7 +77,7 @@ export function registerBillingRoutes(
     const userId = sessionCheck.session.user.id;
     const entitlement = await deps.billingService.getEntitlement(userId);
     if (hasActivePolarEntitlement(entitlement)) {
-      if (entitlement.billingInterval === interval) {
+      if (entitlement.planId === planId) {
         return c.json(
           BillingCheckoutResponseSchema.parse({
             status: "ok",
@@ -108,8 +108,8 @@ export function registerBillingRoutes(
 
     try {
       const url = await deps.billingCheckoutClient.createCheckoutUrl(
-        "pro",
-        interval,
+        planId,
+        "monthly",
         {
           id: userId,
           email: sessionCheck.session.user.email,

@@ -1,7 +1,7 @@
 import { planCapabilities } from "@tab/billing";
 import { Check, CaretDown } from "@phosphor-icons/react";
 import { buttonVariants } from "@tab/ui";
-import { PageKicker, formatCount, formatMonthlyPrice, formatUsd } from "./shared.tsx";
+import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
 export { HomePage } from "./home.tsx";
 
@@ -26,7 +26,12 @@ const downloadSteps = [
 export function PricingPage({ authenticated = false }: { authenticated?: boolean }) {
   const free = planCapabilities.free;
   const pro = planCapabilities.pro;
-  const annualSavings = pro.monthlyPriceUsd * 12 - pro.annualPriceUsd;
+  const max = {
+    ...pro,
+    name: "Max",
+    monthlyPriceUsd: 20,
+    deepCompletesPerMonth: 1_000,
+  };
 
   return (
     <div className="grid gap-20 py-10 sm:py-14">
@@ -37,12 +42,12 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Try Pro for 30 days. No card.</h1>
           </div>
           <div>
-            <p className="text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose Pro or keep using Free.</p>
+            <p className="text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose a paid plan or keep using Free.</p>
             <a className={buttonVariants({ size: "lg", className: "mt-6" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
           </div>
         </div>
 
-        <div className="grid items-stretch gap-4 lg:grid-cols-2" data-pricing-grid>
+        <div className="grid items-stretch gap-4 lg:grid-cols-3" data-pricing-grid>
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="free">
             <div className="flex min-h-7 items-center justify-between gap-3">
               <h2 className="text-2xl font-bold">Free</h2>
@@ -62,7 +67,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
               <div className="flex h-11 items-center rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 text-sm font-semibold">Free begins automatically after your trial</div>
               <a className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
             </div>
-            <p className="mt-3 text-center text-xs text-muted-foreground">No charge unless you choose Pro.</p>
+            <p className="mt-3 text-center text-xs text-muted-foreground">No charge unless you choose a paid plan.</p>
           </article>
 
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8" data-pricing-plan="pro">
@@ -72,7 +77,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             </div>
             <p className="mt-3 min-h-12 text-sm leading-relaxed text-background/65">Unlimited local writing, more Deep Complete, and continuous personalization.</p>
             <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(pro.monthlyPriceUsd)}</p>
-            <p className="mt-2 min-h-10 text-sm text-background/65">or {formatUsd(pro.annualPriceUsd)}/year, save {formatUsd(annualSavings)}</p>
+            <p className="mt-2 min-h-10 text-sm text-background/65">Billed monthly</p>
             <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-background/80">
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> <span><strong className="text-background">Unlimited Accepted Words</strong> from Local Suggestions</span></li>
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> <span><strong className="text-background">{formatCount(pro.deepCompletesPerMonth)} Deep Completes</strong> each month</span></li>
@@ -82,17 +87,31 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             </ul>
             <form action="/billing/checkout" method="get" className="mt-8 grid gap-3">
               <input type="hidden" name="plan" value="pro" />
-              <label className="text-xs font-semibold text-background/70" htmlFor="billing-interval">Billing</label>
-              <div className="relative">
-                <select id="billing-interval" name="interval" defaultValue="monthly" className="h-11 w-full appearance-none rounded-[var(--radius-control)] border border-background/20 bg-background/10 px-3 pr-10 text-sm font-semibold text-background outline-none focus-visible:ring-2 focus-visible:ring-background/70">
-                  <option className="text-foreground" value="monthly">Monthly - {formatMonthlyPrice(pro.monthlyPriceUsd)}</option>
-                  <option className="text-foreground" value="annual">Annual - {formatUsd(pro.annualPriceUsd)}/year - save {formatUsd(annualSavings)}</option>
-                </select>
-                <CaretDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
-              </div>
               <button className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} type="submit">Choose Pro</button>
             </form>
             <p className="mt-3 text-center text-xs text-background/70">{authenticated ? "Continue to secure checkout." : "Sign in, then continue to secure checkout."}</p>
+          </article>
+
+          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="max">
+            <div className="flex min-h-7 items-center justify-between gap-3">
+              <h2 className="text-2xl font-bold">Max</h2>
+              <span className="text-xs font-semibold text-muted-foreground">Most Deep Completes</span>
+            </div>
+            <p className="mt-3 min-h-12 text-sm leading-relaxed text-muted-foreground">The same complete toolkit as Pro, with more Deep Complete capacity.</p>
+            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(max.monthlyPriceUsd)}</p>
+            <p className="mt-2 min-h-10 text-sm text-muted-foreground">Billed monthly</p>
+            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-muted-foreground">
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span><strong className="text-foreground">Unlimited Accepted Words</strong> from Local Suggestions</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span><strong className="text-foreground">{formatCount(max.deepCompletesPerMonth)} Deep Completes</strong> each month</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span>Up to <strong className="text-foreground">{formatCount(max.personalDeviceLimit)} Macs</strong></span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span>Continuous Memory Extraction</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span>Custom writing instructions and supported model catalog</span></li>
+            </ul>
+            <form action="/billing/checkout" method="get" className="mt-8 grid gap-3">
+              <input type="hidden" name="plan" value="max" />
+              <button className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} type="submit">Choose Max</button>
+            </form>
+            <p className="mt-3 text-center text-xs text-muted-foreground">{authenticated ? "Continue to secure checkout." : "Sign in, then continue to secure checkout."}</p>
           </article>
         </div>
       </section>
@@ -123,7 +142,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
         </summary>
         <div className="tab-disclosure-panel mt-6 grid gap-6 text-sm leading-relaxed text-muted-foreground sm:grid-cols-3">
           <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">The 30-day trial starts once per account and cannot charge you without checkout.</p></div>
-          <div><h3 className="font-bold text-foreground">Paid Pro</h3><p className="mt-2">Pro renews on your selected interval. Cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing portal</a>.</p></div>
+          <div><h3 className="font-bold text-foreground">Paid plans</h3><p className="mt-2">Paid plans renew monthly. Cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing portal</a>.</p></div>
           <div><h3 className="font-bold text-foreground">Personal Memory</h3><p className="mt-2">Downgrading does not remove your controls to view, edit, export, or delete existing Personal Memory.</p></div>
         </div>
       </details>

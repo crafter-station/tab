@@ -44,7 +44,13 @@ const billingPlanExpectations = [
     planDefinition: /pro:/,
     localAllowance: /localAcceptedWordsPerDay:\s*null/,
     deepAllowance: /deepCompletesPerMonth:\s*300/,
-    prdDescription: /Pro costs \$10 per month or \$96 per year/,
+    prdDescription: /Pro costs \$10 per month/,
+  },
+  {
+    planDefinition: /max:/,
+    localAllowance: /localAcceptedWordsPerDay:\s*null/,
+    deepAllowance: /deepCompletesPerMonth:\s*1_000/,
+    prdDescription: /Max costs \$20 per month/,
   },
 ];
 
@@ -106,7 +112,7 @@ describe("Tab MVP PRD contracts", () => {
       assert.match(billing, expectation.deepAllowance);
       assert.match(prd, expectation.prdDescription);
     }
-    assert.doesNotMatch(billing, /^\s*max:/m);
+    assert.doesNotMatch(prd, /\$96 per year/);
   });
 
   it("keeps PRD context sources aligned with shared request schema", () => {

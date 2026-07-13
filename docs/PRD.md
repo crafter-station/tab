@@ -14,7 +14,7 @@ The Electron app observes text-bearing Typing Context in memory, suppresses secu
 
 Double-tapping Option explicitly invokes Deep Complete. For that action only, the desktop sends bounded, redacted context to the authenticated Hono API. The API checks the user's Deep Complete entitlement, fetches relevant Personal Memory, generates a non-streaming Suggestion through the configured cloud model provider, and returns either one Suggestion or an empty suggestions array. A successful returned Deep Complete consumes one monthly Deep Complete allowance; empty responses and failures do not consume allowance. Local inference never silently falls back to this path.
 
-A separate background memory workflow runs through Cloudflare Queues and may use a slower AI tool loop to read, create, update, or delete system-created Personal Memory after passing deterministic sensitive-data guardrails. Continuous Memory Extraction is a Pro service. Every user retains the ability to view, edit, export, and delete existing Personal Memory after trial expiration, downgrade, or cancellation.
+A separate background memory workflow runs through Cloudflare Queues and may use a slower AI tool loop to read, create, update, or delete system-created Personal Memory after passing deterministic sensitive-data guardrails. Continuous Memory Extraction is a paid-plan service. Every user retains the ability to view, edit, export, and delete existing Personal Memory after trial expiration, downgrade, or cancellation.
 
 The TanStack Start web app provides marketing, download, pricing, account management, Polar checkout/customer portal, device management, product-value metrics, and the full Personal Memory control plane. The Electron app provides onboarding, permissions guidance, local and Deep Complete status, quick memory controls, pause/opt-out controls, and native product settings.
 
@@ -61,19 +61,20 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 39. As a user, I want to revoke old devices, so that lost or unused installations stop accessing my account.
 40. As a new user, I want a 30-day Pro trial without a credit card, so that I can experience unlimited local writing, Deep Complete, and continuous personalization before choosing a plan.
 41. As a free user, I want up to 100 Accepted Words from Local Suggestions each day, so that Tab remains useful for occasional writing.
-42. As a Pro user, I want unlimited Accepted Words from Local Suggestions for $10 per month or $96 per year, so that I can use Tab throughout every writing day.
+42. As a Pro user, I want unlimited Accepted Words from Local Suggestions for $10 per month, so that I can use Tab throughout every writing day.
 43. As a free user, I want 10 Deep Completes per month, so that I can use the higher-capability path for occasional difficult writing.
 44. As a Pro user, I want 300 Deep Completes per month, so that the higher-capability path can become part of my regular workflow.
-45. As a user, I want local usage to count only words I deliberately accept, so that ignored, dismissed, and stale Suggestions never consume my allowance.
-46. As a user, I want Deep Complete usage to count only once when an explicit request returns a Suggestion, so that retries, empty responses, and failures never consume additional allowance.
-47. As a Pro user, I want continuous Personal Memory learning, so that Tab stays current with the facts and preferences I repeatedly write.
-48. As a user, I want to retain access to view, edit, export, and delete Personal Memory after downgrade or cancellation, so that my data is never held hostage.
-49. As a user, I want entitlement exhaustion to preserve the rest of Tab and show an upgrade path, so that reaching a limit never makes the app appear broken.
-50. As a business owner, I want local and Deep Complete usage tracked separately, so that product value, conversion, and cloud unit economics can be measured independently.
-51. As a developer, I want a native loop spike first, so that the riskiest macOS interaction is proven before building the full stack.
-52. As a developer, I want shared schemas and policies, so that Electron, web, and API agree on request contracts, redaction, memory, and entitlement behavior.
-53. As a developer, I want Effect for typed services and errors, so that cross-runtime workflows are explicit and testable.
-54. As a developer, I want the Hono API to own auth, Deep Complete generation, memory APIs, Polar webhooks, and device tokens, so that backend authority is centralized.
+45. As a Max user, I want 1,000 Deep Completes per month for $20 per month with the same other capabilities and device limit as Pro, so that heavy Deep Complete usage does not require a different workflow.
+46. As a user, I want local usage to count only words I deliberately accept, so that ignored, dismissed, and stale Suggestions never consume my allowance.
+47. As a user, I want Deep Complete usage to count only once when an explicit request returns a Suggestion, so that retries, empty responses, and failures never consume additional allowance.
+48. As a paid user, I want continuous Personal Memory learning, so that Tab stays current with the facts and preferences I repeatedly write.
+49. As a user, I want to retain access to view, edit, export, and delete Personal Memory after downgrade or cancellation, so that my data is never held hostage.
+50. As a user, I want entitlement exhaustion to preserve the rest of Tab and show an upgrade path, so that reaching a limit never makes the app appear broken.
+51. As a business owner, I want local and Deep Complete usage tracked separately, so that product value, conversion, and cloud unit economics can be measured independently.
+52. As a developer, I want a native loop spike first, so that the riskiest macOS interaction is proven before building the full stack.
+53. As a developer, I want shared schemas and policies, so that Electron, web, and API agree on request contracts, redaction, memory, and entitlement behavior.
+54. As a developer, I want Effect for typed services and errors, so that cross-runtime workflows are explicit and testable.
+55. As a developer, I want the Hono API to own auth, Deep Complete generation, memory APIs, Polar webhooks, and device tokens, so that backend authority is centralized.
 
 ## Implementation Decisions
 
@@ -105,8 +106,9 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Enforce Accepted Word and Deep Complete allowances from local app/backend entitlement state without calling Polar synchronously in either hot path.
 - Start every new account with one 30-day Pro trial without requiring a payment card. Reinstalling or linking another Mac does not restart the trial.
 - After the trial, Free includes 100 Accepted Words per day, 10 Deep Completes per month, one Mac, and management of existing Personal Memory.
-- Pro costs $10 per month or $96 per year and includes unlimited Accepted Words, 300 Deep Completes per month, continuous Memory Extraction, custom writing instructions, the supported model catalog, and up to three personal Macs.
-- Do not offer a Max plan until observed heavy-use behavior justifies another package.
+- Pro costs $10 per month and includes unlimited Accepted Words, 300 Deep Completes per month, continuous Memory Extraction, custom writing instructions, the supported model catalog, and up to three personal Macs.
+- Max costs $20 per month and includes 1,000 Deep Completes per month. Its other capabilities and three-device limit are the same as Pro.
+- Offer paid plans monthly only. There is no annual plan and there are no annual customers.
 - Do not use Personal Memory record count as the primary pricing metric. Keep a generous technical abuse ceiling and gate continuous learning rather than access to user data.
 - Preserve view, edit, export, and delete controls for Personal Memory after trial expiration, downgrade, or cancellation.
 - Meter successful Deep Completes for cost and entitlement reporting; local Accepted Words are product-usage telemetry rather than cloud-cost events.
@@ -146,12 +148,12 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - API tests should assert that `suggestions: []` is a successful no-Suggestion result and that Deep Complete allowance exhaustion is an entitlement error.
 - Local allowance tests should cover Accepted Word counting, word boundaries, daily reset, offline use, restart persistence, and multi-device reconciliation without counting ignored, dismissed, stale, empty, or failed Suggestions.
 - Deep Complete allowance tests should assert that one successful returned Suggestion consumes one allowance, internal retries do not double-count, and empty or failed requests do not count.
-- Trial and plan tests should cover the 30-day no-card Pro trial, Free fallback, monthly and annual Pro entitlements, one-versus-three-device enforcement, downgrade, cancellation, and removal of Max.
-- Memory entitlement tests should verify that only Pro receives continuous Memory Extraction while every user can view, edit, export, and delete existing memories.
+- Trial and plan tests should cover the 30-day no-card Pro trial, Free fallback, monthly Pro and Max entitlements, one-versus-three-device enforcement, downgrade, and cancellation.
+- Memory entitlement tests should verify that paid plans receive continuous Memory Extraction while every user can view, edit, export, and delete existing memories.
 - Memory policy tests should focus on external policy behavior: typed text can produce memory jobs, pasted text cannot create memory by default, terminal user input is eligible, terminal output is not.
 - Redaction tests should include common environment variable values, API keys, bearer tokens, private key blocks, database URLs, auth cookies, payment data, government identifiers, and high-entropy strings.
 - Background memory workflow tests should verify that unsafe memory tool writes are rejected by deterministic validators even if the model proposes them.
-- Web app tests should cover pricing display, monthly/annual Polar checkout link generation, trial state, product-value metrics, allowance state, account login, retained memory controls, and device revocation.
+- Web app tests should cover Free, Pro, and Max pricing display, plan-only monthly Polar checkout forwarding, trial state, product-value metrics, allowance state, account login, retained memory controls, and device revocation.
 - Desktop auth tests should cover browser handoff, device-token exchange, Keychain storage, revoked token handling, and sign-in-required status.
 - Telemetry tests should cover local/cloud and automatic/explicit dimensions, outcomes, Accepted Word/character counts, app category, memory-use metadata, conversion events, and cloud cost while asserting that raw Typing Context, Suggestion text, and Personal Memory contents are not persisted.
 - Tests should prefer shared schema fixtures and public API boundaries over testing private functions.

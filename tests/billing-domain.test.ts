@@ -7,11 +7,11 @@ import {
 } from "../packages/billing/src/index.ts";
 
 describe("local-first plan capabilities", () => {
-  it("defines Free and Pro as the only launch plans", () => {
-    expect(Object.keys(planCapabilities)).toEqual(["free", "pro"]);
+  it("defines Free, Pro, and Max as the launch plans", () => {
+    expect(Object.keys(planCapabilities)).toEqual(["free", "pro", "max"]);
     expect(isPlanId("free")).toBe(true);
     expect(isPlanId("pro")).toBe(true);
-    expect(isPlanId("max")).toBe(false);
+    expect(isPlanId("max")).toBe(true);
   });
 
   it("keeps local and Deep Complete allowances independent", () => {
@@ -19,6 +19,8 @@ describe("local-first plan capabilities", () => {
     expect(planCapabilities.free.deepCompletesPerMonth).toBe(10);
     expect(planCapabilities.pro.localAcceptedWordsPerDay).toBeNull();
     expect(planCapabilities.pro.deepCompletesPerMonth).toBe(300);
+    expect(planCapabilities.max.localAcceptedWordsPerDay).toBeNull();
+    expect(planCapabilities.max.deepCompletesPerMonth).toBe(1_000);
   });
 
   it("defines the launch trial, pricing, devices, and paid capabilities", () => {
@@ -26,9 +28,11 @@ describe("local-first plan capabilities", () => {
     expect(planCapabilities.free.personalDeviceLimit).toBe(1);
     expect(planCapabilities.pro.personalDeviceLimit).toBe(3);
     expect(planCapabilities.pro.monthlyPriceUsd).toBe(10);
-    expect(planCapabilities.pro.annualPriceUsd).toBe(96);
+    expect(planCapabilities.max.monthlyPriceUsd).toBe(20);
+    expect(planCapabilities.max.personalDeviceLimit).toBe(3);
     expect(planCapabilities.free.continuousMemoryExtraction).toBe(false);
     expect(planCapabilities.pro.continuousMemoryExtraction).toBe(true);
+    expect(planCapabilities.max.continuousMemoryExtraction).toBe(true);
   });
 });
 

@@ -5,6 +5,7 @@ import {
   isPlanId,
   planCapabilities,
   type BillingInterval,
+  type PaidPlanId,
   type PlanId,
 } from "@tab/billing";
 import type {
@@ -170,8 +171,7 @@ export class PolarUsageMeterClient implements UsageMeterClient {
   constructor(options: CreatePolarUsageMeterClientOptions = {}) {
     const meterId =
       options.meterId ??
-      env.POLAR_DEEP_COMPLETE_METER_ID ??
-      env.POLAR_AUTOCOMPLETE_METER_ID;
+      env.POLAR_DEEP_COMPLETE_METER_ID;
     if (!meterId) {
       throw new Error("POLAR_DEEP_COMPLETE_METER_ID is not configured");
     }
@@ -243,8 +243,7 @@ export function createUsageMeterClient(
   const accessToken = options?.accessToken ?? env.POLAR_ACCESS_TOKEN;
   const meterId =
     options?.meterId ??
-    env.POLAR_DEEP_COMPLETE_METER_ID ??
-    env.POLAR_AUTOCOMPLETE_METER_ID;
+    env.POLAR_DEEP_COMPLETE_METER_ID;
 
   if (accessToken && meterId) {
     return new PolarUsageMeterClient({
@@ -264,7 +263,7 @@ export function createUsageMeterClient(
 
 export interface BillingCheckoutClient {
   createCheckoutUrl(
-    planId: "pro",
+    planId: PaidPlanId,
     interval: BillingInterval,
     user: { id: string; email?: string; name?: string },
   ): Promise<string>;
@@ -274,13 +273,13 @@ export interface BillingCheckoutClient {
 export type CreatePolarBillingCheckoutClientOptions = {
   accessToken?: string;
   server?: PolarServer;
-  productIds?: Partial<Record<BillingInterval, string>>;
+  productIds?: Partial<Record<PaidPlanId, string>>;
   successUrl?: string;
 };
 
 export class StubBillingCheckoutClient implements BillingCheckoutClient {
   async createCheckoutUrl(
-    planId: "pro",
+    planId: PaidPlanId,
     interval: BillingInterval,
     user: { id: string; email?: string; name?: string },
   ): Promise<string> {
@@ -299,35 +298,34 @@ export class StubBillingCheckoutClient implements BillingCheckoutClient {
 
 export class PolarBillingCheckoutClient implements BillingCheckoutClient {
   private readonly polar: Polar;
-  private readonly productIds: Record<BillingInterval, string>;
+  private readonly productIds: Record<PaidPlanId, string>;
   private readonly successUrl: string | undefined;
 
   constructor(options: CreatePolarBillingCheckoutClientOptions = {}) {
     const accessToken = options.accessToken ?? env.POLAR_ACCESS_TOKEN;
     if (!accessToken) throw new Error("POLAR_ACCESS_TOKEN is not configured");
 
-    const productIds: Partial<Record<BillingInterval, string>> = {
-      monthly:
-        env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? env.POLAR_PRODUCT_ID_PRO,
-      annual: env.POLAR_PRODUCT_ID_PRO_ANNUAL,
+    const productIds: Partial<Record<PaidPlanId, string>> = {
+      pro: env.POLAR_PRODUCT_ID_PRO_MONTHLY,
+      max: env.POLAR_PRODUCT_ID_MAX_MONTHLY,
       ...options.productIds,
     };
-    if (!productIds.monthly || !productIds.annual) {
-      throw new Error("Polar Pro monthly and annual product ids are not configured");
+    if (!productIds.pro || !productIds.max) {
+      throw new Error("Polar Pro and Max monthly product ids are not configured");
     }
 
     this.polar = new Polar({
       accessToken,
       server: getPolarServer(options.server),
     });
-    this.productIds = productIds as Record<BillingInterval, string>;
+    this.productIds = productIds as Record<PaidPlanId, string>;
     this.successUrl = optionalEnvString(
       options.successUrl ?? env.POLAR_CHECKOUT_SUCCESS_URL,
     );
   }
 
   async createCheckoutUrl(
-    planId: "pro",
+    planId: PaidPlanId,
     interval: BillingInterval,
     user: { id: string; email?: string; name?: string },
   ): Promise<string> {
@@ -343,12 +341,12 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
   }
 
   private async createCheckoutUrlWithEmail(
-    planId: "pro",
+    planId: PaidPlanId,
     interval: BillingInterval,
     user: { id: string; email?: string; name?: string },
   ): Promise<string> {
     const checkout = await this.polar.checkouts.create({
-      products: [this.productIds[interval]],
+      products: [this.productIds[planId]],
       externalCustomerId: user.id,
       customerEmail: user.email,
       customerName: user.name,
@@ -373,19 +371,18 @@ export function createBillingCheckoutClient(
   options?: CreatePolarBillingCheckoutClientOptions,
 ): BillingCheckoutClient {
   const productIds = {
-    monthly:
-      env.POLAR_PRODUCT_ID_PRO_MONTHLY ?? env.POLAR_PRODUCT_ID_PRO,
-    annual: env.POLAR_PRODUCT_ID_PRO_ANNUAL,
+    pro: env.POLAR_PRODUCT_ID_PRO_MONTHLY,
+    max: env.POLAR_PRODUCT_ID_MAX_MONTHLY,
     ...options?.productIds,
   };
   const accessToken = options?.accessToken ?? env.POLAR_ACCESS_TOKEN;
 
-  if (accessToken && productIds.monthly && productIds.annual) {
+  if (accessToken && productIds.pro && productIds.max) {
     return new PolarBillingCheckoutClient(options);
   }
-  if (accessToken || productIds.monthly || productIds.annual) {
+  if (accessToken || productIds.pro || productIds.max) {
     throw new Error(
-      "Polar checkout is partially configured. Set POLAR_ACCESS_TOKEN, POLAR_PRODUCT_ID_PRO_MONTHLY, and POLAR_PRODUCT_ID_PRO_ANNUAL.",
+      "Polar checkout is partially configured. Set POLAR_ACCESS_TOKEN, POLAR_PRODUCT_ID_PRO_MONTHLY, and POLAR_PRODUCT_ID_MAX_MONTHLY.",
     );
   }
   return new StubBillingCheckoutClient();
@@ -428,7 +425,7 @@ export function hasActivePolarEntitlement(
   now = new Date(),
 ): boolean {
   if (
-    entitlement.planId !== "pro" ||
+    entitlement.planId === "free" ||
     !entitlement.polarCustomerId ||
     !entitlement.polarSubscriptionId
   ) {
@@ -493,7 +490,7 @@ export class BillingService {
     const stored = await this.getEntitlement(userId);
     const now = this.now();
     if (hasActivePolarEntitlement(stored, now)) {
-      return { stored, planId: "pro", source: "paid" };
+      return { stored, planId: stored.planId, source: "paid" };
     }
     if (stored.trialEndsAt > now) {
       return { stored, planId: "pro", source: "trial" };
@@ -889,7 +886,7 @@ function entitlementRowToEntitlement(
     : new Date(trialStartedAt.getTime() + planCapabilities.free.trialDays * DAY_MS);
   return {
     userId: row.userId,
-    planId: isPlanId(row.planId) ? row.planId : row.planId === "max" ? "pro" : "free",
+    planId: isPlanId(row.planId) ? row.planId : "free",
     polarCustomerId: row.polarCustomerId ?? undefined,
     polarSubscriptionId: row.polarSubscriptionId ?? undefined,
     status: normalizeStatus(row.status),
@@ -897,9 +894,7 @@ function entitlementRowToEntitlement(
       ? new Date(row.currentPeriodEnd)
       : undefined,
     billingInterval:
-      row.billingInterval === "monthly" || row.billingInterval === "annual"
-        ? row.billingInterval
-        : undefined,
+      row.billingInterval === "monthly" ? row.billingInterval : undefined,
     trialStartedAt,
     trialEndsAt,
     lastWebhookEventId: row.lastWebhookEventId ?? undefined,
@@ -927,11 +922,10 @@ export class D1BillingStorage implements BillingStorage {
     });
     if (!row) return null;
     const entitlement = entitlementRowToEntitlement(row);
-    if (!row.trialStartedAt || !row.trialEndsAt || row.planId === "max") {
+    if (!row.trialStartedAt || !row.trialEndsAt) {
       await this.db
         .update(userEntitlements)
         .set({
-          planId: sql<string>`case when ${userEntitlements.planId} = 'max' then 'pro' else ${userEntitlements.planId} end`,
           trialStartedAt: sql<string>`coalesce(${userEntitlements.trialStartedAt}, ${entitlement.trialStartedAt.toISOString()})`,
           trialEndsAt: sql<string>`coalesce(${userEntitlements.trialEndsAt}, ${entitlement.trialEndsAt.toISOString()})`,
         })
@@ -1187,22 +1181,18 @@ function normalizeStatus(value: string | undefined): UserEntitlement["status"] {
 
 function planIdFromProductName(name: string): PlanId | null {
   const lower = name.toLowerCase();
-  if (lower.includes("pro") || lower.includes("max")) return "pro";
+  if (lower.includes("max")) return "max";
+  if (lower.includes("pro")) return "pro";
   if (lower.includes("free")) return "free";
   return null;
 }
 
 function planIdFromProductId(productId: string | undefined): PlanId | null {
   if (!productId) return null;
-  if (
-    productId === env.POLAR_PRODUCT_ID_PRO_MONTHLY ||
-    productId === env.POLAR_PRODUCT_ID_PRO_ANNUAL ||
-    productId === env.POLAR_PRODUCT_ID_PRO ||
-    productId === env.POLAR_PRODUCT_ID_MAX
-  ) {
+  if (productId === env.POLAR_PRODUCT_ID_PRO_MONTHLY) {
     return "pro";
   }
-  if (productId === env.POLAR_PRODUCT_ID_FREE) return "free";
+  if (productId === env.POLAR_PRODUCT_ID_MAX_MONTHLY) return "max";
   return null;
 }
 
@@ -1210,11 +1200,9 @@ function intervalFromProductId(
   productId: string | undefined,
 ): BillingInterval | undefined {
   if (!productId) return undefined;
-  if (productId === env.POLAR_PRODUCT_ID_PRO_ANNUAL) return "annual";
   if (
     productId === env.POLAR_PRODUCT_ID_PRO_MONTHLY ||
-    productId === env.POLAR_PRODUCT_ID_PRO ||
-    productId === env.POLAR_PRODUCT_ID_MAX
+    productId === env.POLAR_PRODUCT_ID_MAX_MONTHLY
   ) {
     return "monthly";
   }
@@ -1225,7 +1213,6 @@ function planIdFromMetadata(
   metadata: Record<string, unknown> | undefined,
 ): PlanId | null {
   const planId = optionalString(metadata?.planId ?? metadata?.plan_id);
-  if (planId === "max") return "pro";
   return isPlanId(planId) ? planId : null;
 }
 
@@ -1235,7 +1222,7 @@ function intervalFromMetadata(
   const value = optionalString(
     metadata?.billingInterval ?? metadata?.billing_interval,
   );
-  return value === "monthly" || value === "annual" ? value : undefined;
+  return value === "monthly" ? value : undefined;
 }
 
 export type WebhookValidationResult =
@@ -1342,12 +1329,17 @@ class BillingWebhookHandler {
           product?.id,
         );
         const productName = optionalString(product?.name);
-        const planId =
-          planIdFromProductId(productId) ??
-          planIdFromMetadata(productMetadata) ??
-          (productName ? planIdFromProductName(productName) : null) ??
-          planIdFromMetadata(metadata) ??
-          existing.planId;
+        const configuredProductIds = [
+          env.POLAR_PRODUCT_ID_PRO_MONTHLY,
+          env.POLAR_PRODUCT_ID_MAX_MONTHLY,
+        ].filter(Boolean);
+        const planId = productId && configuredProductIds.length > 0
+          ? planIdFromProductId(productId)
+          : planIdFromProductId(productId) ??
+            planIdFromMetadata(productMetadata) ??
+            (productName ? planIdFromProductName(productName) : null) ??
+            planIdFromMetadata(metadata);
+        if (!planId || planId === "free") return;
         const billingInterval =
           intervalFromProductId(productId) ??
           intervalFromMetadata(productMetadata) ??

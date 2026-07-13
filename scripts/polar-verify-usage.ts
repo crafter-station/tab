@@ -1,4 +1,5 @@
 import { Polar } from "@polar-sh/sdk";
+import { planCapabilities, type PaidPlanId } from "@tab/billing";
 import { env } from "./env.ts";
 
 const accessToken = env.POLAR_ACCESS_TOKEN;
@@ -11,13 +12,23 @@ if (!meterId) {
   throw new Error("POLAR_DEEP_COMPLETE_METER_ID is required");
 }
 
-const productId = env.POLAR_PRODUCT_ID_PRO_MONTHLY;
-if (!productId) {
-  throw new Error("POLAR_PRODUCT_ID_PRO_MONTHLY is required");
+const requestedPlan = process.argv.find((arg) => arg.startsWith("--plan="))
+  ?.slice("--plan=".length) ?? "pro";
+if (requestedPlan !== "pro" && requestedPlan !== "max") {
+  throw new Error("--plan must be pro or max");
 }
-const benefitId = env.POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY;
+const planId: PaidPlanId = requestedPlan;
+const productId = planId === "pro"
+  ? env.POLAR_PRODUCT_ID_PRO_MONTHLY
+  : env.POLAR_PRODUCT_ID_MAX_MONTHLY;
+if (!productId) {
+  throw new Error(`POLAR_PRODUCT_ID_${planId.toUpperCase()}_MONTHLY is required`);
+}
+const benefitId = planId === "pro"
+  ? env.POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY
+  : env.POLAR_CREDITS_BENEFIT_ID_MAX_MONTHLY;
 if (!benefitId) {
-  throw new Error("POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY is required");
+  throw new Error(`POLAR_CREDITS_BENEFIT_ID_${planId.toUpperCase()}_MONTHLY is required`);
 }
 
 const polar = new Polar({ accessToken, server: env.POLAR_SERVER });
@@ -31,7 +42,7 @@ const requestId = `tab-polar-usage-request-${runId}`;
 const timestamp = new Date();
 const startTimestamp = new Date(timestamp.getTime() - 60_000);
 const endTimestamp = new Date(timestamp.getTime() + 60 * 60_000);
-const grantedCredits = 300;
+const grantedCredits = planCapabilities[planId].deepCompletesPerMonth;
 const expectedQuantity = 1 - grantedCredits;
 const expectedBalance = grantedCredits - 1;
 
@@ -69,21 +80,21 @@ try {
     polar.benefits.get({ id: benefitId }),
   ]);
   if (!product.benefits.some((item) => item.id === benefitId)) {
-    throw new Error("The monthly Pro product does not grant the configured benefit");
+    throw new Error(`The monthly ${planId} product does not grant the configured benefit`);
   }
   if (
     benefit.type !== "meter_credit" ||
     benefit.properties.meterId !== meterId ||
     benefit.properties.units !== grantedCredits
   ) {
-    throw new Error("The configured Pro benefit does not match the Deep Complete meter");
+    throw new Error(`The configured ${planId} benefit does not match the Deep Complete meter`);
   }
 
   const customer = await polar.customers.create({
     type: "individual",
     email: `polar-usage+${runId}@cueva.io`,
     externalId: externalCustomerId,
-    name: "Tab Polar Usage Verify",
+    name: `Tab Polar Usage Verify (${planId})`,
     metadata: { source: "tab-polar-verify-usage" },
     ...organizationScope,
   });
@@ -155,6 +166,7 @@ try {
   }
 
   console.log("Polar usage verification passed", {
+    planId,
     externalCustomerId,
     grantedCredits,
     meterQuantity: quantity,

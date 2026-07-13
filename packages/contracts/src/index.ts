@@ -180,7 +180,7 @@ export const DeviceListResponseSchema = z.object({
 });
 
 export const PlanIdSchema = z.enum(PLAN_IDS);
-export const BillingIntervalSchema = z.enum(["monthly", "annual"]);
+export const BillingIntervalSchema = z.literal("monthly");
 export const EntitlementSourceSchema = z.enum(["free", "trial", "paid"]);
 
 export const PlanCapabilitiesSchema = z.object({

@@ -1,10 +1,9 @@
-export const PLAN_IDS = ["free", "pro"] as const;
+export const PLAN_IDS = ["free", "pro", "max"] as const;
 
 export const planCapabilities = {
   free: {
     name: "Free",
     monthlyPriceUsd: 0,
-    annualPriceUsd: 0,
     trialDays: 30,
     localAcceptedWordsPerDay: 100,
     deepCompletesPerMonth: 10,
@@ -16,7 +15,6 @@ export const planCapabilities = {
   pro: {
     name: "Pro",
     monthlyPriceUsd: 10,
-    annualPriceUsd: 96,
     trialDays: 0,
     localAcceptedWordsPerDay: null,
     deepCompletesPerMonth: 300,
@@ -25,10 +23,22 @@ export const planCapabilities = {
     customWritingInstructions: true,
     modelCatalogAccess: true,
   },
+  max: {
+    name: "Max",
+    monthlyPriceUsd: 20,
+    trialDays: 0,
+    localAcceptedWordsPerDay: null,
+    deepCompletesPerMonth: 1_000,
+    personalDeviceLimit: 3,
+    continuousMemoryExtraction: true,
+    customWritingInstructions: true,
+    modelCatalogAccess: true,
+  },
 } as const;
 
 export type PlanId = keyof typeof planCapabilities;
-export type BillingInterval = "monthly" | "annual";
+export type PaidPlanId = Exclude<PlanId, "free">;
+export type BillingInterval = "monthly";
 
 export function isPlanId(value: string | undefined): value is PlanId {
   return Boolean(value && value in planCapabilities);

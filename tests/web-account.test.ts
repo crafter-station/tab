@@ -262,7 +262,7 @@ describe("Web account surface", () => {
     expect(body).toInclude('name="next" value="/dashboard"');
   });
 
-  it("displays accurate Free and Pro allowances and prices", async () => {
+  it("displays accurate monthly Free, Pro, and Max allowances and prices", async () => {
     const { webApp } = await createWebTestEnv();
     const response = await webRequest(webApp, "/pricing");
 
@@ -270,12 +270,14 @@ describe("Web account surface", () => {
     const body = await response.text();
     expect(body).toInclude("Free");
     expect(body).toInclude("Pro");
-    expect(body).not.toInclude("Max");
+    expect(body).toInclude("Max");
     expect(body).toInclude("100 Accepted Words");
     expect(body).toInclude("10 Deep Completes");
     expect(body).toInclude("300 Deep Completes");
+    expect(body).toInclude("1,000 Deep Completes");
     expect(body).toInclude("$10/mo");
-    expect(body).toInclude("$96/year");
+    expect(body).toInclude("$20/mo");
+    expect(body).not.toInclude("/year");
     expect(body).toInclude("Simple pricing");
     expect(body).toInclude("Only completed work counts.");
     expect(body).toInclude("Continuous Memory Extraction");
@@ -286,13 +288,12 @@ describe("Web account surface", () => {
     expect(body).toInclude("Start 30-day Pro trial");
     expect(body).toInclude('href="/signup"');
     expect(body).toInclude('action="/billing/checkout"');
-    expect(body).toInclude('name="interval"');
-    expect(body).toInclude('value="monthly"');
-    expect(body).toInclude('value="monthly" selected=""');
+    expect(body).not.toInclude('name="interval"');
     expect(body).toInclude('data-pricing-grid="true"');
     expect(body).toInclude('data-pricing-plan="free"');
     expect(body).toInclude('data-pricing-plan="pro"');
-    expect(body.match(/data-pricing-plan=/g)?.length).toBe(2);
+    expect(body).toInclude('data-pricing-plan="max"');
+    expect(body.match(/data-pricing-plan=/g)?.length).toBe(3);
     expect(body).toInclude("Free begins automatically after your trial");
   });
 
@@ -311,6 +312,8 @@ describe("Web account surface", () => {
     expect(terms).toInclude("one 30-day Pro trial without a payment card");
     expect(terms).toInclude("does not charge automatic usage overages");
     expect(terms).toInclude("paid benefits remain active through the end of the current paid period");
+    expect(terms).toInclude("Paid plans renew monthly");
+    expect(terms).not.toInclude("monthly or annually");
     expect(terms).toInclude('href="/billing/portal"');
     expect(terms).toInclude('href="/pricing"');
     expect(terms).toInclude('href="/privacy"');
@@ -372,7 +375,7 @@ describe("Web account surface", () => {
     expect(body).toInclude("Dashboard");
     expect(body).not.toInclude('href="/login">Sign in</a>');
     expect(body).toInclude('action="/billing/checkout"');
-    expect(body).toInclude('name="interval"');
+    expect(body).not.toInclude('name="interval"');
     expect(body).not.toInclude('href="/login?next=');
   });
 
@@ -497,7 +500,7 @@ describe("Web account surface", () => {
     expect(usageBody).toInclude("Local Accepted Words today");
     expect(usageBody).toInclude("Deep Completes this month");
     expect(usageBody).toInclude("Need higher allowances?");
-    expect(usageBody).toInclude("View Pro");
+    expect(usageBody).toInclude("Compare plans");
     expect(usageBody).not.toInclude("Manage subscription");
 
     const configResponse = await webRequest(webApp, "/dashboard/account", {}, setCookie!);
@@ -561,13 +564,11 @@ describe("Web account surface", () => {
     expect(location).toInclude("interval=monthly");
   });
 
-  it("sends active monthly Pro subscribers choosing annual to billing management", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
-      await createWebTestEnv();
+  it("normalizes legacy checkout interval input to monthly", async () => {
+    const { apiApp, billingCheckoutClient, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activatePaidPlan(billingService, userId, "pro");
 
     const response = await webRequest(
       webApp,
@@ -577,19 +578,11 @@ describe("Web account surface", () => {
     );
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(
-      "https://portal.test/polar-customer-pro",
-    );
-    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([
-      { userId, customerId: "polar-customer-pro" },
+    expect(response.headers.get("location")).toInclude("checkout.test/pro");
+    expect(response.headers.get("location")).toInclude("interval=monthly");
+    expect(billingCheckoutClient.checkoutRequests).toEqual([
+      { planId: "pro", interval: "monthly", userId },
     ]);
-
-    const entitlement = await billingService.getEntitlement(userId);
-    expect(entitlement.planId).toBe("pro");
-    expect(entitlement.billingInterval).toBe("monthly");
-    expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
-    expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
   });
 
   it("treats active paid subscribers choosing their current plan as a no-op", async () => {
@@ -611,17 +604,21 @@ describe("Web account surface", () => {
     expect(response.headers.get("location")).toBe("/dashboard");
     expect(billingCheckoutClient.checkoutRequests).toEqual([]);
     expect(billingCheckoutClient.portalRequests).toEqual([]);
+
+    const usageResponse = await webRequest(webApp, "/dashboard/usage", {}, cookie);
+    const usageBody = await usageResponse.text();
+    expect(usageBody).toInclude("Pro subscription");
+    expect(usageBody).toInclude("Your paid plan includes 300 Deep Completes each month.");
+    expect(usageBody).not.toInclude("Pro includes");
   });
 
-  it("falls back to the local billing management route for interval-change portal failures", async () => {
+  it("ignores legacy interval input for an existing paid plan", async () => {
     const { apiApp, billingCheckoutClient, billingService, database, webApp } =
       await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
     const { cookie, userId } = await signUpUser(apiApp, database, email, password);
     await activatePaidPlan(billingService, userId, "pro");
-    billingCheckoutClient.failPortalRequests = true;
-
     const response = await webRequest(
       webApp,
       "/billing/checkout?plan=pro&interval=annual",
@@ -630,11 +627,9 @@ describe("Web account surface", () => {
     );
 
     expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/billing/portal");
+    expect(response.headers.get("location")).toBe("/dashboard");
     expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([
-      { userId, customerId: "polar-customer-pro" },
-    ]);
+    expect(billingCheckoutClient.portalRequests).toEqual([]);
 
     const entitlement = await billingService.getEntitlement(userId);
     expect(entitlement.planId).toBe("pro");
@@ -642,26 +637,61 @@ describe("Web account surface", () => {
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
   });
 
-  it("rejects retired plan checkout requests", async () => {
+  it("starts Max checkout and rejects Free checkout", async () => {
     const { apiApp, billingCheckoutClient, database, webApp } =
       await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
     const { cookie } = await signUpUser(apiApp, database, email, password);
 
-    for (const plan of ["free", "max"]) {
-      const response = await webRequest(
-        webApp,
-        `/billing/checkout?plan=${plan}`,
-        {},
-        cookie,
-      );
+    const maxResponse = await webRequest(
+      webApp,
+      "/billing/checkout?plan=max",
+      {},
+      cookie,
+    );
+    expect(maxResponse.status).toBe(302);
+    expect(maxResponse.headers.get("location")).toInclude("checkout.test/max");
 
-      expect(response.status).toBe(200);
-      expect(await response.text()).toInclude("Billing error");
-    }
-    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    const freeResponse = await webRequest(
+      webApp,
+      "/billing/checkout?plan=free",
+      {},
+      cookie,
+    );
+    expect(freeResponse.status).toBe(200);
+    expect(await freeResponse.text()).toInclude("Billing error");
+    expect(billingCheckoutClient.checkoutRequests).toHaveLength(1);
+    expect(billingCheckoutClient.checkoutRequests[0].planId).toBe("max");
     expect(billingCheckoutClient.portalRequests).toEqual([]);
+  });
+
+  it("sends active Pro subscribers to the portal to change to Max", async () => {
+    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
+      await createWebTestEnv();
+    const { cookie, userId } = await signUpUser(
+      apiApp,
+      database,
+      `user-${crypto.randomUUID()}@example.com`,
+      "password123456",
+    );
+    await activatePaidPlan(billingService, userId, "pro");
+
+    const response = await webRequest(
+      webApp,
+      "/billing/checkout?plan=max",
+      {},
+      cookie,
+    );
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe(
+      "https://portal.test/polar-customer-pro",
+    );
+    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
+    expect(billingCheckoutClient.portalRequests).toEqual([
+      { userId, customerId: "polar-customer-pro" },
+    ]);
   });
 
   it("blocks checkout until the signed-in user verifies email", async () => {
@@ -692,7 +722,7 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
-      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dmonthly",
+      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
     );
   });
 
@@ -704,12 +734,12 @@ describe("Web account surface", () => {
 
     const loginPageResponse = await webRequest(
       webApp,
-      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dannual",
+      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
     );
     expect(loginPageResponse.status).toBe(200);
     const loginPageBody = await loginPageResponse.text();
     expect(loginPageBody).toInclude('name="next"');
-    expect(loginPageBody).toInclude('/billing/checkout?plan=pro&amp;interval=annual');
+    expect(loginPageBody).toInclude('/billing/checkout?plan=pro');
 
     const loginResponse = await webRequest(webApp, "/login", {
       method: "POST",
@@ -717,24 +747,24 @@ describe("Web account surface", () => {
       body: new URLSearchParams({
         email,
         password,
-        next: "/billing/checkout?plan=pro&interval=annual",
+        next: "/billing/checkout?plan=pro",
       }),
     });
 
     expect(loginResponse.status).toBe(302);
     expect(loginResponse.headers.get("location")).toBe(
-      "/billing/checkout?plan=pro&interval=annual",
+      "/billing/checkout?plan=pro",
     );
 
     const checkoutResponse = await webRequest(
       webApp,
-      "/billing/checkout?plan=pro&interval=annual",
+      "/billing/checkout?plan=pro",
       {},
       loginResponse.headers.get("set-cookie")!,
     );
     expect(checkoutResponse.status).toBe(302);
     expect(checkoutResponse.headers.get("location")).toInclude("checkout.test/pro");
-    expect(checkoutResponse.headers.get("location")).toInclude("interval=annual");
+    expect(checkoutResponse.headers.get("location")).toInclude("interval=monthly");
   });
 
   it("redirects authenticated login and signup page visits to the dashboard", async () => {
