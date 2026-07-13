@@ -87,7 +87,7 @@ describe("shared app patterns", () => {
     expect(hiddenButtonOpeningTag).toMatch(/\sdisabled=""(?:\s|>)/);
   });
 
-  it("uses the same logo while recoloring Deep Complete suggestions", () => {
+  it("uses the same logo with a restrained cloud material treatment", async () => {
     const markup = renderToStaticMarkup(
       <FloatingSuggestionBar
         suggestion={{ id: "s-cloud", text: " from the cloud" }}
@@ -95,6 +95,7 @@ describe("shared app patterns", () => {
         onAccept={() => {}}
       />,
     );
+    const styles = await Bun.file(new URL("../packages/ui/src/styles/globals.css", import.meta.url)).text();
 
     expect(markup).toInclude('data-source="cloud"');
     expect(markup).toInclude("tab-suggestion-command");
@@ -104,6 +105,10 @@ describe("shared app patterns", () => {
     expect(markup).not.toInclude(">Deep Complete<");
     expect(markup).not.toInclude(">Tab<");
     expect(markup).not.toInclude("data-source-glyph");
+    expect(styles).toInclude("--tab-overlay-deep-bg: rgba(27, 26, 24, 0.97)");
+    expect(styles).toInclude("radial-gradient(circle at 26px 50%, var(--tab-overlay-deep-wash), transparent 104px)");
+    expect(styles).toInclude('.tab-suggestion-command[data-source="cloud"]::before');
+    expect(styles).toInclude("background-color: rgba(255, 255, 255, 0.07)");
   });
 
   it("keeps suggestion content mounted and blurred while a replacement refreshes", () => {
