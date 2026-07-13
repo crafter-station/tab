@@ -34,6 +34,17 @@ test("macOS helper captures terminal paste and invalidates uncertain edits", () 
   assert.match(nativeHelper, /CGEventType\.leftMouseDown/);
 });
 
+test("macOS helper does not turn passive Ghostty output into typing activity", () => {
+  assert.match(
+    nativeHelper,
+    /func emitPolledContextSnapshots\(\)[\s\S]*activeWindowSnapshot\(\)\?\.bundleId != "com\.mitchellh\.ghostty"[\s\S]*emitTextSessionSnapshotIfChanged\(\)/,
+  );
+  assert.match(
+    nativeHelper,
+    /Timer\.scheduledTimer[\s\S]*emitPolledContextSnapshots\(\)/,
+  );
+});
+
 test("macOS helper reserves Option+Tab for suggestion acceptance", () => {
   assert.match(
     nativeHelper,

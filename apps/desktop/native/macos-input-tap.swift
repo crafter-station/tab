@@ -409,6 +409,16 @@ func emitAppContextTreeSnapshotIfChanged() {
   emit(["type": "app-context-tree", "provider": "whatsapp-conversation", "tree": snapshot])
 }
 
+func emitPolledContextSnapshots() {
+  emitActiveWindowIfChanged()
+  // Ghostty output can include Tab's own diagnostics. Polling it would turn
+  // those output changes into a self-sustaining suggestion refresh loop.
+  if activeWindowSnapshot()?.bundleId != "com.mitchellh.ghostty" {
+    emitTextSessionSnapshotIfChanged()
+  }
+  emitAppContextTreeSnapshotIfChanged()
+}
+
 func currentKeyboardLayout() -> UnsafePointer<UCKeyboardLayout>? {
   guard let inputSource = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
         let layoutData = TISGetInputSourceProperty(inputSource, kTISPropertyUnicodeKeyLayoutData) else {
@@ -613,8 +623,6 @@ CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
 CGEvent.tapEnable(tap: eventTap, enable: true)
 emit(["type": "ready"])
 Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { _ in
-  emitActiveWindowIfChanged()
-  emitTextSessionSnapshotIfChanged()
-  emitAppContextTreeSnapshotIfChanged()
+  emitPolledContextSnapshots()
 }
 CFRunLoopRun()

@@ -352,18 +352,29 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
       if (!response.ok) throw new Error("Local inference request failed");
 
       if (!response.body) throw new Error("Local inference response was not streamable");
+      const lastValidPartial: { current: Suggestion | null } = { current: null };
       const streamed = await readCompletionStream(response.body, startedAt, (partialText) => {
         const text = normalizeGeneratedSuggestion(snapshot.sanitizedContext, partialText);
         if (!isSuggestionContractValid(snapshot.sanitizedContext, text)) return;
-        requestOptions?.onPartialSuggestion?.({
+        lastValidPartial.current = {
           id: suggestionId,
           text,
-        });
+        };
+        requestOptions?.onPartialSuggestion?.(lastValidPartial.current);
       });
       const rawText = streamed.text;
       lastTiming = streamed.timing;
       const text = normalizeGeneratedSuggestion(snapshot.sanitizedContext, rawText);
       if (!isSuggestionContractValid(snapshot.sanitizedContext, text)) {
+        if (lastValidPartial.current) {
+          options.onDiagnostic?.("request_completed", {
+            contextId: contextId(snapshot.contextHash),
+            suggestionLength: lastValidPartial.current.text.length,
+            recoveredFromInvalidFinal: true,
+            ...streamed.timing,
+          });
+          return lastValidPartial.current;
+        }
         options.onDiagnostic?.("request_empty", {
           reason: "invalid_suggestion_contract",
           contextId: contextId(snapshot.contextHash),

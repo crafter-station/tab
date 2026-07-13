@@ -49,6 +49,20 @@ function completionStream(content: string, timings: Record<string, number> = {})
   }));
 }
 
+function completionChunksStream(contents: readonly string[]): Response {
+  const encoder = new TextEncoder();
+  const events = [
+    ...contents.map((content) => `data: ${JSON.stringify({ content })}\n\n`),
+    `data: ${JSON.stringify({ stop: true, timings: {} })}\n\n`,
+  ].join("");
+  return new Response(new ReadableStream({
+    start(controller) {
+      controller.enqueue(encoder.encode(events));
+      controller.close();
+    },
+  }));
+}
+
 function chatCompletionStream(content: string): Response {
   const encoder = new TextEncoder();
   const events = [
@@ -282,6 +296,30 @@ describe("local inference prototype", () => {
     await runtime.start();
 
     expect(await runtime.getSuggestion(requestableSnapshot())).toBeNull();
+    runtime.stop();
+  });
+
+  it("keeps the last contract-valid streamed partial when later tokens invalidate the output", async () => {
+    const partialSuggestions: string[] = [];
+    const runtime = createLocalInferencePrototype({
+      executablePath: "llama-server",
+      modelPath: "/tmp/model.gguf",
+      modelExists: () => true,
+      verifyModelArtifact: async () => true,
+      getRuntimeVersion: async () => "version: 9910 (f5525f7e7)",
+      spawnHelper: () => ({ kill: () => true, once: () => {} }),
+      fetch: async (input) => String(input).endsWith("/health")
+        ? new Response("ok")
+        : completionChunksStream(["world ", "Hello"]),
+    });
+    await runtime.start();
+
+    const suggestion = await runtime.getSuggestion(requestableSnapshot(), {
+      onPartialSuggestion: (partial) => partialSuggestions.push(partial.text),
+    });
+
+    expect(partialSuggestions).toEqual([" world"]);
+    expect(suggestion?.text).toBe(" world");
     runtime.stop();
   });
 
