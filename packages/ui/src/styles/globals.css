@@ -337,14 +337,6 @@ a:not([class]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    transition-duration: 1ms !important;
-    animation-duration: 1ms !important;
-    animation-iteration-count: 1 !important;
-  }
-
   button:active,
   a:active,
   summary:active {
@@ -353,9 +345,13 @@ a:not([class]) {
 
   .tab-disclosure-panel,
   .tab-popover-content,
-  .tab-tooltip-content,
-  .tab-disclosure-chevron {
+  .tab-tooltip-content {
     transform: none !important;
+    transition-property: opacity;
+  }
+
+  .tab-disclosure-chevron {
+    transition-duration: 0ms;
   }
 }
 
