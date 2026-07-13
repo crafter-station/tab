@@ -1,0 +1,32 @@
+name: Documentation improvement
+description: Improve setup, architecture, product, contributor, or user documentation.
+title: "[Docs]: "
+labels: ["needs-triage"]
+body:
+  - type: textarea
+    id: location
+    attributes:
+      label: Documentation location
+      placeholder: README.md, CONTRIBUTING.md, docs/PRD.md, docs/adr/..., etc.
+    validations:
+      required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: What is confusing, missing, or wrong?
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: Suggested change
+      placeholder: If you know the fix, describe it here.
+    validations:
+      required: false
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I am willing to open a pull request for this documentation change.
+          required: false

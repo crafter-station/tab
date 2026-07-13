@@ -1,0 +1,70 @@
+name: Feature request
+description: Propose a user-facing improvement or product behavior change.
+title: "[Feature]: "
+labels: ["needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for proposing an improvement. Feature requests are easiest to evaluate when they describe the user problem, affected surface, and privacy impact.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What user problem should this solve?
+      placeholder: As a user, I want ... so that ...
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the smallest useful version of the change.
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Affected surface
+      multiple: true
+      options:
+        - Desktop app
+        - Floating Suggestion Overlay
+        - Web app
+        - API Worker
+        - Auth or device login
+        - Billing or entitlements
+        - Personal Memory
+        - Local Suggestions
+        - Deep Complete
+        - Shared package
+        - Documentation
+        - Unsure
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy, trust, or security impact
+      description: Does this change typing context, memory, telemetry, auth, billing, or storage behavior?
+      placeholder: No known impact, or describe the impact and guardrails.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      placeholder: What simpler approaches or existing workflows did you consider?
+    validations:
+      required: false
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: How would we know this is done?
+      placeholder: |
+        - Given ..., when ..., then ...
+        - Tests cover ...
+        - Manual validation covers ...
+    validations:
+      required: false
