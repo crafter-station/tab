@@ -87,7 +87,7 @@ describe("shared app patterns", () => {
     expect(hiddenButtonOpeningTag).toMatch(/\sdisabled=""(?:\s|>)/);
   });
 
-  it("labels Deep Complete suggestions without decorative source motion", () => {
+  it("uses the same logo while recoloring Deep Complete suggestions", () => {
     const markup = renderToStaticMarkup(
       <FloatingSuggestionBar
         suggestion={{ id: "s-cloud", text: " from the cloud" }}
@@ -99,27 +99,29 @@ describe("shared app patterns", () => {
     expect(markup).toInclude('data-source="cloud"');
     expect(markup).toInclude("tab-suggestion-command");
     expect(markup).toInclude("tab-suggestion-source");
-    expect(markup).toInclude("Deep Complete");
+    expect(markup).toInclude('data-tab-mark="continuation-gap"');
     expect(markup).toInclude("Accept Deep Complete suggestion");
+    expect(markup).not.toInclude(">Deep Complete<");
+    expect(markup).not.toInclude(">Tab<");
     expect(markup).not.toInclude("data-source-glyph");
   });
 
-  it("keeps suggestion content mounted while a cloud replacement loads", () => {
+  it("keeps suggestion content mounted and blurred while a replacement refreshes", () => {
     const markup = renderToStaticMarkup(
       <FloatingSuggestionBar
         suggestion={{ id: "s-local", text: " local suggestion" }}
         source="local"
-        loading
+        refreshing
         onAccept={() => {}}
       />,
     );
 
     expect(markup).toInclude(" local suggestion");
-    expect(markup).toInclude('data-loading="true"');
+    expect(markup).toInclude('data-refreshing="true"');
+    expect(markup).toInclude('aria-busy="true"');
     expect(markup).toInclude('data-source="local"');
-    expect(markup).toInclude("Updating...");
-    expect(markup).toInclude("Updating suggestion");
-    expect(markup).not.toInclude("blur-[1px]");
+    expect(markup).not.toInclude("Updating...");
+    expect(markup).toInclude("tab-suggestion-content");
   });
 
   it("shares identity and suggestion recipes across embedded and native surfaces", () => {

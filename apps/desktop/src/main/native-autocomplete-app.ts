@@ -44,7 +44,7 @@ export type NativeSuggestionSessionOutputs = {
   readonly hideOverlay: () => void;
   readonly showDebugContext: () => void;
   readonly resetDebugApiState: () => void;
-  readonly setSuggestionLoading?: (loading: boolean) => void;
+  readonly setSuggestionRefreshing?: (refreshing: boolean) => void;
   readonly onRequestStarted?: (context: string) => void;
   readonly onRequestFinished?: (suggestion: Suggestion | null) => void;
   readonly onSecretLikeContextDetected?: () => void;
@@ -291,7 +291,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   function finishReplacement(): void {
     if (!replacingSuggestion) return;
     replacingSuggestion = false;
-    outputs.setSuggestionLoading?.(false);
+    outputs.setSuggestionRefreshing?.(false);
   }
 
   function presentSuggestion(suggestion: Suggestion): void {
@@ -392,7 +392,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     outputs.resetDebugApiState();
     if (preserveVisibleSuggestion) {
       replacingSuggestion = true;
-      outputs.setSuggestionLoading?.(true);
+      outputs.setSuggestionRefreshing?.(true);
     } else {
       finishReplacement();
       clearVisibleSuggestion();
@@ -434,15 +434,14 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       && (snapshot.surroundingContext?.beforeCaret?.length ?? 0) > 0;
   }
 
-  function invalidateVisibleSuggestionWithoutContextChange(): void {
+  function holdVisibleSuggestionUntilTextSessionRefresh(): void {
     if (!currentSuggestion) return;
 
     recordDismissal(currentSafeSnapshot());
     outputs.resetDebugApiState();
-    outputs.clearSuggestion();
+    replacingSuggestion = true;
+    outputs.setSuggestionRefreshing?.(true);
     suggestionLoop.invalidate();
-    clearVisibleSuggestion();
-    outputs.showDebugContext();
   }
 
   function appContextInput(snapshot: SafeTypingContextSnapshot): SafeTypingContextSnapshot {
@@ -513,7 +512,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     appendText(text: string): void {
       if (observationPaused) return;
       if (textSessionSnapshot) {
-        invalidateVisibleSuggestionWithoutContextChange();
+        holdVisibleSuggestionUntilTextSessionRefresh();
         return;
       }
       textSessionSnapshot = null;
@@ -679,7 +678,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       const previousTextSessionTarget = visibleTextSessionTarget;
       const previousTelemetry = visibleSuggestionTelemetry;
       replacingSuggestion = true;
-      outputs.setSuggestionLoading?.(true);
+      outputs.setSuggestionRefreshing?.(true);
       if (currentSuggestion) {
         recordDismissal(currentSafeSnapshot());
       }
@@ -703,7 +702,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
         explicitRequestInFlight = false;
         appContextChangedDuringExplicitRequest = false;
         replacingSuggestion = false;
-        outputs.setSuggestionLoading?.(false);
+        outputs.setSuggestionRefreshing?.(false);
       }
       outputs.showDebugContext();
     },

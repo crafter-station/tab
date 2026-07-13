@@ -19,6 +19,12 @@
   opacity: 0.32;
   text-overflow: clip;
   white-space: pre;
+  transition: filter 140ms ease, opacity 140ms ease;
+}
+
+.inline-suggestion[data-refreshing="true"] {
+  filter: blur(2px);
+  opacity: 0.18;
 }
 
 .debug-card {

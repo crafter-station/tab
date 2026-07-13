@@ -118,13 +118,13 @@
   --tab-overlay-divider: rgba(255, 255, 255, 0.11);
   --tab-overlay-focus-ring: rgba(255, 255, 252, 0.7);
   --tab-overlay-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.24);
-  --tab-overlay-deep-bg: rgba(48, 39, 21, 0.96);
-  --tab-overlay-deep-border: rgba(242, 200, 103, 0.42);
-  --tab-overlay-deep-text: rgba(255, 250, 237, 0.96);
-  --tab-overlay-deep-accent: #f2c867;
-  --tab-overlay-deep-accent-bg: rgba(242, 200, 103, 0.14);
-  --tab-overlay-deep-accent-muted: rgba(252, 225, 161, 0.78);
-  --tab-overlay-deep-wash: rgba(242, 200, 103, 0.12);
+  --tab-overlay-deep-bg: rgba(46, 25, 18, 0.96);
+  --tab-overlay-deep-border: rgba(255, 106, 43, 0.42);
+  --tab-overlay-deep-text: rgba(255, 246, 241, 0.96);
+  --tab-overlay-deep-accent: #ff6a2b;
+  --tab-overlay-deep-accent-bg: rgba(255, 106, 43, 0.14);
+  --tab-overlay-deep-accent-muted: rgba(255, 166, 127, 0.82);
+  --tab-overlay-deep-wash: rgba(255, 106, 43, 0.12);
   --tab-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --tab-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --tab-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -378,7 +378,23 @@ details[open] > summary .tab-disclosure-chevron {
 
 .tab-suggestion-command {
   position: relative;
-  transition: transform 120ms var(--tab-ease-out), scale 120ms var(--tab-ease-out);
+  transition: transform 120ms var(--tab-ease-out), scale 120ms var(--tab-ease-out), color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.tab-suggestion-source {
+  color: var(--tab-overlay-muted);
+  background-color: var(--tab-overlay-key-bg);
+  border-color: var(--tab-overlay-divider);
+  transition: color 140ms ease, background-color 140ms ease, border-color 140ms ease;
+}
+
+.tab-suggestion-content {
+  transition: filter 140ms ease, opacity 140ms ease;
+}
+
+.tab-suggestion-command[data-refreshing="true"] .tab-suggestion-content {
+  filter: blur(2px);
+  opacity: 0.58;
 }
 
 .tab-suggestion-command[data-source="cloud"] {
@@ -397,6 +413,14 @@ details[open] > summary .tab-disclosure-chevron {
   color: var(--tab-overlay-deep-accent-muted);
   background-color: var(--tab-overlay-deep-accent-bg);
   border-color: var(--tab-overlay-deep-border);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-suggestion-command,
+  .tab-suggestion-source,
+  .tab-suggestion-content {
+    transition-duration: 0ms;
+  }
 }
 
 .pug-grid-surface {

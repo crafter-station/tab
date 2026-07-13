@@ -410,9 +410,9 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
     resetDebugApiState: () => {
       debugApiState = { status: "idle" };
     },
-    setSuggestionLoading: (loading) => {
+    setSuggestionRefreshing: (refreshing) => {
       if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
-      overlayWindow.webContents.send("suggestion-loading", loading);
+      overlayWindow.webContents.send("suggestion-refreshing", refreshing);
     },
     onRequestStarted: () => updateDebugApiState({ status: "loading" }),
     onRequestFinished: (suggestion) => {

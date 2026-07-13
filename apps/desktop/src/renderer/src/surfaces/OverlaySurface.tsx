@@ -13,7 +13,7 @@ const showDeveloperDiagnostics = import.meta.env.DEV;
 export function OverlaySurface() {
   const [mode, setMode] = useState<OverlayMode>("hidden");
   const [suggestion, setSuggestion] = useState<PresentedSuggestion | null>(null);
-  const [suggestionLoading, setSuggestionLoading] = useState(false);
+  const [suggestionRefreshing, setSuggestionRefreshing] = useState(false);
   const [debugContext, setDebugContext] = useState<DebugContext | null>(null);
 
   useEffect(() => {
@@ -24,7 +24,7 @@ export function OverlaySurface() {
       setDebugContext(null);
       setMode("suggestion");
     });
-    const unsubscribeSuggestionLoading = window.tab.onSuggestionLoading(setSuggestionLoading);
+    const unsubscribeSuggestionRefreshing = window.tab.onSuggestionRefreshing(setSuggestionRefreshing);
 
     const unsubscribeDebugContext = showDeveloperDiagnostics
       ? window.tab.onDebugContext((debug) => {
@@ -36,7 +36,7 @@ export function OverlaySurface() {
 
     const unsubscribeHide = window.tab.onHide(() => {
       setSuggestion(null);
-      setSuggestionLoading(false);
+      setSuggestionRefreshing(false);
       setDebugContext(null);
       setMode("hidden");
     });
@@ -45,7 +45,7 @@ export function OverlaySurface() {
 
     return () => {
       unsubscribeSuggestion();
-      unsubscribeSuggestionLoading();
+      unsubscribeSuggestionRefreshing();
       unsubscribeDebugContext();
       unsubscribeHide();
     };
@@ -57,6 +57,7 @@ export function OverlaySurface() {
         <span
           className="inline-suggestion"
           aria-hidden="true"
+          data-refreshing={suggestionRefreshing || undefined}
           style={suggestion.inlineMetrics ? {
             "--inline-font-size": `${suggestion.inlineMetrics.fontSize}px`,
             "--inline-line-height": `${suggestion.inlineMetrics.lineHeight}px`,
@@ -68,7 +69,7 @@ export function OverlaySurface() {
         <FloatingSuggestionBar
           suggestion={mode === "suggestion" ? suggestion : null}
           source={suggestion?.source}
-          loading={suggestionLoading}
+          refreshing={suggestionRefreshing}
           onAccept={() => window.tab?.acceptSuggestion()}
         />
       )}

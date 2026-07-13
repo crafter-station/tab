@@ -39,7 +39,7 @@ export type TabPreloadApi = {
     presentation?: "floating" | "inline";
     inlineMetrics?: { fontSize: number; lineHeight: number };
   }) => void) => () => void;
-  onSuggestionLoading: (callback: (loading: boolean) => void) => () => void;
+  onSuggestionRefreshing: (callback: (refreshing: boolean) => void) => () => void;
   onDebugContext: (callback: (debug: DebugContext) => void) => () => void;
   onHide: (callback: () => void) => () => void;
   overlayReady: () => void;
@@ -92,10 +92,10 @@ contextBridge.exposeInMainWorld("tab", {
     ipcRenderer.on("suggestion", listener);
     return () => ipcRenderer.off("suggestion", listener);
   },
-  onSuggestionLoading: (callback: (loading: boolean) => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, loading: boolean) => callback(loading);
-    ipcRenderer.on("suggestion-loading", listener);
-    return () => ipcRenderer.off("suggestion-loading", listener);
+  onSuggestionRefreshing: (callback: (refreshing: boolean) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, refreshing: boolean) => callback(refreshing);
+    ipcRenderer.on("suggestion-refreshing", listener);
+    return () => ipcRenderer.off("suggestion-refreshing", listener);
   },
   onDebugContext: (callback: (debug: DebugContext) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, debug: DebugContext) => callback(debug);

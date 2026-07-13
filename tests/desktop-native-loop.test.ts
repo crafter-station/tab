@@ -1446,7 +1446,7 @@ describe("desktop native suggestion loop", () => {
           hideOverlay: () => calls.push({ type: "hideOverlay" }),
           showDebugContext: () => calls.push({ type: "showDebugContext" }),
           resetDebugApiState: () => calls.push({ type: "resetDebugApiState" }),
-          setSuggestionLoading: (loading) => calls.push({ type: "setSuggestionLoading", value: loading }),
+          setSuggestionRefreshing: (refreshing) => calls.push({ type: "setSuggestionRefreshing", value: refreshing }),
         },
         createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
           getCurrentSuggestion,
@@ -1527,7 +1527,7 @@ describe("desktop native suggestion loop", () => {
 
       session.appendText(" world");
 
-      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: true });
+      expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: true });
       expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
       expect(calls.map((call) => call.type)).not.toContain("clearSuggestion");
 
@@ -1537,7 +1537,7 @@ describe("desktop native suggestion loop", () => {
         type: "showSuggestion",
         value: { id: "sg-local-world", text: " today" },
       });
-      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: false });
+      expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: false });
       expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-world", text: " today" });
     });
 
@@ -1555,8 +1555,8 @@ describe("desktop native suggestion loop", () => {
 
       await session.requestSuggestionNow();
 
-      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: true });
-      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: false });
+      expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: true });
+      expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: false });
       expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
       expect(calls.map((call) => call.type)).not.toContain("clearSuggestion");
       expect(calls).toContainEqual({ type: "requestSuggestion", value: "thank" });
@@ -1893,7 +1893,7 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
 
       expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
-      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: true });
+      expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: true });
 
       const hidesAfterCaretChange = calls.filter((call) => call.type === "hideOverlay").length;
       session.applyTextSessionSnapshot(textSession({ focusedElementId: "focus:2", textElementId: "text:2" }));
@@ -2233,7 +2233,7 @@ describe("desktop native suggestion loop", () => {
       expect(calls).toContainEqual({ type: "requestSuggestion", value: "Alpha!" });
     });
 
-    it("clears a visible Text Session suggestion when fallback text arrives before the next snapshot", async () => {
+    it("keeps a visible Text Session suggestion mounted until the next snapshot replaces it", async () => {
       const { calls, session } = makeSession();
       const textSession = (beforeCaret: string): TextSessionSnapshot => ({
         activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
@@ -2257,11 +2257,18 @@ describe("desktop native suggestion loop", () => {
       await wait(10);
 
       expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(0);
-      expect(calls.map((call) => call.type)).toContain("clearSuggestion");
-      expect(calls.map((call) => call.type)).toContain("hideOverlay");
-      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: true });
+      expect(calls.map((call) => call.type)).not.toContain("clearSuggestion");
+      expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
+      expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
       expect(session.getLoopState().status).toBe("idle");
       expect(session.getCurrentSnapshot().sanitizedContext).toBe("Alpha");
+
+      session.applyTextSessionSnapshot(textSession("Alpha!"));
+      await wait(10);
+
+      expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "s-1", text: " world" } });
+      expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: false });
     });
 
     it("does not clear or request again when only Text Session caret bounds change", async () => {
