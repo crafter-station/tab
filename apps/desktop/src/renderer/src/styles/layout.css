@@ -55,7 +55,7 @@ summary {
 }
 
 .settings-tabs__brand > div:last-child,
-.settings-tabs__status > div {
+.settings-tabs__switcher > div {
   display: grid;
   min-width: 0;
   gap: 1px;
@@ -67,7 +67,7 @@ summary {
 }
 
 .settings-tabs__brand > div:last-child span,
-.settings-tabs__status span {
+.settings-tabs__switcher span {
   overflow: hidden;
   color: var(--muted-foreground);
   font-size: 11px;
@@ -112,9 +112,9 @@ summary {
   font-weight: 600;
 }
 
-.settings-tabs__status {
+.settings-tabs__switcher {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 9px;
   margin-top: auto;
@@ -122,35 +122,12 @@ summary {
   border-top: 1px solid var(--tab-hairline);
 }
 
-.settings-tabs__status strong {
+.settings-tabs__switcher strong {
   overflow: hidden;
   font-size: 11px;
   font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.settings-tabs__status-dot {
-  width: 7px;
-  height: 7px;
-  background: var(--muted-foreground);
-  border-radius: 50%;
-  box-shadow: 0 0 0 3px var(--muted);
-}
-
-.settings-tabs__status[data-tone="success"] .settings-tabs__status-dot {
-  background: var(--success);
-  box-shadow: 0 0 0 3px var(--tab-success-tint);
-}
-
-.settings-tabs__status[data-tone="warning"] .settings-tabs__status-dot {
-  background: var(--warning);
-  box-shadow: 0 0 0 3px var(--tab-warning-tint);
-}
-
-.settings-tabs__status[data-tone="destructive"] .settings-tabs__status-dot {
-  background: var(--destructive);
-  box-shadow: 0 0 0 3px var(--tab-destructive-tint);
 }
 
 .settings-tabs__main {

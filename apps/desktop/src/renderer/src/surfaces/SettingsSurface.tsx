@@ -21,7 +21,6 @@ import {
   getStoredThemePreference,
   setThemePreference,
   type ThemeMode,
-  type SemanticTone,
 } from "@tab/ui";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
@@ -32,7 +31,6 @@ import { describePauseState, describePersonalMemorySource } from "./settingsCopy
 
 type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitialState"]>>;
 type SettingsTab = "account" | "completions" | "controls" | "appearance" | "permissions" | "memory";
-type SidebarStatus = { label: string; detail: string; tone: SemanticTone };
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
   { value: "account", label: "Account", description: "Plan, usage, and connection status." },
@@ -44,7 +42,7 @@ const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
-  if (auth === "signed_in") return "success";
+  if (auth === "signed_in") return "brand";
   if (auth === "revoked_device") return "warning";
   return "neutral";
 }
@@ -95,20 +93,6 @@ function describeLocalInference(status: LocalInferenceStatus, error: string | nu
   }
 }
 
-function getSidebarStatus(status: DesktopStatus, paused: boolean, loaded: boolean): SidebarStatus {
-  if (!loaded) return { label: "Checking status...", detail: "", tone: "neutral" };
-  if (status.auth === "revoked_device") return { label: "Reconnect this Mac", detail: "Access was removed", tone: "destructive" };
-  if (status.auth !== "signed_in") return { label: "Sign in required", detail: "Connect this Mac", tone: "warning" };
-  if (status.entitlement?.localAcceptedWords.exhausted && status.entitlement.deepCompletes.exhausted) {
-    return { label: "Suggestion limits reached", detail: "Check reset times in Account", tone: "warning" };
-  }
-  if (status.entitlement?.localAcceptedWords.exhausted) return { label: "Accepted Word limit reached", detail: "Deep Complete still works", tone: "warning" };
-  if (status.entitlement?.deepCompletes.exhausted) return { label: "Deep Complete limit reached", detail: "Local Suggestions still work", tone: "warning" };
-  if (paused) return { label: "Suggestions paused", detail: "Resume in Suggestions", tone: "warning" };
-  if (status.connectivity !== "online") return { label: "Account services offline", detail: "Local Suggestions still work", tone: "warning" };
-  return { label: "Suggestions on", detail: "Tab is ready", tone: "success" };
-}
-
 function createFallbackStatus(): DesktopStatus {
   return {
     auth: "sign_in_required",
@@ -126,7 +110,6 @@ export function SettingsSurface() {
     () => getStoredThemePreference(window.localStorage) ?? "system",
   );
   const [status, setStatus] = useState<DesktopStatus>(() => createFallbackStatus());
-  const [statusLoaded, setStatusLoaded] = useState(false);
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
   const [usePersonalMemory, setUsePersonalMemory] = useState(false);
@@ -139,7 +122,6 @@ export function SettingsSurface() {
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
   const activeTabConfig = SETTINGS_TABS.find((tab) => tab.value === activeTab);
   const pauseState = describePauseState(paused);
-  const sidebarStatus = getSidebarStatus(status, paused, statusLoaded);
   const localInference = describeLocalInference(localInferenceStatus, modelDownloadError);
 
   const refreshAccessibility = useCallback(async () => {
@@ -154,7 +136,6 @@ export function SettingsSurface() {
 
     const unsubscribeStatus = window.tab.onStatusChanged((nextStatus) => {
       setStatus(nextStatus);
-      setStatusLoaded(true);
     });
     const unsubscribeMemories = window.tab.onMemoriesChanged((nextMemories) => setMemories(nextMemories));
     const unsubscribePause = window.tab.onPauseChanged((nextPaused) => setPaused(nextPaused));
@@ -178,7 +159,6 @@ export function SettingsSurface() {
       .getInitialState()
       .then((initialState: InitialState) => {
         setStatus(initialState.status);
-        setStatusLoaded(true);
         setMemories(initialState.memories);
         setPaused(initialState.paused);
         setUsePersonalMemory(initialState.preferences.suggestions.usePersonalMemory);
@@ -245,6 +225,10 @@ export function SettingsSurface() {
     setThemePreference(nextMode);
   }
 
+  function handleSuggestionsEnabled(nextEnabled: boolean) {
+    if (nextEnabled === paused) window.tab?.togglePause?.();
+  }
+
   async function handleDownloadModel() {
     setModelDownloadError(null);
     try {
@@ -277,7 +261,7 @@ export function SettingsSurface() {
               <StatusRow
                 label="Account services"
                 value={status.connectivity === "online" ? "Online" : "Offline"}
-                tone={status.connectivity === "online" ? "success" : "warning"}
+                tone={status.connectivity === "online" ? "brand" : "warning"}
                 description="Used for Deep Complete and Personal Memory sync."
               />
               <div className="settings-group__actions">
@@ -307,9 +291,7 @@ export function SettingsSurface() {
                 <Switch
                   aria-label="Automatic Suggestions"
                   checked={!paused}
-                  onCheckedChange={(nextEnabled) => {
-                    if (nextEnabled === paused) window.tab?.togglePause?.();
-                  }}
+                  onCheckedChange={handleSuggestionsEnabled}
                 />
               </div>
             </SettingsRow>
@@ -318,7 +300,7 @@ export function SettingsSurface() {
               description={localInference.description}
             >
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge tone={localInferenceStatus.status === "ready" ? "success" : "warning"}>
+                <StatusBadge tone={localInferenceStatus.status === "ready" ? "brand" : "warning"}>
                   {localInference.label}
                 </StatusBadge>
                 {localInferenceStatus.status === "unavailable"
@@ -411,7 +393,7 @@ export function SettingsSurface() {
                 description="Required to read the text field you are using and add suggestions you accept."
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <StatusBadge tone={accessibilityGranted ? "success" : "warning"}>
+                  <StatusBadge tone={accessibilityGranted ? "brand" : "warning"}>
                     {accessibilityGranted ? "Enabled" : "Needs access"}
                   </StatusBadge>
                   {accessibilityGranted ? null : <Button disabled={permissionBusy === "accessibility"} onClick={handleAccessibility}>Open System Settings</Button>}
@@ -551,17 +533,16 @@ export function SettingsSurface() {
               ))}
             </TabsList>
 
-            <div
-              className="settings-tabs__status no-drag"
-              data-tone={sidebarStatus.tone}
-            >
-              <span className="settings-tabs__status-dot" aria-hidden="true" />
+            <div className="settings-tabs__switcher no-drag">
               <div>
-                <strong>
-                  {sidebarStatus.label}
-                </strong>
-                <span>{sidebarStatus.detail}</span>
+                <strong>Enable Tab</strong>
+                <span>{paused ? "Suggestions are off" : "Suggestions are on"}</span>
               </div>
+              <Switch
+                aria-label="Enable Tab"
+                checked={!paused}
+                onCheckedChange={handleSuggestionsEnabled}
+              />
             </div>
           </aside>
 
