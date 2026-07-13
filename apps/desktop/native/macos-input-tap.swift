@@ -563,7 +563,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   }
 
   if keyCode == 48 {
-    if isGhostty {
+    if isGhostty && !flags.contains(.maskAlternate) {
       emit(["type": "context-invalidated", "message": "tab"])
     }
     return Unmanaged.passUnretained(event)

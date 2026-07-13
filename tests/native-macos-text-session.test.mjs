@@ -33,3 +33,10 @@ test("macOS helper captures terminal paste and invalidates uncertain edits", () 
   assert.match(nativeHelper, /"type": "context-invalidated", "message": "navigation_or_unknown_key"/);
   assert.match(nativeHelper, /CGEventType\.leftMouseDown/);
 });
+
+test("macOS helper reserves Option+Tab for suggestion acceptance", () => {
+  assert.match(
+    nativeHelper,
+    /if keyCode == 48 \{\s+if isGhostty && !flags\.contains\(\.maskAlternate\) \{\s+emit\(\["type": "context-invalidated", "message": "tab"\]\)/,
+  );
+});
