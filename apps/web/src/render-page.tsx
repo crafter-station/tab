@@ -143,7 +143,7 @@ function WebDocument({
   user?: User;
   siteShell: boolean;
 }) {
-  const pageDescription = description ?? "Finish thoughts faster in the Mac apps where you already write. Tab only inserts a suggestion when you choose.";
+  const pageDescription = description ?? "Autocomplete in supported Mac text fields. Automatic Suggestions run locally, and Tab inserts text only when you accept it.";
 
   return (
     <html lang="en" style={{ colorScheme: "light dark" }}>

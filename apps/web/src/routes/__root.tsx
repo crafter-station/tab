@@ -46,7 +46,7 @@ export const rootRoute = createRootRoute({
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Tab - Native autocomplete for your Mac" },
-      { name: "description", content: "Finish thoughts faster in Mail, Slack, Notes, and the Mac apps where you already write. Tab only inserts a suggestion when you choose." },
+      { name: "description", content: "Autocomplete in supported Mac text fields. Automatic Suggestions run locally, and Tab inserts text only when you accept it." },
     ],
   }),
   component: RootComponent,

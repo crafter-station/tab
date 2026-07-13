@@ -13,13 +13,13 @@ const downloadSteps = [
   },
   {
     number: "02",
-    title: "Grant access",
-    description: "Follow the in-app guide for Accessibility and Input Monitoring.",
+    title: "Allow access",
+    description: "Tab explains Accessibility and Input Monitoring before opening System Settings.",
   },
   {
     number: "03",
-    title: "Keep writing",
-    description: "Tab appears only when it has a useful suggestion for the field you are in.",
+    title: "Start writing",
+    description: "Type in a supported text field and press Option+Tab when a Suggestion appears.",
   },
 ] as const;
 
@@ -135,22 +135,20 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
 
 export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
   return (
-    <section className="grid gap-12 py-6 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] lg:items-center lg:gap-16 lg:py-14">
+    <section className="grid gap-12 py-10 lg:grid-cols-[minmax(0,0.9fr)_minmax(360px,1.1fr)] lg:items-center lg:gap-16 lg:py-16">
       <div className="grid content-center gap-5">
         <PageKicker>Tab for Mac</PageKicker>
         <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,7vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Put Tab where you write.</h1>
-        <p className="max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">One Mac app brings suggestions to Mail, Slack, Notes, terminals, and the other text fields you already use.</p>
-        <p className="mt-2"><a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg">Download for macOS</a></p>
-        <p className="text-sm tabular-nums text-muted-foreground">macOS 14 or newer{latestVersion ? `, version ${latestVersion}` : ""}</p>
+        <p className="max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Get suggestions in supported text fields across Mail, Slack, Notes, terminals, and more.</p>
+        <p className="mt-2"><a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg">Download for Mac</a></p>
+        {latestVersion ? <p className="text-sm tabular-nums text-muted-foreground">Version {latestVersion}</p> : null}
       </div>
-      <aside className="border-y border-border">
-        <div className="py-5">
-          <PageKicker>Three-minute setup</PageKicker>
-          <h2 className="mt-3 font-[var(--font-display)] text-2xl font-bold">From download to first suggestion.</h2>
-        </div>
-        <ol>
+      <aside className="rounded-[var(--radius-surface)] bg-muted/35 p-6 sm:p-8">
+        <PageKicker>Setup</PageKicker>
+        <h2 className="mt-3 font-[var(--font-display)] text-2xl font-bold">From download to first Suggestion.</h2>
+        <ol className="mt-8 grid gap-7">
           {downloadSteps.map((step) => (
-            <li key={step.number} className="grid grid-cols-[2.5rem_1fr] gap-3 border-t border-border py-5">
+            <li key={step.number} className="grid grid-cols-[2.5rem_1fr] gap-3">
               <span className="font-[var(--font-code)] text-xs text-muted-foreground">{step.number}</span>
               <div>
                 <h3 className="font-semibold">{step.title}</h3>
@@ -159,7 +157,6 @@ export function DownloadPage({ latestVersion }: { latestVersion?: string }) {
             </li>
           ))}
         </ol>
-        <p className="border-t border-border py-5 text-sm leading-relaxed text-muted-foreground">Tab explains why each macOS permission is needed before opening System Settings.</p>
       </aside>
     </section>
   );

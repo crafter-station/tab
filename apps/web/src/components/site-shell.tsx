@@ -3,8 +3,8 @@ import { ArrowUpRight, List, X } from "@phosphor-icons/react";
 import { TabMark, buttonVariants } from "@tab/ui";
 
 const primaryLinks = [
-  { href: "/#features", label: "Features" },
   { href: "/#how-it-works", label: "How it works" },
+  { href: "/#privacy", label: "Privacy" },
   { href: "/pricing", label: "Pricing" },
   { href: "/download", label: "Download" },
 ] as const;
@@ -13,7 +13,7 @@ const baseFooterGroups = [
   {
     label: "Product",
     links: [
-      { href: "/#features", label: "Features" },
+      { href: "/#how-it-works", label: "How it works" },
       { href: "/pricing", label: "Pricing" },
       { href: "/download", label: "Download" },
       { href: "/login", label: "Sign in" },
@@ -82,7 +82,7 @@ export function SiteHeader({
           </details>
           {themeControl}
           {accountControl}
-          <a className={buttonVariants({ size: "sm", className: "max-sm:hidden" })} href="/download/tab.dmg">Download free</a>
+          <a className={buttonVariants({ size: "sm", className: "max-sm:hidden" })} href="/download/tab.dmg">Download for Mac</a>
         </div>
       </div>
     </header>
@@ -96,7 +96,7 @@ export function SiteFooter({ authenticated = false }: { authenticated?: boolean 
         <div className="grid gap-12 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
           <div className="max-w-sm">
             <Brand />
-            <p className="mt-5 text-pretty leading-relaxed text-muted-foreground">Native autocomplete that helps you finish the thought in the Mac apps where you already write.</p>
+            <p className="mt-5 text-pretty leading-relaxed text-muted-foreground">Autocomplete in supported Mac text fields. Nothing is inserted until you accept it.</p>
             <a className="mt-5 inline-flex items-center gap-1.5 text-sm font-semibold underline decoration-border underline-offset-4 transition-colors duration-150 hover:decoration-foreground" href="mailto:tab@cueva.io">
               tab@cueva.io
               <ArrowUpRight aria-hidden="true" />
