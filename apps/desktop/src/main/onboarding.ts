@@ -14,15 +14,15 @@ export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subtitle: string }> = {
   try: {
     title: "Try Tab",
-    subtitle: "Accept a sample suggestion before Tab appears in other apps.",
+    subtitle: "Practice accepting a Suggestion.",
   },
   permissions: {
-    title: "Allow Tab to work in your apps",
-    subtitle: "Enable Accessibility and Input Monitoring in order, with a clear explanation of each permission.",
+    title: "Allow access",
+    subtitle: "Turn on two macOS permissions.",
   },
   done: {
-    title: "Start writing with Tab",
-    subtitle: "Relaunch once to apply Input Monitoring, then Tab will run quietly from the menu bar.",
+    title: "Finish setup",
+    subtitle: "Relaunch Tab once.",
   },
 };
 

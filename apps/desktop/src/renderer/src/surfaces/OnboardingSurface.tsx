@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Eyebrow, SuggestionCommand, TabMark, Textarea } from "@tab/ui";
 import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
-import { ONBOARDING_STEPS, type OnboardingStep } from "../../../main/onboarding";
+import { ONBOARDING_STEP_COPY, ONBOARDING_STEPS, type OnboardingStep } from "../../../main/onboarding";
 
 type Feedback = {
   message: string;
@@ -9,21 +9,6 @@ type Feedback = {
 };
 
 type PermissionState = "complete" | "current" | "upcoming";
-
-const STEP_META: Record<OnboardingStep, { label: string; description: string }> = {
-  try: {
-    label: "Try Tab",
-    description: "See how suggestions feel.",
-  },
-  permissions: {
-    label: "Allow access",
-    description: "Enable two macOS permissions.",
-  },
-  done: {
-    label: "Start writing",
-    description: "Apply access and finish.",
-  },
-};
 
 const INITIAL_DRAFT = "Hi Jordan, quick update on the launch plan:";
 const SAMPLE_SUGGESTIONS = [
@@ -251,11 +236,11 @@ export function OnboardingSurface() {
 
   function getPrimaryLabel() {
     if (busy) return "Opening System Settings...";
-    if (step === "try") return acceptedPractice ? "Continue to permissions" : "Accept sample suggestion";
+    if (step === "try") return acceptedPractice ? "Continue" : "Accept sample Suggestion";
     if (step === "done") return "Relaunch Tab";
     if (!accessibilityGranted) return "Open Accessibility Settings";
     if (!inputMonitoringOpened) return "Open Input Monitoring";
-    if (!inputMonitoringConfirmed) return "I enabled Input Monitoring";
+    if (!inputMonitoringConfirmed) return "I turned it on";
     return "Continue";
   }
 
@@ -281,8 +266,8 @@ export function OnboardingSurface() {
                     {itemState === "complete" ? <CheckIcon /> : index + 1}
                   </span>
                   <span className="onboarding-progress__copy">
-                    <strong>{STEP_META[item].label}</strong>
-                    <small>{STEP_META[item].description}</small>
+                    <strong>{ONBOARDING_STEP_COPY[item].title}</strong>
+                    <small>{ONBOARDING_STEP_COPY[item].subtitle}</small>
                   </span>
                 </li>
               );
@@ -291,17 +276,19 @@ export function OnboardingSurface() {
         </nav>
 
         <div className="onboarding-sidebar__footer no-drag">
-          <div className="onboarding-trust-note">
-            <LockIcon />
-            <div>
-              <strong>No Screen Recording or Full Disk Access</strong>
-              <span>Supported nearby context is read locally and bounded.</span>
+          {step === "permissions" ? null : (
+            <div className="onboarding-trust-note">
+              <LockIcon />
+              <div>
+                <strong>No Screen Recording or Full Disk Access</strong>
+                <span>Automatic Suggestions use recent typing on this Mac.</span>
+              </div>
             </div>
-          </div>
+          )}
           <Button className="onboarding-later" onClick={() => window.tab?.skipOnboarding?.()} variant="ghost">
-            Set up later
+            Not now
           </Button>
-          <span className="onboarding-later__hint">Finish anytime from Settings.</span>
+          <span className="onboarding-later__hint">Permissions remain available in Settings.</span>
         </div>
       </aside>
 
@@ -316,19 +303,18 @@ export function OnboardingSurface() {
             {step === "try" ? (
               <>
                 <header className="onboarding-hero">
-                  <Eyebrow>Private autocomplete</Eyebrow>
+                  <Eyebrow>Practice</Eyebrow>
                   <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
-                    Try Tab before it appears in other apps.
+                    Try accepting a Suggestion.
                   </h1>
                   <p className="lede">
-                    Tab offers a short continuation from the text you are writing. Nothing is added until you accept it.
+                    Tab suggests a short continuation. It is added only when you accept it.
                   </p>
                 </header>
 
                 <div className="practice-demo">
                   <div className="practice-demo__header">
-                    <span>Interactive preview</span>
-                    <span>Runs locally</span>
+                    <span>Sample Suggestion</span>
                   </div>
                   <div className="practice-demo__body">
                     <label htmlFor="practice-draft">Your draft</label>
@@ -349,8 +335,8 @@ export function OnboardingSurface() {
                           <CheckIcon />
                         </div>
                         <div>
-                          <strong>Suggestion added</strong>
-                          <span>That is exactly how Tab accepts a continuation in another app.</span>
+                          <strong>Suggestion accepted</strong>
+                          <span>Tab added it to your draft.</span>
                         </div>
                         <Button onClick={resetPractice} size="sm" variant="ghost">
                           Try another
@@ -365,7 +351,7 @@ export function OnboardingSurface() {
                     )}
 
                     <p className="practice-demo__hint">
-                      Click the suggestion here. In other apps, press Option + Tab. Ignore a suggestion and it disappears as you keep typing.
+                      Click the Suggestion here. In other apps, press Option+Tab. Keep typing to dismiss it.
                     </p>
                   </div>
                 </div>
@@ -380,13 +366,13 @@ export function OnboardingSurface() {
                     Allow Tab to work in your apps.
                   </h1>
                   <p className="lede">
-                    Enable these in order. Tab uses them to understand the active text field and insert only suggestions you accept.
+                     Turn on these permissions in order. Tab uses them to read the active text field and insert only Suggestions you accept.
                   </p>
                 </header>
 
                 <div className="permission-list">
                   <PermissionRow
-                    description="Lets Tab read the text field you are using and add an accepted suggestion."
+                    description="Lets Tab read the active text field and insert a Suggestion you accept."
                     index={1}
                     note={
                       accessibilityGranted
@@ -398,7 +384,7 @@ export function OnboardingSurface() {
                     title="Accessibility"
                   />
                   <PermissionRow
-                    description="Lets Tab notice typing and recognize the Option + Tab shortcut."
+                    description="Lets Tab notice typing and recognize the Option+Tab shortcut."
                     index={2}
                     note={
                       inputMonitoringOpened
@@ -410,7 +396,7 @@ export function OnboardingSurface() {
                     state={inputMonitoringConfirmed ? "complete" : accessibilityGranted ? "current" : "upcoming"}
                     status={
                       inputMonitoringConfirmed
-                        ? "Enabled"
+                        ? "Confirmed"
                         : inputMonitoringOpened
                           ? "Finish in Settings"
                           : accessibilityGranted
@@ -455,12 +441,12 @@ export function OnboardingSurface() {
                   <CheckIcon />
                 </div>
                 <header className="onboarding-hero">
-                  <Eyebrow>All set</Eyebrow>
-                  <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
-                    You are ready to write with Tab.
-                  </h1>
-                  <p className="lede">
-                    Relaunch once so macOS applies Input Monitoring. After that, Tab runs quietly from your menu bar.
+                   <Eyebrow>One last step</Eyebrow>
+                   <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                     Relaunch to finish setup.
+                   </h1>
+                   <p className="lede">
+                     Tab needs one relaunch after Input Monitoring changes.
                   </p>
                 </header>
 
@@ -469,21 +455,21 @@ export function OnboardingSurface() {
                     <span>01</span>
                     <p>
                       <strong>Type naturally</strong>
-                      <small>Suggestions appear only when Tab has a useful continuation.</small>
+                      <small>Tab shows a Suggestion when it has a continuation to offer.</small>
                     </p>
                   </div>
                   <div>
                     <span>02</span>
                     <p>
-                      <strong>Deep Complete with two taps of Option</strong>
-                      <small>This explicit action sends bounded, redacted context to the cloud for a harder writing moment.</small>
+                      <strong>Accept with Option+Tab</strong>
+                      <small>Tab inserts the Suggestion in the app you are using.</small>
                     </p>
                   </div>
                   <div>
                     <span>03</span>
                     <p>
-                      <strong>Accept with Option + Tab</strong>
-                      <small>The suggestion is inserted into the app you are already using.</small>
+                      <strong>Double-tap Option for Deep Complete</strong>
+                      <small>Tab sends a limited, redacted excerpt to the cloud only when you ask.</small>
                     </p>
                   </div>
                   <div>
@@ -503,18 +489,20 @@ export function OnboardingSurface() {
           </div>
         </div>
 
-        <footer className="onboarding-actions no-drag">
-          <div>
-            {currentStepIndex > 0 ? (
-              <Button disabled={busy} onClick={goBack} variant="secondary">
-                Back
-              </Button>
-            ) : null}
-          </div>
-          <Button className="onboarding-primary" disabled={busy} onClick={handlePrimaryAction} size="lg">
-            {getPrimaryLabel()}
-          </Button>
-        </footer>
+        {step === "try" && !acceptedPractice ? null : (
+          <footer className="onboarding-actions no-drag">
+            <div>
+              {currentStepIndex > 0 ? (
+                <Button disabled={busy} onClick={goBack} variant="secondary">
+                  Back
+                </Button>
+              ) : null}
+            </div>
+            <Button className="onboarding-primary" disabled={busy} onClick={handlePrimaryAction} size="lg">
+              {getPrimaryLabel()}
+            </Button>
+          </footer>
+        )}
       </section>
     </main>
   );

@@ -1,44 +1,23 @@
 import { useState } from "react";
-import { Button, Eyebrow, StatusBadge, TabMark } from "@tab/ui";
-import type { StatusBadgeTone } from "@tab/ui";
+import { Button, Eyebrow, TabMark } from "@tab/ui";
 
 type SetupStep = {
   title: string;
   description: string;
-  badgeLabel: string;
-  badgeTone: StatusBadgeTone;
 };
 
 const setupSteps: SetupStep[] = [
   {
     title: "Connect this Mac",
-    description: "Sign in opens your browser, then returns you to Tab on this Mac.",
-    badgeLabel: "Required",
-    badgeTone: "warning",
+    description: "Sign in securely in your browser.",
   },
   {
-    title: "Accessibility",
-    description: "Lets Tab read the text field you are using and add suggestions you accept.",
-    badgeLabel: "Setup step",
-    badgeTone: "neutral",
+    title: "Allow access",
+    description: "Turn on Accessibility and Input Monitoring with a guided explanation.",
   },
   {
-    title: "Input Monitoring",
-    description: "Helps Tab notice typing and make Option+Tab work.",
-    badgeLabel: "Setup step",
-    badgeTone: "neutral",
-  },
-  {
-    title: "Privacy scope",
-    description: "Tab does not request Screen Recording or Full Disk Access.",
-    badgeLabel: "Visible",
-    badgeTone: "success",
-  },
-  {
-    title: "Practice suggestion",
-    description: "Try accepting and dismissing a sample suggestion before Tab runs in another app.",
-    badgeLabel: "Practice",
-    badgeTone: "success",
+    title: "Try a Suggestion",
+    description: "Practice accepting with Option+Tab before Tab runs in another app.",
   },
 ];
 
@@ -55,7 +34,7 @@ export function SignInSurface() {
       <section className="sign-in-hero drag-region" aria-label="Tab setup preview">
         <div className="sign-in-proof pug-dot-grid">
           <Eyebrow>Tab for Mac</Eyebrow>
-          <h1 className="sign-in-proof__title">Connect this Mac, then review setup step by step.</h1>
+          <h1 className="sign-in-proof__title">Autocomplete where you already write.</h1>
           <div className="sign-in-proof__steps">
             {setupSteps.map((setupStep) => (
               <article className="sign-in-proof__step" key={setupStep.title}>
@@ -63,7 +42,6 @@ export function SignInSurface() {
                   <strong>{setupStep.title}</strong>
                   <span>{setupStep.description}</span>
                 </div>
-                <StatusBadge tone={setupStep.badgeTone}>{setupStep.badgeLabel}</StatusBadge>
               </article>
             ))}
           </div>
@@ -77,23 +55,20 @@ export function SignInSurface() {
             <TabMark />
             <div>
               <Eyebrow>Tab for Mac</Eyebrow>
-              <strong>Private autocomplete for your Mac</strong>
+              <strong>Autocomplete for Mac</strong>
             </div>
           </div>
 
           <div className="sign-in-copy">
-            <h2>Sign in to continue.</h2>
-            <p className="lede">
-              Tab opens your browser to connect this Mac. After sign-in, new users continue through onboarding;
-              returning users go straight to settings.
-            </p>
+            <h2>Connect this Mac to Tab.</h2>
+            <p className="lede">We will open your browser and return you to Tab when you finish.</p>
           </div>
 
-          <Button aria-busy={opened} className="sign-in-cta" disabled={opened} onClick={handleSignIn}>
-            {opened ? "Waiting for browser sign-in..." : "Sign in"}
+          <Button className="sign-in-cta" onClick={handleSignIn}>
+            {opened ? "Open browser again" : "Continue in browser"}
           </Button>
 
-          {opened ? <p className="sign-in-hint" role="status">Complete sign-in in your browser, then return to Tab.</p> : null}
+          {opened ? <p className="sign-in-hint" role="status">Finish signing in in your browser.</p> : null}
         </div>
       </section>
     </main>

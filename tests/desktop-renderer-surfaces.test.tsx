@@ -9,12 +9,13 @@ describe("desktop renderer setup surfaces", () => {
     expect(signInSource).toInclude("Connect this Mac");
     expect(signInSource).toInclude("Accessibility");
     expect(signInSource).toInclude("Input Monitoring");
-    expect(signInSource).toInclude("Privacy scope");
-    expect(signInSource).toInclude("Practice suggestion");
+    expect(signInSource).toInclude("Try a Suggestion");
+    expect(signInSource).toInclude("Continue in browser");
+    expect(signInSource).toInclude("Open browser again");
     expect(signInSource).toInclude("pug-dot-grid");
     expect(signInSource).toInclude("<TabMark />");
-    expect(onboardingSource).toInclude("Try Tab before it appears in other apps");
-    expect(onboardingSource).toInclude("I enabled Input Monitoring");
+    expect(onboardingSource).toInclude("Try accepting a Suggestion");
+    expect(onboardingSource).toInclude("I turned it on");
     expect(onboardingSource).toInclude("<SuggestionCommand");
   });
 

@@ -29,8 +29,8 @@ mac:
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
-    NSAccessibilityUsageDescription: Tab needs accessibility access to paste accepted suggestions into other apps.
-    NSInputMonitoringUsageDescription: Tab needs input monitoring access to observe typing context and the Option+Tab shortcut across apps.
+    NSAccessibilityUsageDescription: Tab uses Accessibility to read the active text field and insert only Suggestions you accept.
+    NSInputMonitoringUsageDescription: Tab uses Input Monitoring to detect typing and the Option+Tab shortcut.
   artifactName: "${productName}-${version}-${arch}.${ext}"
 dmg:
   sign: false

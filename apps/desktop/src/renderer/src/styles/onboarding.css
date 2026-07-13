@@ -242,7 +242,7 @@
   background: var(--tab-surface-sunken);
   border: 1px solid var(--border);
   border-radius: var(--radius-surface);
-  box-shadow: var(--tab-shadow-soft);
+  box-shadow: var(--tab-shadow-card);
 }
 
 .practice-demo__header {
