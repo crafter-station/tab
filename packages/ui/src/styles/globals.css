@@ -337,104 +337,76 @@ a:not([class]) {
   color: inherit;
 }
 
-@keyframes tab-sheet-fade-in {
+@keyframes tab-sheet-close-lifecycle {
   from {
-    opacity: 0;
+    --tab-sheet-close-progress: 0;
   }
-}
 
-@keyframes tab-sheet-fade-out {
   to {
-    opacity: 0;
+    --tab-sheet-close-progress: 1;
   }
 }
 
-@keyframes tab-sheet-in-from-top {
-  from {
-    transform: translate3d(0, -100%, 0);
-  }
-}
-
-@keyframes tab-sheet-out-to-top {
-  to {
-    transform: translate3d(0, -100%, 0);
-  }
-}
-
-@keyframes tab-sheet-in-from-bottom {
-  from {
-    transform: translate3d(0, 100%, 0);
-  }
-}
-
-@keyframes tab-sheet-out-to-bottom {
-  to {
-    transform: translate3d(0, 100%, 0);
-  }
-}
-
-@keyframes tab-sheet-in-from-left {
-  from {
-    transform: translate3d(-100%, 0, 0);
-  }
-}
-
-@keyframes tab-sheet-out-to-left {
-  to {
-    transform: translate3d(-100%, 0, 0);
-  }
-}
-
-@keyframes tab-sheet-in-from-right {
-  from {
-    transform: translate3d(100%, 0, 0);
-  }
-}
-
-@keyframes tab-sheet-out-to-right {
-  to {
-    transform: translate3d(100%, 0, 0);
-  }
-}
-
-.tab-sheet-overlay[data-state="open"] {
-  animation: tab-sheet-fade-in 200ms var(--tab-ease-out) both;
+.tab-sheet-overlay {
+  opacity: 1;
+  transition: opacity 200ms var(--tab-ease-out);
 }
 
 .tab-sheet-overlay[data-state="closed"] {
-  animation: tab-sheet-fade-out 160ms var(--tab-ease-out) both;
+  opacity: 0;
+  transition-duration: 160ms;
+  animation: tab-sheet-close-lifecycle 160ms;
 }
 
-.tab-sheet-content[data-state="open"][data-side="top"] {
-  animation: tab-sheet-in-from-top 300ms var(--tab-ease-drawer) both;
+.tab-sheet-content {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+  transition-property: opacity, transform;
+  transition-duration: 300ms;
+  transition-timing-function: var(--tab-ease-drawer);
+}
+
+.tab-sheet-content[data-state="closed"] {
+  transition-duration: 240ms;
+  animation: tab-sheet-close-lifecycle 240ms;
 }
 
 .tab-sheet-content[data-state="closed"][data-side="top"] {
-  animation: tab-sheet-out-to-top 240ms var(--tab-ease-drawer) both;
-}
-
-.tab-sheet-content[data-state="open"][data-side="bottom"] {
-  animation: tab-sheet-in-from-bottom 300ms var(--tab-ease-drawer) both;
+  transform: translate3d(0, -100%, 0);
 }
 
 .tab-sheet-content[data-state="closed"][data-side="bottom"] {
-  animation: tab-sheet-out-to-bottom 240ms var(--tab-ease-drawer) both;
-}
-
-.tab-sheet-content[data-state="open"][data-side="left"] {
-  animation: tab-sheet-in-from-left 300ms var(--tab-ease-drawer) both;
+  transform: translate3d(0, 100%, 0);
 }
 
 .tab-sheet-content[data-state="closed"][data-side="left"] {
-  animation: tab-sheet-out-to-left 240ms var(--tab-ease-drawer) both;
-}
-
-.tab-sheet-content[data-state="open"][data-side="right"] {
-  animation: tab-sheet-in-from-right 300ms var(--tab-ease-drawer) both;
+  transform: translate3d(-100%, 0, 0);
 }
 
 .tab-sheet-content[data-state="closed"][data-side="right"] {
-  animation: tab-sheet-out-to-right 240ms var(--tab-ease-drawer) both;
+  transform: translate3d(100%, 0, 0);
+}
+
+@starting-style {
+  .tab-sheet-overlay[data-state="open"] {
+    opacity: 0;
+  }
+
+  .tab-sheet-content[data-state="open"][data-side="top"] {
+    transform: translate3d(0, -100%, 0);
+  }
+
+  .tab-sheet-content[data-state="open"][data-side="bottom"] {
+    transform: translate3d(0, 100%, 0);
+  }
+
+  .tab-sheet-content[data-state="open"][data-side="left"] {
+    transform: translate3d(-100%, 0, 0);
+  }
+
+  .tab-sheet-content[data-state="open"][data-side="right"] {
+    transform: translate3d(100%, 0, 0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -455,12 +427,22 @@ a:not([class]) {
     transition-duration: 0ms;
   }
 
-  .tab-sheet-content[data-state="open"][data-side] {
-    animation: tab-sheet-fade-in 160ms var(--tab-ease-out) both;
+  .tab-sheet-content[data-side] {
+    transform: none !important;
+    transition-property: opacity;
+    transition-duration: 160ms;
+    transition-timing-function: var(--tab-ease-out);
   }
 
   .tab-sheet-content[data-state="closed"][data-side] {
-    animation: tab-sheet-fade-out 160ms var(--tab-ease-out) both;
+    opacity: 0;
+    animation-duration: 160ms;
+  }
+
+  @starting-style {
+    .tab-sheet-content[data-state="open"][data-side] {
+      opacity: 0;
+    }
   }
 }
 
