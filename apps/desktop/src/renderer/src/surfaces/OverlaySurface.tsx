@@ -4,6 +4,7 @@ import { DebugContextCard, type DebugContext } from "../components/DebugContextC
 
 type OverlayMode = "hidden" | "suggestion" | "debug";
 type PresentedSuggestion = Suggestion & {
+  source: "local" | "cloud";
   presentation?: "floating" | "inline";
   inlineMetrics?: { fontSize: number; lineHeight: number };
 };
@@ -12,6 +13,7 @@ const showDeveloperDiagnostics = import.meta.env.DEV;
 export function OverlaySurface() {
   const [mode, setMode] = useState<OverlayMode>("hidden");
   const [suggestion, setSuggestion] = useState<PresentedSuggestion | null>(null);
+  const [suggestionLoading, setSuggestionLoading] = useState(false);
   const [debugContext, setDebugContext] = useState<DebugContext | null>(null);
 
   useEffect(() => {
@@ -22,6 +24,7 @@ export function OverlaySurface() {
       setDebugContext(null);
       setMode("suggestion");
     });
+    const unsubscribeSuggestionLoading = window.tab.onSuggestionLoading(setSuggestionLoading);
 
     const unsubscribeDebugContext = showDeveloperDiagnostics
       ? window.tab.onDebugContext((debug) => {
@@ -33,6 +36,7 @@ export function OverlaySurface() {
 
     const unsubscribeHide = window.tab.onHide(() => {
       setSuggestion(null);
+      setSuggestionLoading(false);
       setDebugContext(null);
       setMode("hidden");
     });
@@ -41,6 +45,7 @@ export function OverlaySurface() {
 
     return () => {
       unsubscribeSuggestion();
+      unsubscribeSuggestionLoading();
       unsubscribeDebugContext();
       unsubscribeHide();
     };
@@ -62,6 +67,8 @@ export function OverlaySurface() {
       ) : (
         <FloatingSuggestionBar
           suggestion={mode === "suggestion" ? suggestion : null}
+          source={suggestion?.source}
+          loading={suggestionLoading}
           onAccept={() => window.tab?.acceptSuggestion()}
         />
       )}

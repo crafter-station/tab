@@ -475,12 +475,19 @@ export function OnboardingSurface() {
                   <div>
                     <span>02</span>
                     <p>
+                      <strong>Suggest now with two taps of Option</strong>
+                      <small>Use it whenever you want Tab to generate a suggestion immediately.</small>
+                    </p>
+                  </div>
+                  <div>
+                    <span>03</span>
+                    <p>
                       <strong>Accept with Option + Tab</strong>
                       <small>The suggestion is inserted into the app you are already using.</small>
                     </p>
                   </div>
                   <div>
-                    <span>03</span>
+                    <span>04</span>
                     <p>
                       <strong>Stay in control</strong>
                       <small>Pause suggestions or review memories anytime in Settings.</small>

@@ -14,7 +14,7 @@ export type DesktopEventIngressHandlers = {
   readonly onActiveApplicationChanged: (bundleId: string, windowId: string | null) => void;
   readonly onTextInput: (text: string) => void;
   readonly onDeleteBackward: (unit: TypingDeletionUnit) => void;
-  readonly onOptionKeyUp: () => void;
+  readonly onSuggestNow: () => void;
   readonly onTextSessionSnapshot: (snapshot: TextSessionSnapshot) => void;
   readonly onAppContextTree: (accessibilityTree: AppContextAccessibilityTree) => void;
 };
@@ -63,10 +63,8 @@ export function createDesktopEventIngress(handlers: DesktopEventIngressHandlers)
         handlers.onDeleteBackward(payload.unit === "token" ? "token" : "character");
         return;
       }
-      if (payload.type === "modifier-key" && payload.key === "option") {
-        if (payload.phase === "up") {
-          handlers.onOptionKeyUp();
-        }
+      if (payload.type === "suggest-now") {
+        handlers.onSuggestNow();
         return;
       }
       if (payload.type === "text-session" && isTextSessionSnapshot(payload.snapshot)) {

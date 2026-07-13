@@ -29,6 +29,7 @@ export type SuggestionLoopDependencies = {
   onHideSuggestion(): void;
   onRequestStarted?: (context: string) => void;
   onRequestFinished?: (suggestion: Suggestion | null) => void;
+  onAutomaticRequestFinished?: (suggestion: Suggestion | null) => void;
   onSuggestionStale?: (suggestion: Suggestion) => void;
   onSecretLikeContextDetected?: () => void;
   triggerPolicy?: TriggerPolicy;
@@ -126,7 +127,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   async function requestCloudSuggestion(
     snapshot: RequestableTypingContextSnapshot,
     version: number,
-  ): Promise<void> {
+  ): Promise<Suggestion | null> {
     const hash = snapshot.contextHash;
     deps.onRequestStarted?.(snapshot.sanitizedContext);
     const controller = new AbortController();
@@ -142,23 +143,24 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     }
 
     if (requestVersion !== version) {
-      return;
+      return null;
     }
 
     const latest = deps.getContext();
     if (latest.contextHash !== hash || !isRequestableTypingContextSnapshot(latest)) {
       state = { status: "idle" };
-      return;
+      return null;
     }
 
     deps.onRequestFinished?.(suggestion);
 
     if (!suggestion) {
       state = { status: "idle" };
-      return;
+      return null;
     }
 
     tryShowSuggestion(latest, suggestion, hash);
+    return state.status === "showing" ? suggestion : null;
   }
 
   async function requestCloudSuggestionNow(): Promise<void> {
@@ -189,6 +191,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
         deps.onSecretLikeContextDetected?.();
       }
       invalidate();
+      deps.onAutomaticRequestFinished?.(null);
       return;
     }
 
@@ -202,6 +205,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
     const triggerDecision = deps.triggerPolicy?.onContextChanged(snapshot);
     if (triggerDecision && !triggerDecision.allow) {
       invalidate();
+      deps.onAutomaticRequestFinished?.(null);
       return;
     }
 
@@ -234,19 +238,23 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
 
         if (localSuggestion) {
           tryShowSuggestion(latest, localSuggestion, hash);
+          deps.onAutomaticRequestFinished?.(state.status === "showing" ? localSuggestion : null);
           return;
         }
 
         if (deps.getLocalSuggestion && deps.fallbackToCloudOnLocalMiss === false) {
           state = { status: "idle" };
+          deps.onAutomaticRequestFinished?.(null);
           return;
         }
 
         try {
-          await requestCloudSuggestion(latest, version);
+          const cloudSuggestion = await requestCloudSuggestion(latest, version);
+          deps.onAutomaticRequestFinished?.(cloudSuggestion);
         } catch {
           if (requestVersion === version && isCurrentDebouncedContext(hash)) {
             state = { status: "idle" };
+            deps.onAutomaticRequestFinished?.(null);
           }
         }
       }, deps.debounceMs),

@@ -1215,6 +1215,7 @@ describe("desktop native suggestion loop", () => {
 
     function makeSession(overrides: {
       requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+      getLocalSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
       maxVisibleMs?: number;
       recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
@@ -1227,6 +1228,7 @@ describe("desktop native suggestion loop", () => {
       const calls: Array<{ type: string; value?: unknown }> = [];
       const session = createNativeSuggestionSession({
         typingContext: buffer,
+        getLocalSuggestion: overrides.getLocalSuggestion,
         requestSuggestion: async (snapshot) => {
           calls.push({
             type: "requestSuggestion",
@@ -1248,6 +1250,7 @@ describe("desktop native suggestion loop", () => {
           hideOverlay: () => calls.push({ type: "hideOverlay" }),
           showDebugContext: () => calls.push({ type: "showDebugContext" }),
           resetDebugApiState: () => calls.push({ type: "resetDebugApiState" }),
+          setSuggestionLoading: (loading) => calls.push({ type: "setSuggestionLoading", value: loading }),
         },
         createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
           getCurrentSuggestion,
@@ -1302,9 +1305,62 @@ describe("desktop native suggestion loop", () => {
       expect(session.getCurrentSuggestion()).toEqual({ id: "local-thank", text: " you" });
     });
 
-    it("can explicitly request a cloud suggestion for the current context", async () => {
+    it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
       const { calls, session } = makeSession({
+        getLocalSuggestion: async (snapshot) => snapshot.sanitizedContext === "hello"
+          ? { id: "sg-local-hello", text: " there" }
+          : { id: "sg-local-world", text: " today" },
+      });
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("hello");
+      await wait(10);
+      expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-hello", text: " there" });
+      calls.length = 0;
+
+      session.appendText(" world");
+
+      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: true });
+      expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
+      expect(calls.map((call) => call.type)).not.toContain("clearSuggestion");
+
+      await wait(10);
+
+      expect(calls).toContainEqual({
+        type: "showSuggestion",
+        value: { id: "sg-local-world", text: " today" },
+      });
+      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: false });
+      expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-world", text: " today" });
+    });
+
+    it("replaces a visible async local suggestion with an explicit cloud suggestion", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "sg-local-thank", text: " you" }),
         requestSuggestion: async () => ({ id: "cloud-thank", text: " you very much" }),
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("thank");
+      await wait(10);
+      expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-thank", text: " you" });
+      calls.length = 0;
+
+      await session.requestSuggestionNow();
+
+      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: true });
+      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: false });
+      expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
+      expect(calls.map((call) => call.type)).not.toContain("clearSuggestion");
+      expect(calls).toContainEqual({ type: "requestSuggestion", value: "thank" });
+      expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "cloud-thank", text: " you very much" } });
+      expect(session.getCurrentSuggestion()).toEqual({ id: "cloud-thank", text: " you very much" });
+    });
+
+    it("keeps the visible local suggestion when an explicit cloud request returns empty", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "sg-local-thank", text: " you" }),
+        requestSuggestion: async () => null,
       });
 
       session.setActiveApplication("com.apple.TextEdit", "window:1");
@@ -1314,9 +1370,8 @@ describe("desktop native suggestion loop", () => {
 
       await session.requestSuggestionNow();
 
-      expect(calls).toContainEqual({ type: "requestSuggestion", value: "thank" });
-      expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "cloud-thank", text: " you very much" } });
-      expect(session.getCurrentSuggestion()).toEqual({ id: "cloud-thank", text: " you very much" });
+      expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "sg-local-thank", text: " you" } });
+      expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-thank", text: " you" });
     });
 
     it("accepts the visible suggestion into the previously active application", async () => {
@@ -1595,7 +1650,8 @@ describe("desktop native suggestion loop", () => {
       session.applyTextSessionSnapshot(textSession({ caretIdentity: "caret:3", selectedRange: { location: 3, length: 0 } }));
       await wait(10);
 
-      expect(calls.map((call) => call.type)).toContain("hideOverlay");
+      expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
+      expect(calls).toContainEqual({ type: "setSuggestionLoading", value: true });
 
       const hidesAfterCaretChange = calls.filter((call) => call.type === "hideOverlay").length;
       session.applyTextSessionSnapshot(textSession({ focusedElementId: "focus:2", textElementId: "text:2" }));

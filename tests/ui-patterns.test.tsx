@@ -69,6 +69,36 @@ describe("shared app patterns", () => {
     expect(suggestionMarkup).toInclude("aria-hidden=\"true\"");
   });
 
+  it("marks cloud suggestions with their source icon", () => {
+    const markup = renderToStaticMarkup(
+      <FloatingSuggestionBar
+        suggestion={{ id: "s-cloud", text: " from the cloud" }}
+        source="cloud"
+        onAccept={() => {}}
+      />,
+    );
+
+    expect(markup).toInclude('data-source="cloud"');
+    expect(markup).toInclude("<svg");
+  });
+
+  it("keeps suggestion content mounted while a cloud replacement loads", () => {
+    const markup = renderToStaticMarkup(
+      <FloatingSuggestionBar
+        suggestion={{ id: "s-local", text: " local suggestion" }}
+        source="local"
+        loading
+        onAccept={() => {}}
+      />,
+    );
+
+    expect(markup).toInclude(" local suggestion");
+    expect(markup).toInclude('data-loading="true"');
+    expect(markup).toInclude('data-source="local"');
+    expect(markup).toInclude("blur-[1px]");
+    expect(markup).not.toInclude("<svg");
+  });
+
   it("shares identity and suggestion recipes across embedded and native surfaces", () => {
     const markup = renderToStaticMarkup(
       <div>

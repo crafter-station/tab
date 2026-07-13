@@ -435,21 +435,32 @@ func normalizedText(from event: CGEvent) -> String? {
   return text
 }
 
+let doubleOptionPressNanoseconds: CGEventTimestamp = 400_000_000
+var lastOptionKeyUpTimestamp: CGEventTimestamp = 0
+
 let callback: CGEventTapCallBack = { _, type, event, _ in
   let flags = event.flags
   let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
 
   if type == .flagsChanged {
     if keyCode == 58 || keyCode == 61 {
-      emitActiveWindowIfChanged()
-      emitTextSessionSnapshotIfChanged()
-      emitAppContextTreeSnapshotIfChanged()
-      emit(["type": "modifier-key", "key": "option", "phase": flags.contains(.maskAlternate) ? "down" : "up"])
+      if flags.contains(.maskAlternate) {
+        return Unmanaged.passUnretained(event)
+      }
+
+      let timestamp = event.timestamp
+      if lastOptionKeyUpTimestamp > 0 && timestamp - lastOptionKeyUpTimestamp <= doubleOptionPressNanoseconds {
+        lastOptionKeyUpTimestamp = 0
+        emit(["type": "suggest-now"])
+      } else {
+        lastOptionKeyUpTimestamp = timestamp
+      }
     }
     return Unmanaged.passUnretained(event)
   }
 
   guard type == .keyDown else { return Unmanaged.passUnretained(event) }
+  lastOptionKeyUpTimestamp = 0
 
   let isDeleteKey = keyCode == 51 || keyCode == 117
 

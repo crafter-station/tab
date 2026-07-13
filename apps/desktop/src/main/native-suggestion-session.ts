@@ -30,6 +30,7 @@ export type NativeSuggestionSessionOutputs = {
   readonly hideOverlay: () => void;
   readonly showDebugContext: () => void;
   readonly resetDebugApiState: () => void;
+  readonly setSuggestionLoading?: (loading: boolean) => void;
   readonly onRequestStarted?: (context: string) => void;
   readonly onRequestFinished?: (suggestion: Suggestion | null) => void;
   readonly onSecretLikeContextDetected?: () => void;
@@ -76,6 +77,7 @@ const SUGGESTION_ID_PREFIX = "sg-";
 export function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
   let currentSuggestion: Suggestion | null = null;
   let visibleSuggestionTelemetry: VisibleSuggestionTelemetry | null = null;
+  let replacingSuggestion = false;
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
   let textSessionSnapshot: TextSessionSnapshot | null = null;
@@ -150,29 +152,54 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     recordInteractionTelemetry("suggestion_dismissed");
   }
 
+  function finishReplacement(): void {
+    if (!replacingSuggestion) return;
+    replacingSuggestion = false;
+    outputs.setSuggestionLoading?.(false);
+  }
+
+  function presentSuggestion(suggestion: Suggestion): void {
+    currentSuggestion = suggestion;
+    visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
+    visibleSuggestionTelemetry = buildTelemetry(suggestion);
+    outputs.showSuggestion(suggestion);
+    finishReplacement();
+  }
+
+  function canRefreshVisibleSuggestionInPlace(snapshot: SafeTypingContextSnapshot): boolean {
+    if (!currentSuggestion || !snapshot.requestable) return false;
+    if (!visibleTextSessionTarget && !snapshot.textSession) {
+      return visibleSuggestionTelemetry?.activeApplicationBundleId === snapshot.activeApplication?.bundleId;
+    }
+    if (!visibleTextSessionTarget || !snapshot.textSession) return false;
+
+    return (
+      activeApplicationKey(visibleTextSessionTarget.activeApplication) === activeApplicationKey(snapshot.textSession.activeApplication) &&
+      visibleTextSessionTarget.focusedElementId === snapshot.textSession.focusedElementId &&
+      visibleTextSessionTarget.textElementId === snapshot.textSession.textElementId
+    );
+  }
+
   const suggestionLoop = createSuggestionLoop({
     getContext: () => currentSafeSnapshot(),
     getLocalSuggestion: deps.getLocalSuggestion ?? ((snapshot) => generateLocalSuggestion(snapshot.sanitizedContext)),
     fallbackToCloudOnLocalMiss: deps.fallbackToCloudOnLocalMiss,
     requestSuggestion: deps.requestSuggestion,
-    onShowSuggestion: (suggestion) => {
-      currentSuggestion = suggestion;
-      visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
-      visibleSuggestionTelemetry = buildTelemetry(suggestion);
-      outputs.showSuggestion(suggestion);
-    },
-    onShowPartialSuggestion: (suggestion) => {
-      currentSuggestion = suggestion;
-      visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
-      visibleSuggestionTelemetry = buildTelemetry(suggestion);
-      outputs.showSuggestion(suggestion);
-    },
+    onShowSuggestion: presentSuggestion,
+    onShowPartialSuggestion: presentSuggestion,
     onHideSuggestion: () => {
+      if (replacingSuggestion) return;
       clearVisibleSuggestion();
       outputs.hideOverlay();
     },
     onRequestStarted: outputs.onRequestStarted,
     onRequestFinished: outputs.onRequestFinished,
+    onAutomaticRequestFinished: (suggestion) => {
+      if (suggestion || !replacingSuggestion) return;
+      finishReplacement();
+      clearVisibleSuggestion();
+      outputs.hideOverlay();
+    },
     onSuggestionStale: () => {
       compatibilityStore.recordStale(currentSafeSnapshot());
       recordInteractionTelemetry("suggestion_stale");
@@ -195,12 +222,19 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     }
     lastContextHash = snapshot.contextHash;
 
-    if (currentSuggestion) {
+    const preserveVisibleSuggestion = canRefreshVisibleSuggestionInPlace(snapshot);
+    if (currentSuggestion && !replacingSuggestion) {
       recordDismissal(snapshot);
     }
     outputs.resetDebugApiState();
-    clearVisibleSuggestion();
-    outputs.clearSuggestion();
+    if (preserveVisibleSuggestion) {
+      replacingSuggestion = true;
+      outputs.setSuggestionLoading?.(true);
+    } else {
+      finishReplacement();
+      clearVisibleSuggestion();
+      outputs.clearSuggestion();
+    }
     suggestionLoop.onContextChanged();
     outputs.showDebugContext();
   }
@@ -334,6 +368,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       outputs.showDebugContext();
     },
     async acceptCurrentSuggestion(): Promise<void> {
+      if (replacingSuggestion) return;
       const insertionDeps = deps.createAcceptanceDependencies(
         () => currentSuggestion,
         () => previouslyActiveApplication,
@@ -356,14 +391,31 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       }
     },
     async requestSuggestionNow(): Promise<void> {
-      if (observationPaused) return;
+      if (observationPaused) {
+        return;
+      }
+      const previousSuggestion = currentSuggestion;
+      const previousTextSessionTarget = visibleTextSessionTarget;
+      const previousTelemetry = visibleSuggestionTelemetry;
+      replacingSuggestion = true;
+      outputs.setSuggestionLoading?.(true);
       if (currentSuggestion) {
         recordDismissal(currentSafeSnapshot());
       }
       outputs.resetDebugApiState();
       clearVisibleSuggestion();
-      outputs.clearSuggestion();
-      await suggestionLoop.requestCloudSuggestionNow();
+      try {
+        await suggestionLoop.requestCloudSuggestionNow();
+        if (!currentSuggestion && previousSuggestion) {
+          currentSuggestion = previousSuggestion;
+          visibleTextSessionTarget = previousTextSessionTarget;
+          visibleSuggestionTelemetry = previousTelemetry;
+          outputs.showSuggestion(previousSuggestion);
+        }
+      } finally {
+        replacingSuggestion = false;
+        outputs.setSuggestionLoading?.(false);
+      }
       outputs.showDebugContext();
     },
     clearContext,

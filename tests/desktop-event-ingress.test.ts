@@ -13,7 +13,7 @@ function makeHandlers() {
         events.push(["active-app", bundleId, windowId]),
       onTextInput: (text: string) => events.push(["text", text]),
       onDeleteBackward: (unit: TypingDeletionUnit) => events.push(["delete", unit]),
-      onOptionKeyUp: () => events.push(["option-up"]),
+      onSuggestNow: () => events.push(["suggest-now"]),
       onTextSessionSnapshot: (snapshot: TextSessionSnapshot) => events.push(["text-session", snapshot]),
       onAppContextTree: (accessibilityTree: unknown) => events.push(["app-context-tree", accessibilityTree]),
     },
@@ -51,7 +51,7 @@ describe("desktop event ingress", () => {
     ingress.handleMessage({ type: "active-app", bundleId: "com.apple.TextEdit", windowId: "window:1" });
     ingress.handleMessage({ type: "text", text: "A" });
     ingress.handleMessage({ type: "delete", unit: "token" });
-    ingress.handleMessage({ type: "modifier-key", key: "option", phase: "up" });
+    ingress.handleMessage({ type: "suggest-now" });
     ingress.handleMessage({ type: "text-session", snapshot });
     ingress.handleMessage({ type: "app-context-tree", tree });
 
@@ -61,7 +61,7 @@ describe("desktop event ingress", () => {
       ["active-app", "com.apple.TextEdit", "window:1"],
       ["text", "A"],
       ["delete", "token"],
-      ["option-up"],
+      ["suggest-now"],
       ["text-session", snapshot],
       ["app-context-tree", tree],
     ]);

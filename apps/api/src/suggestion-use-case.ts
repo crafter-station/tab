@@ -95,9 +95,11 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
+    const [systemMessage, ...messages] = createSuggestionMessages(input);
     const { text } = await generateText({
       model: groq(modelId),
-      messages: createSuggestionMessages(input),
+      instructions: systemMessage?.content,
+      messages,
       maxOutputTokens: MAX_SUGGESTION_TOKENS,
       temperature: 0.3,
     });

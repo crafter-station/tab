@@ -132,7 +132,6 @@ const OVERLAY_BOTTOM_MARGIN = 8;
 const OVERLAY_POSITION_CHECK_MS = 400;
 const OVERLAY_HIT_TEST_MS = 50;
 const SUGGESTION_VISIBLE_MS = 4_000;
-const DOUBLE_OPTION_PRESS_MS = 500;
 const OBSIDIAN_BUNDLE_ID = "md.obsidian";
 const OBSIDIAN_ACCEPTANCE_SHORTCUT = "Tab";
 
@@ -300,6 +299,10 @@ const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
     resetDebugApiState: () => {
       debugApiState = { status: "idle" };
     },
+    setSuggestionLoading: (loading) => {
+      if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
+      overlayWindow.webContents.send("suggestion-loading", loading);
+    },
     onRequestStarted: () => updateDebugApiState({ status: "loading" }),
     onRequestFinished: (suggestion) => {
       updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
@@ -342,7 +345,7 @@ const desktopEventIngress = createDesktopEventIngress({
   onActiveApplicationChanged: handleActiveApplicationChanged,
   onTextInput: handleTextInput,
   onDeleteBackward: handleDeleteBackward,
-  onOptionKeyUp: handleOptionKeyUp,
+  onSuggestNow: handleSuggestNow,
   onTextSessionSnapshot: handleTextSessionSnapshot,
   onAppContextTree: handleAppContextTree,
 });
@@ -709,6 +712,7 @@ function showOverlay(suggestion: Suggestion): void {
   }
   overlayWindow.webContents.send("suggestion", {
     ...suggestion,
+    source: suggestion.id.startsWith("sg-local-") ? "local" : "cloud",
     presentation: inline ? "inline" : "floating",
     ...(inline ? {
       inlineMetrics: {
@@ -717,14 +721,15 @@ function showOverlay(suggestion: Suggestion): void {
       },
     } : {}),
   });
-  overlayWindow.showInactive();
+  if (!overlayWindow.isVisible()) {
+    overlayWindow.showInactive();
+  }
 }
 
 function clearSuggestionOverlay(): void {
   unregisterObsidianTabAcceptance();
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   overlayWindow.webContents.send("hide");
-  overlayWindow.hide();
 }
 
 function hideOverlay(): void {
@@ -838,12 +843,10 @@ async function requestSuggestionNow(): Promise<void> {
   await nativeAutocompleteRuntime.requestSuggestionNow();
 }
 
-function handleOptionKeyUp(): void {
-  if (nativeAutocompleteRuntime.handleOptionKeyUp(DOUBLE_OPTION_PRESS_MS)) {
-    requestSuggestionNow().catch((error) => {
-      console.error("Failed to request suggestion from Option double press:", error);
-    });
-  }
+function handleSuggestNow(): void {
+  requestSuggestionNow().catch((error) => {
+    console.error("Failed to suggest now from double-tap Option:", error);
+  });
 }
 
 function clearContextAndHide(): void {
@@ -1156,10 +1159,6 @@ export function handlePastedText(text: string): void {
 
 export function handleDeleteBackward(unit: TypingDeletionUnit = "character"): void {
   nativeAutocompleteRuntime.deleteBackward(unit);
-}
-
-export function handleShortcutOrNavigation(): void {
-  nativeAutocompleteRuntime.handleShortcutOrNavigation();
 }
 
 export function handleActiveApplicationChanged(bundleId: string | null, windowId: string | null = null): void {

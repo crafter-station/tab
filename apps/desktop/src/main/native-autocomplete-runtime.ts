@@ -37,15 +37,8 @@ export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeD
     clearAppContext: () => deps.appContext.clear(),
   });
 
-  let lastOptionKeyUpAt = 0;
-
-  function resetOptionDoublePressState(): void {
-    lastOptionKeyUpAt = 0;
-  }
-
   return {
     appendText(text: string): void {
-      resetOptionDoublePressState();
       const activeApplication = activeApplicationFromState(deps.typingContext);
       if (activeApplication) {
         deps.memoryExtraction.append({
@@ -57,15 +50,10 @@ export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeD
       session.appendText(text);
     },
     appendPastedText(text: string): void {
-      resetOptionDoublePressState();
       session.appendPastedText(text);
     },
     deleteBackward(unit: TypingDeletionUnit = "character"): void {
-      resetOptionDoublePressState();
       session.deleteBackward(unit);
-    },
-    handleShortcutOrNavigation(): void {
-      resetOptionDoublePressState();
     },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
       session.setActiveApplication(bundleId, windowId);
@@ -97,19 +85,8 @@ export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeD
     async requestSuggestionNow(): Promise<void> {
       await session.requestSuggestionNow();
     },
-    handleOptionKeyUp(doublePressMs: number): boolean {
-      const now = Date.now();
-      if (now - lastOptionKeyUpAt <= doublePressMs) {
-        lastOptionKeyUpAt = 0;
-        return true;
-      }
-
-      lastOptionKeyUpAt = now;
-      return false;
-    },
     clearContext(): void {
       session.clearContext();
-      resetOptionDoublePressState();
     },
     getCurrentSuggestion: (): Suggestion | null => session.getCurrentSuggestion(),
     getCurrentSnapshot: () => session.getCurrentSnapshot(),
