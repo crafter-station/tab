@@ -6,23 +6,23 @@ This checklist covers producing a signed, notarized, direct-download macOS build
 
 - macOS machine with Xcode command-line tools.
 - Valid Apple Developer ID Application certificate installed in Keychain Access.
-- Apple ID, app-specific password, and Team ID for notarization.
+- App Store Connect API key with notarization access.
 - `TAB_MAC_DOWNLOAD_URL` and `TAB_DESKTOP_LATEST_VERSION` set for the web surface.
 
 For GitHub releases, configure these Actions secrets:
 
 - `MACOS_CERTIFICATE`: base64-encoded Developer ID Application `.p12` certificate.
 - `MACOS_CERTIFICATE_PASSWORD`: password for the `.p12` certificate.
-- `APPLE_ID`: Apple Developer account email.
-- `APPLE_APP_SPECIFIC_PASSWORD`: app-specific password used by `notarytool`.
-- `APPLE_TEAM_ID`: Apple Developer team ID.
+- `APPLE_API_KEY`: contents of the App Store Connect API `.p8` key.
+- `APPLE_API_KEY_ID`: App Store Connect API key ID.
+- `APPLE_API_ISSUER`: App Store Connect API issuer UUID.
 
 ## Environment variables
 
 ```sh
-export APPLE_ID="developer@example.com"
-export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
-export APPLE_TEAM_ID="TEAM_ID"
+export APPLE_API_KEY="/path/to/AuthKey_KEY_ID.p8"
+export APPLE_API_KEY_ID="KEY_ID"
+export APPLE_API_ISSUER="ISSUER_UUID"
 export TAB_MAC_DOWNLOAD_URL="https://downloads.tab.app/Tab-0.1.0.dmg"
 export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 ```
@@ -51,16 +51,16 @@ export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 
 - The `electron-builder.yml` sets `hardenedRuntime: true`, `gatekeeperAssess: false`, and points to `build/entitlements.mac.plist`.
 - The entitlements file intentionally does **not** request Screen Recording (`kTCCServiceScreenCapture`) or Full Disk Access (`kTCCServiceSystemPolicyAllFiles`).
-- The `scripts/notarize.cjs` afterSign hook notarizes the `.app` when `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, and `APPLE_TEAM_ID` are present.
+- The `scripts/notarize.cjs` afterSign hook notarizes the `.app` with App Store Connect API key credentials. Apple ID credentials remain available as a local fallback.
 - If credentials are missing, the hook logs a warning and skips notarization so local builds still succeed.
 - After packaging, staple the app:
   ```sh
-  xcrun stapler staple "release/mac/Tab.app"
+  xcrun stapler staple "release/mac-universal/Tab.app"
   ```
 - Verify code signature:
   ```sh
-  codesign -dv --verbose=4 "release/mac/Tab.app"
-  spctl -a -v "release/mac/Tab.app"
+  codesign -dv --verbose=4 "release/mac-universal/Tab.app"
+  spctl -a -v "release/mac-universal/Tab.app"
   ```
 
 ## Download surface

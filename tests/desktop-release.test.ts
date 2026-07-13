@@ -48,7 +48,8 @@ describe("Desktop release packaging", () => {
     expect(workflow).toInclude("tags:");
     expect(workflow).toInclude('"v*"');
     expect(workflow).toInclude("MACOS_CERTIFICATE");
-    expect(workflow).toInclude("APPLE_APP_SPECIFIC_PASSWORD");
+    expect(workflow).toInclude("APPLE_API_KEY_CONTENT");
+    expect(workflow).toInclude("APPLE_API_ISSUER");
     expect(workflow).toInclude("Tab.dmg");
     expect(workflow).toInclude("latest-mac.yml");
     expect(workflow).toInclude(".zip.blockmap");
@@ -70,8 +71,8 @@ describe("Desktop release packaging", () => {
   it("has a notarization script that skips when signing credentials are missing", async () => {
     const script = await Bun.file("apps/desktop/scripts/notarize.cjs").text();
     expect(script).toInclude("notarize");
-    expect(script).toInclude("APPLE_ID");
-    expect(script).toInclude("APPLE_TEAM_ID");
+    expect(script).toInclude("APPLE_API_KEY");
+    expect(script).toInclude("APPLE_API_KEY_ID");
   });
 
   it("defaults packaged builds to the production web and API origins", async () => {

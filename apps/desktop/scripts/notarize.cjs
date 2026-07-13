@@ -4,10 +4,8 @@ const { notarize } = require("@electron/notarize");
  * electron-builder afterSign hook for macOS notarization.
  *
  * Notarization is skipped when the required Apple credentials are not present,
- * so local/test builds do not fail. Production release builds must set:
- *   APPLE_ID
- *   APPLE_APP_SPECIFIC_PASSWORD
- *   APPLE_TEAM_ID
+ * so local/test builds do not fail. Production release builds use either an
+ * App Store Connect API key or Apple ID credentials.
  */
 module.exports = async function notarizing(context) {
   const { electronPlatformName, appOutDir } = context;
@@ -19,13 +17,26 @@ module.exports = async function notarizing(context) {
   const appName = context.packager.appInfo.productFilename;
   const appPath = `${appOutDir}/${appName}.app`;
 
+  const apiKey = process.env.APPLE_API_KEY;
+  const apiKeyId = process.env.APPLE_API_KEY_ID;
+  const apiIssuer = process.env.APPLE_API_ISSUER;
   const appleId = process.env.APPLE_ID;
   const appleIdPassword = process.env.APPLE_APP_SPECIFIC_PASSWORD;
   const teamId = process.env.APPLE_TEAM_ID;
+  const apiKeyCredentials = apiKey && apiKeyId
+    ? {
+        appleApiKey: apiKey,
+        appleApiKeyId: apiKeyId,
+        ...(apiIssuer && { appleApiIssuer: apiIssuer }),
+      }
+    : undefined;
+  const passwordCredentials = appleId && appleIdPassword && teamId
+    ? { appleId, appleIdPassword, teamId }
+    : undefined;
 
-  if (!appleId || !appleIdPassword || !teamId) {
+  if (!apiKeyCredentials && !passwordCredentials) {
     console.warn(
-      "Skipping notarization: APPLE_ID, APPLE_APP_SPECIFIC_PASSWORD, and APPLE_TEAM_ID must all be set.",
+      "Skipping notarization: configure APPLE_API_KEY and APPLE_API_KEY_ID, or Apple ID credentials.",
     );
     return;
   }
@@ -35,9 +46,7 @@ module.exports = async function notarizing(context) {
   await notarize({
     appBundleId: "app.tab.desktop",
     appPath,
-    appleId,
-    appleIdPassword,
-    teamId,
+    ...(apiKeyCredentials ?? passwordCredentials),
   });
 
   console.log("Notarization complete.");

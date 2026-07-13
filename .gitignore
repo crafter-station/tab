@@ -9,5 +9,6 @@ dist/
 build/
 apps/desktop/.dev/
 .wrangler/
+.apple/
 .sandcastle/*.auth.json
 apps/desktop/release
