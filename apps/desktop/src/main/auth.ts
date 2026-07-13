@@ -87,7 +87,6 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
       platform: deps.platform,
       appVersion: deps.appVersion,
     };
-
     const response = await http(`${deps.apiBaseUrl}/api/auth/device/exchange`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
