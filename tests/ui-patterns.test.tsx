@@ -61,23 +61,30 @@ describe("shared app patterns", () => {
         <DebugContextCard debug={null} />
       </main>,
     );
-    const suggestionShellMarkup = suggestionMarkup.match(/<section[^>]*>/)?.[0] ?? "";
+    const suggestionShellOpeningTag = suggestionMarkup.match(/<section[^>]*>/)?.[0] ?? "";
+    const suggestionButtonOpeningTag = suggestionMarkup.match(/<button[^>]*>/)?.[0] ?? "";
+    const suggestionShellClasses = suggestionShellOpeningTag.match(/class="([^"]*)"/)?.[1].split(" ") ?? [];
+    const suggestionButtonClasses = suggestionButtonOpeningTag.match(/class="([^"]*)"/)?.[1].split(" ") ?? [];
 
     expect(suggestionMarkup).toInclude('class="overlay-shell"');
-    expect(suggestionMarkup).toInclude("pointer-events-auto");
+    expect(suggestionButtonClasses).toContain("pointer-events-auto");
     expect(suggestionMarkup).toInclude("Option+Tab");
-    expect(suggestionMarkup).toInclude("type=\"button\"");
-    expect(suggestionShellMarkup).toInclude("visible");
-    expect(suggestionShellMarkup).not.toInclude("transition-opacity");
-    expect(suggestionMarkup).toInclude("aria-hidden=\"true\"");
+    expect(suggestionButtonOpeningTag).toMatch(/\stype="button"(?:\s|>)/);
+    expect(suggestionShellClasses).toContain("visible");
+    expect(suggestionShellClasses).not.toContain("transition-opacity");
+    expect(suggestionShellOpeningTag).toMatch(/\saria-hidden="false"(?:\s|>)/);
 
     const hiddenSuggestionMarkup = renderToStaticMarkup(
       <FloatingSuggestionBar suggestion={null} onAccept={() => {}} />,
     );
+    const hiddenShellOpeningTag = hiddenSuggestionMarkup.match(/<section[^>]*>/)?.[0] ?? "";
+    const hiddenButtonOpeningTag = hiddenSuggestionMarkup.match(/<button[^>]*>/)?.[0] ?? "";
+    const hiddenShellClasses = hiddenShellOpeningTag.match(/class="([^"]*)"/)?.[1].split(" ") ?? [];
 
-    expect(hiddenSuggestionMarkup).toInclude("invisible");
-    expect(hiddenSuggestionMarkup).toInclude('aria-hidden="true"');
-    expect(hiddenSuggestionMarkup).toInclude("disabled");
+    expect(hiddenShellClasses).toContain("invisible");
+    expect(hiddenShellClasses).not.toContain("visible");
+    expect(hiddenShellOpeningTag).toMatch(/\saria-hidden="true"(?:\s|>)/);
+    expect(hiddenButtonOpeningTag).toMatch(/\sdisabled=""(?:\s|>)/);
   });
 
   it("marks cloud suggestions with their source icon", () => {
