@@ -1,14 +1,18 @@
 import { DesktopStatusResponseSchema } from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { BillingService } from "../billing.ts";
+import type { TelemetryService } from "../telemetry.ts";
 
 export function registerStatusRoutes(
   app: ApiApp,
-  deps: { billingService: BillingService },
+  deps: { billingService: BillingService; telemetryService: TelemetryService },
 ) {
   app.get("/api/status", async (c) => {
     const device = c.get("device");
-    const quotaCheck = await deps.billingService.checkQuota(device.userId);
+    const [quotaCheck, localSuggestionActivity] = await Promise.all([
+      deps.billingService.checkQuota(device.userId),
+      deps.telemetryService.getLocalSuggestionActivity(device.userId),
+    ]);
 
     return c.json(
       DesktopStatusResponseSchema.parse({
@@ -21,6 +25,7 @@ export function registerStatusRoutes(
           quota: quotaCheck.quota,
           usage: quotaCheck.usage,
           resetAt: quotaCheck.resetAt.toISOString(),
+          localSuggestionActivity,
         },
       }),
       200,

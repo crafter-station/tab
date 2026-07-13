@@ -6,6 +6,7 @@ import type {
   BillingQuotaResponse,
   DeviceListItem,
   PersonalMemory,
+  LocalSuggestionActivity,
 } from "@tab/contracts";
 import {
   Alert,
@@ -52,6 +53,7 @@ export type DashboardData = {
   quota: BillingQuotaResponse["data"];
   devices: readonly DeviceListItem[];
   memories: readonly PersonalMemory[];
+  localSuggestionActivity: LocalSuggestionActivity;
 };
 
 export type DashboardSection = "overview" | "account" | "usage" | "devices" | "memories";
@@ -492,10 +494,11 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
 
   return (
     <div className="grid gap-8">
-      <section className="grid gap-px border-y border-border bg-border sm:grid-cols-2 lg:grid-cols-4 [&>*]:bg-background">
+      <section className="grid gap-px border-y border-border bg-border sm:grid-cols-2 lg:grid-cols-5 [&>*]:bg-background">
         <DashboardMetric label="Plan" value={formatPlanName(data.quota.planId)} />
         <DashboardMetric label="Connected Macs" value={formatCount(connectedDevices)} description={`${formatCount(data.devices.length)} device records`} />
         <DashboardMetric label="Saved memories" value={formatCount(data.memories.length)} description="Available when enabled" />
+        <DashboardMetric label="Local accepted" value={formatCount(data.localSuggestionActivity.accepted)} description="This month" />
         <DashboardMetric label="Account" value={accountEmailStatus.value} tone={accountEmailStatus.tone} description={data.user.email ?? data.user.name ?? data.user.id} />
       </section>
       <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
@@ -547,6 +550,16 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
   return (
     <div className="grid gap-9">
       <section className="grid gap-5 border-y border-border py-6">
+        <div className="grid gap-px border-b border-border bg-border sm:grid-cols-2 [&>*]:bg-background">
+          <DashboardMetric label="Local accepted" value={formatCount(data.localSuggestionActivity.accepted)} description="Successful local insertions this month" />
+          <DashboardMetric
+            label="Average time to accept"
+            value={data.localSuggestionActivity.averageAcceptanceLatencyMs === null
+              ? "Not available"
+              : `${formatCount(data.localSuggestionActivity.averageAcceptanceLatencyMs)} ms`}
+            description="From first visible suggestion to insertion"
+          />
+        </div>
         <div className="flex items-center justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase text-muted-foreground">Current plan</p>

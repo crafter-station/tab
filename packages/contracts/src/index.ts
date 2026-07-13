@@ -212,6 +212,10 @@ export const DesktopStatusSchema = z.object({
   quota: z.number().int().nonnegative().optional(),
   usage: z.number().int().nonnegative().optional(),
   resetAt: z.string().datetime().optional(),
+  localSuggestionActivity: z.object({
+    accepted: z.number().int().nonnegative(),
+    averageAcceptanceLatencyMs: z.number().int().nonnegative().nullable(),
+  }).optional(),
 });
 
 export const DesktopStatusResponseSchema = z.object({
@@ -292,6 +296,7 @@ export const RecordTelemetryEventRequestSchema = z
     activeApplicationBundleId: z.string().min(1).optional(),
     suggestionLength: z.number().int().nonnegative().optional(),
     latencyMs: z.number().int().nonnegative().optional(),
+    modelId: z.string().min(1).optional(),
   })
   .strict();
 
@@ -300,6 +305,16 @@ export const TelemetryEventsResponseSchema = z.object({
   data: z.object({
     recorded: z.boolean(),
   }),
+});
+
+export const LocalSuggestionActivitySchema = z.object({
+  accepted: z.number().int().nonnegative(),
+  averageAcceptanceLatencyMs: z.number().int().nonnegative().nullable(),
+});
+
+export const LocalSuggestionActivityResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: LocalSuggestionActivitySchema,
 });
 
 export const SuggestionSchema = z.object({
@@ -394,5 +409,6 @@ export type RecordTelemetryEventRequest = z.infer<
 export type TelemetryEventsResponse = z.infer<
   typeof TelemetryEventsResponseSchema
 >;
+export type LocalSuggestionActivity = z.infer<typeof LocalSuggestionActivitySchema>;
 export type DesktopStatus = z.infer<typeof DesktopStatusSchema>;
 export type DesktopStatusResponse = z.infer<typeof DesktopStatusResponseSchema>;

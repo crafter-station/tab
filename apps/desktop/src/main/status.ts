@@ -30,6 +30,10 @@ export type DesktopStatus = {
   readonly connectivity: DesktopConnectivityStatus;
   readonly userId: string | null;
   readonly quota: DesktopQuotaStatus | null;
+  readonly localSuggestionActivity?: {
+    readonly accepted: number;
+    readonly averageAcceptanceLatencyMs: number | null;
+  };
   readonly overlay: DesktopOverlayStatus;
   readonly lastUpdatedAt: Date | null;
 };
@@ -207,6 +211,9 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
               exhausted: data.usage >= data.quota,
             }
           : null,
+        ...(data.localSuggestionActivity
+          ? { localSuggestionActivity: data.localSuggestionActivity }
+          : {}),
         overlay: "hidden",
       });
       return accept(status, sequence, credentialGeneration);

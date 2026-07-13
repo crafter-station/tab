@@ -2,14 +2,20 @@ import {
   TelemetryEventSchema,
   type TelemetryEvent,
 } from "@tab/contracts";
-import { eq } from "drizzle-orm";
+import { and, eq, gte, isNotNull, sql } from "drizzle-orm";
 import type { AppDatabase } from "./db/index.ts";
 import { telemetryEvents } from "./db/schema.ts";
 
 export interface TelemetryStorage {
   recordEvent(event: TelemetryEvent): Promise<void>;
   listEvents(): Promise<readonly TelemetryEvent[]>;
+  getLocalSuggestionActivity(userId: string, since: string): Promise<LocalSuggestionActivity>;
 }
+
+export type LocalSuggestionActivity = {
+  readonly accepted: number;
+  readonly averageAcceptanceLatencyMs: number | null;
+};
 
 export type TelemetryServiceDependencies = {
   readonly storage?: TelemetryStorage;
@@ -37,6 +43,11 @@ export class TelemetryService {
   async listEvents(): Promise<readonly TelemetryEvent[]> {
     return this.storage.listEvents();
   }
+
+  async getLocalSuggestionActivity(userId: string, now = new Date()): Promise<LocalSuggestionActivity> {
+    const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)).toISOString();
+    return this.storage.getLocalSuggestionActivity(userId, since);
+  }
 }
 
 export class InMemoryTelemetryStorage implements TelemetryStorage {
@@ -48,6 +59,22 @@ export class InMemoryTelemetryStorage implements TelemetryStorage {
 
   async listEvents(): Promise<readonly TelemetryEvent[]> {
     return this.events;
+  }
+
+  async getLocalSuggestionActivity(userId: string, since: string): Promise<LocalSuggestionActivity> {
+    const events = this.events.filter((event) =>
+      event.userId === userId &&
+      event.eventType === "suggestion_accepted" &&
+      event.modelId !== undefined &&
+      event.timestamp >= since
+    );
+    const latencies = events.flatMap((event) => event.latencyMs === undefined ? [] : [event.latencyMs]);
+    return {
+      accepted: events.length,
+      averageAcceptanceLatencyMs: latencies.length === 0
+        ? null
+        : Math.round(latencies.reduce((total, latency) => total + latency, 0) / latencies.length),
+    };
   }
 }
 
@@ -128,5 +155,26 @@ export class D1TelemetryStorage implements TelemetryStorage {
       .from(telemetryEvents)
       .orderBy(telemetryEvents.timestamp);
     return rows.map(rowToTelemetryEvent);
+  }
+
+  async getLocalSuggestionActivity(userId: string, since: string): Promise<LocalSuggestionActivity> {
+    const [row] = await this.db
+      .select({
+        accepted: sql<number>`count(*)`,
+        averageAcceptanceLatencyMs: sql<number | null>`round(avg(${telemetryEvents.latencyMs}))`,
+      })
+      .from(telemetryEvents)
+      .where(and(
+        eq(telemetryEvents.userId, userId),
+        eq(telemetryEvents.eventType, "suggestion_accepted"),
+        isNotNull(telemetryEvents.modelId),
+        gte(telemetryEvents.timestamp, since),
+      ));
+    return {
+      accepted: Number(row?.accepted ?? 0),
+      averageAcceptanceLatencyMs: row?.averageAcceptanceLatencyMs === null || row?.averageAcceptanceLatencyMs === undefined
+        ? null
+        : Number(row.averageAcceptanceLatencyMs),
+    };
   }
 }

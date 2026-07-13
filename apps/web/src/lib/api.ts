@@ -6,6 +6,7 @@ import {
   DeviceListResponseSchema,
   MemoryDeleteResponseSchema,
   MemoryListResponseSchema,
+  LocalSuggestionActivityResponseSchema,
 } from "@tab/contracts";
 import { env } from "../env.ts";
 
@@ -59,6 +60,10 @@ export async function parseDevices(response: Response) {
 
 export async function parseMemories(response: Response) {
   return MemoryListResponseSchema.parse(await response.json());
+}
+
+export async function parseLocalSuggestionActivity(response: Response) {
+  return LocalSuggestionActivityResponseSchema.parse(await response.json());
 }
 
 export async function parseDeviceAuthorize(response: Response) {

@@ -229,6 +229,13 @@ export function SettingsSurface() {
                 value={formatQuota(status)}
                 detail={status.quota ? `Resets ${formatDate(status.quota.resetAt)}` : "Available after sign-in"}
               />
+              <SummaryMetric
+                label="Local accepted"
+                value={(status.localSuggestionActivity?.accepted ?? 0).toLocaleString()}
+                detail={status.localSuggestionActivity?.averageAcceptanceLatencyMs === null || !status.localSuggestionActivity
+                  ? "This month"
+                  : `${status.localSuggestionActivity.averageAcceptanceLatencyMs.toLocaleString()} ms average to accept`}
+              />
             </div>
             <SettingsGroup title="Connection" description="Account and network state for this installation of Tab.">
               <StatusRow

@@ -163,7 +163,7 @@ export function createApp(deps: ApiDependencies = {}) {
   app.use("/suggestions", authenticateDevice);
   app.use("/telemetry/events", authenticateDevice);
 
-  registerStatusRoutes(app, { billingService });
+  registerStatusRoutes(app, { billingService, telemetryService });
   registerMemoryRoutes(app, {
     auth,
     personalMemoryService,
@@ -172,7 +172,7 @@ export function createApp(deps: ApiDependencies = {}) {
   });
   registerBillingRoutes(app, { auth, billingService, billingCheckoutClient });
   registerSuggestionRoutes(app, { suggestionUseCase });
-  registerTelemetryRoutes(app, { telemetryService });
+  registerTelemetryRoutes(app, { telemetryService, auth });
 
   return app;
 }

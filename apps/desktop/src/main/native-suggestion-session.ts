@@ -52,6 +52,7 @@ export type NativeSuggestionSessionDependencies = {
   readonly debounceMs: number;
   readonly maxVisibleMs?: number;
   readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
+  readonly localSuggestionModelId?: string;
   readonly triggerPolicy?: TriggerPolicy;
   readonly compatibilityStore?: ApplicationCompatibilityStore;
   readonly getAppContext?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
@@ -63,6 +64,7 @@ type VisibleSuggestionTelemetry = {
   readonly activeApplicationBundleId?: string;
   readonly suggestionLength: number;
   readonly visibleSinceMs: number;
+  readonly modelId?: string;
 };
 
 type InteractionTelemetryEventType = RecordTelemetryEventRequest["eventType"];
@@ -102,6 +104,9 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       activeApplicationBundleId: activeApplication?.bundleId,
       suggestionLength: suggestion.text.length,
       visibleSinceMs: Date.now(),
+      ...(suggestion.id.startsWith("sg-local-") && deps.localSuggestionModelId
+        ? { modelId: deps.localSuggestionModelId }
+        : {}),
     };
   }
 
@@ -130,6 +135,10 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
     if (visibleSuggestionTelemetry.activeApplicationBundleId) {
       event.activeApplicationBundleId = visibleSuggestionTelemetry.activeApplicationBundleId;
+    }
+
+    if (visibleSuggestionTelemetry.modelId) {
+      event.modelId = visibleSuggestionTelemetry.modelId;
     }
 
     return event;

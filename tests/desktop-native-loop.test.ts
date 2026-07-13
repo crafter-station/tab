@@ -1216,6 +1216,7 @@ describe("desktop native suggestion loop", () => {
     function makeSession(overrides: {
       requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
       getLocalSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+      localSuggestionModelId?: string;
       maxVisibleMs?: number;
       recordInteractionTelemetry?: (event: RecordTelemetryEventRequest) => void | Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
@@ -1271,6 +1272,7 @@ describe("desktop native suggestion loop", () => {
         debounceMs: 5,
         maxVisibleMs: overrides.maxVisibleMs,
         recordInteractionTelemetry: overrides.recordInteractionTelemetry,
+        localSuggestionModelId: overrides.localSuggestionModelId,
         triggerPolicy: overrides.triggerPolicy,
         compatibilityStore: overrides.compatibilityStore,
         getAppContext: overrides.getAppContext,
@@ -1876,6 +1878,29 @@ describe("desktop native suggestion loop", () => {
       expect(json).not.toContain("acceptedText");
       expect(json).not.toContain("finalInsertedText");
       expect(json).not.toContain("surroundingText");
+    });
+
+    it("marks accepted local suggestions with their model without sending text", async () => {
+      const telemetry: RecordTelemetryEventRequest[] = [];
+      const { session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "sg-local-request-1", text: " private completion" }),
+        localSuggestionModelId: "local-model-1",
+        recordInteractionTelemetry: (event) => telemetry.push(event),
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("private context");
+      await wait(10);
+      await session.acceptCurrentSuggestion();
+
+      expect(telemetry).toHaveLength(1);
+      expect(telemetry[0]).toMatchObject({
+        eventType: "suggestion_accepted",
+        requestId: "local-request-1",
+        modelId: "local-model-1",
+      });
+      expect(JSON.stringify(telemetry)).not.toContain("private completion");
+      expect(JSON.stringify(telemetry)).not.toContain("private context");
     });
 
     it("continues suggesting after repeated dismissals", async () => {

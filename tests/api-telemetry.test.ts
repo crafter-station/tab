@@ -245,6 +245,9 @@ describe("Metadata-only suggestion telemetry", () => {
           activeApplicationBundleId: "com.apple.Mail",
           suggestionLength: 5,
           latencyMs: 12,
+          ...(eventType === "suggestion_accepted"
+            ? { modelId: "qwen2.5-3b-instruct-q4_k_m" }
+            : {}),
         }),
       });
 
@@ -256,6 +259,10 @@ describe("Metadata-only suggestion telemetry", () => {
     expect(events.some((e) => e.eventType === "suggestion_dismissed")).toBe(true);
     expect(events.some((e) => e.eventType === "suggestion_stale")).toBe(true);
     expect(events.every((e) => e.latencyMs === 12)).toBe(true);
+    expect(await telemetryService.getLocalSuggestionActivity("user-1")).toEqual({
+      accepted: 1,
+      averageAcceptanceLatencyMs: 12,
+    });
     assertNoRawText(events, "accepted suggestion text");
   });
 

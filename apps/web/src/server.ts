@@ -22,6 +22,7 @@ import {
   parseDeviceAuthorize,
   parseDevices,
   parseMemories,
+  parseLocalSuggestionActivity,
   parseCheckout,
   parsePortal,
 } from "./lib/api.ts";
@@ -544,10 +545,11 @@ export function createWebApp(config: WebAppConfig) {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
 
-    const [quotaResponse, devicesResponse, memoriesResponse] = await Promise.all([
+    const [quotaResponse, devicesResponse, memoriesResponse, localActivityResponse] = await Promise.all([
       apiRequest("/api/billing/quota", {}, cookieHeader),
       apiRequest("/api/auth/devices", {}, cookieHeader),
       apiRequest("/api/account/memory", {}, cookieHeader),
+      apiRequest("/api/activity/local-suggestions", {}, cookieHeader),
     ]);
 
     if (quotaResponse.status === 401) {
@@ -561,6 +563,7 @@ export function createWebApp(config: WebAppConfig) {
     const quota = await parseBillingQuota(quotaResponse);
     const deviceList = await parseDevices(devicesResponse);
     const memoryList = await parseMemories(memoriesResponse);
+    const localActivity = await parseLocalSuggestionActivity(localActivityResponse);
     return html(
       createElement(DashboardPage, {
         section,
@@ -569,6 +572,7 @@ export function createWebApp(config: WebAppConfig) {
           quota: quota.data,
           devices: deviceList.data.devices,
           memories: memoryList.data.memories,
+          localSuggestionActivity: localActivity.data,
         },
       }),
       `${section === "overview" ? "Dashboard" : `Dashboard ${section}`} - ${appName}`,

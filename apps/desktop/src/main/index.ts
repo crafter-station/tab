@@ -337,6 +337,7 @@ const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
   debounceMs: 100,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
+  localSuggestionModelId: QWEN_25_3B_Q4_K_M.id,
 });
 
 const desktopEventIngress = createDesktopEventIngress({
