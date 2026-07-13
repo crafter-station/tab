@@ -19,7 +19,7 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
   const handoff = hasDesktopHandoff(search);
 
   return (
-    <AuthShell eyebrow={handoff ? "Mac sign-in" : "Account access"} title="Sign in" description="Open your Tab account or finish connecting this Mac." handoff={handoff}>
+    <AuthShell eyebrow={handoff ? "Mac sign-in" : "Account"} title={handoff ? "Connect this Mac" : "Sign in to Tab"} description={handoff ? "Sign in to connect Tab on this Mac. You will return to the app automatically." : "Manage your plan, connected Macs, and Personal Memory."} handoff={handoff}>
       <form className="flex flex-col gap-4" method="post" action="/login">
         <ErrorMessage message={error} />
         <HandoffFields search={search} />
@@ -43,7 +43,7 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
 
 export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boolean }) {
   return (
-    <AuthShell eyebrow="Account recovery" title="Reset password" description="Request a secure reset link for your Tab account.">
+    <AuthShell eyebrow="Account recovery" title="Reset your password" description="Enter your account email and we will send a reset link.">
       {sent ? (
         <p className="text-muted-foreground">If an account exists for that email, a password reset link is on the way.</p>
       ) : (
@@ -65,7 +65,7 @@ export function ForgotPasswordPage({ error, sent }: { error?: string; sent?: boo
 
 export function ResetPasswordPage({ error, token }: { error?: string; token?: string }) {
   return (
-    <AuthShell eyebrow="Account recovery" title="Choose a new password" description="Set a new password for your Tab account.">
+    <AuthShell eyebrow="Account recovery" title="Create a new password" description="Use at least 8 characters.">
       {token ? (
         <form className="flex flex-col gap-4" method="post" action="/reset-password">
           <ErrorMessage message={error} />
@@ -76,7 +76,7 @@ export function ResetPasswordPage({ error, token }: { error?: string; token?: st
               <Input id="reset-password" type="password" name="password" required autoComplete="new-password" minLength={8} />
             </Field>
           </FieldGroup>
-          <p><Button className="w-full" type="submit">Update password</Button></p>
+          <p><Button className="w-full" type="submit">Save new password</Button></p>
         </form>
       ) : (
         <p className="text-muted-foreground">This reset link is invalid or expired. Request a new password reset link.</p>
@@ -88,9 +88,10 @@ export function ResetPasswordPage({ error, token }: { error?: string; token?: st
 
 export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?: string }) {
   const loginHref = `/login${preserveAuthSearchParams(search)}`;
+  const handoff = hasDesktopHandoff(search);
 
   return (
-    <AuthShell eyebrow="Account access" title="Create your account" description="Start a 30-day Pro trial with one identity for connected Macs, Deep Complete, and saved memories. No card required." handoff={hasDesktopHandoff(search)}>
+    <AuthShell eyebrow={handoff ? "Mac sign-in" : "30-day Pro trial"} title="Create your Tab account" description="Try Pro for 30 days. No card required." handoff={handoff}>
       <form className="flex flex-col gap-4" method="post" action="/signup">
         <ErrorMessage message={error} />
         <HandoffFields search={search} />
@@ -105,11 +106,12 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
           </Field>
           <Field>
             <FieldLabel htmlFor="signup-password">Password</FieldLabel>
-            <Input id="signup-password" type="password" name="password" required autoComplete="new-password" />
+            <Input id="signup-password" type="password" name="password" required autoComplete="new-password" minLength={8} />
           </Field>
         </FieldGroup>
         <p><Button className="w-full" type="submit">Create account</Button></p>
       </form>
+      <p className="text-xs leading-relaxed text-muted-foreground">By creating an account, you agree to the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/terms">Terms of Service</a> and <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/privacy">Privacy Policy</a>.</p>
       <p className="text-sm text-muted-foreground">Already have an account? <a className="font-semibold text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href={loginHref}>Sign in</a>.</p>
     </AuthShell>
   );

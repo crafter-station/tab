@@ -94,23 +94,31 @@ export function AuthShell({
   handoff?: boolean;
   children: ReactNode;
 }) {
-  return (
-    <section className="mx-auto grid max-w-4xl border-y border-border lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)]">
-      <div className="py-8 lg:pr-14 lg:py-12">
+  if (!handoff) {
+    return (
+      <section className="mx-auto grid max-w-md gap-8 py-10 sm:py-14">
         <SurfaceHeader eyebrow={eyebrow} title={title} description={description} headingLevel={1} />
-        <div className="mt-8 grid border-t border-border text-sm">
-          <div className="grid grid-cols-[1.25rem_1fr] gap-3 border-b border-border py-4">
+        <div className="grid gap-5">{children}</div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mx-auto grid max-w-4xl gap-8 py-10 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.8fr)] lg:items-start lg:gap-14 lg:py-14">
+      <div>
+        <SurfaceHeader eyebrow={eyebrow} title={title} description={description} headingLevel={1} />
+        <div className="mt-8 grid gap-4 rounded-[var(--radius-card)] bg-muted/35 p-5 text-sm">
+          <div className="grid grid-cols-[1.25rem_1fr] gap-3">
             <span className="mt-1 size-1.5 rounded-full bg-emphasis" aria-hidden="true" />
-            <p><span className="font-semibold text-foreground">Secure connection.</span> <span className="text-muted-foreground">Your account connects this Mac without storing your password on it.</span></p>
+            <p><span className="font-semibold text-foreground">Your password stays in the browser.</span> <span className="text-muted-foreground">The Mac app receives a revocable device token.</span></p>
           </div>
-          <div className="grid grid-cols-[1.25rem_1fr] gap-3 border-b border-border py-4">
+          <div className="grid grid-cols-[1.25rem_1fr] gap-3">
             <span className="mt-1 size-1.5 rounded-full bg-foreground/40" aria-hidden="true" />
-            <p><span className="font-semibold text-foreground">Typing stays separate.</span> <span className="text-muted-foreground">Signing in does not save recent typing as a memory.</span></p>
+            <p><span className="font-semibold text-foreground">Signing in does not save your recent typing.</span></p>
           </div>
-          {handoff ? <p className="py-4 font-medium text-foreground">After sign-in, this page returns you to Tab on your Mac.</p> : null}
         </div>
       </div>
-      <div className="grid content-center gap-5 border-t border-border py-8 lg:border-l lg:border-t-0 lg:py-12 lg:pl-12">
+      <div className="grid content-center gap-5">
         {children}
       </div>
     </section>

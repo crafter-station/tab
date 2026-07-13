@@ -227,6 +227,28 @@ describe("Web account surface", () => {
     );
   });
 
+  it("preserves desktop handoff fields after a failed sign-in", async () => {
+    const { webApp } = await createWebTestEnv();
+    const response = await webRequest(webApp, "/login", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        email: "missing@example.com",
+        password: "wrong-password",
+        device_id: "desktop-device-1",
+        callback: "tab://auth/callback",
+        next: "/dashboard",
+      }),
+    });
+
+    expect(response.status).toBe(200);
+    const body = await response.text();
+    expect(body).toInclude("Invalid email or password.");
+    expect(body).toInclude('name="device_id" value="desktop-device-1"');
+    expect(body).toInclude('name="callback" value="tab://auth/callback"');
+    expect(body).toInclude('name="next" value="/dashboard"');
+  });
+
   it("displays accurate Free and Pro allowances and prices", async () => {
     const { webApp } = await createWebTestEnv();
     const response = await webRequest(webApp, "/pricing");
@@ -426,16 +448,17 @@ describe("Web account surface", () => {
     expect(usageBody).toInclude("Current plan");
     expect(usageBody).toInclude("Local Accepted Words today");
     expect(usageBody).toInclude("Deep Completes this month");
-    expect(usageBody).toInclude("Change plan");
-    expect(usageBody).toInclude("Pro monthly");
-    expect(usageBody).toInclude("Pro annual");
-    expect(usageBody).toInclude("Manage billing");
+    expect(usageBody).toInclude("Need higher allowances?");
+    expect(usageBody).toInclude("View Pro");
+    expect(usageBody).not.toInclude("Manage subscription");
 
     const configResponse = await webRequest(webApp, "/dashboard/account", {}, setCookie!);
     expect(configResponse.status).toBe(200);
     const configBody = await configResponse.text();
     expect(configBody).toInclude("Signed-in account");
     expect(configBody).toInclude("Email verified");
+    expect(configBody).toInclude("Your email is ready for paid checkout.");
+    expect(configBody).not.toInclude("Verify your email before choosing a paid plan.");
     expect(configBody).toInclude('action="/logout"');
     expect(configBody).toInclude("Sign out");
 

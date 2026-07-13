@@ -1,4 +1,4 @@
-import { isPlanId, planCapabilities, type PlanId } from "@tab/billing";
+import { isPlanId, planCapabilities } from "@tab/billing";
 import { ArrowLeft, Brain, CaretDown, ChartBar, Copy, Desktop, DotsThree, House, Moon, SidebarSimple, Sun, TextT, UserCircle } from "@phosphor-icons/react";
 import { Outlet } from "@tanstack/react-router";
 import { createContext, useContext, type ReactNode } from "react";
@@ -59,7 +59,6 @@ export type DashboardData = {
 
 export type DashboardSection = "overview" | "account" | "usage" | "devices" | "memories";
 
-type PlanEntry = [PlanId, (typeof planCapabilities)[PlanId]];
 type StatusPresentation = { value: string; tone: SemanticTone };
 
 const bulkDeleteMemoriesFormId = "bulk-delete-memories";
@@ -70,13 +69,13 @@ const dashboardSections = [
     id: "account",
     href: "/dashboard/account",
     title: "Account",
-    description: "Profile, email status, and sign out.",
+    description: "Email, verification, and sign out.",
   },
   {
     id: "usage",
     href: "/dashboard/usage",
     title: "Usage and billing",
-    description: "Product value, independent allowances, and billing settings.",
+    description: "This month's activity and your plan.",
   },
   {
     id: "devices",
@@ -87,17 +86,17 @@ const dashboardSections = [
   {
     id: "memories",
     href: "/dashboard/memories",
-    title: "Memories",
-    description: "Review, edit, and delete saved details.",
+    title: "Personal Memory",
+    description: "Add, review, export, or delete saved details.",
   },
 ] as const;
 
 const dashboardDescriptions: Record<DashboardSection, string> = {
-  overview: "A quick read on completed writing, your plan, connected Macs, and saved details.",
-  account: "Your sign-in identity and email status.",
-  usage: "See Local Suggestion and Deep Complete value, then manage Pro.",
-  devices: "Review the Macs connected to your account and remove old access.",
-  memories: "Review the details Tab can reuse when personalizing suggestions.",
+  overview: "Your Tab activity this month.",
+  account: "Email and sign-in status.",
+  usage: "Review this month's activity and manage your plan.",
+  devices: "Review Macs with access to your account.",
+  memories: "Add, review, export, or delete details Tab can use in Suggestions.",
 };
 
 const metricToneClasses: Record<SemanticTone, string> = {
@@ -109,24 +108,9 @@ const metricToneClasses: Record<SemanticTone, string> = {
   destructive: "bg-[var(--destructive)]",
 };
 
-function getPlanEntries(): PlanEntry[] {
-  return Object.entries(planCapabilities) as PlanEntry[];
-}
-
 function formatPlanName(planId: string): string {
   if (isPlanId(planId)) return planCapabilities[planId].name;
   return planId.charAt(0).toUpperCase() + planId.slice(1);
-}
-
-function checkoutPlanHref(planId: PlanId, interval: "monthly" | "annual" = "monthly"): string {
-  return planId === "free"
-    ? "/dashboard"
-    : `/billing/checkout?plan=pro&interval=${interval}`;
-}
-
-function planActionLabel(planName: string, monthlyPriceUsd: number): string {
-  if (monthlyPriceUsd === 0) return `Switch to ${planName}`;
-  return `Upgrade to ${planName}`;
 }
 
 function emailStatus(emailVerified: boolean | undefined): StatusPresentation {
@@ -230,7 +214,6 @@ function DashboardHeader({ section }: { section: DashboardSection }) {
 
   return (
     <SurfaceHeader
-      eyebrow="Your Tab account"
       title={title}
       description={dashboardDescriptions[section]}
       headingLevel={1}
@@ -243,7 +226,7 @@ const dashboardNavigation = [
   { id: "account", href: "/dashboard/account", label: "Account", icon: UserCircle },
   { id: "usage", href: "/dashboard/usage", label: "Usage and billing", icon: ChartBar },
   { id: "devices", href: "/dashboard/devices", label: "Devices", icon: Desktop },
-  { id: "memories", href: "/dashboard/memories", label: "Memories", icon: Brain },
+  { id: "memories", href: "/dashboard/memories", label: "Personal Memory", icon: Brain },
 ] as const;
 
 const tabLogoSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Tab logo"><rect width="32" height="32" rx="8" fill="${PLATFORM_COLORS.theme.light.primary}"/><path fill="${PLATFORM_COLORS.theme.light.primaryForeground}" d="M9 8h14v4h-5v12h-4V12H9z"/></svg>`;
@@ -313,7 +296,7 @@ function DashboardSidebar({ active }: { active: DashboardSection }) {
                 <TabMark className="border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" />
                 <span className="grid min-w-0 text-left leading-tight">
                   <span className="truncate font-[var(--font-display)] font-bold">Tab</span>
-                  <span className="truncate text-xs text-sidebar-foreground/60">Account workspace</span>
+                  <span className="truncate text-xs text-sidebar-foreground/60">Account</span>
                 </span>
               </a>
             </SidebarMenuButton>
@@ -322,7 +305,7 @@ function DashboardSidebar({ active }: { active: DashboardSection }) {
       </SidebarHeader>
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Workspace</SidebarGroupLabel>
+          <SidebarGroupLabel>Account</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {dashboardNavigation.map((item) => {
@@ -366,11 +349,11 @@ function DashboardStaticSidebar({ active }: { active: DashboardSection }) {
         <TabMark className="border-sidebar-primary bg-sidebar-primary text-sidebar-primary-foreground" />
         <span className="dashboard-static-sidebar-label grid min-w-0 leading-tight">
           <span className="truncate font-[var(--font-display)] font-bold">Tab</span>
-          <span className="truncate text-xs text-sidebar-foreground/60">Account workspace</span>
+          <span className="truncate text-xs text-sidebar-foreground/60">Account</span>
         </span>
       </a>
       <nav className="dashboard-static-sidebar-nav flex flex-1 flex-col gap-1 p-3" aria-label="Dashboard navigation">
-        <p className="dashboard-static-sidebar-label px-2 pb-1 pt-2 text-xs font-medium text-sidebar-foreground/60">Workspace</p>
+        <p className="dashboard-static-sidebar-label px-2 pb-1 pt-2 text-xs font-medium text-sidebar-foreground/60">Account</p>
         {dashboardNavigation.map((item) => {
           const Icon = item.icon;
           return (
@@ -389,7 +372,7 @@ function DashboardStaticSidebar({ active }: { active: DashboardSection }) {
           );
         })}
       </nav>
-      <a className="dashboard-static-sidebar-footer m-3 flex items-center gap-2 rounded-[var(--radius-control)] border-t border-sidebar-border px-2 py-3 text-sm font-medium text-sidebar-foreground no-underline" href="/">
+      <a className="dashboard-static-sidebar-footer m-3 flex items-center gap-2 rounded-[var(--radius-control)] px-2 py-3 text-sm font-medium text-sidebar-foreground no-underline hover:bg-sidebar-accent" href="/">
         <ArrowLeft className="size-4" aria-hidden="true" />
         <span className="dashboard-static-sidebar-label whitespace-nowrap">Back to website</span>
       </a>
@@ -400,7 +383,7 @@ function DashboardStaticSidebar({ active }: { active: DashboardSection }) {
 function DashboardContent({ data, section, children }: { data?: DashboardData; section: DashboardSection; children?: ReactNode }) {
   return (
     <main id="main-content" className="w-full flex-1 px-5 py-7 sm:px-8 sm:py-10 lg:px-10">
-      <div className="mx-auto grid w-full max-w-6xl gap-8">
+      <div className="mx-auto grid w-full max-w-6xl gap-10">
         <DashboardHeader section={section} />
         {data ? (
           <DashboardDataContext.Provider value={data}>
@@ -441,8 +424,7 @@ export function DashboardLayout({
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center justify-between gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
             <SidebarTrigger className="-ml-1" />
-            <span className="h-4 w-px bg-border" aria-hidden="true" />
-            <p className="truncate text-sm font-semibold">Account dashboard</p>
+            <p className="truncate text-sm font-semibold">Tab account</p>
           </div>
           <DashboardBrandMenu />
         </header>
@@ -469,11 +451,25 @@ function DashboardStaticLayout({ data, section, children }: { data: DashboardDat
               <SidebarSimple aria-hidden="true" />
               <span className="sr-only">Collapse sidebar</span>
             </button>
-            <span className="hidden h-4 w-px bg-border md:block" aria-hidden="true" />
-            <p className="truncate text-sm font-semibold">Account dashboard</p>
+            <p className="truncate text-sm font-semibold">Tab account</p>
           </div>
           <DashboardBrandMenu />
         </header>
+        <nav className="flex gap-1 overflow-x-auto px-3 py-2 md:hidden" aria-label="Dashboard navigation">
+          {dashboardNavigation.map((item) => (
+            <a
+              key={item.id}
+              href={item.href}
+              aria-current={section === item.id ? "page" : undefined}
+              className={cn(
+                "shrink-0 rounded-[var(--radius-control)] px-3 py-2 text-sm font-medium no-underline",
+                section === item.id ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+              )}
+            >
+              {item.label}
+            </a>
+          ))}
+        </nav>
         <DashboardContent data={data} section={section}>{children}</DashboardContent>
       </div>
     </div>
@@ -491,23 +487,21 @@ export function useDashboardData(): DashboardData {
 export function DashboardOverviewPage({ data }: { data: DashboardData }) {
   const connectedDevices = data.devices.filter((device) => !device.revoked).length;
   const accountEmailStatus = emailStatus(data.user.emailVerified);
-  const typingSaved = Math.round(data.localSuggestionActivity.acceptedCharacters / 5);
 
   return (
-    <div className="grid gap-8">
-      <section className="grid gap-px border-y border-border bg-border sm:grid-cols-2 lg:grid-cols-5 [&>*]:bg-background">
-        <DashboardMetric label="Completed words" value={formatCount(data.localSuggestionActivity.acceptedWords)} description="From Local Suggestions" />
-        <DashboardMetric label="Typing saved" value={`~${formatCount(typingSaved)} sec`} description="Approximation from accepted characters" />
-        <DashboardMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} description="Since value metrics launched" />
+    <div className="grid gap-10">
+      <section className="grid gap-x-8 gap-y-2 rounded-[var(--radius-card)] bg-muted/30 px-5 sm:grid-cols-2 lg:grid-cols-4">
+        <DashboardMetric label="Words completed" value={formatCount(data.localSuggestionActivity.acceptedWords)} description="From Local Suggestions this month" />
+        <DashboardMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} description="This month" />
         <DashboardMetric label="Deep Completes" value={formatCount(data.billing.deepCompletes.used)} description="Successful results this month" />
         <DashboardMetric label="Plan" value={formatPlanName(data.billing.planId)} description={data.billing.entitlementSource === "trial" ? `Trial ends ${formatDate(data.billing.trial.endsAt)}` : undefined} />
       </section>
       <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-        <div className="grid gap-6 border-y border-border py-6">
+        <div className="grid gap-7 rounded-[var(--radius-card)] bg-muted/30 p-5 sm:p-6">
           <QuotaProgressPanel title="Local Accepted Words today" usage={data.billing.localAcceptedWords.used} quota={data.billing.localAcceptedWords.limit} resetAt={data.billing.localAcceptedWords.resetAt} />
           <QuotaProgressPanel title="Deep Completes this month" usage={data.billing.deepCompletes.used} quota={data.billing.deepCompletes.limit} resetAt={data.billing.deepCompletes.resetAt} />
         </div>
-        <div className="grid gap-3 lg:border-l lg:border-border lg:pl-7">
+        <div className="grid gap-3 lg:pt-2">
           <p className="text-sm font-semibold text-foreground">{formatCount(connectedDevices)} of {formatCount(data.billing.devices.limit)} Macs connected</p>
           <p className="text-sm leading-relaxed text-muted-foreground">{accountEmailStatus.value}. Allowances are independent, so reaching one does not disable the other mode.</p>
           <p><a className={buttonVariants({ variant: "secondary", size: "sm" })} href="/dashboard/usage">View usage and billing</a></p>
@@ -520,23 +514,26 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
 export function DashboardAccountPage({ data }: { data: DashboardData }) {
   const accountName = data.user.email ?? data.user.name ?? data.user.id;
   const accountEmailStatus = emailStatus(data.user.emailVerified);
+  const emailGuidance = data.user.emailVerified === false
+    ? "Verify your email before choosing a paid plan."
+    : "Your email is ready for paid checkout.";
 
   return (
-    <section className="border-y border-border">
-      <div className="flex flex-col gap-5 py-6 sm:flex-row sm:items-center sm:justify-between">
+    <section className="grid gap-6 rounded-[var(--radius-card)] bg-muted/30 p-5 sm:p-6">
+      <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
         <div className="min-w-0">
           <p className="text-xs font-semibold uppercase text-muted-foreground">Signed-in account</p>
           <p className="mt-2 truncate text-lg font-semibold text-foreground">{accountName}</p>
         </div>
         <form method="post" action="/logout"><Button type="submit" variant="secondary">Sign out</Button></form>
       </div>
-      <div className="grid gap-2 border-t border-border py-6 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center">
         <div>
           <p className="flex items-center gap-2 font-semibold text-foreground">
             <span className={`size-2 rounded-full ${metricToneClasses[accountEmailStatus.tone]}`} aria-hidden="true" />
             {accountEmailStatus.value}
           </p>
-          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">A verified email may be required before choosing a paid plan.</p>
+          <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{emailGuidance}</p>
         </div>
       </div>
     </section>
@@ -547,13 +544,14 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
   const billing = data.billing;
   const localStatus = quotaStatus(billing.localAcceptedWords.exhausted);
   const deepStatus = quotaStatus(billing.deepCompletes.exhausted);
+  const bothAllowancesExhausted = billing.localAcceptedWords.exhausted && billing.deepCompletes.exhausted;
 
   return (
-    <div className="grid gap-9">
-      <section className="grid gap-5 border-y border-border py-6">
-        <div className="grid gap-px border-b border-border bg-border sm:grid-cols-3 [&>*]:bg-background">
-          <DashboardMetric label="Completed words" value={formatCount(data.localSuggestionActivity.acceptedWords)} description="Accepted Local Suggestion words" />
-          <DashboardMetric label="Active days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} description="Writing days in this metric period" />
+    <div className="grid gap-10">
+      <section className="grid gap-7">
+        <div className="grid gap-x-8 gap-y-2 rounded-[var(--radius-card)] bg-muted/30 px-5 sm:grid-cols-3">
+          <DashboardMetric label="Words completed" value={formatCount(data.localSuggestionActivity.acceptedWords)} description="From Local Suggestions this month" />
+          <DashboardMetric label="Active days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} description="This month" />
           <DashboardMetric
             label="Average time to accept"
             value={data.localSuggestionActivity.averageAcceptanceLatencyMs === null
@@ -562,7 +560,7 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
             description="From first visible suggestion to insertion"
           />
         </div>
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4 rounded-[var(--radius-card)] bg-muted/30 p-5">
           <div>
             <p className="text-xs font-semibold uppercase text-muted-foreground">Current plan</p>
             <p className="mt-2 text-xl font-bold">{formatPlanName(billing.planId)}{billing.entitlementSource === "trial" ? " trial" : ""}</p>
@@ -572,32 +570,22 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
         <QuotaProgressPanel title="Local Accepted Words today" usage={billing.localAcceptedWords.used} quota={billing.localAcceptedWords.limit} resetAt={billing.localAcceptedWords.resetAt} />
         <QuotaProgressPanel title="Deep Completes this month" usage={billing.deepCompletes.used} quota={billing.deepCompletes.limit} resetAt={billing.deepCompletes.resetAt} />
         {billing.localAcceptedWords.exhausted || billing.deepCompletes.exhausted ? (
-          <Alert variant="destructive">
-            <AlertTitle>One allowance is used</AlertTitle>
+          <Alert>
+            <AlertTitle>Allowance reached</AlertTitle>
             <AlertDescription>
-              Local Suggestions and Deep Complete remain independent. {billing.localAcceptedWords.exhausted ? `Local Accepted Words: ${localStatus.value}. ` : ""}{billing.deepCompletes.exhausted ? `Deep Complete: ${deepStatus.value}. ` : ""}<a className="underline" href="/pricing">Compare Pro</a>.
+              {bothAllowancesExhausted
+                ? "Both allowances are used. They reset independently. "
+                : `${billing.localAcceptedWords.exhausted ? `Local Accepted Words: ${localStatus.value}. ` : ""}${billing.deepCompletes.exhausted ? `Deep Complete: ${deepStatus.value}. ` : ""}The other mode still works. `}<a className="underline" href="/pricing">View Pro</a>.
             </AlertDescription>
           </Alert>
         ) : null}
       </section>
-      <section>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <h2 className="text-xl font-bold">Change plan</h2>
-            <p className="mt-1 text-sm text-muted-foreground">Pro includes unlimited Local Accepted Words and 300 Deep Completes per month.</p>
-          </div>
-          <a className={buttonVariants({ variant: "secondary", size: "sm" })} href="/billing/portal">Manage billing</a>
+      <section className="flex flex-col gap-5 rounded-[var(--radius-card)] bg-muted/30 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+        <div>
+          <h2 className="text-xl font-bold">{billing.entitlementSource === "paid" ? "Pro subscription" : "Need higher allowances?"}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Pro includes unlimited Local Accepted Words and {formatCount(planCapabilities.pro.deepCompletesPerMonth)} Deep Completes each month.</p>
         </div>
-        <div className="mt-5 grid border-y border-border sm:grid-cols-2">
-          <div className="grid gap-4 py-5 sm:pr-5">
-            <div><p className="font-semibold">Pro monthly</p><p className="mt-1 text-sm text-muted-foreground">$10/month, cancel through the billing portal</p></div>
-            <p><a className={buttonVariants({ variant: "secondary", size: "sm" })} href={checkoutPlanHref("pro")}>Choose monthly</a></p>
-          </div>
-          <div className="grid gap-4 border-t border-border py-5 sm:border-l sm:border-t-0 sm:pl-5">
-            <div><p className="font-semibold">Pro annual</p><p className="mt-1 text-sm text-muted-foreground">$96/year, saving $24</p></div>
-            <p><a className={buttonVariants({ variant: "secondary", size: "sm" })} href={checkoutPlanHref("pro", "annual")}>Choose annual</a></p>
-          </div>
-        </div>
+        <a className={buttonVariants({ variant: "secondary", size: "sm" })} href={billing.entitlementSource === "paid" ? "/billing/portal" : "/pricing"}>{billing.entitlementSource === "paid" ? "Manage subscription" : "View Pro"}</a>
       </section>
     </div>
   );
@@ -606,15 +594,10 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
 export function DashboardDevicesPage({ data }: { data: DashboardData }) {
   const devices = data.devices;
   const activeDeviceCount = devices.filter((device) => !device.revoked).length;
-  const revokedDeviceCount = devices.length - activeDeviceCount;
 
   return (
     <section id="devices" className="grid gap-6">
-      <div className="grid gap-px border-y border-border bg-border sm:grid-cols-3 [&>*]:bg-background">
-        <DashboardMetric label="Connected" value={formatCount(activeDeviceCount)} description="Can use this account" />
-        <DashboardMetric label="Removed" value={formatCount(revokedDeviceCount)} description="Access already revoked" />
-        <DashboardMetric label="Safety" value="Review old Macs" description="Remove anything unfamiliar" />
-      </div>
+      <p className="text-sm text-muted-foreground"><strong className="text-foreground">{formatCount(activeDeviceCount)} connected.</strong> Remove any Mac you no longer use.</p>
       {devices.length === 0 ? (
           <EmptyState
             title="No linked devices"
@@ -667,21 +650,14 @@ export function DashboardDevicesPage({ data }: { data: DashboardData }) {
 export function DashboardMemoriesPage({ data }: { data: DashboardData }) {
   const memories = data.memories;
   const memoryCountLabel = `${formatCount(memories.length)} ${memories.length === 1 ? "memory" : "memories"}`;
-  const savedByUserCount = memories.filter((memory) => memory.createdBy === "user").length;
-  const savedFromWritingCount = memories.length - savedByUserCount;
 
   return (
     <section id="memories" className="grid gap-6">
-      <div className="grid gap-px border-y border-border bg-border sm:grid-cols-3 [&>*]:bg-background">
-        <DashboardMetric label="Saved" value={memoryCountLabel} description="Ready when memory is enabled" />
-        <DashboardMetric label="Added by you" value={formatCount(savedByUserCount)} description="Created or updated manually" />
-        <DashboardMetric label="Learned from writing" value={formatCount(savedFromWritingCount)} description="From eligible user-authored writing" />
-      </div>
       <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
-        <p className="max-w-[65ch] leading-relaxed text-muted-foreground">Saved memories can personalize suggestions when memory is enabled in the Mac app.</p>
+        <p className="max-w-[65ch] leading-relaxed text-muted-foreground"><strong className="text-foreground">{memoryCountLabel} saved.</strong> Tab can use these details when Personal Memory is on in the Mac app.</p>
         <a className={buttonVariants({ variant: "secondary", size: "sm" })} href="/dashboard/memories/export">Export JSON</a>
       </div>
-      <details className="border-y border-border py-4">
+      <details className="rounded-[var(--radius-card)] bg-muted/30 p-4">
         <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-[var(--radius-control)] py-1 text-sm font-semibold text-foreground hover:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
             <span>Add a memory</span>
             <span className="flex items-center gap-2 text-xs font-medium text-muted-foreground">

@@ -276,6 +276,14 @@ export function createWebApp(config: WebAppConfig) {
     };
   }
 
+  function authSearchParams(deviceId: string, callback: string, next?: string): URLSearchParams {
+    const searchParams = new URLSearchParams();
+    if (deviceId) searchParams.set("device_id", deviceId);
+    if (callback) searchParams.set("callback", callback);
+    if (next) searchParams.set("next", next);
+    return searchParams;
+  }
+
   async function loginPage(
     error?: string,
     _path = "/login",
@@ -346,6 +354,7 @@ export function createWebApp(config: WebAppConfig) {
     const deviceId = String(formData.get("device_id") ?? "");
     const callback = String(formData.get("callback") ?? "");
     const next = safeNextPath(String(formData.get("next") ?? ""));
+    const searchParams = authSearchParams(deviceId, callback, next);
 
     const signInResponse = await apiRequest(
       "/api/auth/sign-in/email",
@@ -359,15 +368,15 @@ export function createWebApp(config: WebAppConfig) {
 
     if (signInResponse.status !== 200) {
       if (signInResponse.status === 403) {
-        return loginPage("Check your email to verify your account before signing in.");
+        return loginPage("Check your email to verify your account before signing in.", "/login", searchParams);
       }
-      return loginPage("Invalid email or password.");
+      return loginPage("Invalid email or password.", "/login", searchParams);
     }
 
     if (deviceId && callback) {
       const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
       if (!signedInCookieHeader) {
-        return loginPage("Signed in, but failed to authorize this device.");
+        return loginPage("We could not connect this Mac. Try signing in again.", "/login", searchParams);
       }
       return authorizeDeviceRedirect(callback, signedInCookieHeader, signInResponse);
     }
@@ -391,6 +400,7 @@ export function createWebApp(config: WebAppConfig) {
     const deviceId = String(formData.get("device_id") ?? "");
     const callback = String(formData.get("callback") ?? "");
     const next = safeNextPath(String(formData.get("next") ?? ""));
+    const searchParams = authSearchParams(deviceId, callback, next);
 
     const signUpResponse = await apiRequest(
       "/api/auth/sign-up/email",
@@ -403,7 +413,7 @@ export function createWebApp(config: WebAppConfig) {
     );
 
     if (signUpResponse.status !== 200) {
-      return signupPage("Could not create that account.");
+      return signupPage("We could not create that account. Check the details and try again.", "/signup", searchParams);
     }
 
     const signInResponse = await apiRequest(
