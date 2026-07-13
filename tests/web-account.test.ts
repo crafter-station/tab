@@ -198,15 +198,15 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(200);
     const body = await response.text();
-    expect(body).toInclude("Autocomplete for your Mac");
-    expect(body).toInclude("Works in every app");
-    expect(body).toInclude("Download Tab free");
+    expect(body).toInclude("Autocomplete across your Mac");
+    expect(body).toInclude("Built for standard Mac text fields");
+    expect(body).toInclude("Download for Mac");
     expect(body).toInclude("data-theme-choice=\"system\"");
-    expect(body).toInclude("Saved memories");
-    expect(body).toInclude("Recent typing");
-    expect(body).toInclude("Start free. Upgrade when Tab becomes a habit.");
-    expect(body).toInclude("100 Accepted Words from Local Suggestions each day");
-    expect(body).toInclude("No card is required for the trial.");
+    expect(body).toInclude("Personal Memory stays visible");
+    expect(body).toInclude("Automatic Suggestions run on your Mac");
+    expect(body).toInclude("Try Pro. Keep Free if you do not upgrade.");
+    expect(body).toInclude("100 Accepted Words each day");
+    expect(body).toInclude("No card required");
   });
 
   it("renders redesigned auth handoff forms without dropping desktop fields", async () => {
@@ -236,28 +236,29 @@ describe("Web account surface", () => {
     expect(body).toInclude("Free");
     expect(body).toInclude("Pro");
     expect(body).not.toInclude("Max");
-    expect(body).toInclude("100 Accepted Words/day");
+    expect(body).toInclude("100 Accepted Words");
     expect(body).toInclude("10 Deep Completes");
     expect(body).toInclude("300 Deep Completes");
     expect(body).toInclude("$10/mo");
     expect(body).toInclude("$96/year");
-    expect(body).toInclude("Free and Pro");
-    expect(body).toInclude("Tab counts value you receive.");
+    expect(body).toInclude("Simple pricing");
+    expect(body).toInclude("Only completed work counts.");
     expect(body).toInclude("Continuous Memory Extraction");
     expect(body).toInclude("Custom writing instructions");
-    expect(body).toInclude("Supported model catalog");
+    expect(body).toInclude("supported model catalog");
     expect(body).toInclude("No automatic overages");
     expect(body).toInclude("Sign in, then continue to secure checkout");
     expect(body).toInclude("Start 30-day Pro trial");
     expect(body).toInclude('href="/signup"');
-    expect(body).toInclude(
-      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dmonthly"',
-    );
-    expect(body).toInclude(
-      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dannual"',
-    );
-    expect(body).not.toInclude('href="/billing/checkout?plan=pro&amp;interval=monthly"');
-    expect(body).not.toInclude('href="/billing/checkout?plan=pro&amp;interval=annual"');
+    expect(body).toInclude('action="/billing/checkout"');
+    expect(body).toInclude('name="interval"');
+    expect(body).toInclude('value="monthly"');
+    expect(body).toInclude('value="monthly" selected=""');
+    expect(body).toInclude('data-pricing-grid="true"');
+    expect(body).toInclude('data-pricing-plan="free"');
+    expect(body).toInclude('data-pricing-plan="pro"');
+    expect(body.match(/data-pricing-plan=/g)?.length).toBe(2);
+    expect(body).toInclude("Free begins automatically after your trial");
   });
 
   it("explains local processing, billing, cancellation, and retained data controls", async () => {
@@ -335,14 +336,9 @@ describe("Web account surface", () => {
     expect(body).toInclude('href="/dashboard"');
     expect(body).toInclude("Dashboard");
     expect(body).not.toInclude('href="/login">Sign in</a>');
-    expect(body).toInclude('href="/billing/checkout?plan=pro&amp;interval=monthly"');
-    expect(body).toInclude('href="/billing/checkout?plan=pro&amp;interval=annual"');
-    expect(body).not.toInclude(
-      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dmonthly"',
-    );
-    expect(body).not.toInclude(
-      'href="/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro%26interval%3Dannual"',
-    );
+    expect(body).toInclude('action="/billing/checkout"');
+    expect(body).toInclude('name="interval"');
+    expect(body).not.toInclude('href="/login?next=');
   });
 
   it("asks a new web signup to verify email before checkout", async () => {

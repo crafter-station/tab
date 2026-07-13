@@ -7,10 +7,6 @@ import {
   CheckCircle,
   Command,
   DownloadSimple,
-  Eye,
-  Keyboard,
-  Lightning,
-  LockKey,
   Plus,
   ShieldCheck,
 } from "@phosphor-icons/react";
@@ -19,89 +15,53 @@ import { SuggestionCommand, buttonVariants, cn } from "@tab/ui";
 import { PageKicker, formatCount, formatMonthlyPrice, formatUsd } from "./shared.tsx";
 
 const appLogos = [
-  { name: "Gmail", src: "/logos/gmail.svg", href: "https://workspace.google.com/products/gmail/" },
-  { name: "Slack", src: "/logos/slack.svg", href: "https://slack.com/" },
-  { name: "Notion", src: "/logos/notion.svg", href: "https://www.notion.com/" },
-  { name: "Linear", src: "/logos/linear.svg", href: "https://linear.app/" },
-  { name: "Chrome", src: "/logos/chrome.svg", href: "https://www.google.com/chrome/" },
-  { name: "WhatsApp", src: "/logos/whatsapp.svg", href: "https://www.whatsapp.com/" },
-  { name: "Ghostty", src: "/logos/ghostty.svg", href: "https://ghostty.org/" },
-  { name: "Messages", src: "/logos/messages.svg", href: "https://support.apple.com/messages" },
-  { name: "Discord", src: "/logos/discord.svg", href: "https://discord.com/" },
-  { name: "VS Code", src: "/logos/vscode.svg", href: "https://code.visualstudio.com/" },
-  { name: "Obsidian", src: "/logos/obsidian.svg", href: "https://obsidian.md/" },
-  { name: "Zed", src: "/logos/zed.svg", href: "https://zed.dev/" },
-] as const;
-
-const benefits = [
-  {
-    icon: Lightning,
-    title: "Stay in the sentence",
-    description: "Finish routine phrases without reaching for another app, prompt box, or copy-and-paste loop.",
-  },
-  {
-    icon: Eye,
-    title: "See it before it lands",
-    description: "Suggestions appear separately from your writing. Nothing is inserted until you accept it.",
-  },
-  {
-    icon: Brain,
-    title: "Make it sound like you",
-    description: "Personal Memory keeps useful details visible, editable, and deletable from your account.",
-  },
+  { name: "Gmail", src: "/logos/gmail.svg" },
+  { name: "Slack", src: "/logos/slack.svg" },
+  { name: "Notion", src: "/logos/notion.svg" },
+  { name: "Linear", src: "/logos/linear.svg" },
+  { name: "Chrome", src: "/logos/chrome.svg" },
+  { name: "WhatsApp", src: "/logos/whatsapp.svg" },
+  { name: "Ghostty", src: "/logos/ghostty.svg" },
+  { name: "Messages", src: "/logos/messages.svg" },
+  { name: "Discord", src: "/logos/discord.svg" },
+  { name: "VS Code", src: "/logos/vscode.svg" },
+  { name: "Obsidian", src: "/logos/obsidian.svg" },
+  { name: "Zed", src: "/logos/zed.svg" },
 ] as const;
 
 const steps = [
   {
     number: "01",
-    title: "Write as usual",
-    description: "Tab watches for a useful moment in supported text fields while your active app keeps focus.",
+    title: "Keep typing",
+    description: "Tab uses recent typing from the active text field to prepare a short continuation.",
   },
   {
     number: "02",
     title: "Preview the next words",
-    description: "A quiet Floating Suggestion Overlay shows a short continuation without changing your draft.",
+    description: "The suggestion appears separately from your draft, so nothing changes before you act.",
   },
   {
     number: "03",
     title: "Accept or ignore",
-    description: "Press Option+Tab to add it. Keep typing to dismiss it. You stay in control either way.",
+    description: "Press Option+Tab to insert it, or keep typing to dismiss it.",
   },
 ] as const;
 
-const useCases = [
+const trustPoints = [
   {
-    context: "Follow-up email",
-    lead: "Would Thursday morning",
-    suggestion: "work for a quick review?",
-    app: "Mail",
+    icon: ShieldCheck,
+    title: "Automatic Suggestions stay local",
+    description: "They run on your Mac without sending Typing Context to Tab.",
   },
   {
-    context: "Team update",
-    lead: "The new onboarding flow is ready",
-    suggestion: "for a final pass before we ship.",
-    app: "Slack",
+    icon: CheckCircle,
+    title: "Cloud only when you ask",
+    description: "Deep Complete sends bounded, redacted context after you double-tap Option.",
   },
   {
-    context: "Project notes",
-    lead: "Before launch, remember to",
-    suggestion: "update the release checklist.",
-    app: "Notes",
-  },
-] as const;
-
-const productPromises = [
-  {
-    quote: "Nothing is inserted until you choose.",
-    description: "Every suggestion stays separate from your draft until you press Option+Tab or click to accept it.",
-  },
-  {
-    quote: "Keep typing and Tab gets out of the way.",
-    description: "A suggestion is optional, never a modal. Continue the sentence and stale text disappears.",
-  },
-  {
-    quote: "Personal should never mean hidden.",
-    description: "Personal Memory is visible in your account, where you can review and delete what Tab remembers.",
+    icon: Brain,
+    title: "Personal Memory stays visible",
+    description: "Add, edit, export, or delete saved details from your account.",
   },
 ] as const;
 
@@ -128,24 +88,20 @@ const memoryExamples = [
 
 const faqs = [
   {
-    question: "Does Tab type anything without me?",
-    answer: "No. A suggestion stays separate from your writing until you deliberately accept it with Option+Tab. If you keep typing, Tab gets out of the way.",
-  },
-  {
     question: "Where does Tab work?",
-    answer: "Tab is built for standard text fields across macOS apps, including everyday writing surfaces such as Mail, Slack, Notes, and terminals. Some custom editors may behave differently.",
+    answer: "Tab is designed for standard text fields across macOS. Compatibility can vary in custom editors.",
   },
   {
-    question: "What does Personal Memory save?",
-    answer: "Personal Memory stores useful facts that can make suggestions more relevant. Those memories are listed in your dashboard, where you can add, edit, or delete them.",
+    question: "What leaves my Mac?",
+    answer: "Automatic Suggestions run locally. Deep Complete sends bounded, redacted context only when you double-tap Option.",
   },
   {
-    question: "Can I try it before paying?",
-    answer: `Yes. Every account starts with a 30-day Pro trial, no card required. Afterward, Free includes ${formatCount(planCapabilities.free.localAcceptedWordsPerDay)} Accepted Words from Local Suggestions each day and ${planCapabilities.free.deepCompletesPerMonth} Deep Completes each month.`,
+    question: "What happens after the trial?",
+    answer: `Your account moves to Free unless you choose Pro. Free includes ${formatCount(planCapabilities.free.localAcceptedWordsPerDay)} Accepted Words from Local Suggestions each day and ${planCapabilities.free.deepCompletesPerMonth} Deep Completes each month.`,
   },
   {
-    question: "What Mac do I need?",
-    answer: "Tab requires macOS 14 or newer. Setup guides you through the Accessibility and Input Monitoring permissions it needs to show and insert suggestions.",
+    question: "What happens to Personal Memory if I cancel?",
+    answer: "You can still view, edit, export, and delete existing Personal Memory.",
   },
 ] as const;
 
@@ -176,14 +132,14 @@ function DemoScene({
 
 function AutocompleteDemo() {
   return (
-    <div className="tab-demo overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-tab-demo data-active="mail" data-accepted="false" aria-label="Interactive Tab autocomplete demonstration" role="region" tabIndex={0}>
+    <div className="tab-demo overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-tab-demo data-active="mail" data-accepted="false" aria-label="Interactive Tab autocomplete example" role="region" tabIndex={0}>
       <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-3 py-2.5 sm:px-4">
         <div className="flex items-center gap-1.5" aria-hidden="true">
           <span className="size-2.5 rounded-full bg-foreground/20" />
           <span className="size-2.5 rounded-full bg-foreground/[0.12]" />
           <span className="size-2.5 rounded-full bg-foreground/[0.08]" />
         </div>
-        <p className="text-xs font-semibold text-muted-foreground">Live product example</p>
+        <p className="text-xs font-semibold text-muted-foreground">Interactive example</p>
         <button className="inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-demo-replay>
           <ArrowClockwise aria-hidden="true" />
           Replay
@@ -239,21 +195,6 @@ function AutocompleteDemo() {
   );
 }
 
-function AppLogo({ name, src, href, duplicate = false }: (typeof appLogos)[number] & { duplicate?: boolean }) {
-  return (
-    <a
-      className="group flex items-center gap-3 rounded-[var(--radius-control)] whitespace-nowrap text-sm font-semibold text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-      href={href}
-      target="_blank"
-      rel="noreferrer"
-      tabIndex={duplicate ? -1 : undefined}
-    >
-      <span className="grid size-8 place-items-center rounded-[var(--radius-media)] border border-border bg-white transition-colors group-hover:border-foreground/25"><img className="size-4" src={src} alt="" /></span>
-      {name}
-    </a>
-  );
-}
-
 function MotionToggle({ controls, className }: { controls: string; className?: string }) {
   return (
     <button
@@ -273,19 +214,23 @@ function MotionToggle({ controls, className }: { controls: string; className?: s
 
 function AppMarquee() {
   return (
-    <div id="app-marquee-animation" className="tab-app-marquee border-y border-border py-4" aria-labelledby="app-marquee-title" role="region" data-motion-region data-motion-paused="false">
-      <div className="mb-4 flex items-center justify-between gap-4 px-3">
-        <p id="app-marquee-title" className="font-[var(--font-display)] text-sm font-bold text-foreground">Works in every app</p>
+    <div id="app-marquee-animation" className="tab-app-marquee" aria-labelledby="app-marquee-title" role="region" data-motion-region data-motion-paused="false">
+      <div className="mb-5 flex items-center justify-between gap-4">
+        <p id="app-marquee-title" className="text-sm font-semibold text-muted-foreground">Supported app examples</p>
         <MotionToggle controls="app-marquee-animation" />
       </div>
       <div className="tab-app-marquee-viewport overflow-hidden">
         <div className="tab-app-marquee-track flex w-max items-center">
-          <div className="tab-app-marquee-group flex items-center gap-7 pr-7">
-            {appLogos.map((app) => <AppLogo key={app.name} {...app} />)}
-          </div>
-          <div className="tab-app-marquee-copy flex items-center gap-7 pr-7" aria-hidden="true">
-            {appLogos.map((app) => <AppLogo key={app.name} {...app} duplicate />)}
-          </div>
+          {[false, true].map((duplicate) => (
+            <div className={cn("flex items-center gap-7 pr-7", duplicate ? "tab-app-marquee-copy" : "tab-app-marquee-group")} aria-hidden={duplicate || undefined} key={String(duplicate)}>
+              {appLogos.map((app) => (
+                <div className="flex items-center gap-3 whitespace-nowrap text-sm font-semibold" key={app.name}>
+                  <span className="grid size-9 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src={app.src} alt="" /></span>
+                  {app.name}
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -300,7 +245,11 @@ function WorkflowMap() {
   const paths = [incomingLeft, incomingRight, outgoingLeft, outgoingRight];
 
   return (
-    <div className="tab-workflow" data-tab-workflow data-accepted="false">
+    <div id="workflow-animation" className="tab-workflow overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card" data-tab-workflow data-accepted="false" data-motion-region data-motion-paused="false">
+      <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
+        <div><p className="text-sm font-bold">Suggestion path</p><p className="text-xs text-muted-foreground">From your draft to a deliberate insertion</p></div>
+        <MotionToggle controls="workflow-animation" />
+      </div>
       <div className="tab-workflow-map relative isolate min-h-[19rem] overflow-hidden bg-[var(--tab-surface-sunken)] sm:min-h-[23rem]">
         <svg className="absolute inset-0 size-full text-border" viewBox="0 0 760 340" preserveAspectRatio="none" aria-hidden="true">
           {paths.map((path) => <path className="tab-workflow-line" d={path} fill="none" stroke="currentColor" key={path} />)}
@@ -311,20 +260,17 @@ function WorkflowMap() {
           ))}
         </svg>
 
-        <div className="tab-workflow-node tab-workflow-draft absolute left-1/2 top-[7%] w-[min(76%,23rem)] -translate-x-1/2 rounded-[var(--radius-card)] border border-border bg-card p-3 shadow-[var(--tab-shadow-card)] sm:p-4">
+        <div className="absolute left-1/2 top-[7%] w-[min(76%,23rem)] -translate-x-1/2 rounded-[var(--radius-card)] border border-border bg-card p-3 shadow-[var(--tab-shadow-card)] sm:p-4">
           <p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Your thought</p>
           <p className="mt-1 truncate text-sm font-semibold sm:text-base">Would Tuesday afternoon <span className="tab-workflow-completion text-muted-foreground">work for a quick review?</span></p>
         </div>
 
-        <div className="tab-workflow-node absolute left-[7%] top-[40%] flex w-[28%] max-w-40 items-center gap-2 rounded-[var(--radius-card)] border border-border bg-card p-2.5 shadow-[var(--tab-shadow-card)] sm:gap-3 sm:p-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src="/logos/apple.svg" alt="" /></span>
-          <span className="min-w-0"><span className="block truncate text-sm font-bold">Mail</span><span className="hidden truncate text-xs text-muted-foreground min-[460px]:block">Active app</span></span>
-        </div>
-
-        <div className="tab-workflow-node absolute right-[7%] top-[40%] flex w-[28%] max-w-40 items-center gap-2 rounded-[var(--radius-card)] border border-border bg-card p-2.5 shadow-[var(--tab-shadow-card)] sm:gap-3 sm:p-3">
-          <span className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src="/logos/slack.svg" alt="" /></span>
-          <span className="min-w-0"><span className="block truncate text-sm font-bold">Slack</span><span className="hidden truncate text-xs text-muted-foreground min-[460px]:block">Active app</span></span>
-        </div>
+        {[{ name: "Mail", src: "/logos/apple.svg", side: "left-[7%]" }, { name: "Slack", src: "/logos/slack.svg", side: "right-[7%]" }].map((app) => (
+          <div className={cn("absolute top-[40%] flex w-[28%] max-w-40 items-center gap-2 rounded-[var(--radius-card)] border border-border bg-card p-2.5 shadow-[var(--tab-shadow-card)] sm:gap-3 sm:p-3", app.side)} key={app.name}>
+            <span className="grid size-8 shrink-0 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-4" src={app.src} alt="" /></span>
+            <span className="min-w-0"><span className="block truncate text-sm font-bold">{app.name}</span><span className="hidden truncate text-xs text-muted-foreground min-[460px]:block">Active app</span></span>
+          </div>
+        ))}
 
         <div className="absolute bottom-[10%] left-1/2 w-[min(86%,33rem)] -translate-x-1/2">
           <SuggestionCommand
@@ -343,12 +289,12 @@ function WorkflowMap() {
 
       <ol className="grid border-t border-border md:grid-cols-3">
         {steps.map((step, index) => (
-          <li className="grid min-h-48 content-between gap-8 border-b border-border p-5 last:border-b-0 md:border-b-0 md:border-l md:first:border-l-0 md:p-6" key={step.number}>
+          <li className="grid min-h-44 content-between gap-7 border-b border-border p-5 last:border-b-0 md:border-b-0 md:border-l md:first:border-l-0 md:p-6" key={step.number}>
             <span className="font-[var(--font-code)] text-xs font-semibold text-muted-foreground">{step.number}</span>
             <div>
               <h3 className="text-lg font-bold">{step.title}</h3>
               <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">{step.description}</p>
-              {index === 2 ? <p className="mt-4 font-[var(--font-code)] text-[0.6875rem] font-semibold text-foreground">Try the overlay above</p> : null}
+              {index === 2 ? <p className="mt-4 font-[var(--font-code)] text-[0.6875rem] font-semibold"><Command aria-hidden="true" /> Try the overlay above</p> : null}
             </div>
           </li>
         ))}
@@ -359,39 +305,32 @@ function WorkflowMap() {
 }
 
 function MemoryShowcase() {
-  const featureDetails = [
-    { icon: Brain, title: "Relevant details only", description: "Useful facts can shape a suggestion when they match what you are writing." },
-    { icon: Eye, title: "Visible in your account", description: "Every saved memory has a readable place in your dashboard." },
-    { icon: LockKey, title: "Delete it anytime", description: "You decide what stays available for future suggestions." },
-  ] as const;
-
   return (
-    <section id="personal-memory" className="scroll-mt-24 border-t border-border py-20 sm:py-24">
+    <section id="personal-memory" className="scroll-mt-24 py-20 sm:py-28">
       <div className="max-w-3xl">
         <PageKicker>Personal Memory</PageKicker>
-        <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Suggestions that remember what matters.</h2>
-        <p className="mt-6 max-w-[38rem] text-pretty text-lg leading-relaxed text-muted-foreground">Tab can bring useful details from your own writing into the next phrase, without turning Personal Memory into a hidden profile.</p>
-        <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8" })} href="/signup">Start free <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
+        <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Useful details, ready for the next phrase.</h2>
+        <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">When a saved detail matches what you are writing, Tab can use it to make the suggestion more relevant. Every memory remains visible and editable.</p>
       </div>
 
       <div id="memory-showcase-animation" className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false" data-motion-region data-motion-paused="false">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
-          <div><p className="text-sm font-bold">Live relevance demo</p><p className="text-xs text-muted-foreground">A matching memory shapes the next phrase</p></div>
+          <div><p className="text-sm font-bold">Memory in context</p><p className="text-xs text-muted-foreground">A matching detail shapes the suggestion</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="memory-showcase-animation" />
-            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
+            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
               <ArrowClockwise aria-hidden="true" /> Replay
             </button>
           </div>
         </div>
 
-        <div className="tab-showcase-canvas tab-memory-stage grid items-center gap-5 p-5 md:grid-cols-[minmax(0,0.9fr)_4rem_minmax(0,1.1fr)] md:p-10 lg:gap-8 lg:p-14">
+        <div className="tab-showcase-canvas grid items-center gap-5 p-5 md:grid-cols-[minmax(0,0.9fr)_4rem_minmax(0,1.1fr)] md:p-10 lg:gap-8 lg:p-14">
           <div className="rounded-[var(--radius-card)] border border-border bg-background shadow-[var(--tab-shadow-card)]">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div><p className="text-sm font-bold">Personal Memory</p><p className="text-xs text-muted-foreground">Saved memories</p></div>
+              <div><p className="text-sm font-bold">Personal Memory</p><p className="text-xs text-muted-foreground">Saved details</p></div>
               <span className="rounded-full border border-border bg-secondary px-2 py-1 font-[var(--font-code)] text-[0.625rem] font-semibold text-muted-foreground">3 active</span>
             </div>
-            <div className="tab-memory-list grid gap-1 p-2">
+            <div className="grid gap-1 p-2">
               {memoryExamples.map((example, index) => (
                 <div className="tab-memory-row flex items-start justify-between gap-3 rounded-[var(--radius-control)] border border-transparent px-3 py-3" key={example.memory}>
                   <div className="flex gap-2.5"><span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--success)]" /><p className="text-sm leading-relaxed">{example.memory}</p></div>
@@ -401,14 +340,14 @@ function MemoryShowcase() {
             </div>
           </div>
 
-          <div className="tab-memory-transfer relative mx-auto h-12 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-memory-transfer-dot absolute size-2 rounded-full bg-foreground" /></div>
+          <div className="relative mx-auto h-12 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-memory-transfer-dot absolute size-2 rounded-full bg-foreground" /></div>
 
           <div className="overflow-hidden rounded-[var(--radius-card)] border border-border bg-background shadow-[var(--tab-shadow-card)]">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div><p className="text-sm font-bold">Current draft</p><p className="text-xs text-muted-foreground">Mail</p></div>
               <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"><span className="size-1.5 rounded-full bg-[var(--success)]" /> Memory on</span>
             </div>
-            <div className="tab-memory-output-stack relative min-h-52 p-4 sm:min-h-48 sm:p-5" aria-hidden="true">
+            <div className="relative min-h-52 p-4 sm:min-h-48 sm:p-5" aria-hidden="true">
               {memoryExamples.map((example) => (
                 <div className="tab-memory-output absolute inset-4 grid content-between gap-6 sm:inset-5" key={example.memory}>
                   <div>
@@ -416,7 +355,7 @@ function MemoryShowcase() {
                     <p className="mt-4 text-lg leading-8">{example.lead} <span className="text-muted-foreground">{example.suggestion}</span></p>
                   </div>
                   <div className="flex items-center justify-between gap-3 rounded-[var(--radius-control)] border border-border bg-[var(--tab-success-tint)] px-3 py-2 text-xs">
-                    <span className="truncate font-semibold text-foreground">Used: {example.memory}</span>
+                    <span className="truncate font-semibold">Used: {example.memory}</span>
                     <span className="shrink-0 font-[var(--font-code)] text-muted-foreground">Relevant</span>
                   </div>
                 </div>
@@ -424,51 +363,32 @@ function MemoryShowcase() {
             </div>
           </div>
         </div>
-
-        <div className="grid border-t border-border md:grid-cols-3">
-          {featureDetails.map((detail, index) => {
-            const Icon = detail.icon;
-            return (
-              <article className="grid min-h-48 content-between gap-8 border-b border-border p-5 last:border-b-0 md:border-b-0 md:border-l md:first:border-l-0 md:p-6" key={detail.title}>
-                <div className="flex items-center justify-between"><Icon aria-hidden="true" /><span className="font-[var(--font-code)] text-xs text-muted-foreground">0{index + 1}</span></div>
-                <div><h3 className="text-lg font-bold">{detail.title}</h3><p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">{detail.description}</p></div>
-              </article>
-            );
-          })}
-        </div>
       </div>
     </section>
   );
 }
 
 function PrivacyPipeline() {
-  const featureDetails = [
-    { icon: Keyboard, title: "Automatic stays local", description: "Routine Automatic Suggestions run on your Mac without sending Typing Context to Tab." },
-    { icon: ShieldCheck, title: "Explicit cloud boundary", description: "Deep Complete sends bounded, redacted context only after you double-tap Option." },
-    { icon: Eye, title: "No raw typing log", description: "Suggestion telemetry records product events and metadata, not your draft text." },
-  ] as const;
-
   return (
-    <section id="privacy-by-design" className="scroll-mt-24 border-y border-border py-20 sm:py-24">
+    <section id="privacy" className="scroll-mt-24 py-20 sm:py-28" aria-labelledby="trust-heading">
       <div className="max-w-3xl">
-        <PageKicker>Privacy by construction</PageKicker>
-        <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Useful context in. Raw typing logs out.</h2>
-        <p className="mt-6 max-w-[40rem] text-pretty text-lg leading-relaxed text-muted-foreground">Automatic Suggestions never need a cloud request. When you explicitly invoke Deep Complete, obvious secrets are removed and only bounded, redacted context moves forward.</p>
-        <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8" })} href="/privacy">Read the privacy design <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
+        <PageKicker>Privacy and control</PageKicker>
+        <h2 id="trust-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Local unless you ask for the cloud.</h2>
+        <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">Automatic Suggestions stay on your Mac. Deep Complete sends bounded, redacted context only after you double-tap Option.</p>
       </div>
 
       <div id="privacy-showcase-animation" className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false" data-motion-region data-motion-paused="false">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
-          <div><p className="text-sm font-bold">Deep Complete boundary</p><p className="text-xs text-muted-foreground">What moves only after your explicit action</p></div>
+          <div><p className="text-sm font-bold">Deep Complete boundary</p><p className="text-xs text-muted-foreground">What moves after your explicit action</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="privacy-showcase-animation" />
-            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
+            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
               <ArrowClockwise aria-hidden="true" /> Replay
             </button>
           </div>
         </div>
 
-        <div className="tab-showcase-canvas tab-privacy-stage grid items-center gap-4 p-5 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,0.9fr)_3rem_minmax(0,1fr)] md:p-8 lg:gap-6 lg:p-12">
+        <div className="tab-showcase-canvas grid items-center gap-4 p-5 md:grid-cols-[minmax(0,1fr)_3rem_minmax(0,0.9fr)_3rem_minmax(0,1fr)] md:p-8 lg:gap-6 lg:p-12">
           <div className="rounded-[var(--radius-card)] border border-border bg-background p-4 shadow-[var(--tab-shadow-card)] sm:p-5">
             <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Recent typing context</p><span className="font-[var(--font-code)] text-[0.625rem] text-muted-foreground">On this Mac</span></div>
             <div className="mt-5 rounded-[var(--radius-control)] border border-border bg-muted/35 p-3 font-[var(--font-code)] text-xs leading-6">
@@ -478,18 +398,18 @@ function PrivacyPipeline() {
             <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Navigation, shortcuts, and passive app content are not Typing Context.</p>
           </div>
 
-          <div className="tab-privacy-transfer relative mx-auto h-10 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-privacy-transfer-dot absolute size-2 rounded-full bg-foreground" /></div>
+          <div className="relative mx-auto h-10 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-privacy-transfer-dot absolute size-2 rounded-full bg-foreground" /></div>
 
           <div className="rounded-[var(--radius-card)] border border-border bg-background p-4 shadow-[var(--tab-shadow-card)] sm:p-5">
             <p className="text-sm font-bold">Local guardrails</p>
-            <div className="tab-privacy-checks mt-4 grid gap-2">
+            <div className="mt-4 grid gap-2">
               {["Secure input suppressed", "Secrets redacted locally", "Context bounded"].map((check) => (
                 <div className="tab-privacy-check flex items-center gap-2 rounded-[var(--radius-control)] border border-border px-3 py-2.5 text-xs font-semibold" key={check}><CheckCircle aria-hidden="true" /> {check}</div>
               ))}
             </div>
           </div>
 
-          <div className="tab-privacy-transfer relative mx-auto h-10 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-privacy-transfer-dot tab-privacy-transfer-dot-delayed absolute size-2 rounded-full bg-foreground" /></div>
+          <div className="relative mx-auto h-10 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-privacy-transfer-dot tab-privacy-transfer-dot-delayed absolute size-2 rounded-full bg-foreground" /></div>
 
           <div className="tab-privacy-request relative overflow-hidden rounded-[var(--radius-card)] border border-border bg-background p-4 shadow-[var(--tab-shadow-card)] sm:p-5">
             <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Deep Complete request</p><span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success)]"><span className="size-1.5 rounded-full bg-[var(--success)]" /> Explicit</span></div>
@@ -501,50 +421,54 @@ function PrivacyPipeline() {
             </dl>
           </div>
         </div>
+      </div>
 
-        <div className="grid border-t border-border md:grid-cols-3">
-          {featureDetails.map((detail, index) => {
-            const Icon = detail.icon;
-            return (
-              <article className="grid min-h-48 content-between gap-8 border-b border-border p-5 last:border-b-0 md:border-b-0 md:border-l md:first:border-l-0 md:p-6" key={detail.title}>
-                <div className="flex items-center justify-between"><Icon aria-hidden="true" /><span className="font-[var(--font-code)] text-xs text-muted-foreground">0{index + 1}</span></div>
-                <div><h3 className="text-lg font-bold">{detail.title}</h3><p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">{detail.description}</p></div>
-              </article>
-            );
-          })}
-        </div>
+      <div className="mt-12 grid gap-10 md:grid-cols-3 md:gap-12">
+        {trustPoints.map((point) => {
+          const Icon = point.icon;
+          return (
+            <article key={point.title}>
+              <Icon className="size-5" aria-hidden="true" />
+              <h3 className="mt-5 text-lg font-bold">{point.title}</h3>
+              <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">{point.description}</p>
+            </article>
+          );
+        })}
+      </div>
+      <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold">
+        <a className="inline-flex items-center gap-1.5 underline decoration-border underline-offset-4" href="/privacy">Read the privacy policy <ArrowRight aria-hidden="true" /></a>
+        <a className="inline-flex items-center gap-1.5 underline decoration-border underline-offset-4" href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">Inspect the source <ArrowUpRight aria-hidden="true" /></a>
       </div>
     </section>
   );
 }
 
 export function HomePage() {
+  const free = planCapabilities.free;
+  const pro = planCapabilities.pro;
+
   return (
     <>
-      <section className="grid gap-12 py-8 lg:grid-cols-[minmax(0,0.88fr)_minmax(31rem,1.12fr)] lg:items-center lg:gap-16 lg:py-20">
+      <section className="grid gap-12 py-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(31rem,1.12fr)] lg:items-center lg:gap-16 lg:py-20">
         <div className="marketing-intro grid content-center gap-6">
-          <a className="marketing-announcement flex w-fit items-center gap-2 rounded-full border border-border bg-card py-1.5 pl-2 pr-3 text-xs font-semibold text-foreground no-underline shadow-[var(--tab-shadow-control)] transition-[background-color,transform] duration-150 ease-[var(--tab-ease-out)] hover:bg-secondary active:scale-[0.97]" href="#pricing">
-            <span className="rounded-full bg-foreground px-2 py-0.5 text-[0.625rem] uppercase text-background">Free</span>
-            30 days of Pro, no card
-            <ArrowRight aria-hidden="true" />
-          </a>
-          <PageKicker>Native Autocomplete for your Mac</PageKicker>
-          <h1 className="max-w-[10ch] text-balance font-[var(--font-display)] text-[clamp(3.25rem,7vw,6.4rem)] font-bold leading-[0.88] tracking-[-0.035em]">Keep the thought. Skip the typing.</h1>
-          <p className="max-w-[36rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Copilot handles the code. Tab handles everything around it, with private Local Suggestions as you type and Deep Complete when you explicitly ask.</p>
+          <PageKicker>Autocomplete across your Mac</PageKicker>
+          <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(3.25rem,7vw,6.4rem)] font-bold leading-[0.88] tracking-[-0.035em]">Finish the sentence without leaving the app.</h1>
+          <p className="max-w-[38rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next words in supported Mac text fields. Press Option+Tab to insert them, or keep typing to ignore them.</p>
+          <p className="max-w-[38rem] text-pretty text-sm leading-relaxed text-muted-foreground">Automatic Suggestions run on your Mac. Double-tap Option when you want Deep Complete.</p>
           <div className="flex flex-col gap-3 min-[420px]:flex-row">
             <a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg">
               <DownloadSimple data-icon="inline-start" aria-hidden="true" />
-              Download Tab free
+              Download for Mac
             </a>
-            <a className={buttonVariants({ variant: "secondary", size: "lg" })} href="#demo">
-              Try the live demo
+            <a className={buttonVariants({ variant: "secondary", size: "lg" })} href="#how-it-works">
+              See how it works
               <ArrowRight data-icon="inline-end" aria-hidden="true" />
             </a>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> macOS 14+</span>
-            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> {formatCount(planCapabilities.free.localAcceptedWordsPerDay)} Accepted Words free each day</span>
-            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> You approve every insertion</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> 30-day Pro trial</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> No card required</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> You choose every insertion</span>
           </div>
         </div>
         <div id="demo" className="scroll-mt-24">
@@ -552,181 +476,81 @@ export function HomePage() {
         </div>
       </section>
 
-      <AppMarquee />
-
-      <section className="border-b border-border py-16 sm:py-20" aria-labelledby="why-tab-quote">
-        <figure className="marketing-quote relative overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card px-6 py-10 sm:px-10 sm:py-14 lg:grid lg:grid-cols-[minmax(12rem,0.45fr)_minmax(0,1.55fr)] lg:items-start lg:gap-12">
-          <figcaption className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-[var(--radius-media)] border border-border bg-foreground font-[var(--font-code)] text-lg font-bold text-background" aria-hidden="true">T</span>
-            <span><span className="block font-[var(--font-code)] text-[0.6875rem] font-semibold uppercase text-muted-foreground">Why Tab exists</span><span className="mt-0.5 block text-sm font-semibold">A product principle</span></span>
-          </figcaption>
-          <blockquote id="why-tab-quote" className="mt-8 text-balance font-[var(--font-display)] text-[clamp(1.75rem,4vw,3.5rem)] font-semibold leading-[1.08] tracking-[-0.025em] lg:mt-0">
-            &ldquo;Writing with AI should not mean leaving the sentence to brief a chatbot.&rdquo;
-          </blockquote>
-        </figure>
+      <section id="how-it-works" className="scroll-mt-24 py-20 sm:py-28">
+        <div className="max-w-3xl">
+          <PageKicker>How it works</PageKicker>
+          <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Three steps. No new writing workflow.</h2>
+        </div>
+        <div className="mt-12"><WorkflowMap /></div>
       </section>
 
-      <section id="features" className="scroll-mt-24 py-20 sm:py-28">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,0.78fr)_minmax(0,1.22fr)] lg:gap-20">
-          <div>
-            <PageKicker>Less friction, same voice</PageKicker>
-            <h2 className="mt-4 max-w-[12ch] text-balance font-[var(--font-display)] text-[clamp(2.25rem,5vw,4.25rem)] font-bold leading-[0.98] tracking-[-0.03em]">The thought is already there. Typing it should not be the slow part.</h2>
-          </div>
-          <div className="grid border-t border-border">
-            {benefits.map((benefit) => {
-              const Icon = benefit.icon;
-              return (
-                <article className="grid gap-4 border-b border-border py-6 sm:grid-cols-[2.5rem_1fr] sm:gap-5" key={benefit.title}>
-                  <Icon className="mt-0.5" aria-hidden="true" />
-                  <div>
-                    <h3 className="text-xl font-bold">{benefit.title}</h3>
-                    <p className="mt-2 max-w-[36rem] text-pretty leading-relaxed text-muted-foreground">{benefit.description}</p>
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+      <section id="compatibility" className="scroll-mt-24 rounded-[var(--radius-surface)] bg-muted/35 px-5 py-10 sm:px-8 sm:py-12 lg:px-12">
+        <div className="max-w-3xl">
+          <PageKicker>Compatibility</PageKicker>
+          <h2 className="mt-4 text-balance font-[var(--font-display)] text-3xl font-bold tracking-[-0.02em] sm:text-4xl">Built for standard Mac text fields.</h2>
+          <p className="mt-4 max-w-[40rem] text-pretty leading-relaxed text-muted-foreground">Use Tab in supported writing surfaces such as Mail, Slack, Notes, and terminals. Some custom editors may behave differently.</p>
         </div>
-
+        <div className="mt-10"><AppMarquee /></div>
       </section>
 
       <MemoryShowcase />
+      <PrivacyPipeline />
 
-      <section id="how-it-works" className="scroll-mt-24 border-y border-border py-20 sm:py-24">
-        <div className="mx-auto max-w-3xl text-center">
-          <PageKicker>One shortcut, every app</PageKicker>
-          <h2 className="mt-4 text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">The sentence stays in front of you.</h2>
-          <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">Tab follows the active application, previews a useful continuation, and waits. Your app keeps focus through the entire loop.</p>
+      <section id="pricing" className="scroll-mt-24 rounded-[var(--radius-surface)] bg-muted/35 px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
+        <div className="max-w-3xl">
+          <PageKicker>30 days of Pro, no card</PageKicker>
+          <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Try Pro. Keep Free if you do not upgrade.</h2>
+          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose Pro or continue on Free.</p>
         </div>
-        <div className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]">
-          <WorkflowMap />
+
+        <div className="mt-12 grid items-stretch gap-4 md:grid-cols-2" data-pricing-grid>
+          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="free">
+            <div className="flex min-h-7 items-center justify-between gap-3">
+              <h3 className="text-xl font-bold">Free</h3>
+              <span className="text-xs font-semibold text-muted-foreground">After your trial</span>
+            </div>
+            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">$0</p>
+            <p className="mt-2 min-h-10 text-sm leading-relaxed text-muted-foreground">No subscription required.</p>
+            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-muted-foreground">
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {formatCount(free.localAcceptedWordsPerDay)} Accepted Words each day</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {free.deepCompletesPerMonth} Deep Completes each month</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {free.personalDeviceLimit} Mac</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Manage existing Personal Memory</li>
+            </ul>
+            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Start 30-day Pro trial</a>
+          </article>
+
+          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8" data-pricing-plan="pro">
+            <div className="flex min-h-7 items-center justify-between gap-3">
+              <h3 className="text-xl font-bold">Pro</h3>
+              <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/75">Best for daily use</span>
+            </div>
+            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(pro.monthlyPriceUsd)}</p>
+            <p className="mt-2 min-h-10 text-sm leading-relaxed text-background/65">or {formatUsd(pro.annualPriceUsd)}/year</p>
+            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-background/80">
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Unlimited Accepted Words</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> {pro.deepCompletesPerMonth} Deep Completes each month</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Up to {pro.personalDeviceLimit} Macs</li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Continuous Memory Extraction</li>
+            </ul>
+            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Start 30-day Pro trial</a>
+          </article>
+        </div>
+        <div className="mt-8 flex flex-col justify-between gap-4 text-sm leading-relaxed text-muted-foreground sm:flex-row sm:items-center">
+          <p>Free counts only words you insert. There are no automatic overage charges.</p>
+          <a className="shrink-0 font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare full plan details</a>
         </div>
       </section>
 
       <section className="py-20 sm:py-28">
-        <div className="grid gap-8 sm:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] sm:items-end">
-          <div>
-            <PageKicker>Small examples, every day</PageKicker>
-            <h2 className="mt-4 text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.015em]">Useful words, right where they belong.</h2>
-          </div>
-          <p className="max-w-[36rem] text-pretty text-lg leading-relaxed text-muted-foreground">Tab is not another destination. It shortens the routine parts of writing while leaving the idea, judgment, and final wording with you.</p>
-        </div>
-        <div className="mt-12 grid border-y border-border lg:grid-cols-3">
-          {useCases.map((example) => (
-            <article className="group border-b border-border py-7 last:border-b-0 lg:border-b-0 lg:border-l lg:px-7 lg:first:border-l-0 lg:first:pl-0 lg:last:pr-0" key={example.context}>
-              <div className="flex items-center justify-between gap-3 text-xs font-semibold text-muted-foreground"><span>{example.context}</span><span>{example.app}</span></div>
-              <p className="mt-12 text-lg leading-8">{example.lead} <span className="text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] group-hover:text-foreground">{example.suggestion}</span></p>
-              <p className="mt-6 inline-flex items-center gap-2 font-[var(--font-code)] text-[0.6875rem] font-semibold text-muted-foreground"><Command aria-hidden="true" /> Option + Tab to accept</p>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="border-y border-border py-20 sm:py-24" aria-labelledby="promises-heading">
-        <div className="grid gap-10 lg:grid-cols-[minmax(0,0.62fr)_minmax(0,1.38fr)] lg:gap-16">
-          <div>
-            <PageKicker>Promises you can test</PageKicker>
-            <h2 id="promises-heading" className="mt-4 max-w-[12ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.015em]">Control is part of the product.</h2>
-            <p className="mt-5 max-w-md text-pretty leading-relaxed text-muted-foreground">Tab is early, so the proof is the product: a live demo, public source, visible permissions, and a free plan you can test on your own writing.</p>
-          </div>
-          <div className="grid gap-px overflow-hidden rounded-[var(--radius-card)] border border-border bg-border sm:grid-cols-3">
-            {productPromises.map((promise, index) => (
-              <figure className="grid min-h-64 content-between gap-8 bg-card p-6" key={promise.quote}>
-                <span className="font-[var(--font-code)] text-xs font-semibold text-muted-foreground">0{index + 1}</span>
-                <div>
-                  <blockquote className="text-balance font-[var(--font-display)] text-xl font-semibold leading-snug">&ldquo;{promise.quote}&rdquo;</blockquote>
-                  <figcaption className="mt-4 text-pretty text-sm leading-relaxed text-muted-foreground">{promise.description}</figcaption>
-                </div>
-              </figure>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="open-source" className="scroll-mt-24 py-20 sm:py-24">
-        <div className="grid gap-12 lg:grid-cols-[minmax(0,0.85fr)_minmax(27rem,1.15fr)] lg:items-center lg:gap-20">
-          <div>
-            <PageKicker>Open source by default</PageKicker>
-            <h2 className="mt-4 max-w-[12ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.5rem)] font-bold leading-[0.98] tracking-[-0.03em]">Trust the product. Inspect the work.</h2>
-            <p className="mt-6 max-w-[36rem] text-pretty text-lg leading-relaxed text-muted-foreground">Tab is developed in public. Read the implementation, follow architectural decisions, report a bug, or see what is being built next.</p>
-            <div className="mt-8 flex flex-wrap gap-3">
-              <a className={buttonVariants({ size: "lg" })} href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">
-                <span className="grid size-5 place-items-center rounded-sm bg-white" data-icon="inline-start" aria-hidden="true"><img className="size-3.5" src="/logos/github.svg" alt="" /></span>
-                Explore the source
-                <ArrowUpRight data-icon="inline-end" aria-hidden="true" />
-              </a>
-              <a className={buttonVariants({ variant: "secondary", size: "lg" })} href="https://github.com/crafter-station/tab/issues" target="_blank" rel="noreferrer">View issues</a>
-            </div>
-          </div>
-          <a className="group block overflow-hidden rounded-[var(--radius-card)] border border-border bg-card no-underline shadow-[var(--tab-shadow-card)] transition-transform duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99]" href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer" aria-label="Open the crafter-station/tab GitHub repository">
-            <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
-              <div className="flex items-center gap-3">
-                <span className="grid size-9 place-items-center rounded-[var(--radius-media)] border border-border bg-white"><img className="size-5" src="/logos/github.svg" alt="" /></span>
-                <div><p className="text-sm font-bold">crafter-station / tab</p><p className="text-xs text-muted-foreground">Public repository</p></div>
-              </div>
-              <ArrowUpRight className="text-muted-foreground" aria-hidden="true" />
-            </div>
-            <div className="grid gap-1 p-4 font-[var(--font-code)] text-xs sm:p-5">
-              {[
-                { name: "apps/desktop", note: "native autocomplete runtime" },
-                { name: "apps/web", note: "account and marketing surface" },
-                { name: "apps/api", note: "suggestions, memory, and billing" },
-                { name: "docs/adr", note: "architectural decisions" },
-                { name: "CONTEXT.md", note: "shared product language" },
-              ].map((entry) => (
-                <div className="grid grid-cols-[minmax(7rem,0.65fr)_minmax(0,1fr)] gap-4 rounded-[var(--radius-control)] px-3 py-2.5 transition-colors duration-150 group-hover:bg-muted/60" key={entry.name}>
-                  <span className="font-semibold text-foreground">{entry.name}</span>
-                  <span className="truncate text-muted-foreground">{entry.note}</span>
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center justify-between border-t border-border px-5 py-3 text-xs font-semibold text-muted-foreground"><span>Native macOS autocomplete</span><span>View on GitHub</span></div>
-          </a>
-        </div>
-      </section>
-
-      <PrivacyPipeline />
-
-      <section id="pricing" className="scroll-mt-24 py-20 sm:py-28">
-        <div className="text-center">
-          <PageKicker>30 days of Pro, then Free</PageKicker>
-          <h2 className="mx-auto mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Start free. Upgrade when Tab becomes a habit.</h2>
-          <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">Free covers lighter writing. Pro removes the Local Suggestion limit and expands Deep Complete, Personal Memory learning, model choice, and connected Macs.</p>
-        </div>
-        <div className="mx-auto mt-12 grid max-w-4xl gap-4 md:grid-cols-2">
-          {(["free", "pro"] as const).map((planId) => {
-            const plan = planCapabilities[planId];
-            const featured = planId === "pro";
-            return (
-              <article className={`flex flex-col rounded-[var(--radius-card)] border p-6 sm:p-8 ${featured ? "border-foreground bg-foreground text-background" : "border-border bg-card"}`} key={planId}>
-                <div className="flex items-center justify-between gap-3">
-                  <h3 className="text-xl font-bold">{plan.name}</h3>
-                  {featured ? <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/70">Daily writing</span> : null}
-                </div>
-                <p className={`mt-8 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] ${featured ? "text-background" : "text-foreground"}`}>{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
-                <p className={`mt-3 text-sm ${featured ? "text-background/65" : "text-muted-foreground"}`}>{plan.localAcceptedWordsPerDay === null ? "Unlimited Accepted Words from Local Suggestions" : `${formatCount(plan.localAcceptedWordsPerDay)} Accepted Words from Local Suggestions each day`}</p>
-                <ul className={`mt-8 grid flex-1 gap-3 text-sm ${featured ? "text-background/75" : "text-muted-foreground"}`}>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.deepCompletesPerMonth} Deep Completes each month</li>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.personalDeviceLimit} personal {plan.personalDeviceLimit === 1 ? "Mac" : "Macs"}</li>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.continuousMemoryExtraction ? "Continuous Personal Memory learning" : "Manage existing Personal Memory"}</li>
-                </ul>
-                <a className={buttonVariants({ variant: featured ? "secondary" : "default", size: "lg", className: "mt-8 w-full" })} href={planId === "free" ? "/signup" : "/billing/checkout?plan=pro&interval=monthly"}>{planId === "free" ? "Start 30-day Pro trial" : "Choose Pro monthly"}</a>
-              </article>
-            );
-          })}
-        </div>
-        <p className="mt-6 text-center text-sm text-muted-foreground">No card is required for the trial. Pro is {formatMonthlyPrice(planCapabilities.pro.monthlyPriceUsd)} or {formatUsd(planCapabilities.pro.annualPriceUsd)}/year. <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare every feature</a>.</p>
-      </section>
-
-      <section className="border-t border-border py-20 sm:py-24">
         <div className="grid gap-10 lg:grid-cols-[minmax(0,0.65fr)_minmax(0,1.35fr)] lg:gap-20">
           <div>
-            <PageKicker>Questions, answered</PageKicker>
+            <PageKicker>Questions</PageKicker>
             <h2 className="mt-4 text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.015em]">Know before you install.</h2>
           </div>
-          <div className="border-t border-border">
+          <div>
             {faqs.map((faq) => (
-              <details className="marketing-detail group border-b border-border" key={faq.question}>
+              <details className="marketing-detail group border-b border-border first:border-t" key={faq.question}>
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-5 py-5 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
                   {faq.question}
                   <Plus className="marketing-detail-icon shrink-0 transition-transform duration-150 ease-[var(--tab-ease-out)]" aria-hidden="true" />
@@ -740,19 +564,16 @@ export function HomePage() {
         </div>
       </section>
 
-      <section className="border-t border-border py-16 sm:py-24">
+      <section className="pb-16 pt-4 sm:pb-24 sm:pt-8">
         <div className="grid gap-8 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
           <div>
-            <p className="font-[var(--font-code)] text-xs font-semibold uppercase text-muted-foreground">Your next sentence can move faster</p>
-            <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.92] tracking-[-0.035em]">Stay with the idea, not the keys.</h2>
+            <p className="font-[var(--font-code)] text-xs font-semibold uppercase text-muted-foreground">Ready to try it?</p>
+            <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.92] tracking-[-0.035em]">Try Tab in your next sentence.</h2>
           </div>
-          <div className="sm:text-right">
-            <a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" /> Download Tab free</a>
-            <p className="mt-3 text-sm text-muted-foreground">macOS 14 or newer</p>
-          </div>
+          <a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" /> Download for Mac</a>
         </div>
       </section>
-      <script src="/marketing-demo.js?v=motion-controls" defer />
+      <script src="/marketing-demo.js?v=restored-motion" defer />
     </>
   );
 }

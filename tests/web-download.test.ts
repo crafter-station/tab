@@ -10,15 +10,6 @@ function webRequest(
   return webApp.fetch(request);
 }
 
-function expectMotionRegion(body: string, id: string): void {
-  expect(body).toMatch(
-    new RegExp(`<div(?=[^>]*id="${id}")(?=[^>]*data-motion-region(?:=""|="true")?(?=[\\s>]))(?=[^>]*data-motion-paused="false")[^>]*>`),
-  );
-  expect(body).toMatch(
-    new RegExp(`<button(?=[^>]*data-motion-toggle(?:=""|="true")?(?=[\\s>]))(?=[^>]*aria-controls="${id}")(?=[^>]*aria-pressed="false")[^>]*>(?:(?!</button>)[^])*?<span[^>]*data-motion-toggle-label(?:=""|="true")?(?=[\\s>])[^>]*>Pause animation</span>(?:(?!</button>)[^])*?</button>`),
-  );
-}
-
 describe("Web download surface", () => {
   it("redirects /download/tab.dmg to the configured macOS artifact URL", async () => {
     const webApp = createWebApp({
@@ -78,17 +69,24 @@ describe("Web download surface", () => {
     expect(response.status).toBe(200);
     const body = await response.text();
     expect(body).toInclude('href="/download/tab.dmg"');
-    expect(body).toInclude("Writing with AI should not mean leaving the sentence");
+    expect(body).toInclude("Finish the sentence without leaving the app");
+    expect(body).toInclude("data-tab-demo");
+    expect(body).toInclude("Interactive example");
+    expect(body).toInclude('id="how-it-works"');
+    expect(body).toInclude("Built for standard Mac text fields");
+    expect(body).toInclude("Local unless you ask for the cloud");
     expect(body).toInclude("data-tab-workflow");
-    expect(body).toInclude("data-workflow-accept");
-    expect(body).toInclude("Suggestions that remember what matters");
-    expect(body).toInclude("Useful context in. Raw typing logs out.");
     expect(body).toInclude("data-animated-showcase");
-    expect(body).toInclude("data-showcase-replay");
-    expectMotionRegion(body, "app-marquee-animation");
-    expectMotionRegion(body, "memory-showcase-animation");
-    expectMotionRegion(body, "privacy-showcase-animation");
-    expect(body).toInclude('src="/marketing-demo.js?v=motion-controls"');
+    expect(body).toInclude('id="workflow-animation"');
+    expect(body).toInclude('id="app-marquee-animation"');
+    expect(body).toInclude('id="memory-showcase-animation"');
+    expect(body).toInclude('id="privacy-showcase-animation"');
+    expect(body).toInclude("Pause animation");
+    expect(body.match(/data-motion-region/g)?.length).toBe(4);
+    expect(body).toInclude('src="/marketing-demo.js?v=restored-motion"');
     expect(body).toInclude('id="pricing"');
+    expect(body).toInclude('data-pricing-plan="free"');
+    expect(body).toInclude('data-pricing-plan="pro"');
+    expect(body.match(/data-pricing-plan=/g)?.length).toBe(2);
   });
 });

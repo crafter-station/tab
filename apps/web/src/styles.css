@@ -75,12 +75,8 @@
 }
 
 .tab-app-marquee-track {
-  animation: tab-app-marquee 44s linear infinite;
-}
-
-.marketing-quote {
-  background-image: radial-gradient(color-mix(in srgb, var(--foreground) 12%, transparent) 0.75px, transparent 0.75px);
-  background-size: 0.75rem 0.75rem;
+  animation: tab-app-marquee 48s linear infinite;
+  will-change: transform;
 }
 
 .tab-workflow-map {
@@ -112,10 +108,10 @@
 }
 
 .tab-workflow[data-accepted="true"] .tab-workflow-command {
-  animation: none;
-  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
-  background: var(--success);
   color: var(--success-foreground);
+  background: var(--success);
+  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
+  animation: none;
 }
 
 .tab-workflow[data-accepted="true"] .tab-workflow-ready-label {
@@ -196,9 +192,8 @@
 
 .tab-privacy-request::after {
   position: absolute;
+  inset-inline: 0;
   top: 0;
-  right: 0;
-  left: 0;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--success), transparent);
   content: "";
@@ -209,6 +204,7 @@
 }
 
 [data-motion-region][data-motion-paused="true"] .tab-app-marquee-track,
+[data-motion-region][data-motion-paused="true"] .tab-workflow-command,
 [data-motion-region][data-motion-paused="true"] .tab-memory-row,
 [data-motion-region][data-motion-paused="true"] .tab-memory-output,
 [data-motion-region][data-motion-paused="true"] .tab-memory-transfer-dot,
@@ -265,9 +261,9 @@
 .tab-demo[data-active="mail"] [data-demo-target="mail"],
 .tab-demo[data-active="slack"] [data-demo-target="slack"],
 .tab-demo[data-active="notes"] [data-demo-target="notes"] {
-  border-color: var(--foreground);
-  background: var(--foreground);
   color: var(--background);
+  background: var(--foreground);
+  border-color: var(--foreground);
 }
 
 .tab-demo-suggestion {
@@ -282,23 +278,23 @@
 
 .tab-demo[data-restarting="true"] .tab-demo-suggestion,
 .tab-demo[data-restarting="true"] .tab-demo-overlay {
-  animation: none;
   opacity: 0;
+  animation: none;
 }
 
 .tab-demo[data-accepted="true"] .tab-demo-suggestion {
-  animation: none;
-  opacity: 1;
   color: var(--foreground);
+  opacity: 1;
+  animation: none;
 }
 
 .tab-demo[data-accepted="true"] .tab-demo-overlay {
-  animation: none;
+  color: var(--success-foreground);
+  background: var(--success);
+  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
   opacity: 1;
   transform: none;
-  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
-  background: var(--success);
-  color: var(--success-foreground);
+  animation: none;
 }
 
 .tab-demo[data-accepted="true"] .tab-demo-ready-label {
@@ -471,6 +467,7 @@
   from {
     opacity: 0;
   }
+
   to {
     opacity: 1;
   }
@@ -501,14 +498,7 @@
   }
 
   .tab-app-marquee-copy,
-  .tab-workflow-signal {
-    display: none;
-  }
-
-  .tab-workflow-command {
-    animation: none;
-  }
-
+  .tab-workflow-signal,
   .tab-showcase-replay,
   .tab-memory-transfer-dot,
   .tab-privacy-transfer-dot,
@@ -532,5 +522,15 @@
     display: grid;
     opacity: 1;
     transform: none;
+  }
+
+  .marketing-intro > *,
+  .tab-demo[data-active] [data-demo-scene],
+  .tab-demo-suggestion,
+  .tab-demo-overlay,
+  .tab-workflow-command {
+    opacity: 1;
+    transform: none;
+    animation: none;
   }
 }

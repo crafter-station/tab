@@ -45,6 +45,11 @@
 
   function setMotionPaused(region, paused) {
     region.dataset.motionPaused = String(paused);
+    region.querySelectorAll("svg").forEach((svg) => {
+      if (typeof svg.pauseAnimations !== "function") return;
+      if (paused) svg.pauseAnimations();
+      else svg.unpauseAnimations();
+    });
     region.querySelectorAll("[data-motion-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(paused));
       const label = button.querySelector("[data-motion-toggle-label]");
@@ -101,8 +106,7 @@
       return;
     }
 
-    const target = control.getAttribute("data-demo-target");
-    if (target) {
+    if (control.hasAttribute("data-demo-target")) {
       activateTab(demo, control);
       return;
     }

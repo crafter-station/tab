@@ -1,7 +1,6 @@
-import { planCapabilities, type BillingInterval } from "@tab/billing";
-import {
-  buttonVariants,
-} from "@tab/ui";
+import { planCapabilities } from "@tab/billing";
+import { Check, CaretDown } from "@phosphor-icons/react";
+import { buttonVariants } from "@tab/ui";
 import { PageKicker, formatCount, formatMonthlyPrice, formatUsd } from "./shared.tsx";
 
 export { HomePage } from "./home.tsx";
@@ -24,135 +23,112 @@ const downloadSteps = [
   },
 ] as const;
 
-function checkoutHref(interval: BillingInterval, authenticated: boolean): string {
-  const checkout = `/billing/checkout?plan=pro&interval=${interval}`;
-  return authenticated ? checkout : `/login?next=${encodeURIComponent(checkout)}`;
-}
-
 export function PricingPage({ authenticated = false }: { authenticated?: boolean }) {
   const free = planCapabilities.free;
   const pro = planCapabilities.pro;
-  const comparisonRows = [
-    ["Automatic Local Suggestions", `${formatCount(free.localAcceptedWordsPerDay)} Accepted Words/day`, "Unlimited Accepted Words"],
-    ["Deep Complete", `${formatCount(free.deepCompletesPerMonth)} successful results/month`, `${formatCount(pro.deepCompletesPerMonth)} successful results/month`],
-    ["Personal Memory", "Manage existing memories", "Continuous Memory Extraction and full controls"],
-    ["Writing controls", "Default controls", "Custom writing instructions"],
-    ["Local models", "Recommended supported model", "Supported model catalog"],
-    ["Personal Macs", formatCount(free.personalDeviceLimit), `Up to ${formatCount(pro.personalDeviceLimit)}`],
-  ] as const;
+  const annualSavings = pro.monthlyPriceUsd * 12 - pro.annualPriceUsd;
 
   return (
-    <div className="grid gap-16 border-t border-border py-8 sm:gap-20 sm:py-12">
+    <div className="grid gap-20 py-10 sm:py-14">
       <section className="grid gap-10" aria-labelledby="pricing-heading">
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,0.8fr)_minmax(17.5rem,1.2fr)] sm:items-end sm:gap-12">
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(19rem,0.7fr)] lg:items-end lg:gap-16">
           <div>
-            <PageKicker>Free and Pro</PageKicker>
-            <h1 id="pricing-heading" className="mt-3 text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em] sm:text-5xl">Local by default. Deeper when you ask.</h1>
+            <PageKicker>Simple pricing</PageKicker>
+            <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Try Pro for 30 days. No card.</h1>
           </div>
-          <p className="max-w-[56ch] text-pretty text-lg leading-relaxed text-muted-foreground">Automatic Suggestions stay on your Mac. Deep Complete uses bounded, redacted context in the cloud only after you double-tap Option.</p>
+          <div>
+            <p className="text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose Pro or keep using Free.</p>
+            <a className={buttonVariants({ size: "lg", className: "mt-6" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
+          </div>
         </div>
 
-        <div className="grid gap-4 border-y border-border py-5 sm:grid-cols-[auto_1fr] sm:items-center sm:gap-8">
-          <p className="font-[var(--font-display)] text-2xl font-bold">Try all of Pro for 30 days.</p>
-          <p className="max-w-[62ch] text-pretty leading-relaxed text-muted-foreground">Every new account gets one account-level trial with no card required. When it ends, Tab moves to Free unless you choose Pro.</p>
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2">
-          <article className="flex flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8">
+        <div className="grid items-stretch gap-4 lg:grid-cols-2" data-pricing-grid>
+          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="free">
             <div className="flex min-h-7 items-center justify-between gap-3">
-              <h2 className="text-xl font-bold">{free.name}</h2>
+              <h2 className="text-2xl font-bold">Free</h2>
               <span className="text-xs font-semibold text-muted-foreground">After your trial</span>
             </div>
-            <p className="mt-2 min-h-12 text-sm leading-relaxed text-muted-foreground">Private local help and occasional Deep Complete for lighter writing.</p>
-            <p className="mt-7 font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em] tabular-nums">Free</p>
-            <p className="mt-2 text-sm text-muted-foreground">No card or subscription required</p>
-            <div className="my-6 border-t border-border" />
-            <ul className="grid flex-1 gap-3 text-sm text-muted-foreground">
-              <li><strong className="text-foreground">{formatCount(free.localAcceptedWordsPerDay)} Accepted Words</strong> from Local Suggestions each day</li>
-              <li><strong className="text-foreground">{formatCount(free.deepCompletesPerMonth)} Deep Completes</strong> each month</li>
-              <li><strong className="text-foreground">{formatCount(free.personalDeviceLimit)} personal Mac</strong> and management of existing Personal Memory</li>
+            <p className="mt-3 min-h-12 text-sm leading-relaxed text-muted-foreground">Private local help and occasional Deep Complete for lighter writing.</p>
+            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">$0</p>
+            <p className="mt-2 min-h-10 text-sm text-muted-foreground">No card or subscription required</p>
+            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-muted-foreground">
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span><strong className="text-foreground">{formatCount(free.localAcceptedWordsPerDay)} Accepted Words</strong> from Local Suggestions each day</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span><strong className="text-foreground">{formatCount(free.deepCompletesPerMonth)} Deep Completes</strong> each month</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span><strong className="text-foreground">{formatCount(free.personalDeviceLimit)} Mac</strong></span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> <span>View, edit, export, and delete existing Personal Memory</span></li>
             </ul>
-            <p className="mt-7 text-xs font-semibold text-muted-foreground">One trial per account, even if you reinstall or connect another Mac</p>
-            <p className="mt-3"><a className={buttonVariants({ variant: "secondary", className: "w-full" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open your dashboard" : "Start 30-day Pro trial"}</a></p>
+            <div className="mt-8 grid gap-3">
+              <p className="text-xs font-semibold text-muted-foreground">No billing details</p>
+              <div className="flex h-11 items-center rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 text-sm font-semibold">Free begins automatically after your trial</div>
+              <a className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
+            </div>
+            <p className="mt-3 text-center text-xs text-muted-foreground">No charge unless you choose Pro.</p>
           </article>
 
-          <article className="flex flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8">
+          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8" data-pricing-plan="pro">
             <div className="flex min-h-7 items-center justify-between gap-3">
-              <h2 className="text-xl font-bold">{pro.name}</h2>
-              <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/70">Best for daily use</span>
+              <h2 className="text-2xl font-bold">Pro</h2>
+              <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/75">Best for daily use</span>
             </div>
-            <p className="mt-2 min-h-12 text-sm leading-relaxed text-background/65">Unlimited local writing, more Deep Complete, and continuous personalization.</p>
-            <p className="mt-7 font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em] tabular-nums">{formatMonthlyPrice(pro.monthlyPriceUsd)}</p>
-            <p className="mt-2 text-sm text-background/65">or {formatUsd(pro.annualPriceUsd)}/year, equal to {formatMonthlyPrice(pro.annualPriceUsd / 12)}</p>
-            <div className="my-6 border-t border-background/20" />
-            <ul className="grid flex-1 gap-3 text-sm text-background/75">
-              <li><strong className="text-background">Unlimited Accepted Words</strong> from Local Suggestions</li>
-              <li><strong className="text-background">{formatCount(pro.deepCompletesPerMonth)} Deep Completes</strong> each month</li>
-              <li><strong className="text-background">Up to {formatCount(pro.personalDeviceLimit)} personal Macs</strong>, continuous Personal Memory learning, custom instructions, and model choice</li>
+            <p className="mt-3 min-h-12 text-sm leading-relaxed text-background/65">Unlimited local writing, more Deep Complete, and continuous personalization.</p>
+            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(pro.monthlyPriceUsd)}</p>
+            <p className="mt-2 min-h-10 text-sm text-background/65">or {formatUsd(pro.annualPriceUsd)}/year, save {formatUsd(annualSavings)}</p>
+            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-background/80">
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> <span><strong className="text-background">Unlimited Accepted Words</strong> from Local Suggestions</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> <span><strong className="text-background">{formatCount(pro.deepCompletesPerMonth)} Deep Completes</strong> each month</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> <span>Up to <strong className="text-background">{formatCount(pro.personalDeviceLimit)} Macs</strong></span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> <span>Continuous Memory Extraction</span></li>
+              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> <span>Custom writing instructions and supported model catalog</span></li>
             </ul>
-            <p className="mt-7 text-xs font-semibold text-background/65">{authenticated ? "Choose a billing interval for secure checkout" : "Sign in, then continue to secure checkout"}</p>
-            <div className="mt-3 grid gap-2 sm:grid-cols-2">
-              <a className={buttonVariants({ variant: "secondary", className: "w-full" })} href={checkoutHref("monthly", authenticated)}>Choose monthly</a>
-              <a className={buttonVariants({ variant: "secondary", className: "w-full" })} href={checkoutHref("annual", authenticated)}>Choose annual</a>
-            </div>
-            <p className="mt-3 text-center text-xs text-background/65">Annual saves {formatUsd(pro.monthlyPriceUsd * 12 - pro.annualPriceUsd)} compared with 12 monthly payments.</p>
+            <form action="/billing/checkout" method="get" className="mt-8 grid gap-3">
+              <input type="hidden" name="plan" value="pro" />
+              <label className="text-xs font-semibold text-background/70" htmlFor="billing-interval">Billing</label>
+              <div className="relative">
+                <select id="billing-interval" name="interval" defaultValue="monthly" className="h-11 w-full appearance-none rounded-[var(--radius-control)] border border-background/20 bg-background/10 px-3 pr-10 text-sm font-semibold text-background outline-none focus-visible:ring-2 focus-visible:ring-background/70">
+                  <option className="text-foreground" value="monthly">Monthly - {formatMonthlyPrice(pro.monthlyPriceUsd)}</option>
+                  <option className="text-foreground" value="annual">Annual - {formatUsd(pro.annualPriceUsd)}/year - save {formatUsd(annualSavings)}</option>
+                </select>
+                <CaretDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2" aria-hidden="true" />
+              </div>
+              <button className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} type="submit">Choose Pro</button>
+            </form>
+            <p className="mt-3 text-center text-xs text-background/70">{authenticated ? "Continue to secure checkout." : "Sign in, then continue to secure checkout."}</p>
           </article>
         </div>
-      </section>
-
-      <section aria-labelledby="compare-plans-heading">
-        <div>
-          <PageKicker>What changes after Free</PageKicker>
-          <h2 id="compare-plans-heading" className="mt-3 text-balance font-[var(--font-display)] text-3xl font-bold tracking-[-0.015em] sm:text-4xl">Compare every plan feature.</h2>
-        </div>
-        <div className="mt-8 overflow-hidden rounded-[var(--radius-card)] border border-border">
-          <div className="hidden grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] bg-muted/35 px-5 py-3 text-xs font-semibold uppercase text-muted-foreground md:grid">
-            <span>Feature</span><span>Free</span><span>Pro</span>
-          </div>
-          {comparisonRows.map(([feature, freeValue, proValue]) => (
-            <div className="grid gap-4 border-t border-border px-5 py-5 first:border-t-0 md:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)_minmax(0,0.8fr)] md:first:border-t" key={feature}>
-              <h3 className="font-semibold">{feature}</h3>
-              <div><p className="text-xs font-semibold uppercase text-muted-foreground md:sr-only">Free</p><p className="mt-1 text-sm leading-relaxed text-muted-foreground md:mt-0">{freeValue}</p></div>
-              <div><p className="text-xs font-semibold uppercase text-muted-foreground md:sr-only">Pro</p><p className="mt-1 text-sm font-semibold leading-relaxed md:mt-0">{proValue}</p></div>
-            </div>
-          ))}
-        </div>
-        <p className="mt-5 text-sm leading-relaxed text-muted-foreground">Personal Memory remains visible, editable, exportable, and deletable on both plans. Pro pays for continuous learning, not access to your saved data.</p>
       </section>
 
       <section aria-labelledby="allowances-heading">
-        <PageKicker>Allowances without surprises</PageKicker>
-        <h2 id="allowances-heading" className="mt-3 max-w-[16ch] text-balance font-[var(--font-display)] text-3xl font-bold tracking-[-0.015em] sm:text-4xl">Tab counts value you receive.</h2>
-        <div className="mt-8 grid border-y border-border md:grid-cols-3">
-          <article className="border-b border-border py-6 md:border-b-0 md:border-l md:px-6 md:first:border-l-0 md:first:pl-0">
+        <PageKicker>How usage is counted</PageKicker>
+        <h2 id="allowances-heading" className="mt-3 max-w-[18ch] text-balance font-[var(--font-display)] text-3xl font-bold tracking-[-0.015em] sm:text-4xl">Only completed work counts.</h2>
+        <div className="mt-8 grid gap-8 md:grid-cols-3 md:gap-12">
+          <article>
             <h3 className="font-bold">Local Suggestions</h3>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Free counts only words you deliberately accept into your writing. Generated, ignored, dismissed, stale, empty, and failed Suggestions do not count. The allowance resets each local calendar day on your Mac.</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Free counts only words you insert. Ignored, dismissed, empty, stale, and failed Suggestions do not count.</p>
           </article>
-          <article className="border-b border-border py-6 md:border-b-0 md:border-l md:px-6">
+          <article>
             <h3 className="font-bold">Deep Complete</h3>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">One Deep Complete counts when your explicit request returns a Suggestion. Retries, empty responses, and failures do not count. The allowance resets each UTC calendar month.</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">One request counts only when it returns a Suggestion. Retries, empty responses, and failures do not count.</p>
           </article>
-          <article className="py-6 md:border-l md:border-border md:pl-6">
+          <article>
             <h3 className="font-bold">No automatic overages</h3>
-            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">Tab does not bill for usage beyond either allowance. Reaching one limit leaves the other mode and your account controls available until that allowance resets.</p>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Reaching a limit does not create a charge or disable the other suggestion mode.</p>
           </article>
         </div>
       </section>
 
-      <section className="grid gap-8 border-y border-border py-8 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1.3fr)] lg:gap-16" aria-labelledby="billing-details-heading">
-        <div>
-          <PageKicker>Trial and billing</PageKicker>
-          <h2 id="billing-details-heading" className="mt-3 text-balance font-[var(--font-display)] text-3xl font-bold tracking-[-0.015em]">Know what happens next.</h2>
+      <details className="marketing-detail rounded-[var(--radius-card)] bg-muted/35 p-5 sm:p-6">
+        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          Trial, renewal, and cancellation details
+          <CaretDown className="tab-disclosure-chevron shrink-0" aria-hidden="true" />
+        </summary>
+        <div className="tab-disclosure-panel mt-6 grid gap-6 text-sm leading-relaxed text-muted-foreground sm:grid-cols-3">
+          <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">The 30-day trial starts once per account and cannot charge you without checkout.</p></div>
+          <div><h3 className="font-bold text-foreground">Paid Pro</h3><p className="mt-2">Pro renews on your selected interval. Cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing portal</a>.</p></div>
+          <div><h3 className="font-bold text-foreground">Personal Memory</h3><p className="mt-2">Downgrading does not remove your controls to view, edit, export, or delete existing Personal Memory.</p></div>
         </div>
-        <div className="grid gap-5 text-sm leading-relaxed text-muted-foreground sm:grid-cols-2">
-          <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">The 30-day Pro trial starts once for the account. It does not restart when you reinstall Tab or connect another Mac, and it cannot charge you without checkout.</p></div>
-          <div><h3 className="font-bold text-foreground">Renewal</h3><p className="mt-2">Paid Pro renews on the monthly or annual interval you select. An active subscriber changing intervals continues through the billing portal.</p></div>
-          <div><h3 className="font-bold text-foreground">Cancellation</h3><p className="mt-2">Cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing portal</a>. Pro stays active through the paid period, then your account moves to Free.</p></div>
-          <div><h3 className="font-bold text-foreground">Your data</h3><p className="mt-2">Downgrading or canceling does not remove your controls to view, edit, export, or delete existing Personal Memory.</p></div>
-        </div>
-      </section>
+      </details>
 
-      <p className="text-center text-sm leading-relaxed text-muted-foreground">Prices are shown in USD before applicable taxes. Checkout and use of Tab are subject to the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/terms">Terms of Service</a> and <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/privacy">Privacy Policy</a>.</p>
+      <p className="text-center text-sm leading-relaxed text-muted-foreground">Prices are in USD before applicable taxes. See the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/terms">Terms of Service</a> and <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/privacy">Privacy Policy</a>.</p>
     </div>
   );
 }
