@@ -30,11 +30,15 @@ export function formatDate(iso: string): string {
 
 export function formatMonthlyPrice(monthlyPriceUsd: number): string {
   if (monthlyPriceUsd === 0) return "Free";
-  return `${new Intl.NumberFormat(undefined, {
+  return `${formatUsd(monthlyPriceUsd)}/mo`;
+}
+
+export function formatUsd(amount: number): string {
+  return new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
-  }).format(monthlyPriceUsd)}/mo`;
+  }).format(amount);
 }
 
 export function formatCount(count: number): string {

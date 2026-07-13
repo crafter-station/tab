@@ -6,5 +6,5 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: "privacy",
   component: PrivacyPage,
-  head: () => ({ meta: [{ title: "Privacy Policy - Tab" }, { name: "description", content: "How Tab processes Typing Context, Personal Memory, account, device, usage, and billing information." }] }),
+  head: () => ({ meta: [{ title: "Privacy Policy - Tab" }, { name: "description", content: "How Tab keeps Automatic Suggestions local and processes explicit Deep Complete requests, Personal Memory, telemetry, account, device, and billing data." }] }),
 });

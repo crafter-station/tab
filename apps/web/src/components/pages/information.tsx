@@ -3,7 +3,7 @@ import { ArrowRight, ArrowUpRight, EnvelopeSimple, GithubLogo, ShieldCheck } fro
 import { buttonVariants } from "@tab/ui";
 import { PageKicker } from "./shared.tsx";
 
-const lastUpdated = "July 9, 2026";
+const lastUpdated = "July 13, 2026";
 
 function PageIntro({
   eyebrow,
@@ -102,22 +102,23 @@ export function ContactPage() {
 export function PrivacyPage() {
   return (
     <>
-      <PageIntro eyebrow={`Privacy policy · Updated ${lastUpdated}`} title="Clear data boundaries." description="This policy explains what Tab processes to provide native autocomplete, Personal Memory, account access, and billing." />
+      <PageIntro eyebrow={`Privacy policy · Updated ${lastUpdated}`} title="Clear data boundaries." description="This policy explains how Tab keeps Automatic Suggestions local and processes explicit Deep Complete requests, Personal Memory, account access, and billing." />
       <div className="py-8 sm:py-12">
         <LegalSection title="Overview">
-          <p>Tab is a native autocomplete app for macOS. It processes limited account, device, billing, Typing Context, and Personal Memory data to provide the service.</p>
-          <p><strong>Tab does not need raw key-event logs, screenshots, clipboard contents, full document contents, browser URLs, or window titles to generate a Suggestion.</strong></p>
+          <p>Tab is a native autocomplete app for macOS. Automatic Suggestions use local inference on your Mac. Tab sends bounded, redacted Typing Context to the cloud for Deep Complete only after you explicitly invoke it.</p>
+          <p><strong>Tab does not store raw key-event logs, screenshots, clipboard contents, full document contents, browser URLs, window titles, or accepted Suggestion text as product analytics by default.</strong></p>
         </LegalSection>
         <LegalSection title="Information we collect">
           <p><strong>Account information:</strong> your name, email address, email-verification state, and authentication records.</p>
           <p><strong>Device information:</strong> identifiers and basic client metadata needed to connect and manage your Macs.</p>
-          <p><strong>Typing Context:</strong> a limited span of recent text-bearing input and the active application identity used to request a Suggestion. Navigation, shortcuts, and other non-text actions are excluded.</p>
-          <p><strong>Personal Memory:</strong> facts you create or that Tab learns from eligible recent writing to personalize future Suggestions. These records are visible in your dashboard.</p>
+          <p><strong>Typing Context:</strong> a limited, temporary span of recent text-bearing input and active-application information used to generate a Suggestion. Automatic Suggestions process this context on your Mac. Deep Complete sends bounded, redacted context to the cloud only after your explicit action. Navigation, shortcuts, and other non-text actions are excluded.</p>
+          <p><strong>Pasted text:</strong> text you paste may inform an immediate Suggestion after local redaction, but Tab does not read your clipboard and pasted text does not create Personal Memory by default.</p>
+          <p><strong>Personal Memory:</strong> facts you create or that Tab learns from eligible user-authored writing to personalize future Suggestions. Personal Memory is stored with your account and remains visible and controllable from your dashboard.</p>
           <p><strong>Usage and billing:</strong> plan, trial and subscription status, daily Accepted Word counts, monthly Deep Complete counts, and transaction references needed to enforce allowances and manage paid access.</p>
-          <p><strong>Operational data:</strong> limited metadata needed for security, reliability, and diagnostics. Tab does not store accepted Suggestion text as product telemetry by default.</p>
+          <p><strong>Operational data:</strong> limited metadata needed for security, reliability, diagnostics, and product quality, such as event outcome, counts, app category, latency, plan, and model version. This telemetry excludes raw Typing Context, Suggestion text, Personal Memory contents, clipboard contents, URLs, document names, window titles, and contact identities.</p>
         </LegalSection>
         <LegalSection title="How we use information">
-          <p>We use this information to authenticate accounts, connect authorized devices, generate and personalize Suggestions, enforce monthly limits, process plan changes, provide support, prevent abuse, and maintain the service.</p>
+          <p>We use this information to authenticate accounts, connect authorized devices, generate and personalize Suggestions, enforce daily and monthly allowances, process plan changes, provide support, prevent abuse, and maintain the service.</p>
           <p>We do not sell personal information or use private writing to serve advertising.</p>
         </LegalSection>
         <LegalSection title="Service providers">
@@ -126,17 +127,18 @@ export function PrivacyPage() {
         </LegalSection>
         <LegalSection title="Retention and control">
           <p>We retain account and service data while your account is active and as needed to provide the service, meet legal obligations, resolve disputes, and protect the service.</p>
-          <p>You can review and delete Personal Memory records and revoke connected devices from your dashboard. To request account deletion or a copy of your information, email <a href="mailto:tab@cueva.io">tab@cueva.io</a>.</p>
+          <p>Recent Typing Context and Memory Extraction Windows are bounded and temporary. Tab does not retain them as a raw typing log by default. Personal Memory remains until you delete it or your account, subject to legal and operational retention requirements.</p>
+          <p>You can view, edit, export, and delete existing Personal Memory even after a trial ends, downgrade, or cancellation. You can also revoke connected devices from your dashboard. To request account deletion or a copy of your information, email <a href="mailto:tab@cueva.io">tab@cueva.io</a>.</p>
         </LegalSection>
         <LegalSection title="Security">
           <p>We use technical and organizational safeguards intended to protect information. No internet service can guarantee absolute security, so please report suspected security issues privately by email rather than in a public issue.</p>
         </LegalSection>
         <LegalSection title="Your choices">
-          <p>You may stop Typing Context processing by quitting or disabling Tab, revoke macOS permissions in System Settings, remove Personal Memory records, revoke devices, change plans, or request account deletion.</p>
+          <p>You may stop Typing Context processing by pausing, quitting, or disabling Tab; revoke macOS permissions in System Settings; manage Personal Memory; revoke devices; change plans; cancel through the billing portal; or request account deletion.</p>
         </LegalSection>
         <LegalSection title="Changes and contact">
           <p>We may update this policy as Tab changes. The updated date above identifies the current version. Material changes will be communicated through the service or by email when appropriate.</p>
-          <p>Questions or privacy requests can be sent to <a href="mailto:tab@cueva.io">tab@cueva.io</a>.</p>
+          <p>Questions or privacy requests can be sent to <a href="mailto:tab@cueva.io">tab@cueva.io</a>. The <a href="/terms">Terms of Service</a> govern your use of Tab, and current plan details are on the <a href="/pricing">pricing page</a>.</p>
         </LegalSection>
       </div>
     </>
@@ -146,14 +148,15 @@ export function PrivacyPage() {
 export function TermsPage() {
   return (
     <>
-      <PageIntro eyebrow={`Terms of service · Updated ${lastUpdated}`} title="Terms for using Tab." description="These terms govern access to the Tab website, native macOS app, account dashboard, and paid plans." />
+      <PageIntro eyebrow={`Terms of service · Updated ${lastUpdated}`} title="Terms for using Tab." description="These terms govern access to the Tab website, native macOS app, account dashboard, and Free and Pro plans." />
       <div className="py-8 sm:py-12">
         <LegalSection title="Agreement">
           <p>By creating an account, downloading Tab, or using the service, you agree to these terms and the <a href="/privacy">Privacy Policy</a>. If you do not agree, do not use the service.</p>
           <p>You must be able to form a binding contract where you live. If you use Tab for an organization, you represent that you have authority to accept these terms for that organization.</p>
         </LegalSection>
         <LegalSection title="The service">
-          <p>Tab provides Suggestions in supported macOS text fields. Suggestions may be incomplete, inaccurate, or unsuitable for a particular context. You are responsible for reviewing text before accepting, sending, publishing, or relying on it.</p>
+          <p>Tab provides Automatic Suggestions through local inference and provides Deep Complete through an explicit cloud-backed action in supported macOS text fields. Local inference does not silently fall back to Deep Complete.</p>
+          <p>Suggestions may be incomplete, inaccurate, or unsuitable for a particular context. You are responsible for reviewing text before accepting, sending, publishing, or relying on it.</p>
           <p>Compatibility may vary by macOS version, application, editor, hardware, and permissions. We may improve, change, suspend, or discontinue parts of the service.</p>
         </LegalSection>
         <LegalSection title="Accounts">
@@ -161,8 +164,12 @@ export function TermsPage() {
           <p>One person or organization may not use the service to bypass plan limits, probe other accounts, or interfere with service operation.</p>
         </LegalSection>
         <LegalSection title="Plans and payment">
-          <p>Plan prices, Local Accepted Word and Deep Complete allowances, and included features are shown on the <a href="/pricing">pricing page</a>. Pro renews monthly or annually, according to the interval selected at checkout, until changed or canceled through the billing portal.</p>
-          <p>Fees are charged in the displayed currency and may include applicable taxes. Except where required by law, charges for a billing period that has begun are non-refundable. Changing plans may affect limits and charges for the current or next billing period as shown during checkout.</p>
+          <p>Every new account receives one 30-day Pro trial without a payment card. The trial does not restart when you reinstall Tab or connect another Mac. When the trial ends, the account moves to Free unless you complete checkout for Pro.</p>
+          <p>Plan prices, daily Local Accepted Word allowances, monthly Deep Complete allowances, device limits, and included features are shown on the <a href="/pricing">pricing page</a>. Local usage counts only words deliberately inserted through Acceptance. Deep Complete usage counts when an explicit request returns a Suggestion. Retries, empty responses, failures, and ignored Local Suggestions do not count.</p>
+          <p>Tab does not charge automatic usage overages. Reaching one allowance does not disable unrelated product capabilities. Allowances become available again at their applicable daily or monthly reset.</p>
+          <p>Pro renews monthly or annually, according to the interval selected at checkout, until canceled through the <a href="/billing/portal">billing portal</a>. Canceling stops future renewal; paid benefits remain active through the end of the current paid period, then the account moves to Free.</p>
+          <p>Fees are charged in the displayed currency and may include applicable taxes. Except where required by law, charges for a billing period that has begun are non-refundable. Changing a billing interval may affect charges for the current or next billing period as shown during checkout or in the billing portal.</p>
+          <p>Trial expiration, downgrade, or cancellation does not remove your ability to view, edit, export, or delete existing Personal Memory. Data processing is described in the <a href="/privacy">Privacy Policy</a>.</p>
         </LegalSection>
         <LegalSection title="Acceptable use">
           <p>Do not use Tab to break the law, violate another person's rights, distribute malware, gain unauthorized access, harass others, generate abusive automated traffic, reverse engineer protected service components, or evade technical and billing limits.</p>

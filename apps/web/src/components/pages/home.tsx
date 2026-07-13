@@ -16,7 +16,7 @@ import {
 } from "@phosphor-icons/react";
 import { planCapabilities } from "@tab/billing";
 import { SuggestionCommand, buttonVariants, cn } from "@tab/ui";
-import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
+import { PageKicker, formatCount, formatMonthlyPrice, formatUsd } from "./shared.tsx";
 
 const appLogos = [
   { name: "Gmail", src: "/logos/gmail.svg", href: "https://workspace.google.com/products/gmail/" },
@@ -689,9 +689,9 @@ export function HomePage() {
 
       <section id="pricing" className="scroll-mt-24 py-20 sm:py-28">
         <div className="text-center">
-          <PageKicker>Start small, move when you need to</PageKicker>
-          <h2 className="mx-auto mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Private for the routine. Pro for the hard parts.</h2>
-          <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">Local Suggestions and Deep Complete solve different writing moments. Your memories always remain visible, editable, exportable, and deletable.</p>
+          <PageKicker>30 days of Pro, then Free</PageKicker>
+          <h2 className="mx-auto mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Start free. Upgrade when Tab becomes a habit.</h2>
+          <p className="mx-auto mt-5 max-w-2xl text-pretty text-lg leading-relaxed text-muted-foreground">Free covers lighter writing. Pro removes the Local Suggestion limit and expands Deep Complete, Personal Memory learning, model choice, and connected Macs.</p>
         </div>
         <div className="mx-auto mt-12 grid max-w-4xl gap-4 md:grid-cols-2">
           {(["free", "pro"] as const).map((planId) => {
@@ -704,18 +704,18 @@ export function HomePage() {
                   {featured ? <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/70">Daily writing</span> : null}
                 </div>
                 <p className={`mt-8 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] ${featured ? "text-background" : "text-foreground"}`}>{formatMonthlyPrice(plan.monthlyPriceUsd)}</p>
-                <p className={`mt-3 text-sm ${featured ? "text-background/65" : "text-muted-foreground"}`}>{plan.localAcceptedWordsPerDay === null ? "Unlimited Local Accepted Words" : `${formatCount(plan.localAcceptedWordsPerDay)} Local Accepted Words / day`}</p>
+                <p className={`mt-3 text-sm ${featured ? "text-background/65" : "text-muted-foreground"}`}>{plan.localAcceptedWordsPerDay === null ? "Unlimited Accepted Words from Local Suggestions" : `${formatCount(plan.localAcceptedWordsPerDay)} Accepted Words from Local Suggestions each day`}</p>
                 <ul className={`mt-8 grid flex-1 gap-3 text-sm ${featured ? "text-background/75" : "text-muted-foreground"}`}>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.deepCompletesPerMonth} Deep Completes / month</li>
+                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.deepCompletesPerMonth} Deep Completes each month</li>
                   <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.personalDeviceLimit} personal {plan.personalDeviceLimit === 1 ? "Mac" : "Macs"}</li>
-                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.continuousMemoryExtraction ? "Continuous Memory Extraction" : "Manage existing memories"}</li>
+                  <li className="flex items-center gap-2"><Check aria-hidden="true" /> {plan.continuousMemoryExtraction ? "Continuous Personal Memory learning" : "Manage existing Personal Memory"}</li>
                 </ul>
                 <a className={buttonVariants({ variant: featured ? "secondary" : "default", size: "lg", className: "mt-8 w-full" })} href={planId === "free" ? "/signup" : "/billing/checkout?plan=pro&interval=monthly"}>{planId === "free" ? "Start 30-day Pro trial" : "Choose Pro monthly"}</a>
               </article>
             );
           })}
         </div>
-        <p className="mt-6 text-center text-sm text-muted-foreground">Pro is also available for $96/year. <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare plans</a>.</p>
+        <p className="mt-6 text-center text-sm text-muted-foreground">No card is required for the trial. Pro is {formatMonthlyPrice(planCapabilities.pro.monthlyPriceUsd)} or {formatUsd(planCapabilities.pro.annualPriceUsd)}/year. <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare every feature</a>.</p>
       </section>
 
       <section className="border-t border-border py-20 sm:py-24">

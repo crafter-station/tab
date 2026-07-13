@@ -230,7 +230,7 @@ export function createWebApp(config: WebAppConfig) {
       `${appName} - Native autocomplete for your Mac`,
       200,
       user,
-      "Finish thoughts faster in Mail, Slack, Notes, and the Mac apps where you already write. Tab only inserts a suggestion when you choose.",
+      "Private Local Suggestions as you type, explicit Deep Complete for harder writing, and autocomplete across the Mac apps where you already work.",
     );
   }
 
@@ -238,9 +238,10 @@ export function createWebApp(config: WebAppConfig) {
     const user = await getOptionalUser(cookieHeader);
     return html(
       createElement(PricingPage, { authenticated: Boolean(user) }),
-      `${appName} Pricing`,
+      `Pricing - ${appName}`,
       200,
       user,
+      "Compare Tab Free and Pro, including the 30-day Pro trial, Local Suggestion and Deep Complete allowances, monthly and annual billing, and cancellation.",
     );
   }
 
@@ -804,7 +805,7 @@ export function createWebApp(config: WebAppConfig) {
           `Privacy Policy - ${appName}`,
           200,
           undefined,
-          "How Tab processes Typing Context, Personal Memory, account, device, usage, and billing information.",
+          "How Tab keeps Automatic Suggestions local and processes explicit Deep Complete requests, Personal Memory, telemetry, account, device, and billing data.",
         );
       }
 
@@ -814,7 +815,7 @@ export function createWebApp(config: WebAppConfig) {
           `Terms of Service - ${appName}`,
           200,
           undefined,
-          "Terms governing the Tab website, native macOS app, account dashboard, and paid plans.",
+          "Terms governing Tab Free and Pro, the 30-day trial, billing, renewal, cancellation, and use of the native macOS app.",
         );
       }
 
