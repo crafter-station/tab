@@ -5,7 +5,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "@tab/ui/lib/utils"
 
 const toggleVariants = cva(
-  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-[13px] font-medium transition-[background-color,border-color,color,transform,box-shadow] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.97] hover:bg-[var(--tab-hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/70 disabled:pointer-events-none disabled:scale-100 disabled:opacity-50 data-[state=on]:bg-[var(--tab-surface-raised)] data-[state=on]:text-foreground data-[state=on]:shadow-[var(--tab-shadow-control)] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+  "inline-flex items-center justify-center gap-2 rounded-[var(--radius-control)] text-[13px] font-medium transition-[background-color,border-color,color,transform,box-shadow] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.97] hover:bg-[var(--tab-hover)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:pointer-events-none disabled:scale-100 disabled:opacity-50 data-[state=on]:bg-[var(--tab-surface-raised)] data-[state=on]:text-foreground data-[state=on]:shadow-[var(--tab-shadow-control)] [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
   {
     variants: {
       variant: {

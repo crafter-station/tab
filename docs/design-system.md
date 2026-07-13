@@ -4,7 +4,7 @@ Tab uses the shared `@tab/ui` package as the source of truth for visual tokens, 
 
 ## Palette
 
-Use the neutral palette from `packages/ui/src/styles/globals.css`: `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--accent`, `--border`, `--input`, and `--ring`. Keep `--primary` monochrome and reserve semantic color for status or evidence. Do not reintroduce amber brand blocks, one-off hex values, or local duplicate variables when a shared token exists.
+Use the warm-neutral surfaces from `packages/ui/src/styles/globals.css`: `--background`, `--foreground`, `--card`, `--popover`, `--muted`, `--border`, and `--input`. Orange is the shared product accent, split by role so contrast does not depend on one color doing every job: `--primary` and `--primary-hover` are solid control fills with `--primary-foreground`; `--emphasis` is the brighter decorative and focus color; `--emphasis-text` is the accessible small-text color; and `--accent` is the quiet interaction wash used for hover and selected surfaces. Use `--tab-emphasis-tint` for tinted brand treatments. Do not add one-off brand hex values or local duplicate variables when a shared token exists.
 
 ## Typography
 
@@ -32,7 +32,7 @@ Use `--tab-ease-out` for direct feedback and entrances and `--tab-ease-in-out` o
 
 ## Semantic Statuses
 
-Use the shared `SemanticTone` vocabulary: `neutral`, `success`, `warning`, `info`, and `destructive`. Apply it through `StatusRow`, `StatusBadge`, and related shared patterns so web and desktop represent equivalent states the same way. Status meaning must appear in text, not color alone. Warning states use `--warning` and `--tab-warning-tint`, not amber utility classes.
+Use the shared `SemanticTone` vocabulary: `neutral`, `brand`, `success`, `warning`, `info`, and `destructive`. Apply it through `StatusRow`, `StatusBadge`, and related shared patterns so web and desktop represent equivalent states the same way. Use `brand` for product categories, enabled preferences, and availability; reserve green `success` for verified, connected, granted, completed, or healthy states. Status meaning must appear in text, not color alone. Warning states use `--warning` and `--tab-warning-tint`, not amber utility classes.
 
 ## Review Surface
 

@@ -297,7 +297,7 @@ export function SettingsSurface() {
           <SettingsGroup title="Suggestions" description="Pause autocomplete without disconnecting your account.">
             <SettingsRow label="Pause suggestions" description={pauseState.description}>
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge tone={paused ? "warning" : "success"}>{pauseState.label}</StatusBadge>
+                <StatusBadge tone={paused ? "warning" : "brand"}>{pauseState.label}</StatusBadge>
                 <Switch
                   aria-label="Pause suggestions"
                   checked={paused}
@@ -373,7 +373,7 @@ export function SettingsSurface() {
                 {completionHistory.map((entry) => (
                   <article className="rounded-lg border border-border bg-background/40 p-4" key={entry.id}>
                     <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <StatusBadge tone={entry.mode === "local" ? "success" : "neutral"}>{entry.mode}</StatusBadge>
+                      <StatusBadge tone={entry.mode === "local" ? "brand" : "neutral"}>{entry.mode}</StatusBadge>
                       <span>{entry.model}</span>
                       <span>{entry.latencyMs} ms</span>
                       <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleTimeString()}</time>
@@ -492,7 +492,7 @@ export function SettingsSurface() {
                 }
               >
                 <div className="flex items-center justify-end gap-2">
-                  <StatusBadge tone={usePersonalMemory ? "success" : "neutral"}>{usePersonalMemory ? "On" : "Off"}</StatusBadge>
+                  <StatusBadge tone={usePersonalMemory ? "brand" : "neutral"}>{usePersonalMemory ? "On" : "Off"}</StatusBadge>
                   <Switch
                     aria-label="Use saved memories in suggestions"
                     checked={usePersonalMemory}
@@ -507,7 +507,7 @@ export function SettingsSurface() {
                   : "Available during the Pro trial and on Pro. Existing memories remain manageable."}
               >
                 <div className="flex items-center justify-end gap-2">
-                  <StatusBadge tone={continuousMemoryExtraction ? "success" : "neutral"}>{continuousMemoryExtraction ? "On" : "Off"}</StatusBadge>
+                  <StatusBadge tone={continuousMemoryExtraction ? "brand" : "neutral"}>{continuousMemoryExtraction ? "On" : "Off"}</StatusBadge>
                   <Switch
                     aria-label="Continuous Memory Extraction"
                     checked={continuousMemoryExtraction}

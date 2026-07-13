@@ -69,7 +69,7 @@ type EyebrowProps = PropsWithChildren<{
 
 export function Eyebrow({ className, children }: EyebrowProps) {
   return (
-    <p className={cn("font-mono text-[11px] font-semibold uppercase text-muted-foreground", className)}>
+    <p className={cn("font-mono text-[11px] font-semibold uppercase text-emphasis-text", className)}>
       {children}
     </p>
   );

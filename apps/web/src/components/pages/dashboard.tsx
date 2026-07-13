@@ -101,6 +101,7 @@ const dashboardDescriptions: Record<DashboardSection, string> = {
 
 const metricToneClasses: Record<SemanticTone, string> = {
   neutral: "bg-muted-foreground",
+  brand: "bg-emphasis",
   success: "bg-[var(--success)]",
   warning: "bg-[var(--warning)]",
   info: "bg-[var(--info)]",
@@ -140,7 +141,7 @@ function quotaStatus(exhausted: boolean): StatusPresentation {
     return { value: "Allowance used", tone: "warning" };
   }
 
-  return { value: "Available", tone: "success" };
+  return { value: "Available", tone: "brand" };
 }
 
 function DashboardMetric({

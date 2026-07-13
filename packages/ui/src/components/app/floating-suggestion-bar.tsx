@@ -30,7 +30,7 @@ const hiddenShellClassName = "invisible";
 const commandClassName =
   "tab-suggestion-command pointer-events-auto isolate grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] py-2 pr-2 pl-2.5 text-[var(--tab-overlay-text)] shadow-[var(--tab-overlay-shadow)] backdrop-blur-xl active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:pointer-events-none disabled:scale-100";
 const iconClassName =
-  "tab-suggestion-source relative grid size-6 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] border border-transparent bg-[var(--tab-overlay-key-bg)] text-[11px] font-bold text-[var(--tab-overlay-text)]";
+  "tab-suggestion-source relative grid size-6 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] border border-primary bg-primary text-[11px] font-bold text-primary-foreground";
 const sourceGlyphClassName =
   "col-start-1 row-start-1 transition-[opacity,transform,filter] duration-200 ease-[var(--tab-ease-out)]";
 const shortcutClassName =

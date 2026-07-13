@@ -100,7 +100,7 @@ export function AuthShell({
         <SurfaceHeader eyebrow={eyebrow} title={title} description={description} headingLevel={1} />
         <div className="mt-8 grid border-t border-border text-sm">
           <div className="grid grid-cols-[1.25rem_1fr] gap-3 border-b border-border py-4">
-            <span className="mt-1 size-1.5 rounded-full bg-[var(--success)]" aria-hidden="true" />
+            <span className="mt-1 size-1.5 rounded-full bg-emphasis" aria-hidden="true" />
             <p><span className="font-semibold text-foreground">Secure connection.</span> <span className="text-muted-foreground">Your account connects this Mac without storing your password on it.</span></p>
           </div>
           <div className="grid grid-cols-[1.25rem_1fr] gap-3 border-b border-border py-4">

@@ -108,9 +108,9 @@
 }
 
 .tab-workflow[data-accepted="true"] .tab-workflow-command {
-  color: var(--success-foreground);
-  background: var(--success);
-  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
   animation: none;
 }
 
@@ -289,9 +289,9 @@
 }
 
 .tab-demo[data-accepted="true"] .tab-demo-overlay {
-  color: var(--success-foreground);
-  background: var(--success);
-  border-color: color-mix(in srgb, var(--success) 70%, var(--background));
+  color: var(--primary-foreground);
+  background: var(--primary);
+  border-color: var(--primary);
   opacity: 1;
   transform: none;
   animation: none;

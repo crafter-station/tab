@@ -13,7 +13,10 @@
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
+  --color-emphasis: var(--emphasis);
+  --color-emphasis-text: var(--emphasis-text);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -48,14 +51,17 @@
   --card-foreground: #1a1c1a;
   --popover: #ffffff;
   --popover-foreground: #1a1c1a;
-  --primary: #20221f;
-  --primary-foreground: #f8f9f6;
+  --primary: #c83f00;
+  --primary-hover: #b93a00;
+  --primary-foreground: #fffaf7;
+  --emphasis: #c83f00;
+  --emphasis-text: #a83200;
   --secondary: #eceeea;
   --secondary-foreground: #20221f;
   --muted: #e6e8e4;
   --muted-foreground: #626660;
-  --accent: #e7ece3;
-  --accent-foreground: #20251e;
+  --accent: #f4e2d9;
+  --accent-foreground: #35170b;
   --destructive: #b5332f;
   --destructive-foreground: #ffffff;
   --success: #21633d;
@@ -66,7 +72,7 @@
   --info-foreground: #ffffff;
   --border: #d7dad4;
   --input: #858a82;
-  --ring: #30332f;
+  --ring: var(--emphasis);
   --radius-control: 7px;
   --radius-media: 9px;
   --radius-card: 12px;
@@ -76,12 +82,13 @@
   --tab-warning-tint: rgba(143, 93, 13, 0.12);
   --tab-info-tint: rgba(52, 111, 143, 0.12);
   --tab-destructive-tint: rgba(181, 51, 47, 0.11);
+  --tab-emphasis-tint: rgba(200, 63, 0, 0.12);
   --tab-canvas: #eef0ec;
   --tab-sidebar: #e9ebe7;
   --tab-surface-raised: #fbfcf9;
   --tab-surface-sunken: #eceeea;
   --tab-hover: rgba(26, 28, 26, 0.055);
-  --tab-active: rgba(26, 28, 26, 0.09);
+  --tab-active: var(--tab-emphasis-tint);
   --tab-hairline: rgba(26, 28, 26, 0.12);
   --tab-page-wash: none;
   --tab-grid-bg: none;
@@ -126,14 +133,17 @@
   --card-foreground: rgba(246, 247, 243, 0.94);
   --popover: #242724;
   --popover-foreground: rgba(246, 247, 243, 0.94);
-  --primary: #f1f3ee;
-  --primary-foreground: #171917;
+  --primary: #c83f00;
+  --primary-hover: #cc4000;
+  --primary-foreground: #fffaf7;
+  --emphasis: #ff6a2b;
+  --emphasis-text: #ff8250;
   --secondary: #2a2d2a;
   --secondary-foreground: rgba(246, 247, 243, 0.94);
   --muted: #282b28;
   --muted-foreground: rgba(246, 247, 243, 0.64);
-  --accent: #30362e;
-  --accent-foreground: rgba(246, 247, 243, 0.94);
+  --accent: #3b241b;
+  --accent-foreground: #fff2eb;
   --destructive: #ff8a80;
   --destructive-foreground: #190b09;
   --success: #74d59a;
@@ -144,17 +154,18 @@
   --info-foreground: #06131a;
   --border: #383c38;
   --input: #6b7169;
-  --ring: rgba(246, 247, 243, 0.86);
+  --ring: var(--emphasis);
   --tab-success-tint: rgba(116, 213, 154, 0.16);
   --tab-warning-tint: rgba(243, 201, 105, 0.16);
   --tab-info-tint: rgba(134, 199, 232, 0.16);
   --tab-destructive-tint: rgba(255, 138, 128, 0.15);
+  --tab-emphasis-tint: rgba(255, 106, 43, 0.16);
   --tab-canvas: #151715;
   --tab-sidebar: #1b1e1b;
   --tab-surface-raised: #202320;
   --tab-surface-sunken: #181b18;
   --tab-hover: rgba(246, 247, 243, 0.055);
-  --tab-active: rgba(246, 247, 243, 0.09);
+  --tab-active: var(--tab-emphasis-tint);
   --tab-hairline: rgba(246, 247, 243, 0.13);
   --tab-page-wash: none;
   --tab-grid-bg: none;
@@ -175,14 +186,17 @@
     --card-foreground: rgba(246, 247, 243, 0.94);
     --popover: #242724;
     --popover-foreground: rgba(246, 247, 243, 0.94);
-    --primary: #f1f3ee;
-    --primary-foreground: #171917;
+    --primary: #c83f00;
+    --primary-hover: #cc4000;
+    --primary-foreground: #fffaf7;
+    --emphasis: #ff6a2b;
+    --emphasis-text: #ff8250;
     --secondary: #2a2d2a;
     --secondary-foreground: rgba(246, 247, 243, 0.94);
     --muted: #282b28;
     --muted-foreground: rgba(246, 247, 243, 0.64);
-    --accent: #30362e;
-    --accent-foreground: rgba(246, 247, 243, 0.94);
+    --accent: #3b241b;
+    --accent-foreground: #fff2eb;
     --destructive: #ff8a80;
     --destructive-foreground: #190b09;
     --success: #74d59a;
@@ -193,17 +207,18 @@
     --info-foreground: #06131a;
     --border: #383c38;
     --input: #6b7169;
-    --ring: rgba(246, 247, 243, 0.86);
+    --ring: var(--emphasis);
     --tab-success-tint: rgba(116, 213, 154, 0.16);
     --tab-warning-tint: rgba(243, 201, 105, 0.16);
     --tab-info-tint: rgba(134, 199, 232, 0.16);
     --tab-destructive-tint: rgba(255, 138, 128, 0.15);
+    --tab-emphasis-tint: rgba(255, 106, 43, 0.16);
     --tab-canvas: #151715;
     --tab-sidebar: #1b1e1b;
     --tab-surface-raised: #202320;
     --tab-surface-sunken: #181b18;
     --tab-hover: rgba(246, 247, 243, 0.055);
-    --tab-active: rgba(246, 247, 243, 0.09);
+    --tab-active: var(--tab-emphasis-tint);
     --tab-hairline: rgba(246, 247, 243, 0.13);
     --tab-page-wash: none;
     --tab-grid-bg: none;
@@ -217,9 +232,11 @@
   }
 }
 
-* {
-  box-sizing: border-box;
-  border-color: var(--border);
+@layer base {
+  * {
+    box-sizing: border-box;
+    border-color: var(--border);
+  }
 }
 
 body {
@@ -521,23 +538,23 @@ a:not([class]) {
 
 @layer base {
   :root {
-    --sidebar-background: 100 5% 91%;
-    --sidebar-foreground: 120 4% 11%;
-    --sidebar-primary: 100 4% 13%;
-    --sidebar-primary-foreground: 90 20% 97%;
-    --sidebar-accent: 100 8% 87%;
-    --sidebar-accent-foreground: 100 10% 13%;
-    --sidebar-border: 100 7% 82%;
-    --sidebar-ring: 100 4% 19%;
+    --sidebar-background: 30 4% 91%;
+    --sidebar-foreground: 24 8% 11%;
+    --sidebar-primary: 19 100% 39%;
+    --sidebar-primary-foreground: 20 100% 98%;
+    --sidebar-accent: 18 42% 89%;
+    --sidebar-accent-foreground: 20 30% 16%;
+    --sidebar-border: 24 8% 82%;
+    --sidebar-ring: 19 100% 39%;
   }
   .dark {
-    --sidebar-background: 120 5% 11%;
-    --sidebar-foreground: 90 20% 95%;
-    --sidebar-primary: 90 16% 94%;
-    --sidebar-primary-foreground: 120 5% 9%;
-    --sidebar-accent: 100 8% 19%;
-    --sidebar-accent-foreground: 90 20% 95%;
-    --sidebar-border: 100 4% 23%;
-    --sidebar-ring: 90 12% 92%;
+    --sidebar-background: 24 5% 11%;
+    --sidebar-foreground: 20 20% 95%;
+    --sidebar-primary: 19 100% 39%;
+    --sidebar-primary-foreground: 20 100% 98%;
+    --sidebar-accent: 18 28% 20%;
+    --sidebar-accent-foreground: 20 24% 95%;
+    --sidebar-border: 24 5% 23%;
+    --sidebar-ring: 17 100% 58%;
   }
 }
