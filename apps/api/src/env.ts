@@ -15,11 +15,14 @@ export const env = createEnv({
     GROQ_API_KEY: z.string().optional(),
     POLAR_ACCESS_TOKEN: z.string().optional(),
     POLAR_AUTOCOMPLETE_METER_ID: z.string().optional(),
+    POLAR_DEEP_COMPLETE_METER_ID: z.string().optional(),
     POLAR_CHECKOUT_SUCCESS_URL: z.url().optional(),
     POLAR_ORGANIZATION_ID: z.string().optional(),
     POLAR_PRODUCT_ID_FREE: z.string().optional(),
     POLAR_PRODUCT_ID_MAX: z.string().optional(),
     POLAR_PRODUCT_ID_PRO: z.string().optional(),
+    POLAR_PRODUCT_ID_PRO_ANNUAL: z.string().optional(),
+    POLAR_PRODUCT_ID_PRO_MONTHLY: z.string().optional(),
     POLAR_SERVER: z.enum(["production", "sandbox"]).default("production"),
     POLAR_SEND_ORGANIZATION_ID: z
       .enum(["true", "false"])

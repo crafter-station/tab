@@ -22,6 +22,11 @@ import {
 } from "./typing-context.ts";
 import { createApiSuggestionClient } from "./suggestion-client.ts";
 import { createDesktopTelemetryClient } from "./telemetry-client.ts";
+import {
+  createAcceptedWordLedger,
+  createFileAcceptedWordLedgerStorage,
+} from "./accepted-word-ledger.ts";
+import { createLocalAcceptanceUsageClient } from "./usage-client.ts";
 import { createNativeAutocompleteRuntime } from "./native-autocomplete-runtime.ts";
 import {
   type AppContextSnapshot,
@@ -90,6 +95,11 @@ mkdirSync(userDataPath, { recursive: true });
 const preferencesManager = createPreferencesManager({
   storage: createFilePreferencesStorage(path.join(userDataPath, "preferences.json")),
 });
+const acceptedWordLedger = createAcceptedWordLedger({
+  storage: createFileAcceptedWordLedgerStorage(
+    path.join(userDataPath, "accepted-word-ledger.v1.json"),
+  ),
+});
 
 const onboardingManager = createOnboardingManager({
   getPreferences: () => preferencesManager.get().onboarding,
@@ -113,7 +123,7 @@ const APP_VERSION = app.getVersion() || "0.0.0";
 
 function getOrCreateDeviceId(): string {
   const prefs = preferencesManager.get();
-  if (prefs.deviceId) return prefs.deviceId;
+  if (prefs.deviceId && prefs.deviceId !== "device-unknown") return prefs.deviceId;
   const deviceId = env.TAB_DEVICE_ID || crypto.randomUUID();
   preferencesManager.update({ deviceId });
   console.log("Generated and persisted new device id:", deviceId);
@@ -159,7 +169,12 @@ const requestCloudSuggestion = createApiSuggestionClient({
   appVersion: APP_VERSION,
   platform: process.platform,
   memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
+  getCustomWritingInstructions: () =>
+    currentDesktopStatus?.entitlement?.capabilities.customWritingInstructions
+      ? preferencesManager.get().suggestions.customWritingInstructions || undefined
+      : undefined,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+  onEntitlementError: () => settingsWindowManager.show(),
 });
 const completionHistory = createCompletionHistory((entries) => {
   settingsWindowManager.sendCompletionHistory(entries);
@@ -182,14 +197,33 @@ const recordInteractionTelemetry = createDesktopTelemetryClient({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
+const synchronizeLocalAcceptance = createLocalAcceptanceUsageClient({
+  apiBaseUrl: API_BASE_URL,
+  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+});
+
+async function synchronizeAcceptedWordLedger(): Promise<void> {
+  for (const event of acceptedWordLedger.getPending()) {
+    const allowance = await synchronizeLocalAcceptance(event);
+    if (!allowance) return;
+    acceptedWordLedger.reconcileUsage(event.localDay, allowance.used);
+    acceptedWordLedger.markSynced(event.acceptanceId);
+  }
+}
 
 const memoryClient = createDesktopMemoryClient({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
 
+let currentDesktopStatus: DesktopStatus | null = null;
 const memoryExtractionWindow = createMemoryExtractionWindow({
-  memoryEnabled: () => preferencesManager.get().suggestions.usePersonalMemory,
+  memoryEnabled: () =>
+    preferencesManager.get().suggestions.continuousMemoryExtraction &&
+    Boolean(
+      currentDesktopStatus?.entitlement?.capabilities
+        .continuousMemoryExtraction,
+    ),
 });
 
 const memoryExtractionDispatcher = createMemoryExtractionDispatcher({
@@ -219,17 +253,40 @@ const updateChecker = createUpdateChecker({
 
 const statusService = createDesktopStatusService({
   apiBaseUrl: API_BASE_URL,
+  getCachedEntitlement: () =>
+    preferencesManager.get().cachedEntitlement ?? null,
+  setCachedEntitlement: (cachedEntitlement) => {
+    preferencesManager.update({
+      cachedEntitlement: cachedEntitlement ?? undefined,
+    });
+  },
   getAuthorizationObservation: () => authClient.getAuthorizationObservation(),
   isCredentialGenerationCurrent: (credentialGeneration) =>
     authClient.isCredentialGenerationCurrent(credentialGeneration),
   publishIfCredentialGenerationCurrent: (credentialGeneration, publish) =>
     authClient.publishIfCredentialGenerationCurrent(credentialGeneration, publish),
   onChange: (status, credentialGeneration) => {
+    currentDesktopStatus = status;
     settingsWindowManager.sendStatus(status);
     onboardingWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
     if (credentialGeneration !== null) {
       void authSession.handleStatus(status.auth, credentialGeneration);
+    }
+    if (status.auth === "signed_in") {
+      if (
+        status.entitlement?.localAcceptedWords.period ===
+        acceptedWordLedger.getCurrentDay()
+      ) {
+        acceptedWordLedger.reconcileUsage(
+          status.entitlement.localAcceptedWords.period,
+          status.entitlement.localAcceptedWords.used,
+        );
+      }
+      void synchronizeAcceptedWordLedger();
+    }
+    if (!status.entitlement?.capabilities.continuousMemoryExtraction) {
+      memoryExtractionDispatcher.cancelAndClear();
     }
   },
 });
@@ -261,6 +318,14 @@ const localInference = createLocalInferencePrototype({
   modelPath: LOCAL_INFERENCE_MODEL_PATH,
   modelUrl: LOCAL_INFERENCE_MODEL_URL,
   port: env.TAB_LOCAL_INFERENCE_PORT,
+  getMemories: () =>
+    preferencesManager.get().suggestions.usePersonalMemory
+      ? currentMemories
+      : [],
+  getCustomWritingInstructions: () =>
+    currentDesktopStatus?.entitlement?.capabilities.customWritingInstructions
+      ? preferencesManager.get().suggestions.customWritingInstructions || undefined
+      : undefined,
   onDiagnostic: (event, details) => logLocalSuggestion(`inference.${event}`, details),
   onStatusChange: (status) => {
     settingsWindowManager.sendLocalInferenceStatus(status);
@@ -350,6 +415,17 @@ const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
   debounceMs: 100,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
+  canAcceptLocalSuggestion: () =>
+    acceptedWordLedger.canAccept(
+      currentDesktopStatus?.entitlement
+        ? currentDesktopStatus.entitlement.capabilities.localAcceptedWordsPerDay
+        : 100,
+    ),
+  onLocalAllowanceExhausted: () => settingsWindowManager.show(),
+  recordAcceptedUsage: (event) => {
+    acceptedWordLedger.record(event);
+    void synchronizeAcceptedWordLedger();
+  },
   localSuggestionModelId: QWEN_25_3B_Q4_K_M.id,
 });
 
@@ -394,6 +470,33 @@ function setUsePersonalMemoryForSuggestions(enabled: boolean): void {
   settingsWindowManager.sendPreferences(nextPreferences);
 }
 
+function setContinuousMemoryExtraction(enabled: boolean): void {
+  const preferences = preferencesManager.get();
+  const nextPreferences = {
+    ...preferences,
+    suggestions: {
+      ...preferences.suggestions,
+      continuousMemoryExtraction: enabled,
+    },
+  };
+  preferencesManager.update(nextPreferences);
+  if (!enabled) memoryExtractionDispatcher.cancelAndClear();
+  settingsWindowManager.sendPreferences(nextPreferences);
+}
+
+function setCustomWritingInstructions(value: string): void {
+  const preferences = preferencesManager.get();
+  const nextPreferences = {
+    ...preferences,
+    suggestions: {
+      ...preferences.suggestions,
+      customWritingInstructions: value.trimStart().slice(0, 1_000),
+    },
+  };
+  preferencesManager.update(nextPreferences);
+  settingsWindowManager.sendPreferences(nextPreferences);
+}
+
 function updateTray(): void {
   tray?.update(createTrayState(statusService.getCurrentStatus()));
 }
@@ -402,7 +505,7 @@ function createTrayState(status: DesktopStatus) {
   return {
     paused: nativeAutocompleteRuntime.isPaused(),
     auth: status.auth,
-    quotaExhausted: status.quota?.exhausted ?? false,
+    quotaExhausted: false,
     updateAvailable,
   };
 }
@@ -420,6 +523,7 @@ async function togglePause(): Promise<void> {
 async function signOut(): Promise<void> {
   console.log("Signing out device:", DEVICE_ID);
   await authClient.clearToken();
+  memoryExtractionDispatcher.cancelAndClear();
   clearContextAndHide();
   await statusService.refresh();
   await refreshMemories();
@@ -1015,6 +1119,11 @@ async function bootstrap(): Promise<void> {
   ipcMain.on("sign-out", () => {
     signOut().catch((error) => console.error("Failed to sign out:", error));
   });
+  ipcMain.on("open-pricing", () => {
+    shell.openExternal(`${WEB_BASE_URL}/pricing`).catch((error) =>
+      console.error("Failed to open pricing:", error),
+    );
+  });
 
   ipcMain.on("toggle-pause", () => {
     togglePause().catch((error) => console.error("Failed to toggle pause:", error));
@@ -1034,6 +1143,12 @@ async function bootstrap(): Promise<void> {
 
   ipcMain.on("set-use-personal-memory-for-suggestions", (_event, enabled: boolean) => {
     setUsePersonalMemoryForSuggestions(Boolean(enabled));
+  });
+  ipcMain.on("set-continuous-memory-extraction", (_event, enabled: boolean) => {
+    setContinuousMemoryExtraction(Boolean(enabled));
+  });
+  ipcMain.on("set-custom-writing-instructions", (_event, value: string) => {
+    setCustomWritingInstructions(typeof value === "string" ? value : "");
   });
 
   ipcMain.handle("get-initial-state", () => ({
@@ -1134,6 +1249,9 @@ async function bootstrap(): Promise<void> {
 
   // Initial status and memory refresh.
   statusService.refresh().catch((error) => console.error("Failed initial status refresh:", error));
+  synchronizeAcceptedWordLedger().catch((error) =>
+    console.error("Failed initial Accepted Word reconciliation:", error),
+  );
   refreshMemories().catch((error) => console.error("Failed initial memory refresh:", error));
 }
 

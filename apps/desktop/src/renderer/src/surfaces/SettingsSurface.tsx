@@ -12,6 +12,7 @@ import {
   SummaryMetric,
   Switch,
   TabMark,
+  Textarea,
   THEME_MODES,
   Tabs,
   TabsContent,
@@ -26,7 +27,10 @@ import {
 } from "@tab/ui";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
-import type { LocalInferenceStatus } from "../../../main/local-inference-prototype";
+import {
+  SUPPORTED_LOCAL_MODELS,
+  type LocalInferenceStatus,
+} from "../../../main/local-inference-prototype";
 import type { CompletionHistoryEntry } from "../../../main/completion-history";
 import { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
 import { describePauseState, describePersonalMemorySource } from "./settingsCopy";
@@ -61,9 +65,8 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
 }
 
-function formatQuota(status: DesktopStatus) {
-  if (!status.quota) return "Not available";
-  return `${status.quota.usage.toLocaleString()} / ${status.quota.quota.toLocaleString()}`;
+function formatAllowance(used: number, limit: number | null) {
+  return `${used.toLocaleString()} / ${limit === null ? "Unlimited" : limit.toLocaleString()}`;
 }
 
 function formatThemeMode(mode: ThemeMode) {
@@ -79,7 +82,9 @@ function getSidebarStatus(status: DesktopStatus, paused: boolean, loaded: boolea
   if (status.connectivity !== "online") return { label: "Tab is offline", detail: "Waiting for a connection", tone: "warning" };
   if (status.auth === "revoked_device") return { label: "Reconnect Tab", detail: "Access was removed", tone: "destructive" };
   if (status.auth !== "signed_in") return { label: "Sign in required", detail: "Connect this Mac", tone: "warning" };
-  if (status.quota?.exhausted) return { label: "Monthly limit reached", detail: "Suggestions are unavailable", tone: "warning" };
+  if (status.entitlement?.localAcceptedWords.exhausted || status.entitlement?.deepCompletes.exhausted) {
+    return { label: "One allowance reached", detail: "Other Tab capabilities remain available", tone: "warning" };
+  }
   if (paused) return { label: "Suggestions paused", detail: "Resume from Controls", tone: "warning" };
   return { label: "Tab is ready", detail: "Suggestions are active", tone: "success" };
 }
@@ -89,7 +94,7 @@ function createFallbackStatus(): DesktopStatus {
     auth: "sign_in_required",
     connectivity: "online",
     userId: null,
-    quota: null,
+    entitlement: null,
     overlay: "hidden",
     lastUpdatedAt: null,
   };
@@ -105,6 +110,8 @@ export function SettingsSurface() {
   const [memories, setMemories] = useState<PersonalMemory[]>([]);
   const [paused, setPaused] = useState(false);
   const [usePersonalMemory, setUsePersonalMemory] = useState(false);
+  const [continuousMemoryExtraction, setContinuousMemoryExtraction] = useState(false);
+  const [customWritingInstructions, setCustomWritingInstructions] = useState("");
   const [localInferenceStatus, setLocalInferenceStatus] = useState<LocalInferenceStatus>({ status: "stopped" });
   const [modelDownloadError, setModelDownloadError] = useState<string | null>(null);
   const [completionHistory, setCompletionHistory] = useState<readonly CompletionHistoryEntry[]>([]);
@@ -132,6 +139,8 @@ export function SettingsSurface() {
     const unsubscribePause = window.tab.onPauseChanged((nextPaused) => setPaused(nextPaused));
     const unsubscribePreferences = window.tab.onPreferencesChanged((nextPreferences) => {
       setUsePersonalMemory(nextPreferences.suggestions.usePersonalMemory);
+      setContinuousMemoryExtraction(nextPreferences.suggestions.continuousMemoryExtraction);
+      setCustomWritingInstructions(nextPreferences.suggestions.customWritingInstructions);
     });
     let receivedLocalInferenceStatus = false;
     const unsubscribeLocalInference = window.tab.onLocalInferenceStatusChanged((status) => {
@@ -152,6 +161,8 @@ export function SettingsSurface() {
         setMemories(initialState.memories);
         setPaused(initialState.paused);
         setUsePersonalMemory(initialState.preferences.suggestions.usePersonalMemory);
+        setContinuousMemoryExtraction(initialState.preferences.suggestions.continuousMemoryExtraction);
+        setCustomWritingInstructions(initialState.preferences.suggestions.customWritingInstructions);
         if (!receivedLocalInferenceStatus) setLocalInferenceStatus(initialState.localInferenceStatus);
         if (!receivedCompletionHistory) setCompletionHistory(initialState.completionHistory ?? []);
       })
@@ -198,6 +209,16 @@ export function SettingsSurface() {
     window.tab?.setUsePersonalMemoryForSuggestions?.(nextEnabled);
   }
 
+  function handleContinuousMemoryExtraction(nextEnabled: boolean) {
+    setContinuousMemoryExtraction(nextEnabled);
+    window.tab?.setContinuousMemoryExtraction?.(nextEnabled);
+  }
+
+  function handleCustomWritingInstructions(value: string) {
+    setCustomWritingInstructions(value);
+    window.tab?.setCustomWritingInstructions?.(value);
+  }
+
   function handleThemeMode(nextMode: ThemeMode) {
     setThemeMode(nextMode);
     setThemePreference(nextMode);
@@ -223,19 +244,25 @@ export function SettingsSurface() {
                 value={status.auth === "signed_in" ? "Connected" : formatAuth(status.auth)}
                 detail="This Mac"
               />
-              <SummaryMetric label="Plan" value={status.quota ? formatPlanName(status.quota.planId) : "Not available"} detail="Current tier" />
+              <SummaryMetric label="Plan" value={status.entitlement ? formatPlanName(status.entitlement.planId) : "Not available"} detail={status.entitlement?.entitlementSource === "trial" ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}` : "Current tier"} />
               <SummaryMetric
-                label="Monthly suggestions"
-                value={formatQuota(status)}
-                detail={status.quota ? `Resets ${formatDate(status.quota.resetAt)}` : "Available after sign-in"}
+                label="Local Accepted Words"
+                value={status.entitlement ? formatAllowance(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit) : "Not available"}
+                detail={status.entitlement ? `Resets ${formatDate(status.entitlement.localAcceptedWords.resetAt)}` : "Available after sign-in"}
               />
               <SummaryMetric
-                label="Local accepted"
-                value={(status.localSuggestionActivity?.accepted ?? 0).toLocaleString()}
+                label="Deep Completes"
+                value={status.entitlement ? formatAllowance(status.entitlement.deepCompletes.used, status.entitlement.deepCompletes.limit) : "Not available"}
+                detail={status.entitlement ? `Resets ${formatDate(status.entitlement.deepCompletes.resetAt)}` : "Available after sign-in"}
+              />
+              <SummaryMetric
+                label="Completed words"
+                value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()}
                 detail={status.localSuggestionActivity?.averageAcceptanceLatencyMs === null || !status.localSuggestionActivity
                   ? "This month"
                   : `${status.localSuggestionActivity.averageAcceptanceLatencyMs.toLocaleString()} ms average to accept`}
               />
+              <SummaryMetric label="Connected Macs" value={status.entitlement ? `${status.entitlement.devices.active} / ${status.entitlement.devices.limit}` : "Not available"} detail="Personal devices" />
             </div>
             <SettingsGroup title="Connection" description="Account and network state for this installation of Tab.">
               <StatusRow
@@ -251,6 +278,11 @@ export function SettingsSurface() {
                 description="Whether Tab can reach your account and sync saved memories."
               />
               <div className="settings-group__actions">
+                {status.entitlement?.upgradeUrl ? (
+                  <Button onClick={() => window.tab?.openPricing?.()}>
+                    Upgrade to Pro
+                  </Button>
+                ) : null}
                 {status.auth === "signed_in" ? (
                   <Button variant="secondary" onClick={() => window.tab?.signOut?.()}>
                     Sign out
@@ -285,12 +317,14 @@ export function SettingsSurface() {
               description="Your account stays connected. Tab stops checking recent typing and hides the suggestion bar."
             />
             <SettingsRow
-              label="Local model"
+              label={status.entitlement?.capabilities.modelCatalogAccess
+                ? "Supported model catalog"
+                : "Local model"}
               description={modelDownloadError ?? (localInferenceStatus.status === "unavailable"
                 ? `Automatic Suggestions are unavailable (${localInferenceStatus.reason}). Remote inference will not be used automatically.`
                 : localInferenceStatus.status === "downloading"
                   ? "Keep Tab open while the local model downloads."
-                : "Automatic Suggestions run on this Mac and never silently fall through to remote inference.")}
+                  : `${SUPPORTED_LOCAL_MODELS[0].id} runs on this Mac and never silently falls through to remote inference.`)}
             >
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge tone={localInferenceStatus.status === "ready" ? "success" : "warning"}>
@@ -309,6 +343,22 @@ export function SettingsSurface() {
                   <Button onClick={handleDownloadModel}>Download model</Button>
                 )}
               </div>
+            </SettingsRow>
+            <SettingsRow
+              label="Custom writing instructions"
+              description={status.entitlement?.capabilities.customWritingInstructions
+                ? "Applied locally and to Deep Complete without being stored as telemetry."
+                : "Available during the Pro trial and on Pro."}
+            >
+              <Textarea
+                aria-label="Custom writing instructions"
+                className="min-h-20 w-full max-w-md"
+                disabled={!status.entitlement?.capabilities.customWritingInstructions}
+                maxLength={1_000}
+                onChange={(event) => handleCustomWritingInstructions(event.target.value)}
+                placeholder="For example: Keep the tone concise and direct."
+                value={customWritingInstructions}
+              />
             </SettingsRow>
           </SettingsGroup>
         );
@@ -450,6 +500,22 @@ export function SettingsSurface() {
                     aria-label="Use saved memories in suggestions"
                     checked={usePersonalMemory}
                     onCheckedChange={handleUsePersonalMemory}
+                  />
+                </div>
+              </SettingsRow>
+              <SettingsRow
+                label="Continuous Memory Extraction"
+                description={status.entitlement?.capabilities.continuousMemoryExtraction
+                  ? "Learn new memories from eligible writing in the background."
+                  : "Available during the Pro trial and on Pro. Existing memories remain manageable."}
+              >
+                <div className="flex items-center justify-end gap-2">
+                  <StatusBadge tone={continuousMemoryExtraction ? "success" : "neutral"}>{continuousMemoryExtraction ? "On" : "Off"}</StatusBadge>
+                  <Switch
+                    aria-label="Continuous Memory Extraction"
+                    checked={continuousMemoryExtraction}
+                    disabled={!status.entitlement?.capabilities.continuousMemoryExtraction}
+                    onCheckedChange={handleContinuousMemoryExtraction}
                   />
                 </div>
               </SettingsRow>

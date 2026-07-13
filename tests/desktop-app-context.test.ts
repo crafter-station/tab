@@ -7,6 +7,7 @@ import {
 import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy.ts";
 import { createAppContextExtractor } from "../apps/desktop/src/main/app-context-extractor.ts";
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "../apps/desktop/src/main/typing-context.ts";
+import { createSuggestionMessages } from "../packages/suggestion-policy/src/index.ts";
 
 function makeTextSession(overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot {
   return {
@@ -424,6 +425,47 @@ describe("App Context privacy normalization", () => {
       fragments: [],
       metadata: { status: "suppressed", suppressionReason: "secret_like_context" },
     });
+  });
+});
+
+describe("OpenCode suggestion prompt context", () => {
+  it("reserves prompt space for current terminal context after conversation background", () => {
+    const messages = createSuggestionMessages({
+      typingContext: "Continue this",
+      contextSource: "terminal_input",
+      activeApplication: { bundleId: "com.mitchellh.ghostty" },
+      memories: [],
+      appContext: {
+        fragments: [
+          {
+            id: "opencode-conversation",
+            provider: "opencode-local-session",
+            kind: "conversation",
+            text: "C".repeat(600),
+            confidence: 0.95,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          },
+          {
+            id: "ghostty-terminal",
+            provider: "ghostty-terminal",
+            kind: "terminal_visible_context",
+            text: "T".repeat(600),
+            confidence: 0.86,
+            redaction: { applied: false, redactionCount: 0, kinds: [] },
+            requestable: true,
+            memoryEligible: false,
+          },
+        ],
+        metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+      },
+    });
+    const prompt = messages.at(-1)?.content ?? "";
+
+    expect(prompt.match(/\] (C+)/)?.[1]).toHaveLength(400);
+    expect(prompt.match(/\] (T+)/)?.[1]).toHaveLength(200);
+    expect(prompt).toContain("Unfinished text:\nContinue this");
   });
 });
 

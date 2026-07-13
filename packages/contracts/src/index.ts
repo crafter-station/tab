@@ -1,4 +1,5 @@
 import { MEMORY_EXTRACTION_WINDOW_POLICY, SUGGESTION_CONTEXT_SOURCES } from "@tab/memory-policy";
+import { PLAN_IDS } from "@tab/billing";
 import { z } from "zod";
 
 const errorCodes = [
@@ -9,6 +10,8 @@ const errorCodes = [
   "billing_required",
   "plan_change_required",
   "quota_exhausted",
+  "device_limit_reached",
+  "feature_unavailable",
   "rate_limited",
   "provider_failure",
 ] as const;
@@ -117,6 +120,14 @@ export const MemoryDeleteResponseSchema = z.object({
   }),
 });
 
+export const MemoryExportResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: z.object({
+    exportedAt: z.string().datetime(),
+    memories: z.array(PersonalMemorySchema),
+  }),
+});
+
 export const MemoryExtractionWindowEntrySchema = z
   .object({
     id: z.string().min(1),
@@ -168,14 +179,72 @@ export const DeviceListResponseSchema = z.object({
   }),
 });
 
-export const BillingQuotaResponseSchema = z.object({
+export const PlanIdSchema = z.enum(PLAN_IDS);
+export const BillingIntervalSchema = z.enum(["monthly", "annual"]);
+export const EntitlementSourceSchema = z.enum(["free", "trial", "paid"]);
+
+export const PlanCapabilitiesSchema = z.object({
+  localAcceptedWordsPerDay: z.number().int().positive().nullable(),
+  deepCompletesPerMonth: z.number().int().positive(),
+  personalDeviceLimit: z.number().int().positive(),
+  continuousMemoryExtraction: z.boolean(),
+  customWritingInstructions: z.boolean(),
+  modelCatalogAccess: z.boolean(),
+});
+
+export const AllowanceStateSchema = z.object({
+  period: z.string().min(1).optional(),
+  used: z.number().int().nonnegative(),
+  limit: z.number().int().positive().nullable(),
+  remaining: z.number().int().nonnegative().nullable(),
+  resetAt: z.string().datetime(),
+  exhausted: z.boolean(),
+});
+
+export const TrialStateSchema = z.object({
+  active: z.boolean(),
+  startedAt: z.string().datetime(),
+  endsAt: z.string().datetime(),
+});
+
+export const BillingStatusDataSchema = z.object({
+  planId: PlanIdSchema,
+  entitlementSource: EntitlementSourceSchema,
+  billingInterval: BillingIntervalSchema.optional(),
+  accessEndsAt: z.string().datetime().optional(),
+  capabilities: PlanCapabilitiesSchema,
+  trial: TrialStateSchema,
+  localAcceptedWords: AllowanceStateSchema,
+  deepCompletes: AllowanceStateSchema,
+  devices: z.object({
+    active: z.number().int().nonnegative(),
+    limit: z.number().int().positive(),
+    canLink: z.boolean(),
+  }),
+  upgradeUrl: z.string().min(1).optional(),
+});
+
+export const BillingStatusResponseSchema = z.object({
+  status: z.literal("ok"),
+  data: BillingStatusDataSchema,
+});
+
+export const BillingQuotaResponseSchema = BillingStatusResponseSchema;
+
+export const LocalAcceptanceUsageRequestSchema = z
+  .object({
+    acceptanceId: z.string().min(1),
+    localDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    acceptedAt: z.string().datetime(),
+    wordCount: z.number().int().nonnegative(),
+    characterCount: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const LocalAcceptanceUsageResponseSchema = z.object({
   status: z.literal("ok"),
   data: z.object({
-    planId: z.string().min(1),
-    quota: z.number().int().nonnegative(),
-    usage: z.number().int().nonnegative(),
-    resetAt: z.string().datetime(),
-    upgradeUrl: z.string().min(1).optional(),
+    localAcceptedWords: AllowanceStateSchema,
   }),
 });
 
@@ -208,12 +277,12 @@ export const DesktopStatusSchema = z.object({
   authenticated: z.boolean(),
   deviceRevoked: z.boolean(),
   userId: z.string().min(1).optional(),
-  planId: z.string().min(1).optional(),
-  quota: z.number().int().nonnegative().optional(),
-  usage: z.number().int().nonnegative().optional(),
-  resetAt: z.string().datetime().optional(),
+  entitlement: BillingStatusDataSchema.optional(),
   localSuggestionActivity: z.object({
-    accepted: z.number().int().nonnegative(),
+    acceptedSuggestions: z.number().int().nonnegative(),
+    acceptedWords: z.number().int().nonnegative(),
+    acceptedCharacters: z.number().int().nonnegative(),
+    activeWritingDays: z.number().int().nonnegative(),
     averageAcceptanceLatencyMs: z.number().int().nonnegative().nullable(),
   }).optional(),
 });
@@ -226,6 +295,7 @@ export const DesktopStatusResponseSchema = z.object({
 export const SuggestionRequestSchema = z.object({
   requestId: z.string().min(1),
   deviceId: z.string().min(1),
+  mode: z.literal("deep_complete"),
   typingContext: z.string().min(1),
   contextSource: SuggestionContextSourceSchema,
   redaction: RedactionSummarySchema,
@@ -233,6 +303,7 @@ export const SuggestionRequestSchema = z.object({
   memoryEnabled: z.boolean().default(true),
   contextHash: z.string().min(1).optional(),
   appContext: AppContextSchema.optional(),
+  customWritingInstructions: z.string().trim().min(1).max(1_000).optional(),
   clientMetadata: ClientMetadataSchema.optional(),
 });
 
@@ -248,6 +319,7 @@ export const MemoryJobSchema = z.object({
 });
 
 export const TelemetryEventTypeSchema = z.enum([
+  "suggestion_generated",
   "suggestion_shown",
   "suggestion_accepted",
   "suggestion_dismissed",
@@ -257,6 +329,17 @@ export const TelemetryEventTypeSchema = z.enum([
   "memory_extraction_attempted",
   "memory_extraction_succeeded",
   "memory_extraction_failed",
+]);
+
+export const SuggestionInferenceSourceSchema = z.enum(["local", "deep_complete"]);
+export const SuggestionTriggerSchema = z.enum(["automatic", "explicit"]);
+export const ApplicationCategorySchema = z.enum([
+  "communication",
+  "development",
+  "documents",
+  "productivity",
+  "terminal",
+  "other",
 ]);
 
 export const TelemetryEventSchema = z.object({
@@ -282,21 +365,41 @@ export const TelemetryEventSchema = z.object({
   memoryUpdatedCount: z.number().int().nonnegative().optional(),
   memoryDeletedCount: z.number().int().nonnegative().optional(),
   memoryRejectedCount: z.number().int().nonnegative().optional(),
+  inferenceSource: SuggestionInferenceSourceSchema.optional(),
+  trigger: SuggestionTriggerSchema.optional(),
+  acceptedWordCount: z.number().int().nonnegative().optional(),
+  acceptedCharacterCount: z.number().int().nonnegative().optional(),
+  applicationCategory: ApplicationCategorySchema.optional(),
+  memoryUsed: z.boolean().optional(),
+  memoryCount: z.number().int().nonnegative().optional(),
+  providerId: z.string().min(1).optional(),
+  cloudCostUsdMicros: z.number().int().nonnegative().optional(),
 });
 
 export const RecordTelemetryEventRequestSchema = z
   .object({
     eventType: z.enum([
+      "suggestion_generated",
+      "suggestion_shown",
       "suggestion_accepted",
       "suggestion_dismissed",
       "suggestion_stale",
+      "suggestion_error",
     ]),
+    eventId: z.string().min(1),
     requestId: z.string().min(1),
     timestamp: z.string().datetime(),
-    activeApplicationBundleId: z.string().min(1).optional(),
     suggestionLength: z.number().int().nonnegative().optional(),
     latencyMs: z.number().int().nonnegative().optional(),
+    errorCode: z.enum(errorCodes).optional(),
     modelId: z.string().min(1).optional(),
+    inferenceSource: SuggestionInferenceSourceSchema,
+    trigger: SuggestionTriggerSchema,
+    acceptedWordCount: z.number().int().nonnegative().optional(),
+    acceptedCharacterCount: z.number().int().nonnegative().optional(),
+    applicationCategory: ApplicationCategorySchema.optional(),
+    memoryUsed: z.boolean().optional(),
+    memoryCount: z.number().int().nonnegative().optional(),
   })
   .strict();
 
@@ -308,7 +411,10 @@ export const TelemetryEventsResponseSchema = z.object({
 });
 
 export const LocalSuggestionActivitySchema = z.object({
-  accepted: z.number().int().nonnegative(),
+  acceptedSuggestions: z.number().int().nonnegative(),
+  acceptedWords: z.number().int().nonnegative(),
+  acceptedCharacters: z.number().int().nonnegative(),
+  activeWritingDays: z.number().int().nonnegative(),
   averageAcceptanceLatencyMs: z.number().int().nonnegative().nullable(),
 });
 
@@ -332,9 +438,15 @@ export const ApiSuccessResponseSchema = z.object({
 });
 
 export const EntitlementErrorDetailsSchema = z.object({
-  quota: z.number().int().nonnegative(),
-  usage: z.number().int().nonnegative(),
-  resetAt: z.string().datetime(),
+  capability: z.enum([
+    "local_accepted_words",
+    "deep_completes",
+    "devices",
+    "memory_extraction",
+  ]),
+  limit: z.number().int().positive().nullable().optional(),
+  used: z.number().int().nonnegative().optional(),
+  resetAt: z.string().datetime().optional(),
   upgradeUrl: z.string().min(1).optional(),
 });
 
@@ -385,6 +497,7 @@ export type PersonalMemoryCreatedBy = z.infer<
 export type PersonalMemory = z.infer<typeof PersonalMemorySchema>;
 export type MemoryListResponse = z.infer<typeof MemoryListResponseSchema>;
 export type MemoryDeleteResponse = z.infer<typeof MemoryDeleteResponseSchema>;
+export type MemoryExportResponse = z.infer<typeof MemoryExportResponseSchema>;
 export type MemoryExtractionRequest = z.infer<
   typeof MemoryExtractionRequestSchema
 >;
@@ -393,7 +506,21 @@ export type MemoryExtractionCounts = z.infer<
 >;
 export type DeviceListItem = z.infer<typeof DeviceListItemSchema>;
 export type DeviceListResponse = z.infer<typeof DeviceListResponseSchema>;
+export type PlanId = z.infer<typeof PlanIdSchema>;
+export type BillingInterval = z.infer<typeof BillingIntervalSchema>;
+export type EntitlementSource = z.infer<typeof EntitlementSourceSchema>;
+export type PlanCapabilities = z.infer<typeof PlanCapabilitiesSchema>;
+export type AllowanceState = z.infer<typeof AllowanceStateSchema>;
+export type TrialState = z.infer<typeof TrialStateSchema>;
+export type BillingStatusData = z.infer<typeof BillingStatusDataSchema>;
+export type BillingStatusResponse = z.infer<typeof BillingStatusResponseSchema>;
 export type BillingQuotaResponse = z.infer<typeof BillingQuotaResponseSchema>;
+export type LocalAcceptanceUsageRequest = z.infer<
+  typeof LocalAcceptanceUsageRequestSchema
+>;
+export type LocalAcceptanceUsageResponse = z.infer<
+  typeof LocalAcceptanceUsageResponseSchema
+>;
 export type BillingCheckoutResponse = z.infer<typeof BillingCheckoutResponseSchema>;
 export type BillingPortalResponse = z.infer<typeof BillingPortalResponseSchema>;
 export type DesktopReleaseFeed = z.infer<typeof DesktopReleaseFeedSchema>;
@@ -402,6 +529,11 @@ export type DesktopReleaseFeedResponse = z.infer<
 >;
 export type MemoryJob = z.infer<typeof MemoryJobSchema>;
 export type TelemetryEventType = z.infer<typeof TelemetryEventTypeSchema>;
+export type SuggestionInferenceSource = z.infer<
+  typeof SuggestionInferenceSourceSchema
+>;
+export type SuggestionTrigger = z.infer<typeof SuggestionTriggerSchema>;
+export type ApplicationCategory = z.infer<typeof ApplicationCategorySchema>;
 export type TelemetryEvent = z.infer<typeof TelemetryEventSchema>;
 export type RecordTelemetryEventRequest = z.infer<
   typeof RecordTelemetryEventRequestSchema

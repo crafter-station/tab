@@ -113,7 +113,7 @@ describe("desktop onboarding", () => {
       "recent typing",
       "saved memories",
       "metadata-only telemetry",
-      "raw logs",
+      "raw recent typing",
     ];
 
     for (const phrase of requiredPrivacyModelPhrases) {

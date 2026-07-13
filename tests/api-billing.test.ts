@@ -25,6 +25,7 @@ import type { SuggestionGenerator } from "../apps/api/src/index.ts";
 const validRequest = {
   requestId: "req-1",
   deviceId: "device-1",
+  mode: "deep_complete",
   typingContext: "Hello",
   contextSource: "typed_text",
   redaction: { applied: false, redactionCount: 0, kinds: [] },
@@ -71,9 +72,9 @@ async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
   await billingService.applyEntitlement({
     userId: "user-1",
     planId: "free",
-    polarCustomerId: "polar-customer-free",
-    polarSubscriptionId: "polar-sub-free",
-    status: "active",
+    status: "inactive",
+    trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+    trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
     cachedAt: new Date(),
   });
   return { app, token, billingService, usageMeterClient };
@@ -83,8 +84,89 @@ async function parseApiResponse(response: Response) {
   return ApiResponseSchema.parse(await response.json());
 }
 
-describe("Billing and quota enforcement", () => {
-  it("counts only returned suggestions against quota", async () => {
+describe("Billing and allowance enforcement", () => {
+  it("starts one persisted 30-day Pro trial and falls back to Free without Polar", async () => {
+    let now = new Date("2026-07-01T00:00:00.000Z");
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({ storage, now: () => now });
+
+    const trial = await billing.getStatus("trial-user");
+    expect(trial.planId).toBe("pro");
+    expect(trial.entitlementSource).toBe("trial");
+    expect(trial.trial.endsAt).toBe("2026-07-31T00:00:00.000Z");
+
+    now = new Date("2026-08-01T00:00:00.000Z");
+    const free = await billing.getStatus("trial-user");
+    expect(free.planId).toBe("free");
+    expect(free.entitlementSource).toBe("free");
+    expect(free.trial.endsAt).toBe(trial.trial.endsAt);
+  });
+
+  it("keeps local and Deep Complete usage independent and reconciles duplicates", async () => {
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({
+      storage,
+      now: () => new Date("2026-07-12T12:00:00.000Z"),
+    });
+    await billing.applyEntitlement({
+      userId: "free-user",
+      planId: "free",
+      status: "inactive",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
+      cachedAt: new Date(),
+    });
+
+    await billing.recordLocalAcceptedWords({
+      userId: "free-user",
+      acceptanceId: "accept-1",
+      localDay: "2026-07-12",
+      words: 102,
+    });
+    await billing.recordLocalAcceptedWords({
+      userId: "free-user",
+      acceptanceId: "accept-1",
+      localDay: "2026-07-12",
+      words: 102,
+    });
+    await billing.consumeDeepComplete("free-user", "deep-1");
+    await billing.consumeDeepComplete("free-user", "deep-1");
+
+    const status = await billing.getStatus("free-user", {
+      localDay: "2026-07-12",
+    });
+    expect(status.localAcceptedWords.used).toBe(102);
+    expect(status.localAcceptedWords.exhausted).toBe(true);
+    expect(status.deepCompletes.used).toBe(1);
+    expect(status.deepCompletes.exhausted).toBe(false);
+  });
+
+  it("keeps canceled paid benefits through currentPeriodEnd", async () => {
+    const now = new Date("2026-07-12T12:00:00.000Z");
+    const billing = new BillingService({
+      storage: new InMemoryBillingStorage(),
+      now: () => now,
+    });
+    await billing.applyEntitlement({
+      userId: "paid-user",
+      planId: "pro",
+      polarCustomerId: "customer-1",
+      polarSubscriptionId: "subscription-1",
+      status: "canceled",
+      currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      billingInterval: "annual",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
+      cachedAt: now,
+    });
+
+    const status = await billing.getStatus("paid-user");
+    expect(status.planId).toBe("pro");
+    expect(status.entitlementSource).toBe("paid");
+    expect(status.billingInterval).toBe("annual");
+  });
+
+  it("counts only returned Deep Completes against allowance", async () => {
     const { app, token, billingService } = await createBillingTestApp(
       async () => ({ text: " world" }),
     );
@@ -107,7 +189,35 @@ describe("Billing and quota enforcement", () => {
     expect(usage).toBe(2);
   });
 
-  it("does not consume quota for empty suggestions", async () => {
+  it("does not regenerate a Deep Complete for a consumed request id", async () => {
+    let generationCount = 0;
+    const { app, token, billingService } = await createBillingTestApp(
+      async () => {
+        generationCount += 1;
+        return { text: " world" };
+      },
+    );
+
+    const first = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+    const replay = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(validRequest),
+    });
+
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(409);
+    expect(generationCount).toBe(1);
+    expect(
+      await billingService.storage.getUsage("user-1", currentMonth()),
+    ).toBe(1);
+  });
+
+  it("does not consume allowance for empty Deep Completes", async () => {
     const { app, token, billingService } = await createBillingTestApp(
       async () => null,
     );
@@ -128,7 +238,7 @@ describe("Billing and quota enforcement", () => {
     expect(usage).toBe(0);
   });
 
-  it("does not consume quota when generation fails", async () => {
+  it("does not consume allowance when generation fails", async () => {
     const { app, token, billingService } = await createBillingTestApp(async () => {
       throw new Error("model timeout");
     });
@@ -144,7 +254,7 @@ describe("Billing and quota enforcement", () => {
     expect(usage).toBe(0);
   });
 
-  it("returns a quota_exhausted entitlement error when the monthly quota is exceeded", async () => {
+  it("returns quota_exhausted after ten Free Deep Completes", async () => {
     const { app, token, billingService } = await createBillingTestApp(
       async () => ({ text: " world" }),
     );
@@ -152,13 +262,13 @@ describe("Billing and quota enforcement", () => {
     await billingService.applyEntitlement({
       userId: "user-1",
       planId: "free",
-      polarCustomerId: "polar-customer-free",
-      polarSubscriptionId: "polar-sub-free",
-      status: "active",
+      status: "inactive",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
 
-    for (let i = 0; i < 100; i++) {
+    for (let i = 0; i < 10; i++) {
       const response = await app.request("/suggestions", {
         method: "POST",
         headers: authHeaders(token),
@@ -179,8 +289,9 @@ describe("Billing and quota enforcement", () => {
     if (body.status !== "error") throw new Error("Expected error response");
     expect(body.error.code).toBe("quota_exhausted");
     expect(body.error.details).toBeDefined();
-    expect(body.error.details?.quota).toBe(100);
-    expect(body.error.details?.usage).toBe(100);
+    expect(body.error.details?.capability).toBe("deep_completes");
+    expect(body.error.details?.limit).toBe(10);
+    expect(body.error.details?.used).toBe(10);
     expect(body.error.details?.resetAt).toBeDefined();
   });
 
@@ -242,12 +353,12 @@ describe("Billing and quota enforcement", () => {
     expect(() =>
       createBillingCheckoutClient({
         accessToken: "polar-token",
-        productIds: { free: "", pro: "prod-pro", max: "prod-max" },
+        productIds: { monthly: "prod-pro-monthly", annual: "" },
       }),
     ).toThrow("Polar checkout is partially configured");
   });
 
-  it("requires a Polar-backed active entitlement before serving suggestions", async () => {
+  it("serves Free without a Polar subscription after the trial", async () => {
     const { app, token, billingService } = await createBillingTestApp(
       async () => ({ text: " world" }),
     );
@@ -256,6 +367,8 @@ describe("Billing and quota enforcement", () => {
       userId: "user-1",
       planId: "free",
       status: "inactive",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
 
@@ -265,12 +378,9 @@ describe("Billing and quota enforcement", () => {
       body: JSON.stringify(validRequest),
     });
 
-    expect(response.status).toBe(402);
+    expect(response.status).toBe(200);
     const body = await parseApiResponse(response);
-    expect(body.status).toBe("error");
-    if (body.status !== "error") throw new Error("Expected error response");
-    expect(body.error.code).toBe("billing_required");
-    expect(body.error.details?.upgradeUrl).toBe("/billing/checkout?plan=free");
+    expect(body.status).toBe("ok");
   });
 
   it("rejects webhook requests with an invalid signature", async () => {
@@ -341,7 +451,7 @@ describe("Billing and quota enforcement", () => {
     expect(entitlement.planId).toBe("pro");
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
 
-    for (let i = 0; i < 1000; i++) {
+    for (let i = 0; i < 300; i++) {
       const response = await app.request("/suggestions", {
         method: "POST",
         headers: authHeaders(token),
@@ -392,7 +502,7 @@ describe("Billing and quota enforcement", () => {
     });
 
     const entitlement = await billingService.getEntitlement("user-1");
-    expect(entitlement.planId).toBe("max");
+    expect(entitlement.planId).toBe("pro");
     expect(entitlement.status).toBe("active");
     expect(entitlement.polarCustomerId).toBe("polar-customer-1");
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
@@ -441,7 +551,7 @@ describe("Billing and quota enforcement", () => {
     });
 
     const entitlement = await billingService.getEntitlement("user-1");
-    expect(entitlement.planId).toBe("max");
+    expect(entitlement.planId).toBe("pro");
     expect(entitlement.status).toBe("active");
     expect(entitlement.polarCustomerId).toBe("polar-customer-1");
     expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
@@ -471,8 +581,19 @@ describe("Billing and quota enforcement", () => {
         cachedAt: new Date(),
       });
 
+      await platform.env.DB.prepare(
+        "UPDATE user_entitlements SET trial_started_at = NULL, trial_ends_at = NULL, cached_at = ? WHERE user_id = ?",
+      )
+        .bind("2020-01-01T00:00:00.000Z", "user-d1")
+        .run();
+
       const entitlement = await storage.getEntitlement("user-d1");
-      expect(entitlement?.planId).toBe("max");
+      expect(entitlement?.planId).toBe("pro");
+      expect(entitlement!.trialStartedAt.getTime()).toBeGreaterThanOrEqual(now);
+      expect(
+        entitlement!.trialEndsAt.getTime() -
+          entitlement!.trialStartedAt.getTime(),
+      ).toBe(30 * 24 * 60 * 60 * 1_000);
 
       const initialContenders = await Promise.all([
         storage.consumeUsageWithinLimit("user-d1", currentMonth(), 1),
@@ -481,9 +602,9 @@ describe("Billing and quota enforcement", () => {
       expect(initialContenders).toContain(1);
       expect(initialContenders).toContain(null);
       await platform.env.DB.prepare(
-        "DELETE FROM usage_records WHERE user_id = ? AND month = ?",
+        "DELETE FROM allowance_usage_events WHERE user_id = ? AND metric = ? AND period = ?",
       )
-        .bind("user-d1", currentMonth())
+        .bind("user-d1", "deep_completes", currentMonth())
         .run();
 
       const first = await storage.consumeUsageWithinLimit(
@@ -567,7 +688,7 @@ describe("PolarUsageMeterClient", () => {
       metadata: { requestId: string; creditsSpent: number };
       timestamp: Date;
     };
-    expect(event.name).toBe("autocomplete.used");
+    expect(event.name).toBe("deep_complete.used");
     expect(event.externalCustomerId).toBe("user-1");
     expect(event.externalId).toBe("req-1");
     expect(event.organizationId).toBe("org-123");

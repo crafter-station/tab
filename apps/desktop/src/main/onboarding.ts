@@ -36,9 +36,9 @@ export const ONBOARDING_PERMISSIONS_COPY = {
   whyInputMonitoring:
     "Input Monitoring helps Tab notice typing, support Option+Tab, and keep working when text details are unavailable.",
   notRequested:
-    "Tab does not ask to see your screen or access your files. Screen Recording and Full Disk Access stay outside Tab's permission scope.",
+    "Tab does not request Screen Recording or Full Disk Access. Supported nearby context, including a bounded local OpenCode conversation match, may be read on-device without those broad permissions.",
   privacyNote:
-    "Recent typing is used to make suggestions. Nearby app text from supported apps is temporary and is not saved as memory by default. Saved memories remain visible and controlled by you. Metadata-only telemetry can improve reliability, but raw logs, raw recent typing, raw nearby app text, accepted suggestion text, and final inserted text are not stored by default.",
+    "Automatic Suggestions use recent typing locally. Double-tapping Option explicitly sends bounded, redacted Typing Context and eligible nearby context for Deep Complete. Nearby app text is temporary and is not saved as memory by default. Saved memories remain visible and controlled by you. Metadata-only telemetry excludes raw recent typing, nearby app text, accepted Suggestion text, and final inserted text.",
   cta: "Continue to Permissions",
 } as const;
 

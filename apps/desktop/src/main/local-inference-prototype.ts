@@ -6,7 +6,7 @@ import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import type { Suggestion } from "@tab/contracts";
+import type { PersonalMemory, Suggestion } from "@tab/contracts";
 import {
   createSuggestionMessages,
   isSuggestionContractValid,
@@ -34,6 +34,8 @@ export const QWEN_25_3B_Q4_K_M: LocalModelConfiguration = {
   maxTokens: MAX_SUGGESTION_TOKENS,
   temperature: 0.3,
 } as const;
+
+export const SUPPORTED_LOCAL_MODELS = [QWEN_25_3B_Q4_K_M] as const;
 
 export type LocalInferenceUnavailableReason =
   | "missing_model"
@@ -88,6 +90,8 @@ export type LocalInferencePrototypeOptions = {
   readonly model?: LocalModelConfiguration;
   readonly onStatusChange?: (status: LocalInferenceStatus) => void;
   readonly onDiagnostic?: (event: string, details: Record<string, unknown>) => void;
+  readonly getMemories?: () => readonly PersonalMemory[];
+  readonly getCustomWritingInstructions?: () => string | undefined;
   readonly spawnHelper?: SpawnHelper;
   readonly fetch?: typeof globalThis.fetch;
   readonly modelExists?: (path: string) => boolean;
@@ -306,18 +310,21 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
       typingContext: snapshot.sanitizedContext,
       contextSource: snapshot.contextSource,
       activeApplication: snapshot.activeApplication,
-      memories: [],
+      memories: options.getMemories?.() ?? [],
       appContext: snapshot.appContext,
+      customWritingInstructions: options.getCustomWritingInstructions?.(),
     };
     const messages = createSuggestionMessages(promptInput);
     options.onDiagnostic?.("request_started", {
       contextId: contextId(snapshot.contextHash),
       contextLength: snapshot.sanitizedContext.length,
-      typingContext: snapshot.sanitizedContext,
       contextSource: snapshot.contextSource,
       activeApplication: snapshot.activeApplication.bundleId,
       messageCount: messages.length,
-      messages,
+      memoryCount: promptInput.memories.length,
+      appContextFragmentCount: promptInput.appContext?.fragments.length ?? 0,
+      customWritingInstructionsLength:
+        promptInput.customWritingInstructions?.length ?? 0,
       modelId: model.id,
       maxTokens: model.maxTokens,
       temperature: model.temperature,
@@ -327,6 +334,7 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
 
     try {
       const startedAt = performance.now();
+      const suggestionId = `sg-local-${crypto.randomUUID()}`;
       const response = await fetchImpl(`${baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: {
@@ -350,7 +358,7 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
         const text = normalizeGeneratedSuggestion(snapshot.sanitizedContext, partialText);
         if (!isSuggestionContractValid(snapshot.sanitizedContext, text)) return;
         requestOptions?.onPartialSuggestion?.({
-          id: `sg-local-${crypto.randomUUID()}`,
+          id: suggestionId,
           text,
         });
       });
@@ -361,8 +369,6 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
         options.onDiagnostic?.("request_empty", {
           reason: "invalid_suggestion_contract",
           contextId: contextId(snapshot.contextHash),
-          rawOutput: rawText,
-          normalizedOutput: text,
           rawOutputLength: rawText.length,
           normalizedOutputLength: text.length,
           ...streamed.timing,
@@ -372,13 +378,11 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
 
       options.onDiagnostic?.("request_completed", {
         contextId: contextId(snapshot.contextHash),
-        rawOutput: rawText,
-        normalizedOutput: text,
         suggestionLength: text.length,
         ...streamed.timing,
       });
 
-      return { id: `sg-local-${crypto.randomUUID()}`, text } satisfies Suggestion;
+      return { id: suggestionId, text } satisfies Suggestion;
     } catch (error) {
       if (requestOptions?.signal?.aborted) {
         options.onDiagnostic?.("request_aborted", { contextId: contextId(snapshot.contextHash) });

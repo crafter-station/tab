@@ -12,6 +12,8 @@ export const ERROR_CODES = [
   "billing_required",
   "plan_change_required",
   "quota_exhausted",
+  "device_limit_reached",
+  "feature_unavailable",
   "rate_limited",
   "provider_failure",
 ] as const;

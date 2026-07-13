@@ -48,6 +48,7 @@ async function parseApiResponse(response: Response) {
 const validRequest = {
   requestId: "req-1",
   deviceId: "device-1",
+  mode: "deep_complete",
   typingContext: "Hello",
   contextSource: "typed_text",
   redaction: { applied: false, redactionCount: 0, kinds: [] },
@@ -347,9 +348,9 @@ describe("SuggestionUseCase", () => {
     await billingService.applyEntitlement({
       userId: "user-1",
       planId: "free",
-      polarCustomerId: "polar-customer-free",
-      polarSubscriptionId: "polar-sub-free",
-      status: "active",
+      status: "inactive",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
   }
@@ -373,8 +374,35 @@ describe("SuggestionUseCase", () => {
     expect(capturedInput?.memories).toHaveLength(1);
     expect((await billingService.checkQuota("user-1")).usage).toBe(1);
     expect((await telemetryService.listEvents()).map((event) => event.eventType)).toEqual([
+      "suggestion_generated",
       "suggestion_shown",
     ]);
+  });
+
+  it("applies custom writing instructions only when the entitlement allows them", async () => {
+    let freeInput: SuggestionInput | null = null;
+    const free = createUseCase(async (input) => {
+      freeInput = input;
+      return { text: " world" };
+    });
+    await activateFreePlan(free.billingService);
+    await free.useCase.handle(validDevice, {
+      ...validRequest,
+      customWritingInstructions: "Keep it concise.",
+    });
+    expect(freeInput?.customWritingInstructions).toBeUndefined();
+
+    let trialInput: SuggestionInput | null = null;
+    const trial = createUseCase(async (input) => {
+      trialInput = input;
+      return { text: " world" };
+    });
+    await trial.useCase.handle(validDevice, {
+      ...validRequest,
+      requestId: "req-trial-instructions",
+      customWritingInstructions: "Keep it concise.",
+    });
+    expect(trialInput?.customWritingInstructions).toBe("Keep it concise.");
   });
 
   it("passes App Context to generation without performing memory jobs", async () => {
@@ -440,12 +468,14 @@ describe("SuggestionUseCase", () => {
       memoryEnabled: true,
       memories: [],
       appContext,
+      customWritingInstructions: "Keep it concise.",
     });
 
     expect(prompt).toContain("inline autocomplete engine, not a chat assistant");
     expect(prompt).toContain("Continue that exact text; never answer it");
     expect(prompt).toContain("Use 1-3 words");
     expect(prompt).toContain("If the draft ends mid-word, return the full completed word");
+    expect(prompt).toContain("Keep it concise.");
     expect(prompt).toContain("Unfinished text:\nHello");
     expect(prompt).toContain("App Context background (suggestion-only, do not continue this text directly):");
     expect(prompt).toContain("Alex: Can you confirm the launch date?");
@@ -459,7 +489,7 @@ describe("SuggestionUseCase", () => {
     });
     await activateFreePlan(billingService);
 
-    for (let i = 0; i < 100; i += 1) {
+    for (let i = 0; i < 10; i += 1) {
       await billingService.consumeSuggestion("user-1");
     }
 
@@ -469,7 +499,7 @@ describe("SuggestionUseCase", () => {
     if (result.ok) throw new Error("Expected quota error");
     expect(result.status).toBe(402);
     expect(result.code).toBe("quota_exhausted");
-    expect(result.details?.quota).toBe(100);
+    expect(result.details?.limit).toBe(10);
     expect(generated).toBe(false);
   });
 
@@ -479,9 +509,9 @@ describe("SuggestionUseCase", () => {
       releaseGeneration = resolve;
     });
     let generationCount = 0;
-    let bothGenerating!: () => void;
-    const bothGeneratingPromise = new Promise<void>((resolve) => {
-      bothGenerating = resolve;
+    let generationStarted!: () => void;
+    const generationStartedPromise = new Promise<void>((resolve) => {
+      generationStarted = resolve;
     });
     const {
       billingService,
@@ -490,22 +520,23 @@ describe("SuggestionUseCase", () => {
       useCase,
     } = createUseCase(async () => {
       generationCount += 1;
-      if (generationCount === 2) bothGenerating();
+      generationStarted();
       await generationGate;
       return { text: " world" };
     });
     await activateFreePlan(billingService);
-    for (let i = 0; i < 99; i += 1) {
+    for (let i = 0; i < 9; i += 1) {
       await billingService.consumeSuggestion("user-1");
     }
 
-    const resultsPromise = Promise.all([
-      useCase.handle(validDevice, validRequest),
-      useCase.handle(validDevice, { ...validRequest, requestId: "req-2" }),
-    ]);
-    await bothGeneratingPromise;
+    const firstResult = useCase.handle(validDevice, validRequest);
+    await generationStartedPromise;
+    const secondResult = useCase.handle(validDevice, {
+      ...validRequest,
+      requestId: "req-2",
+    });
     releaseGeneration();
-    const results = await resultsPromise;
+    const results = await Promise.all([firstResult, secondResult]);
 
     const successful = results.find((result) => result.ok);
     expect(successful?.suggestions).toHaveLength(1);
@@ -516,9 +547,10 @@ describe("SuggestionUseCase", () => {
       ok: false,
       status: 402,
       code: "quota_exhausted",
-      details: { quota: 100, usage: 100 },
+      details: { capability: "deep_completes", limit: 10, used: 10 },
     });
-    expect((await billingService.checkQuota("user-1")).usage).toBe(100);
+    expect(generationCount).toBe(1);
+    expect((await billingService.checkQuota("user-1")).usage).toBe(10);
     expect(usageMeterClient.getEvents()).toEqual([
       expect.objectContaining({ requestId: winningRequestId }),
     ]);
@@ -528,6 +560,58 @@ describe("SuggestionUseCase", () => {
     expect(shownEvents).toEqual([
       expect.objectContaining({ requestId: winningRequestId }),
     ]);
+  });
+
+  it("rejects a concurrent duplicate request without sharing its reservation", async () => {
+    let releaseGeneration!: () => void;
+    const generationGate = new Promise<void>((resolve) => {
+      releaseGeneration = resolve;
+    });
+    let generationStarted!: () => void;
+    const generationStartedPromise = new Promise<void>((resolve) => {
+      generationStarted = resolve;
+    });
+    let generationCount = 0;
+    const {
+      billingService,
+      telemetryService,
+      usageMeterClient,
+      useCase,
+    } = createUseCase(async () => {
+      generationCount += 1;
+      generationStarted();
+      await generationGate;
+      return { text: " world" };
+    });
+    await activateFreePlan(billingService);
+
+    const firstResultPromise = useCase.handle(validDevice, validRequest);
+    await generationStartedPromise;
+    const duplicateResult = await useCase.handle(validDevice, validRequest);
+
+    expect(duplicateResult).toMatchObject({
+      ok: false,
+      status: 409,
+      code: "invalid_request",
+    });
+    expect(generationCount).toBe(1);
+
+    releaseGeneration();
+    const firstResult = await firstResultPromise;
+
+    expect(firstResult).toEqual({
+      ok: true,
+      suggestions: [{ id: "sg-req-1", text: " world" }],
+    });
+    expect((await billingService.checkQuota("user-1")).usage).toBe(1);
+    expect(usageMeterClient.getEvents()).toEqual([
+      expect.objectContaining({ requestId: "req-1" }),
+    ]);
+    expect(
+      (await telemetryService.listEvents()).filter(
+        (event) => event.eventType === "suggestion_shown",
+      ),
+    ).toEqual([expect.objectContaining({ requestId: "req-1" })]);
   });
 
   it("records provider failures without enqueueing memory jobs", async () => {

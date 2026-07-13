@@ -17,6 +17,12 @@ import type { AccessibilityNode as WhatsAppAccessibilityNode } from "./whatsapp-
 import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
 import type { OpenCodeConversationContext } from "./opencode-session-context.ts";
 
+export type AppContextSnapshotState = {
+  readonly snapshot: AppContextSnapshot;
+  readonly pending: boolean;
+  readonly revision: number;
+};
+
 export type AppContextAccessibilityTree = {
   readonly id?: string;
   readonly role?: string;
@@ -48,7 +54,9 @@ export type AppContextExtractor = {
     readonly accessibilityTree: AppContextAccessibilityTree | null | undefined;
   }): void;
   getSnapshot(snapshot: SafeTypingContextSnapshot): AppContextSnapshot;
+  getSnapshotState?(snapshot: SafeTypingContextSnapshot): AppContextSnapshotState;
   ingestTextSession?(snapshot: TextSessionSnapshot): void;
+  subscribe?(listener: () => void): () => void;
   clear(): void;
 };
 
@@ -148,23 +156,40 @@ export function createAppContextExtractor(options: {
   const accessibilityProviders = createAccessibilityCandidateProviderRegistry();
   const snapshotProviders = createSnapshotCandidateProviderRegistry(getZedAppContext, options.openCodeConversation);
 
+  function getSnapshotState(snapshot: SafeTypingContextSnapshot): AppContextSnapshotState {
+    const openCodeState = options.openCodeConversation?.getState(snapshot);
+    const managedSnapshot = managedContext.getSnapshot();
+    if (isAvailable(managedSnapshot) || managedSnapshot.metadata.status === "suppressed") {
+      return {
+        snapshot: managedSnapshot,
+        pending: false,
+        revision: openCodeState?.revision ?? 0,
+      };
+    }
+
+    const candidates = snapshotProviders.map((provider) => provider.getCandidate(snapshot));
+    return {
+      snapshot: normalizeAppContext(
+        firstAvailableOrSuppressed(candidates)
+          ?? candidates[candidates.length - 1]
+          ?? { fragments: [], metadata: { status: "empty" } },
+      ),
+      pending: openCodeState?.pending ?? false,
+      revision: openCodeState?.revision ?? 0,
+    };
+  }
+
   return {
     ingestAccessibilityTree(input) {
       const candidates = accessibilityProviders.map((provider) => provider.getCandidate(input));
       managedContext.setCandidate(firstAvailableOrSuppressed(candidates) ?? { fragments: [], metadata: { status: "unsupported" } });
     },
     getSnapshot(snapshot) {
-      const managedSnapshot = managedContext.getSnapshot();
-      if (isAvailable(managedSnapshot) || managedSnapshot.metadata.status === "suppressed") {
-        return managedSnapshot;
-      }
-
-      const candidates = snapshotProviders.map((provider) => provider.getCandidate(snapshot));
-      return normalizeAppContext(
-        firstAvailableOrSuppressed(candidates)
-          ?? candidates[candidates.length - 1]
-          ?? { fragments: [], metadata: { status: "empty" } },
-      );
+      return getSnapshotState(snapshot).snapshot;
+    },
+    getSnapshotState,
+    subscribe(listener) {
+      return options.openCodeConversation?.subscribe(() => listener()) ?? (() => {});
     },
     ingestTextSession(snapshot) {
       void options.openCodeConversation?.observe(snapshot);

@@ -6,7 +6,6 @@ import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
-import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import {
   ApiResponseSchema,
   DeviceAuthorizeResponseSchema,
@@ -60,14 +59,7 @@ async function signUpAndSignIn(app: ReturnType<typeof createApp>, billingService
   const signUpBody = (await signUpResponse.json()) as { user?: { id: string } };
   expect(signUpBody.user?.id).toBeDefined();
 
-  await billingService.applyEntitlement({
-    userId: signUpBody.user!.id,
-    planId: "free",
-    polarCustomerId: "polar-customer-free",
-    polarSubscriptionId: "polar-sub-free",
-    status: "active",
-    cachedAt: new Date(),
-  });
+  await billingService.getEntitlement(signUpBody.user!.id);
 
   const signInResponse = await app.request("/api/auth/sign-in/email", {
     method: "POST",
@@ -249,7 +241,7 @@ describe("Better Auth browser handoff and device tokens", () => {
     expect(statusResponse.status).toBe(200);
   });
 
-  it("moves an existing device id to the newly signed-in user", async () => {
+  it("does not move an installation id between accounts", async () => {
     const { app, billingService, deviceTokenService } = await createAuthApp();
     const firstUser = await signUpAndSignIn(app, billingService);
     const secondUser = await signUpAndSignIn(app, billingService);
@@ -277,31 +269,82 @@ describe("Better Auth browser handoff and device tokens", () => {
         }),
       });
 
-      expect(exchangeResponse.status).toBe(200);
-      return DeviceTokenExchangeResponseSchema.parse(await exchangeResponse.json()).token;
+      return exchangeResponse;
     };
 
-    const firstToken = await signInDevice(firstUser.cookie);
-    const secondToken = await signInDevice(secondUser.cookie);
-
-    expect(secondToken).not.toBe(firstToken);
-    expect(await deviceTokenService.listDevices(firstUser.userId)).toHaveLength(0);
-
-    const secondUserDevices = await deviceTokenService.listDevices(secondUser.userId);
-    expect(secondUserDevices).toHaveLength(1);
-    expect(secondUserDevices[0].deviceId).toBe("desktop-device-shared");
+    const firstExchange = await signInDevice(firstUser.cookie);
+    expect(firstExchange.status).toBe(200);
+    const firstToken = DeviceTokenExchangeResponseSchema.parse(
+      await firstExchange.json(),
+    ).token;
+    const secondExchange = await signInDevice(secondUser.cookie);
+    expect(secondExchange.status).toBe(409);
+    expect(await deviceTokenService.listDevices(firstUser.userId)).toHaveLength(1);
+    expect(await deviceTokenService.listDevices(secondUser.userId)).toHaveLength(0);
 
     const oldTokenStatus = await app.request("/api/status", {
       method: "GET",
       headers: { Authorization: `Bearer ${firstToken}` },
     });
-    expect(oldTokenStatus.status).toBe(401);
+    expect(oldTokenStatus.status).toBe(200);
+  });
 
-    const newTokenStatus = await app.request("/api/status", {
-      method: "GET",
-      headers: { Authorization: `Bearer ${secondToken}` },
+  it("enforces one Free Mac and three trial or Pro Macs at exchange", async () => {
+    const { app, billingService } = await createAuthApp();
+    const freeUser = await signUpAndSignIn(app, billingService);
+    await billingService.applyEntitlement({
+      userId: freeUser.userId,
+      planId: "free",
+      status: "inactive",
+      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
+      cachedAt: new Date(),
     });
-    expect(newTokenStatus.status).toBe(200);
+
+    const exchange = async (cookie: string, deviceId: string) => {
+      const authorization = await app.request("/api/auth/device/authorize", {
+        method: "POST",
+        headers: { Cookie: cookie },
+      });
+      const { code } = DeviceAuthorizeResponseSchema.parse(
+        await authorization.json(),
+      );
+      return app.request("/api/auth/device/exchange", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code,
+          deviceId,
+          platform: "darwin",
+          appVersion: "0.0.1",
+        }),
+      });
+    };
+
+    expect((await exchange(freeUser.cookie, "free-mac-1")).status).toBe(200);
+    const freeBlocked = await exchange(freeUser.cookie, "free-mac-2");
+    expect(freeBlocked.status).toBe(409);
+    expect((await freeBlocked.json()).error.code).toBe("device_limit_reached");
+
+    const revokeFirstFreeMac = await app.request("/api/auth/device/revoke", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Cookie: freeUser.cookie,
+      },
+      body: JSON.stringify({ deviceId: "free-mac-1" }),
+    });
+    expect(revokeFirstFreeMac.status).toBe(200);
+    expect((await exchange(freeUser.cookie, "free-mac-2")).status).toBe(200);
+    expect((await exchange(freeUser.cookie, "free-mac-1")).status).toBe(409);
+
+    const trialUser = await signUpAndSignIn(app, billingService);
+    for (let index = 1; index <= 3; index += 1) {
+      expect(
+        (await exchange(trialUser.cookie, `trial-mac-${index}`)).status,
+      ).toBe(200);
+    }
+    expect((await exchange(trialUser.cookie, "trial-mac-4")).status).toBe(409);
   });
 
   it("revokes a device and rejects its token at the suggestion API", async () => {

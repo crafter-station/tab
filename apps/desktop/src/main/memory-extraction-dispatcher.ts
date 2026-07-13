@@ -195,9 +195,16 @@ export function createMemoryExtractionDispatcher<TTimer = ReturnType<typeof setT
     retryTimer = clearTimer(retryTimer);
   }
 
+  function cancelAndClear(): void {
+    stop();
+    pendingBatch = null;
+    deps.window.clear();
+  }
+
   return {
     append,
     flush: () => flush("manual"),
+    cancelAndClear,
     stop,
   };
 }

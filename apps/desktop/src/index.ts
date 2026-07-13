@@ -29,6 +29,12 @@ export { createDesktopStatusService, type DesktopStatus } from "./main/status.ts
 export { createDesktopMemoryClient } from "./main/memory-client.ts";
 export { createMemoryExtractionWindow } from "./main/memory-extraction-window.ts";
 export { createMemoryExtractionDispatcher } from "./main/memory-extraction-dispatcher.ts";
+export {
+  createAcceptedWordLedger,
+  createFileAcceptedWordLedgerStorage,
+  createMemoryAcceptedWordLedgerStorage,
+} from "./main/accepted-word-ledger.ts";
+export { createLocalAcceptanceUsageClient } from "./main/usage-client.ts";
 export { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "./main/app-context.ts";
 export { createOnboardingManager, ONBOARDING_PERMISSIONS_COPY, type OnboardingPreferences } from "./main/onboarding.ts";
 export { createPreferencesManager, createMemoryPreferencesStorage, type DesktopPreferences } from "./main/preferences.ts";

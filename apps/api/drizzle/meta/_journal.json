@@ -57,6 +57,13 @@
       "when": 1783684924791,
       "tag": "0007_brave_network",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1783916667904,
+      "tag": "0008_legal_ma_gnuci",
+      "breakpoints": true
     }
   ]
 }

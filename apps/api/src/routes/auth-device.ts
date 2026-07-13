@@ -23,23 +23,6 @@ export function registerDeviceAuthRoutes(
     const sessionCheck = await requireSession(c, deps.auth);
     if (!sessionCheck.ok) return sessionCheck.response;
 
-    const quotaCheck = await deps.billingService.checkQuota(sessionCheck.session.user.id);
-    if (!quotaCheck.ok && quotaCheck.reason === "billing_required") {
-      return c.json(
-        createErrorResponse(
-          "billing_required",
-          "Choose the free plan in Polar before connecting a device.",
-          {
-            quota: quotaCheck.quota,
-            usage: quotaCheck.usage,
-            resetAt: quotaCheck.resetAt.toISOString(),
-            upgradeUrl: "/billing/checkout?plan=free",
-          },
-        ),
-        402,
-      );
-    }
-
     const code = await deps.deviceTokenService.createExchangeCode(
       sessionCheck.session.user.id,
     );
@@ -79,16 +62,41 @@ export function registerDeviceAuthRoutes(
       );
     }
 
-    const { token } = await deps.deviceTokenService.createDeviceToken(
+    const activeDevices = await deps.deviceTokenService.activeDeviceCount(
+      exchange.userId,
+    );
+    const entitlement = await deps.billingService.getStatus(exchange.userId, {
+      activeDevices,
+    });
+    const linked = await deps.deviceTokenService.createDeviceTokenWithinLimit(
       exchange.userId,
       {
         deviceId: parseResult.data.deviceId,
         platform: parseResult.data.platform,
         appVersion: parseResult.data.appVersion,
       },
+      entitlement.capabilities.personalDeviceLimit,
     );
+    if (!linked) {
+      return c.json(
+        createErrorResponse(
+          "device_limit_reached",
+          "This account has reached its connected Mac limit.",
+          {
+            capability: "devices",
+            limit: entitlement.capabilities.personalDeviceLimit,
+            used: entitlement.devices.active,
+            upgradeUrl: "/pricing",
+          },
+        ),
+        409,
+      );
+    }
 
-    return c.json(DeviceTokenExchangeResponseSchema.parse({ token }), 200);
+    return c.json(
+      DeviceTokenExchangeResponseSchema.parse({ token: linked.token }),
+      200,
+    );
   });
 
   app.post("/api/auth/device/revoke", async (c) => {

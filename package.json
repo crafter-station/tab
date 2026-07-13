@@ -18,6 +18,7 @@
     "desktop:dev": "bun --env-file=.dev.vars apps/desktop/scripts/dev.ts",
     "desktop:permissions": "bun run --cwd apps/desktop dev:permissions",
     "eval:suggestions": "bun apps/desktop/evals/suggestion-prompt.ts",
+    "polar:migrate": "bun --env-file=.dev.vars scripts/polar-migrate-local-first.ts",
     "polar:setup": "bun --env-file=.dev.vars scripts/polar-setup.ts",
     "polar:verify-usage": "bun --env-file=.dev.vars scripts/polar-verify-usage.ts",
     "polar:diagnose-customer": "bun --env-file=.dev.vars scripts/polar-diagnose-customer.ts",

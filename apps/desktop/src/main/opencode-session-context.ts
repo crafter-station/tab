@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
@@ -33,7 +34,15 @@ export type OpenCodeSession = {
 export type OpenCodeConversationContext = {
   observe(snapshot: TextSessionSnapshot): Promise<void>;
   getCandidate(snapshot: SafeTypingContextSnapshot): AppContextCandidate;
+  getState(snapshot: TextSessionSnapshot | SafeTypingContextSnapshot): OpenCodeConversationState;
+  subscribe(listener: (state: OpenCodeConversationState) => void): () => void;
   clear(): void;
+};
+
+export type OpenCodeConversationState = {
+  readonly candidate: AppContextCandidate;
+  readonly pending: boolean;
+  readonly revision: number;
 };
 
 export type OpenCodeConversationContextOptions = {
@@ -182,47 +191,101 @@ function emptyCandidate(status: "empty" | "unsupported" = "empty"): AppContextCa
   return { fragments: [], metadata: { provider: "opencode-local-session", status, confidence: 0 } };
 }
 
+type TerminalObservation = {
+  readonly snapshot: TextSessionSnapshot;
+  readonly targetKey: string;
+};
+
+function terminalEvidenceFingerprint(contents: string): string {
+  return createHash("sha256").update(normalizedText(contents)).digest("hex").slice(0, 16);
+}
+
+function terminalTargetKey(snapshot: TextSessionSnapshot): string {
+  const window = snapshot.activeApplication?.windowId ?? "window-unknown";
+  const title = snapshot.terminalTitle ?? "title-unknown";
+  if (title.startsWith("OC | ")) return `${window}:${title}`;
+  return `${window}:${title}:${terminalEvidenceFingerprint(snapshot.terminalContents ?? "")}`;
+}
+
+function snapshotTextSession(snapshot: TextSessionSnapshot | SafeTypingContextSnapshot): TextSessionSnapshot | null {
+  return "accessibilityReliability" in snapshot ? snapshot : snapshot.textSession ?? null;
+}
+
+function candidateSignature(candidate: AppContextCandidate): string {
+  return JSON.stringify(candidate);
+}
+
 export function createOpenCodeConversationContext(
   options: OpenCodeConversationContextOptions,
 ): OpenCodeConversationContext {
   const queryDatabase = options.queryDatabase ?? queryOpenCodeDatabase;
   const now = options.now ?? Date.now;
-  let candidate: AppContextCandidate = emptyCandidate();
-  let targetKey: string | null = null;
+  let state = {
+    targetKey: null as string | null,
+    candidate: emptyCandidate(),
+    pending: false,
+    revision: 0,
+  };
   let lastRefreshAt = 0;
-  let inFlightGeneration: number | null = null;
-  let generation = 0;
+  let latestTargetKey: string | null = null;
+  let queuedObservation: TerminalObservation | null = null;
+  let runner: Promise<void> | null = null;
+  const listeners = new Set<(state: OpenCodeConversationState) => void>();
 
-  return {
-    async observe(snapshot) {
-      const title = snapshot.terminalTitle;
-      const contents = snapshot.terminalContents ?? "";
-      const nextTargetKey = `${snapshot.activeApplication?.windowId ?? "window-unknown"}:${title ?? "title-unknown"}`;
-      if (snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID || !isOpenCodeTerminal(title, contents)) {
-        generation += 1;
-        targetKey = null;
-        candidate = emptyCandidate("unsupported");
-        return;
-      }
-      if (inFlightGeneration !== null || (targetKey === nextTargetKey && now() - lastRefreshAt < REFRESH_INTERVAL_MS)) return;
+  function publicState(): OpenCodeConversationState {
+    return { candidate: state.candidate, pending: state.pending, revision: state.revision };
+  }
 
+  function stateForSnapshot(snapshot: TextSessionSnapshot | SafeTypingContextSnapshot): OpenCodeConversationState {
+    const textSession = snapshotTextSession(snapshot);
+    if (!textSession || terminalTargetKey(textSession) !== state.targetKey) {
+      return { candidate: emptyCandidate(), pending: false, revision: state.revision };
+    }
+    return publicState();
+  }
+
+  function publish(targetKey: string | null, candidate: AppContextCandidate, pending: boolean): void {
+    if (
+      state.targetKey === targetKey
+      && state.pending === pending
+      && candidateSignature(state.candidate) === candidateSignature(candidate)
+    ) return;
+
+    state = {
+      targetKey,
+      candidate,
+      pending,
+      revision: state.revision + 1,
+    };
+    const next = publicState();
+    for (const listener of listeners) listener(next);
+  }
+
+  async function runQueue(): Promise<void> {
+    while (queuedObservation) {
+      const observation = queuedObservation;
+      queuedObservation = null;
       lastRefreshAt = now();
-      const requestGeneration = ++generation;
-      inFlightGeneration = requestGeneration;
-      try {
-        const rows = (await Promise.all(
-          (options.databasePaths ?? databasePaths(options.dataDirectory))
-            .map((databasePath) => queryDatabase(databasePath).catch(() => [])),
-        )).flat();
-        const session = matchOpenCodeSession(sessionsFromRows(rows), title, contents);
-        if (requestGeneration !== generation) return;
-        targetKey = nextTargetKey;
-        if (!session) {
-          candidate = emptyCandidate();
-          return;
-        }
-        const text = conversationText(session);
-        candidate = text
+      const rows = (await Promise.all(
+        (options.databasePaths ?? databasePaths(options.dataDirectory))
+          .map((databasePath) => queryDatabase(databasePath).catch(() => [])),
+      )).flat();
+      if (latestTargetKey !== observation.targetKey) continue;
+
+      const session = matchOpenCodeSession(
+        sessionsFromRows(rows),
+        observation.snapshot.terminalTitle,
+        observation.snapshot.terminalContents ?? "",
+      );
+      if (!session) {
+        publish(observation.targetKey, emptyCandidate(), false);
+        continue;
+      }
+
+      const text = conversationText(session);
+      publish(
+        observation.targetKey,
+        text
           ? {
               fragments: [{
                 id: "opencode-conversation",
@@ -234,20 +297,47 @@ export function createOpenCodeConversationContext(
               }],
               metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
             }
-          : emptyCandidate();
-      } finally {
-        if (inFlightGeneration === requestGeneration) inFlightGeneration = null;
+          : emptyCandidate(),
+        false,
+      );
+    }
+  }
+
+  return {
+    async observe(snapshot) {
+      const title = snapshot.terminalTitle;
+      const contents = snapshot.terminalContents ?? "";
+      if (snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID || !isOpenCodeTerminal(title, contents)) {
+        latestTargetKey = null;
+        queuedObservation = null;
+        publish(null, emptyCandidate("unsupported"), false);
+        return;
       }
+      const nextTargetKey = terminalTargetKey(snapshot);
+      latestTargetKey = nextTargetKey;
+      if (state.targetKey === nextTargetKey && !state.pending && now() - lastRefreshAt < REFRESH_INTERVAL_MS) return;
+
+      queuedObservation = { snapshot, targetKey: nextTargetKey };
+      publish(nextTargetKey, emptyCandidate(), true);
+      if (!runner) {
+        runner = runQueue().finally(() => {
+          runner = null;
+        });
+      }
+      await runner;
     },
     getCandidate(snapshot) {
-      const key = `${snapshot.activeApplication?.windowId ?? "window-unknown"}:${snapshot.textSession?.terminalTitle ?? "title-unknown"}`;
-      return key === targetKey ? candidate : emptyCandidate();
+      return stateForSnapshot(snapshot).candidate;
+    },
+    getState: stateForSnapshot,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => listeners.delete(listener);
     },
     clear() {
-      generation += 1;
-      inFlightGeneration = null;
-      targetKey = null;
-      candidate = emptyCandidate();
+      latestTargetKey = null;
+      queuedObservation = null;
+      publish(null, emptyCandidate(), false);
     },
   };
 }

@@ -10,6 +10,7 @@ export const MAX_SUGGESTION_TOKENS = 16;
 export const MAX_SUGGESTION_WORDS = 3;
 const MAX_TYPING_CONTEXT_LENGTH = 600;
 const MAX_APP_CONTEXT_LENGTH = 600;
+const MIN_TERMINAL_APP_CONTEXT_LENGTH = 200;
 const MAX_MEMORY_COUNT = 3;
 const MAX_MEMORY_LENGTH = 160;
 
@@ -26,6 +27,7 @@ export type SuggestionPromptInput = {
   readonly activeApplication: ActiveApplication;
   readonly memories: readonly PersonalMemory[];
   readonly appContext?: AppContext;
+  readonly customWritingInstructions?: string;
 };
 
 export type SuggestionMessage = {
@@ -71,8 +73,28 @@ function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
   return `\nRelevant personal memory:\n${lines.join("\n")}`;
 }
 
+function newestWholeWordsWithin(text: string, maxLength: number): string {
+  if (maxLength <= 0) return "";
+  if (text.length <= maxLength) return text;
+  const tail = text.slice(-maxLength);
+  const firstBoundary = tail.search(/\s/);
+  return firstBoundary < 0 ? tail : tail.slice(firstBoundary + 1);
+}
+
 function formatAppContext(appContext: AppContext | undefined): string {
   if (!appContext || appContext.fragments.length === 0) return "";
+
+  const conversation = appContext.fragments.find((fragment) => fragment.provider === "opencode-local-session");
+  const terminal = appContext.fragments.find((fragment) => fragment.provider === "ghostty-terminal");
+  if (conversation && terminal) {
+    const terminalLength = Math.min(MIN_TERMINAL_APP_CONTEXT_LENGTH, terminal.text.length);
+    const conversationLength = Math.min(conversation.text.length, MAX_APP_CONTEXT_LENGTH - terminalLength);
+    const remainingTerminalLength = Math.min(terminal.text.length, MAX_APP_CONTEXT_LENGTH - conversationLength);
+    return `\nApp Context background (suggestion-only, do not continue this text directly):\n${[
+      `- [${conversation.provider}/${conversation.kind}] ${newestWholeWordsWithin(conversation.text, conversationLength)}`,
+      `- [${terminal.provider}/${terminal.kind}] ${newestWholeWordsWithin(terminal.text, remainingTerminalLength)}`,
+    ].join("\n")}`;
+  }
 
   let remaining = MAX_APP_CONTEXT_LENGTH;
   const lines: string[] = [];
@@ -92,8 +114,16 @@ export function createSuggestionPrompt(input: SuggestionPromptInput): string {
 export function createSuggestionMessages(input: SuggestionPromptInput): SuggestionMessage[] {
   const typingContext = input.typingContext.slice(-MAX_TYPING_CONTEXT_LENGTH);
   const context = `${formatAppContext(input.appContext)}${formatRelevantMemories(input.memories)}`;
+  const customWritingInstructions = input.customWritingInstructions
+    ?.trim()
+    .slice(0, 1_000);
   return [
-    { role: "system", content: SUGGESTION_SYSTEM_PROMPT },
+    {
+      role: "system",
+      content: customWritingInstructions
+        ? `${SUGGESTION_SYSTEM_PROMPT}\nFollow these user writing preferences when they do not conflict with the output contract: ${customWritingInstructions}`
+        : SUGGESTION_SYSTEM_PROMPT,
+    },
     ...SUGGESTION_EXAMPLES,
     {
       role: "user",

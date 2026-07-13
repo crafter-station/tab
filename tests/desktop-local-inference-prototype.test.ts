@@ -16,6 +16,25 @@ function requestableSnapshot(context = "Hello"): RequestableTypingContextSnapsho
   return snapshot as RequestableTypingContextSnapshot;
 }
 
+function requestableSnapshotWithAppContext(): RequestableTypingContextSnapshot {
+  return {
+    ...requestableSnapshot("Continue this"),
+    appContext: {
+      fragments: [{
+        id: "opencode-conversation",
+        provider: "opencode-local-session",
+        kind: "conversation",
+        text: "User: Please keep the implementation local-first.",
+        confidence: 0.95,
+        redaction: { applied: false, redactionCount: 0, kinds: [] },
+        requestable: true,
+        memoryEligible: false,
+      }],
+      metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+    },
+  };
+}
+
 function completionStream(content: string, timings: Record<string, number> = {}): Response {
   const encoder = new TextEncoder();
   const events = [
@@ -57,6 +76,15 @@ describe("local inference prototype", () => {
       modelExists: () => true,
       verifyModelArtifact: async () => true,
       getRuntimeVersion: async () => "version: 9910 (f5525f7e7)",
+      getMemories: () => [{
+        id: "memory-1",
+        userId: "user-1",
+        content: "Prefers concise replies",
+        createdBy: "user",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        updatedAt: "2026-07-01T00:00:00.000Z",
+      }],
+      getCustomWritingInstructions: () => "Keep the tone concise and direct.",
       spawnHelper: (executable, args) => {
         spawnCalls.push({ executable, args });
         return { pid: 123, kill: () => true, once: () => {} };
@@ -97,6 +125,10 @@ describe("local inference prototype", () => {
       cache_prompt: true,
       chat_template_kwargs: { enable_thinking: false },
     });
+    expect(JSON.stringify(requestBodies[0])).toContain("Prefers concise replies");
+    expect(JSON.stringify(requestBodies[0])).toContain(
+      "Keep the tone concise and direct.",
+    );
     expect(partialSuggestions).toEqual([" world"]);
     expect(suggestion?.text).toBe(" world peace");
     expect(suggestion?.id).toStartWith("sg-local-");
@@ -106,6 +138,34 @@ describe("local inference prototype", () => {
       predictedTokens: 2,
       predictedMs: 30,
     });
+    runtime.stop();
+  });
+
+  it("includes OpenCode App Context in the local llama request", async () => {
+    let requestBody: { messages?: Array<{ role: string; content: string }> } | null = null;
+    const runtime = createLocalInferencePrototype({
+      executablePath: "/opt/llama-server",
+      modelPath: "/tmp/model.gguf",
+      port: 40_001,
+      apiKey: "test-api-key",
+      modelExists: () => true,
+      verifyModelArtifact: async () => true,
+      getRuntimeVersion: async () => "version: 9910 (f5525f7e7)",
+      spawnHelper: () => ({ pid: 123, kill: () => true, once: () => {} }),
+      fetch: async (input, init) => {
+        if (String(input).endsWith("/health")) return new Response("ok");
+        requestBody = JSON.parse(String(init?.body));
+        return completionStream("next step");
+      },
+    });
+
+    await runtime.start();
+    await runtime.getSuggestion(requestableSnapshotWithAppContext());
+
+    const finalMessage = requestBody?.messages?.at(-1)?.content ?? "";
+    expect(finalMessage).toContain("[opencode-local-session/conversation]");
+    expect(finalMessage).toContain("Please keep the implementation local-first.");
+    expect(finalMessage).toContain("Unfinished text:\nContinue this");
     runtime.stop();
   });
 

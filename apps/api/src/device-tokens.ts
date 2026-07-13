@@ -2,7 +2,7 @@ import {
   DeviceTokenExchangeRequestSchema,
   type DeviceMetadata,
 } from "@tab/contracts";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";
 import { deviceExchangeCodes, deviceTokens } from "./db/schema.ts";
@@ -27,6 +27,14 @@ export type DeviceInfo = {
 
 export interface DeviceTokenStorage {
   createDevice(record: Omit<Device, "id">): Promise<Device>;
+  createDeviceWithinLimit?(
+    record: Omit<Device, "id">,
+    limit: number,
+  ): Promise<Device | null>;
+  activateDeviceWithinLimit?(
+    device: Device,
+    limit: number,
+  ): Promise<Device | null>;
   findDeviceByTokenHash(tokenHash: string): Promise<Device | null>;
   findDeviceByDeviceId(deviceId: string): Promise<Device | null>;
   updateDevice(device: Device): Promise<Device>;
@@ -70,6 +78,28 @@ export class InMemoryDeviceTokenStorage implements DeviceTokenStorage {
     this.devicesByHash.set(device.tokenHash, device);
     this.devicesByDeviceId.set(device.deviceId, device);
     return device;
+  }
+
+  async createDeviceWithinLimit(
+    record: Omit<Device, "id">,
+    limit: number,
+  ): Promise<Device | null> {
+    const active = Array.from(this.devices.values()).filter(
+      (device) => device.userId === record.userId && !device.revoked,
+    ).length;
+    return active >= limit ? null : this.createDevice(record);
+  }
+
+  async activateDeviceWithinLimit(
+    device: Device,
+    limit: number,
+  ): Promise<Device | null> {
+    const existing = this.devices.get(device.id);
+    if (existing && !existing.revoked) return this.updateDevice(device);
+    const active = Array.from(this.devices.values()).filter(
+      (candidate) => candidate.userId === device.userId && !candidate.revoked,
+    ).length;
+    return active >= limit ? null : this.updateDevice(device);
   }
 
   async findDeviceByTokenHash(tokenHash: string): Promise<Device | null> {
@@ -159,6 +189,57 @@ export class D1DeviceTokenStorage implements DeviceTokenStorage {
       revoked: record.revoked,
     });
     return device;
+  }
+
+  async createDeviceWithinLimit(
+    record: Omit<Device, "id">,
+    limit: number,
+  ): Promise<Device | null> {
+    const id = crypto.randomUUID();
+    const inserted = await this.db.get<{ id: string }>(sql`
+      INSERT INTO device_tokens (
+        id, user_id, device_id, token_hash, platform, app_version,
+        created_at, last_seen_at, revoked
+      )
+      SELECT
+        ${id}, ${record.userId}, ${record.deviceId}, ${record.tokenHash},
+        ${record.platform}, ${record.appVersion},
+        ${record.createdAt.toISOString()}, ${record.lastSeenAt.toISOString()}, 0
+      WHERE (
+        SELECT count(*)
+        FROM device_tokens
+        WHERE user_id = ${record.userId}
+          AND revoked = 0
+      ) < ${limit}
+      RETURNING id
+    `);
+    return inserted ? { ...record, id } : null;
+  }
+
+  async activateDeviceWithinLimit(
+    device: Device,
+    limit: number,
+  ): Promise<Device | null> {
+    const updated = await this.db.get<{ id: string }>(sql`
+      UPDATE device_tokens
+      SET token_hash = ${device.tokenHash},
+          platform = ${device.platform},
+          app_version = ${device.appVersion},
+          last_seen_at = ${device.lastSeenAt.toISOString()},
+          revoked = 0
+      WHERE id = ${device.id}
+        AND user_id = ${device.userId}
+        AND (
+          revoked = 0 OR (
+            SELECT count(*)
+            FROM device_tokens
+            WHERE user_id = ${device.userId}
+              AND revoked = 0
+          ) < ${limit}
+        )
+      RETURNING id
+    `);
+    return updated ? device : null;
   }
 
   async findDeviceByTokenHash(tokenHash: string): Promise<Device | null> {
@@ -291,6 +372,53 @@ export class DeviceTokenService {
     return { token, device };
   }
 
+  async createDeviceTokenWithinLimit(
+    userId: string,
+    deviceInfo: DeviceInfo,
+    limit: number,
+  ): Promise<{ token: string; device: Device } | null> {
+    const token = generateOpaqueToken();
+    const tokenHash = await hashToken(token);
+    const now = new Date();
+    const existing = await this.storage.findDeviceByDeviceId(deviceInfo.deviceId);
+    if (existing) {
+      if (existing.userId !== userId) return null;
+      const updated: Device = {
+        ...existing,
+        tokenHash,
+        platform: deviceInfo.platform,
+        appVersion: deviceInfo.appVersion,
+        lastSeenAt: now,
+        revoked: false,
+      };
+      const device = existing.revoked
+        ? this.storage.activateDeviceWithinLimit
+          ? await this.storage.activateDeviceWithinLimit(updated, limit)
+          : (await this.activeDeviceCount(userId)) < limit
+            ? await this.storage.updateDevice(updated)
+            : null
+        : await this.storage.updateDevice(updated);
+      return device ? { token, device } : null;
+    }
+
+    const record = {
+      userId,
+      deviceId: deviceInfo.deviceId,
+      tokenHash,
+      platform: deviceInfo.platform,
+      appVersion: deviceInfo.appVersion,
+      createdAt: now,
+      lastSeenAt: now,
+      revoked: false,
+    };
+    const device = this.storage.createDeviceWithinLimit
+      ? await this.storage.createDeviceWithinLimit(record, limit)
+      : (await this.activeDeviceCount(userId)) < limit
+        ? await this.storage.createDevice(record)
+        : null;
+    return device ? { token, device } : null;
+  }
+
   async verifyDeviceToken(token: string): Promise<Device | null> {
     const tokenHash = await hashToken(token);
     const device = await this.storage.findDeviceByTokenHash(tokenHash);
@@ -314,6 +442,11 @@ export class DeviceTokenService {
 
   async listDevices(userId: string): Promise<Device[]> {
     return this.storage.listDevicesByUser(userId);
+  }
+
+  async activeDeviceCount(userId: string): Promise<number> {
+    return (await this.listDevices(userId)).filter((device) => !device.revoked)
+      .length;
   }
 
   getDeviceMetadata(device: Device): DeviceMetadata {

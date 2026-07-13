@@ -118,6 +118,7 @@ function authHeaders(token: string) {
 const validSuggestionRequest = {
   requestId: "req-memory",
   deviceId: "device-1",
+  mode: "deep_complete",
   typingContext: "Hello Acme",
   contextSource: "typed_text" as const,
   redaction: { applied: false, redactionCount: 0, kinds: [] as string[] },

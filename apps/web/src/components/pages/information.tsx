@@ -113,7 +113,7 @@ export function PrivacyPage() {
           <p><strong>Device information:</strong> identifiers and basic client metadata needed to connect and manage your Macs.</p>
           <p><strong>Typing Context:</strong> a limited span of recent text-bearing input and the active application identity used to request a Suggestion. Navigation, shortcuts, and other non-text actions are excluded.</p>
           <p><strong>Personal Memory:</strong> facts you create or that Tab learns from eligible recent writing to personalize future Suggestions. These records are visible in your dashboard.</p>
-          <p><strong>Usage and billing:</strong> plan, subscription status, monthly Suggestion counts, and transaction references needed to enforce quotas and manage paid access.</p>
+          <p><strong>Usage and billing:</strong> plan, trial and subscription status, daily Accepted Word counts, monthly Deep Complete counts, and transaction references needed to enforce allowances and manage paid access.</p>
           <p><strong>Operational data:</strong> limited metadata needed for security, reliability, and diagnostics. Tab does not store accepted Suggestion text as product telemetry by default.</p>
         </LegalSection>
         <LegalSection title="How we use information">
@@ -161,7 +161,7 @@ export function TermsPage() {
           <p>One person or organization may not use the service to bypass plan limits, probe other accounts, or interfere with service operation.</p>
         </LegalSection>
         <LegalSection title="Plans and payment">
-          <p>Plan prices, monthly Suggestion limits, and included features are shown on the <a href="/pricing">pricing page</a>. Paid plans renew monthly until changed or canceled through the billing portal.</p>
+          <p>Plan prices, Local Accepted Word and Deep Complete allowances, and included features are shown on the <a href="/pricing">pricing page</a>. Pro renews monthly or annually, according to the interval selected at checkout, until changed or canceled through the billing portal.</p>
           <p>Fees are charged in the displayed currency and may include applicable taxes. Except where required by law, charges for a billing period that has begun are non-refundable. Changing plans may affect limits and charges for the current or next billing period as shown during checkout.</p>
         </LegalSection>
         <LegalSection title="Acceptable use">

@@ -81,7 +81,7 @@ export function FloatingSuggestionBar({ suggestion, source, loading, onAccept, c
         className="w-[min(100%,536px)]"
         onClick={onAccept}
         disabled={!suggestion || loading}
-        aria-label={loading ? "Generating cloud suggestion" : suggestion ? `Accept suggestion: ${suggestion.text}` : "No suggestion available"}
+        aria-label={loading ? "Generating suggestion" : suggestion ? `Accept suggestion: ${suggestion.text}` : "No suggestion available"}
         suggestion={suggestion?.text ?? ""}
         source={source}
         loading={loading}

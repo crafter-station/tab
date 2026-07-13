@@ -65,9 +65,12 @@ export type TabPreloadApi = {
   getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences; localInferenceStatus: LocalInferenceStatus; completionHistory: readonly CompletionHistoryEntry[] }>;
   signIn: () => void;
   signOut: () => void;
+  openPricing: () => void;
   togglePause: () => void;
   downloadLocalModel: () => Promise<void>;
   setUsePersonalMemoryForSuggestions: (enabled: boolean) => void;
+  setContinuousMemoryExtraction: (enabled: boolean) => void;
+  setCustomWritingInstructions: (value: string) => void;
   deleteMemory: (id: string) => void;
 };
 
@@ -163,12 +166,21 @@ contextBridge.exposeInMainWorld("tab", {
   signOut: () => {
     ipcRenderer.send("sign-out");
   },
+  openPricing: () => {
+    ipcRenderer.send("open-pricing");
+  },
   togglePause: () => {
     ipcRenderer.send("toggle-pause");
   },
   downloadLocalModel: () => ipcRenderer.invoke("download-local-model"),
   setUsePersonalMemoryForSuggestions: (enabled: boolean) => {
     ipcRenderer.send("set-use-personal-memory-for-suggestions", enabled);
+  },
+  setContinuousMemoryExtraction: (enabled: boolean) => {
+    ipcRenderer.send("set-continuous-memory-extraction", enabled);
+  },
+  setCustomWritingInstructions: (value: string) => {
+    ipcRenderer.send("set-custom-writing-instructions", value);
   },
   deleteMemory: (id: string) => {
     ipcRenderer.send("delete-memory", id);

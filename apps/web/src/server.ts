@@ -18,7 +18,7 @@ import {
   apiRequest as requestApi,
   appendSetCookies,
   cookieHeaderFromSetCookie,
-  parseBillingQuota,
+  parseBillingStatus,
   parseDeviceAuthorize,
   parseDevices,
   parseMemories,
@@ -255,25 +255,6 @@ export function createWebApp(config: WebAppConfig) {
       cookieHeader,
     );
 
-    if (authorizeResponse.status === 402) {
-      const checkoutResponse = await apiRequest(
-        "/api/billing/checkout?plan=free",
-        {},
-        cookieHeader,
-      );
-
-      if (checkoutResponse.status === 200) {
-        const body = await parseCheckout(checkoutResponse);
-        const response = redirect(body.data.url);
-        if (sourceResponse) appendSetCookies(response, sourceResponse);
-        return response;
-      }
-
-      const response = redirect("/billing/checkout?plan=free");
-      if (sourceResponse) appendSetCookies(response, sourceResponse);
-      return response;
-    }
-
     if (authorizeResponse.status !== 200) {
       return loginPage("Signed in, but failed to authorize this device.");
     }
@@ -463,28 +444,6 @@ export function createWebApp(config: WebAppConfig) {
       return response;
     }
 
-    if (signInResponse.status === 200) {
-      const signedInCookieHeader = cookieHeaderFromSetCookie(signInResponse);
-      if (signedInCookieHeader) {
-        const checkoutResponse = await apiRequest(
-          "/api/billing/checkout?plan=free",
-          {},
-          signedInCookieHeader,
-        );
-
-        if (checkoutResponse.status === 200) {
-          const body = await parseCheckout(checkoutResponse);
-          const response = redirect(body.data.url);
-          appendSetCookies(response, signInResponse);
-          return response;
-        }
-
-        const response = redirect("/billing/checkout?plan=free");
-        appendSetCookies(response, signInResponse);
-        return response;
-      }
-    }
-
     const response = redirect("/dashboard");
     appendSetCookies(response, signInResponse.status === 200 ? signInResponse : signUpResponse);
     return response;
@@ -545,22 +504,18 @@ export function createWebApp(config: WebAppConfig) {
     const sessionCheck = await requireSession(cookieHeader);
     if (!sessionCheck.ok) return sessionCheck.response;
 
-    const [quotaResponse, devicesResponse, memoriesResponse, localActivityResponse] = await Promise.all([
-      apiRequest("/api/billing/quota", {}, cookieHeader),
+    const [billingResponse, devicesResponse, memoriesResponse, localActivityResponse] = await Promise.all([
+      apiRequest("/api/billing/status", {}, cookieHeader),
       apiRequest("/api/auth/devices", {}, cookieHeader),
       apiRequest("/api/account/memory", {}, cookieHeader),
       apiRequest("/api/activity/local-suggestions", {}, cookieHeader),
     ]);
 
-    if (quotaResponse.status === 401) {
+    if (billingResponse.status === 401) {
       return redirect("/login");
     }
 
-    if (quotaResponse.status === 402) {
-      return redirect("/billing/checkout?plan=free");
-    }
-
-    const quota = await parseBillingQuota(quotaResponse);
+    const billing = await parseBillingStatus(billingResponse);
     const deviceList = await parseDevices(devicesResponse);
     const memoryList = await parseMemories(memoriesResponse);
     const localActivity = await parseLocalSuggestionActivity(localActivityResponse);
@@ -569,7 +524,7 @@ export function createWebApp(config: WebAppConfig) {
         section,
         data: {
           user: sessionCheck.user,
-          quota: quota.data,
+          billing: billing.data,
           devices: deviceList.data.devices,
           memories: memoryList.data.memories,
           localSuggestionActivity: localActivity.data,
@@ -583,17 +538,40 @@ export function createWebApp(config: WebAppConfig) {
     );
   }
 
+  async function memoryExport(
+    cookieHeader: string | undefined,
+  ): Promise<Response> {
+    const sessionCheck = await requireSession(cookieHeader);
+    if (!sessionCheck.ok) return sessionCheck.response;
+    const response = await apiRequest(
+      "/api/account/memory/export",
+      {},
+      cookieHeader,
+    );
+    if (!response.ok) {
+      return htmlErrorPage("Export failed", "Could not export Personal Memory.");
+    }
+    return new Response(response.body, {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "content-disposition": 'attachment; filename="tab-personal-memory.json"',
+      },
+    });
+  }
+
   async function checkoutRedirect(
     cookieHeader: string | undefined,
     searchParams: URLSearchParams,
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
     const plan = searchParams.get("plan") ?? "pro";
-    const checkoutPath = `/billing/checkout?plan=${encodeURIComponent(plan)}`;
+    const interval = searchParams.get("interval") ?? "monthly";
+    const checkoutPath = `/billing/checkout?plan=${encodeURIComponent(plan)}&interval=${encodeURIComponent(interval)}`;
     if (!sessionCheck.ok) return loginRedirect(checkoutPath);
 
     const response = await apiRequest(
-      `/api/billing/checkout?plan=${encodeURIComponent(plan)}`,
+      `/api/billing/checkout?plan=${encodeURIComponent(plan)}&interval=${encodeURIComponent(interval)}`,
       {},
       cookieHeader,
     );
@@ -896,6 +874,10 @@ export function createWebApp(config: WebAppConfig) {
 
       if (path === "/dashboard/memories" && request.method === "GET") {
         return accountPage(cookieHeader, path, url.searchParams, "memories");
+      }
+
+      if (path === "/dashboard/memories/export" && request.method === "GET") {
+        return memoryExport(cookieHeader);
       }
 
       if ((path === "/account/memory/create" || path === "/dashboard/memories/create") && request.method === "POST") {
