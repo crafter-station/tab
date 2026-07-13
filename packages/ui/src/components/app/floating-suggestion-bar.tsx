@@ -28,11 +28,13 @@ const visibleShellClassName = "visible";
 const hiddenShellClassName = "invisible";
 
 const commandClassName =
-  "pointer-events-auto grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] py-2 pr-2 pl-2.5 text-[var(--tab-overlay-text)] shadow-[var(--tab-overlay-shadow)] backdrop-blur-xl transition-transform duration-100 ease-[var(--tab-ease-out)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:pointer-events-none disabled:scale-100";
+  "tab-suggestion-command pointer-events-auto isolate grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] py-2 pr-2 pl-2.5 text-[var(--tab-overlay-text)] shadow-[var(--tab-overlay-shadow)] backdrop-blur-xl active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:pointer-events-none disabled:scale-100";
 const iconClassName =
-  "inline-flex size-6 items-center justify-center rounded-[var(--radius-control)] bg-[var(--tab-overlay-key-bg)] text-[11px] font-bold text-[var(--tab-overlay-text)]";
+  "tab-suggestion-source relative grid size-6 shrink-0 place-items-center overflow-hidden rounded-[var(--radius-control)] border border-transparent bg-[var(--tab-overlay-key-bg)] text-[11px] font-bold text-[var(--tab-overlay-text)]";
+const sourceGlyphClassName =
+  "col-start-1 row-start-1 transition-[opacity,transform,filter] duration-200 ease-[var(--tab-ease-out)]";
 const shortcutClassName =
-  "rounded-[var(--radius-control)] border border-[var(--tab-overlay-divider)] bg-[var(--tab-overlay-key-bg)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--tab-overlay-muted)] whitespace-nowrap";
+  "tab-suggestion-shortcut rounded-[var(--radius-control)] border border-[var(--tab-overlay-divider)] bg-[var(--tab-overlay-key-bg)] px-2 py-1 font-mono text-[11px] font-semibold text-[var(--tab-overlay-muted)] whitespace-nowrap";
 
 export function SuggestionCommand({
   suggestion,
@@ -43,6 +45,8 @@ export function SuggestionCommand({
   className,
   ...props
 }: SuggestionCommandProps) {
+  const isCloud = source === "cloud";
+
   return (
     <button
       className={cn(commandClassName, className)}
@@ -52,12 +56,32 @@ export function SuggestionCommand({
       type="button"
       {...props}
     >
-      <span className={cn(iconClassName, "transition-opacity duration-150", loading && "opacity-65")} aria-hidden="true">
-        {source === "cloud" ? (
-          <svg viewBox="0 0 24 24" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2">
-            <path d="M17.5 19H7a5 5 0 0 1-.6-9.96A6.5 6.5 0 0 1 18.82 8.2 4.5 4.5 0 0 1 17.5 19Z" />
-          </svg>
-        ) : "T"}
+      <span className={cn(iconClassName, loading && "opacity-65")} aria-hidden="true">
+        <span
+          className={cn(
+            sourceGlyphClassName,
+            isCloud ? "-translate-y-1 scale-[0.92] opacity-0 blur-[1px]" : "translate-y-0 scale-100 opacity-100 blur-0",
+          )}
+          data-source-glyph="local"
+          data-active={!isCloud || undefined}
+        >
+          T
+        </span>
+        <svg
+          viewBox="0 0 24 24"
+          className={cn(
+            sourceGlyphClassName,
+            "size-3.5",
+            isCloud ? "translate-y-0 scale-100 opacity-100 blur-0" : "translate-y-1 scale-[0.92] opacity-0 blur-[1px]",
+          )}
+          data-source-glyph="cloud"
+          data-active={isCloud || undefined}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
+          <path d="M17.5 19H7a5 5 0 0 1-.6-9.96A6.5 6.5 0 0 1 18.82 8.2 4.5 4.5 0 0 1 17.5 19Z" />
+        </svg>
       </span>
       <span className={cn(
         "min-w-0 truncate text-left text-[13px] font-medium leading-tight transition-[opacity,filter] duration-150 ease-[var(--tab-ease-out)]",
@@ -81,7 +105,11 @@ export function FloatingSuggestionBar({ suggestion, source, loading, onAccept, c
         className="w-[min(100%,536px)]"
         onClick={onAccept}
         disabled={!suggestion || loading}
-        aria-label={loading ? "Generating suggestion" : suggestion ? `Accept suggestion: ${suggestion.text}` : "No suggestion available"}
+        aria-label={loading
+          ? "Generating suggestion"
+          : suggestion
+            ? `Accept ${source === "cloud" ? "Deep Complete " : ""}suggestion: ${suggestion.text}`
+            : "No suggestion available"}
         suggestion={suggestion?.text ?? ""}
         source={source}
         loading={loading}

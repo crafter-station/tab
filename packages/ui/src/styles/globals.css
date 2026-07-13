@@ -99,6 +99,13 @@
   --tab-overlay-key-bg: rgba(255, 255, 255, 0.09);
   --tab-overlay-divider: rgba(255, 255, 255, 0.11);
   --tab-overlay-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --tab-overlay-deep-bg: rgba(48, 39, 21, 0.96);
+  --tab-overlay-deep-border: rgba(242, 200, 103, 0.42);
+  --tab-overlay-deep-text: rgba(255, 250, 237, 0.96);
+  --tab-overlay-deep-accent: #f2c867;
+  --tab-overlay-deep-accent-bg: rgba(242, 200, 103, 0.14);
+  --tab-overlay-deep-accent-muted: rgba(252, 225, 161, 0.78);
+  --tab-overlay-deep-wash: rgba(242, 200, 103, 0.12);
   --tab-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --tab-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --tab-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
@@ -318,6 +325,61 @@ details[open] > summary .tab-disclosure-chevron {
   }
 }
 
+.tab-suggestion-command {
+  position: relative;
+  transition: transform 120ms var(--tab-ease-out), scale 120ms var(--tab-ease-out), color 180ms ease;
+}
+
+.tab-suggestion-command::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  border: 1px solid var(--tab-overlay-deep-border);
+  border-radius: inherit;
+  background:
+    linear-gradient(110deg, var(--tab-overlay-deep-wash), transparent 56%),
+    var(--tab-overlay-deep-bg);
+  box-shadow: inset 0 1px rgba(255, 244, 211, 0.08);
+  content: "";
+  opacity: 0;
+  pointer-events: none;
+  transform: translate3d(-4%, 0, 0);
+  transition: opacity 220ms ease, transform 240ms var(--tab-ease-out);
+}
+
+.tab-suggestion-command > * {
+  position: relative;
+  z-index: 1;
+}
+
+.tab-suggestion-source,
+.tab-suggestion-shortcut {
+  transition-property: color, background-color, border-color, opacity;
+  transition-duration: 180ms;
+  transition-timing-function: ease;
+}
+
+.tab-suggestion-command[data-source="cloud"] {
+  color: var(--tab-overlay-deep-text);
+}
+
+.tab-suggestion-command[data-source="cloud"]::before {
+  opacity: 1;
+  transform: translate3d(0, 0, 0);
+}
+
+.tab-suggestion-command[data-source="cloud"] .tab-suggestion-source {
+  color: var(--tab-overlay-deep-accent);
+  background-color: var(--tab-overlay-deep-accent-bg);
+  border-color: var(--tab-overlay-deep-border);
+}
+
+.tab-suggestion-command[data-source="cloud"] .tab-suggestion-shortcut {
+  color: var(--tab-overlay-deep-accent-muted);
+  background-color: var(--tab-overlay-deep-accent-bg);
+  border-color: var(--tab-overlay-deep-border);
+}
+
 .pug-grid-surface {
   background: var(--background);
 }
@@ -437,6 +499,17 @@ a:not([class]) {
   .tab-sheet-content[data-state="closed"][data-side] {
     opacity: 0;
     animation-duration: 160ms;
+  }
+
+  .tab-suggestion-command::before {
+    transform: none;
+    transition-property: opacity;
+  }
+
+  .tab-suggestion-source > [data-source-glyph] {
+    filter: none !important;
+    transform: none !important;
+    transition-property: opacity;
   }
 
   @starting-style {

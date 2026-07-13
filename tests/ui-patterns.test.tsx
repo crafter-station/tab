@@ -87,7 +87,7 @@ describe("shared app patterns", () => {
     expect(hiddenButtonOpeningTag).toMatch(/\sdisabled=""(?:\s|>)/);
   });
 
-  it("marks cloud suggestions with their source icon", () => {
+  it("marks Deep Complete suggestions for accent styling and the source glyph transition", () => {
     const markup = renderToStaticMarkup(
       <FloatingSuggestionBar
         suggestion={{ id: "s-cloud", text: " from the cloud" }}
@@ -97,6 +97,10 @@ describe("shared app patterns", () => {
     );
 
     expect(markup).toInclude('data-source="cloud"');
+    expect(markup).toInclude("tab-suggestion-command");
+    expect(markup).toInclude("tab-suggestion-source");
+    expect(markup).toMatch(/data-source-glyph="cloud" data-active="true"/);
+    expect(markup).toInclude("Accept Deep Complete suggestion");
     expect(markup).toInclude("<svg");
   });
 
@@ -114,7 +118,8 @@ describe("shared app patterns", () => {
     expect(markup).toInclude('data-loading="true"');
     expect(markup).toInclude('data-source="local"');
     expect(markup).toInclude("blur-[1px]");
-    expect(markup).not.toInclude("<svg");
+    expect(markup).toMatch(/data-source-glyph="local" data-active="true"/);
+    expect(markup).toMatch(/data-source-glyph="cloud"(?! data-active)/);
   });
 
   it("shares identity and suggestion recipes across embedded and native surfaces", () => {
