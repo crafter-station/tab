@@ -61,12 +61,23 @@ describe("shared app patterns", () => {
         <DebugContextCard debug={null} />
       </main>,
     );
+    const suggestionShellMarkup = suggestionMarkup.match(/<section[^>]*>/)?.[0] ?? "";
 
     expect(suggestionMarkup).toInclude('class="overlay-shell"');
     expect(suggestionMarkup).toInclude("pointer-events-auto");
     expect(suggestionMarkup).toInclude("Option+Tab");
     expect(suggestionMarkup).toInclude("type=\"button\"");
+    expect(suggestionShellMarkup).toInclude("visible");
+    expect(suggestionShellMarkup).not.toInclude("transition-opacity");
     expect(suggestionMarkup).toInclude("aria-hidden=\"true\"");
+
+    const hiddenSuggestionMarkup = renderToStaticMarkup(
+      <FloatingSuggestionBar suggestion={null} onAccept={() => {}} />,
+    );
+
+    expect(hiddenSuggestionMarkup).toInclude("invisible");
+    expect(hiddenSuggestionMarkup).toInclude('aria-hidden="true"');
+    expect(hiddenSuggestionMarkup).toInclude("disabled");
   });
 
   it("marks cloud suggestions with their source icon", () => {

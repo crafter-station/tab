@@ -23,9 +23,9 @@ type SuggestionCommandProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, "chi
 };
 
 const shellClassName =
-  "absolute inset-0 flex items-center justify-center px-3 py-2 opacity-0 transition-opacity duration-150 ease-[var(--tab-ease-out)] motion-reduce:duration-0";
-const visibleShellClassName = "opacity-100";
-const hiddenShellClassName = "opacity-0";
+  "absolute inset-0 flex items-center justify-center px-3 py-2";
+const visibleShellClassName = "visible";
+const hiddenShellClassName = "invisible";
 
 const commandClassName =
   "pointer-events-auto grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] py-2 pr-2 pl-2.5 text-[var(--tab-overlay-text)] shadow-[var(--tab-overlay-shadow)] backdrop-blur-xl transition-transform duration-100 ease-[var(--tab-ease-out)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70 disabled:pointer-events-none disabled:scale-100";
