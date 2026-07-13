@@ -360,7 +360,7 @@ function MemoryShowcase() {
       </div>
 
       <div id="memory-showcase-animation" className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false" data-motion-region data-motion-paused="false">
-        <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
           <div><p className="text-sm font-bold">Live relevance demo</p><p className="text-xs text-muted-foreground">A matching memory shapes the next phrase</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="memory-showcase-animation" />
@@ -443,7 +443,7 @@ function PrivacyPipeline() {
       </div>
 
       <div id="privacy-showcase-animation" className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false" data-motion-region data-motion-paused="false">
-        <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
+        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
           <div><p className="text-sm font-bold">Live request boundary</p><p className="text-xs text-muted-foreground">What moves from your Mac to a suggestion</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="privacy-showcase-animation" />
@@ -737,7 +737,7 @@ export function HomePage() {
           </div>
         </div>
       </section>
-      <script src="/marketing-demo.js" defer />
+      <script src="/marketing-demo.js?v=motion-controls" defer />
     </>
   );
 }

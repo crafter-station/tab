@@ -10,6 +10,15 @@ function webRequest(
   return webApp.fetch(request);
 }
 
+function expectMotionRegion(body: string, id: string): void {
+  expect(body).toMatch(
+    new RegExp(`<div(?=[^>]*id="${id}")(?=[^>]*data-motion-region(?:=""|="true")?(?=[\\s>]))(?=[^>]*data-motion-paused="false")[^>]*>`),
+  );
+  expect(body).toMatch(
+    new RegExp(`<button(?=[^>]*data-motion-toggle(?:=""|="true")?(?=[\\s>]))(?=[^>]*aria-controls="${id}")(?=[^>]*aria-pressed="false")[^>]*>(?:(?!</button>)[^])*?<span[^>]*data-motion-toggle-label(?:=""|="true")?(?=[\\s>])[^>]*>Pause animation</span>(?:(?!</button>)[^])*?</button>`),
+  );
+}
+
 describe("Web download surface", () => {
   it("redirects /download/tab.dmg to the configured macOS artifact URL", async () => {
     const webApp = createWebApp({
@@ -76,12 +85,10 @@ describe("Web download surface", () => {
     expect(body).toInclude("Useful context in. Raw typing logs out.");
     expect(body).toInclude("data-animated-showcase");
     expect(body).toInclude("data-showcase-replay");
-    expect(body).toInclude('id="app-marquee-animation"');
-    expect(body).toInclude('id="memory-showcase-animation"');
-    expect(body).toInclude('id="privacy-showcase-animation"');
-    expect(body).toInclude("data-motion-toggle");
-    expect(body).toInclude('data-motion-paused="false"');
-    expect(body).toInclude('aria-pressed="false"');
+    expectMotionRegion(body, "app-marquee-animation");
+    expectMotionRegion(body, "memory-showcase-animation");
+    expectMotionRegion(body, "privacy-showcase-animation");
+    expect(body).toInclude('src="/marketing-demo.js?v=motion-controls"');
     expect(body).toInclude('id="pricing"');
   });
 });
