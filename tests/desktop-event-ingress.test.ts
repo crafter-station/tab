@@ -12,6 +12,8 @@ function makeHandlers() {
       onActiveApplicationChanged: (bundleId: string, windowId: string | null) =>
         events.push(["active-app", bundleId, windowId]),
       onTextInput: (text: string) => events.push(["text", text]),
+      onPastedText: (text: string) => events.push(["paste", text]),
+      onContextInvalidated: (reason: string) => events.push(["context-invalidated", reason]),
       onDeleteBackward: (unit: TypingDeletionUnit) => events.push(["delete", unit]),
       onSuggestNow: () => events.push(["suggest-now"]),
       onTextSessionSnapshot: (snapshot: TextSessionSnapshot) => events.push(["text-session", snapshot]),
@@ -50,6 +52,8 @@ describe("desktop event ingress", () => {
     ingress.handleMessage({ type: "error", message: "missing permission" });
     ingress.handleMessage({ type: "active-app", bundleId: "com.apple.TextEdit", windowId: "window:1" });
     ingress.handleMessage({ type: "text", text: "A" });
+    ingress.handleMessage({ type: "paste", text: "pasted text" });
+    ingress.handleMessage({ type: "context-invalidated", message: "navigation_or_unknown_key" });
     ingress.handleMessage({ type: "delete", unit: "token" });
     ingress.handleMessage({ type: "suggest-now" });
     ingress.handleMessage({ type: "text-session", snapshot });
@@ -60,6 +64,8 @@ describe("desktop event ingress", () => {
       ["error", "missing permission"],
       ["active-app", "com.apple.TextEdit", "window:1"],
       ["text", "A"],
+      ["paste", "pasted text"],
+      ["context-invalidated", "navigation_or_unknown_key"],
       ["delete", "token"],
       ["suggest-now"],
       ["text-session", snapshot],
@@ -74,6 +80,8 @@ describe("desktop event ingress", () => {
     ingress.handleMessage(null);
     ingress.handleMessage({ type: "active-app", bundleId: 123 });
     ingress.handleMessage({ type: "text", text: 123 });
+    ingress.handleMessage({ type: "paste", text: 123 });
+    ingress.handleMessage({ type: "context-invalidated", message: 123 });
     ingress.handleMessage({ type: "text-session", snapshot: { selectedText: 123 } });
     ingress.handleMessage({ type: "app-context-tree", tree: { bounds: { x: 1, y: 2, width: "wide", height: 4 } } });
 

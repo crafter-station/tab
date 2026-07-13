@@ -85,6 +85,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
   let textSessionSnapshot: TextSessionSnapshot | null = null;
+  let ambientTerminalSnapshot: TextSessionSnapshot | null = null;
   let visibleTextSessionTarget: TextSessionSnapshot | null = null;
   let lastContextHash: string | null = null;
   const { outputs } = deps;
@@ -260,6 +261,7 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
 
   function clearTextSessionSnapshot(): void {
     textSessionSnapshot = null;
+    ambientTerminalSnapshot = null;
   }
 
   function hasUsableTextSessionContext(snapshot: TextSessionSnapshot): boolean {
@@ -283,7 +285,8 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
       return snapshot;
     }
 
-    const appContext = deps.getAppContext(snapshot);
+    const appContextInput = ambientTerminalSnapshot ? { ...snapshot, textSession: ambientTerminalSnapshot } : snapshot;
+    const appContext = deps.getAppContext(appContextInput);
     compatibilityStore.recordAppContextSnapshot(snapshot.activeApplication, appContext);
     if (appContext.metadata.status !== "available" || appContext.fragments.length === 0) {
       return snapshot;
@@ -320,21 +323,27 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
         invalidateVisibleSuggestionWithoutContextChange();
         return;
       }
-      clearTextSessionSnapshot();
+      textSessionSnapshot = null;
       deps.typingContext.appendText(text, deps.getContextSource());
       contextChanged();
     },
     appendPastedText(text: string): void {
       if (observationPaused) return;
-      clearTextSessionSnapshot();
+      textSessionSnapshot = null;
       deps.typingContext.appendPastedText(text);
       contextChanged();
     },
     deleteBackward(unit: TypingDeletionUnit = "character"): void {
       if (observationPaused) return;
-      clearTextSessionSnapshot();
+      textSessionSnapshot = null;
       deps.typingContext.deleteBackward(unit, deps.getContextSource());
       contextChanged();
+    },
+    invalidateContext(): void {
+      if (observationPaused) return;
+      clearContext(false);
+      outputs.clearSuggestion();
+      outputs.showDebugContext();
     },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
       if (observationPaused) return;
@@ -365,6 +374,11 @@ export function createNativeSuggestionSession(deps: NativeSuggestionSessionDepen
     applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
       if (observationPaused) return;
       compatibilityStore.recordTextSessionSnapshot(snapshot);
+      ambientTerminalSnapshot = snapshot.activeApplication?.bundleId === GHOSTTY_BUNDLE_ID
+        && isReliableTextSessionSnapshot(snapshot)
+        && !snapshot.secureLike
+        ? snapshot
+        : null;
       textSessionSnapshot = isReliableTextSessionSnapshot(snapshot) && hasUsableTextSessionContext(snapshot)
         ? snapshot
         : null;

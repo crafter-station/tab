@@ -44,6 +44,7 @@ import { createLocalInferencePrototype, QWEN_25_3B_Q4_K_M } from "./local-infere
 import { createCompletionHistory } from "./completion-history.ts";
 import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
+import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
@@ -75,9 +76,14 @@ type InputTapProcess = {
 };
 
 let inputTapProcess: InputTapProcess | null = null;
+let pendingSyntheticPaste: { text: string; expiresAt: number } | null = null;
 
 const typingContextBuffer = createTypingContextBuffer();
-const appContextExtractor = createAppContextExtractor();
+const appContextExtractor = createAppContextExtractor({
+  openCodeConversation: createOpenCodeConversationContext({
+    dataDirectory: path.join(app.getPath("home"), ".local", "share", "opencode"),
+  }),
+});
 
 const userDataPath = app.getPath("userData");
 mkdirSync(userDataPath, { recursive: true });
@@ -320,6 +326,7 @@ const nativeAutocompleteRuntime = createNativeAutocompleteRuntime({
     setClipboard: async (text) => {
       const previous = clipboard.readText();
       clipboard.writeText(text);
+      pendingSyntheticPaste = { text, expiresAt: Date.now() + 1_000 };
       return previous;
     },
     sendPaste: async () => {
@@ -351,6 +358,8 @@ const desktopEventIngress = createDesktopEventIngress({
   onError: (message) => console.error("macOS input tap error:", message),
   onActiveApplicationChanged: handleActiveApplicationChanged,
   onTextInput: handleTextInput,
+  onPastedText: handlePastedText,
+  onContextInvalidated: handleContextInvalidated,
   onDeleteBackward: handleDeleteBackward,
   onSuggestNow: handleSuggestNow,
   onTextSessionSnapshot: handleTextSessionSnapshot,
@@ -1166,7 +1175,17 @@ export function handleTextInput(text: string): void {
 }
 
 export function handlePastedText(text: string): void {
+  if (pendingSyntheticPaste?.text === text && pendingSyntheticPaste.expiresAt >= Date.now()) {
+    pendingSyntheticPaste = null;
+    return;
+  }
+  pendingSyntheticPaste = null;
   nativeAutocompleteRuntime.appendPastedText(text);
+}
+
+export function handleContextInvalidated(reason: string): void {
+  console.log("[local-suggestions] input.context-invalidated", { reason });
+  nativeAutocompleteRuntime.invalidateContext();
 }
 
 export function handleDeleteBackward(unit: TypingDeletionUnit = "character"): void {

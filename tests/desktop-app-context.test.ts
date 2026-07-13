@@ -352,6 +352,22 @@ describe("App Context privacy normalization", () => {
     expect(snapshot.fragments[0]).not.toHaveProperty("requestPayloadPolicy");
   });
 
+  it("can preserve the newest end of a bounded candidate", () => {
+    const snapshot = normalizeAppContext({
+      fragments: [{
+        id: "end-bounded-fragment",
+        provider: "test-provider",
+        kind: "visible_text",
+        text: "old context that should be removed newest context to preserve",
+        confidence: 0.9,
+        requestPayloadPolicy: { maxLength: 30, preserveWholeWords: true, from: "end" },
+      }],
+      metadata: { provider: "test-provider", status: "available", confidence: 0.9 },
+    });
+
+    expect(snapshot.fragments[0]?.text).toBe("newest context to preserve");
+  });
+
   it("normalizes malformed candidate request payload limits before slicing", () => {
     const sourceText = "ordinary context ".repeat(180);
     const normalizeWithMaxLength = (maxLength: number) => normalizeAppContext({

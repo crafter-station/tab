@@ -61,6 +61,8 @@ export type TextSessionSnapshot = {
   readonly secureLike: boolean;
   readonly accessibilityReliability: TextSessionReliability;
   readonly supportsSemanticInsertion?: boolean;
+  readonly terminalTitle?: string;
+  readonly terminalContents?: string;
   readonly surroundingContext?: {
     readonly beforeCaret?: string;
     readonly afterCaret?: string;

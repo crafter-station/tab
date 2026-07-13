@@ -17,17 +17,19 @@ test("macOS helper emits Accessibility Text Session snapshots accepted by deskto
   assert.match(nativeHelper, /"type": "text-session"/);
   assert.match(nativeHelper, /"accessibilityReliability"/);
   assert.match(nativeHelper, /"selectedText"/);
+  assert.match(nativeHelper, /"terminalContents"/);
+  assert.match(nativeHelper, /"terminalTitle"/);
+  assert.match(nativeHelper, /kAXStringForRangeParameterizedAttribute/);
   assert.match(nativeHelper, /emitTextSessionSnapshotIfChanged\(\)/);
 
   assert.match(typingContext, /readonly selectedText\?: string/);
   assert.match(desktopEventIngress, /snapshot\.selectedText === undefined \|\| typeof snapshot\.selectedText === "string"/);
 });
 
-test("macOS helper refreshes context before Option modifier shortcut events", () => {
+test("macOS helper captures terminal paste and invalidates uncertain edits", () => {
   assert.match(nativeHelper, /CGEventType\.flagsChanged/);
-  assert.match(nativeHelper, /"type": "modifier-key", "key": "option"/);
-  assert.match(
-    nativeHelper,
-    /if type == \.flagsChanged \{[\s\S]*emitActiveWindowIfChanged\(\)[\s\S]*emitTextSessionSnapshotIfChanged\(\)[\s\S]*emitAppContextTreeSnapshotIfChanged\(\)[\s\S]*"type": "modifier-key", "key": "option"/,
-  );
+  assert.match(nativeHelper, /"type": "paste", "text": text/);
+  assert.match(nativeHelper, /"type": "context-invalidated", "message": "submission"/);
+  assert.match(nativeHelper, /"type": "context-invalidated", "message": "navigation_or_unknown_key"/);
+  assert.match(nativeHelper, /CGEventType\.leftMouseDown/);
 });

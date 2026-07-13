@@ -55,6 +55,9 @@ export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeD
     deleteBackward(unit: TypingDeletionUnit = "character"): void {
       session.deleteBackward(unit);
     },
+    invalidateContext(): void {
+      session.invalidateContext();
+    },
     setActiveApplication(bundleId: string | null, windowId: string | null = null): void {
       session.setActiveApplication(bundleId, windowId);
     },
@@ -62,6 +65,7 @@ export function createNativeAutocompleteRuntime(deps: NativeAutocompleteRuntimeD
       session.setSecureInput(active);
     },
     applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
+      deps.appContext.ingestTextSession?.(snapshot);
       if (snapshot.accessibilityReliability === "unavailable") {
         deps.appContext.ingestAccessibilityTree({
           activeApplication: snapshot.activeApplication,

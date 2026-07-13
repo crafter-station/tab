@@ -43,6 +43,7 @@ var lastActiveWindowSnapshot: ActiveWindowSnapshot?
 var lastTextSessionSnapshotKey: String?
 var lastAppContextSnapshotKey: String?
 let textSessionContextLimit = 500
+let terminalContextLimit = 12_000
 let appContextNodeLimit = 120
 let appContextDepthLimit = 7
 var deadKeyState: UInt32 = 0
@@ -102,6 +103,15 @@ func focusedAXElement(for app: NSRunningApplication) -> AXUIElement? {
   return axUIElement(copyAXAttribute(appElement, kAXFocusedUIElementAttribute as String))
 }
 
+func focusedAXWindow(for app: NSRunningApplication) -> AXUIElement? {
+  let appElement = AXUIElementCreateApplication(app.processIdentifier)
+  return axUIElement(copyAXAttribute(appElement, kAXFocusedWindowAttribute as String))
+}
+
+func isGhosttyBundleId(_ bundleId: String) -> Bool {
+  return bundleId == "com.mitchellh.ghostty"
+}
+
 func selectedTextRange(from element: AXUIElement) -> CFRange? {
   guard let axValue = axValue(copyAXAttribute(element, kAXSelectedTextRangeAttribute as String)) else { return nil }
   guard AXValueGetType(axValue) == .cfRange else { return nil }
@@ -109,6 +119,29 @@ func selectedTextRange(from element: AXUIElement) -> CFRange? {
   var range = CFRange(location: 0, length: 0)
   guard AXValueGetValue(axValue, .cfRange, &range) else { return nil }
   return range
+}
+
+func terminalContents(from element: AXUIElement) -> String? {
+  if let characterCount = copyAXAttribute(element, kAXNumberOfCharactersAttribute as String) as? NSNumber {
+    var range = CFRange(
+      location: max(0, characterCount.intValue - terminalContextLimit),
+      length: min(characterCount.intValue, terminalContextLimit)
+    )
+    if let rangeValue = AXValueCreate(.cfRange, &range) {
+      var value: CFTypeRef?
+      if AXUIElementCopyParameterizedAttributeValue(
+        element,
+        kAXStringForRangeParameterizedAttribute as CFString,
+        rangeValue,
+        &value
+      ) == .success, let text = value as? String {
+        return text
+      }
+    }
+  }
+
+  return stringAXAttribute(element, kAXValueAttribute as String)
+    .map { String($0.suffix(terminalContextLimit)) }
 }
 
 func boundedContext(from value: String?, selectedRange: CFRange?) -> [String: String]? {
@@ -260,11 +293,15 @@ func textSessionSnapshot() -> TextSessionPayload? {
 
   let selectedRange = selectedTextRange(from: element)
   let selectedText = stringAXAttribute(element, kAXSelectedTextAttribute as String)
-  let value = stringAXAttribute(element, kAXValueAttribute as String)
+  let ghostty = isGhosttyBundleId(bundleId)
+  let value = ghostty ? nil : stringAXAttribute(element, kAXValueAttribute as String)
   let surroundingContext = boundedContext(from: value, selectedRange: selectedRange)
   let caretBounds = caretBounds(from: element, selectedRange: selectedRange)
   let identity = elementIdentity(element, bundleId: bundleId)
-  let reliability = selectedRange != nil || selectedText != nil || surroundingContext != nil ? "reliable" : "unreliable"
+  let terminalContents = ghostty ? terminalContents(from: element) : nil
+  let reliability = selectedRange != nil || selectedText != nil || surroundingContext != nil || terminalContents != nil
+    ? "reliable"
+    : "unreliable"
   let secureLike = isSecureLikeTextElement(element)
 
   var snapshot: TextSessionPayload = [
@@ -285,6 +322,12 @@ func textSessionSnapshot() -> TextSessionPayload? {
   }
   if let caretBounds = caretBounds {
     snapshot["caretBounds"] = caretBounds
+  }
+  if let terminalContents = terminalContents {
+    snapshot["terminalContents"] = terminalContents
+    snapshot["terminalTitle"] = stringAXAttribute(element, kAXTitleAttribute as String)
+      ?? focusedAXWindow(for: app).flatMap { stringAXAttribute($0, kAXTitleAttribute as String) }
+      ?? ""
   }
 
   return snapshot
@@ -459,13 +502,27 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     return Unmanaged.passUnretained(event)
   }
 
+  if type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown {
+    if activeWindowSnapshot()?.bundleId == "com.mitchellh.ghostty" {
+      emitActiveWindowIfChanged()
+      emitTextSessionSnapshotIfChanged()
+      emit(["type": "context-invalidated", "message": "mouse_input"])
+    }
+    return Unmanaged.passUnretained(event)
+  }
+
   guard type == .keyDown else { return Unmanaged.passUnretained(event) }
   lastOptionKeyUpTimestamp = 0
 
-  let isDeleteKey = keyCode == 51 || keyCode == 117
+  let activeBundleId = activeWindowSnapshot()?.bundleId
+  let isGhostty = activeBundleId == "com.mitchellh.ghostty"
+  let isDeleteKey = keyCode == 51
 
   if isDeleteKey {
     if flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskHelp) {
+      if isGhostty {
+        emit(["type": "context-invalidated", "message": "modified_delete"])
+      }
       return Unmanaged.passUnretained(event)
     }
 
@@ -476,15 +533,53 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     return Unmanaged.passUnretained(event)
   }
 
+  if keyCode == 117 {
+    if isGhostty {
+      emit(["type": "context-invalidated", "message": "forward_delete"])
+    }
+    return Unmanaged.passUnretained(event)
+  }
+
+  let isCommandPaste = keyCode == 9 && flags.contains(.maskCommand)
+    && !flags.contains(.maskControl) && !flags.contains(.maskHelp)
+  if isCommandPaste {
+    guard isGhostty else { return Unmanaged.passUnretained(event) }
+    emitActiveWindowIfChanged()
+    emitTextSessionSnapshotIfChanged()
+    if let text = NSPasteboard.general.string(forType: .string) {
+      emit(["type": "paste", "text": text])
+    } else if isGhostty {
+      emit(["type": "context-invalidated", "message": "unsupported_paste"])
+    }
+    return Unmanaged.passUnretained(event)
+  }
+
+  let isPlainReturn = (keyCode == 36 || keyCode == 76)
+    && !flags.contains(.maskShift) && !flags.contains(.maskAlternate)
+    && !flags.contains(.maskCommand) && !flags.contains(.maskControl)
+  if isPlainReturn && isGhostty {
+    emit(["type": "context-invalidated", "message": "submission"])
+    return Unmanaged.passUnretained(event)
+  }
+
   if keyCode == 48 {
+    if isGhostty {
+      emit(["type": "context-invalidated", "message": "tab"])
+    }
     return Unmanaged.passUnretained(event)
   }
 
   if flags.contains(.maskCommand) || flags.contains(.maskControl) || flags.contains(.maskHelp) {
+    if isGhostty {
+      emit(["type": "context-invalidated", "message": "shortcut"])
+    }
     return Unmanaged.passUnretained(event)
   }
 
   guard let text = normalizedText(from: event) else {
+    if isGhostty {
+      emit(["type": "context-invalidated", "message": "navigation_or_unknown_key"])
+    }
     return Unmanaged.passUnretained(event)
   }
 
@@ -499,7 +594,13 @@ guard let eventTap = CGEvent.tapCreate(
   tap: .cgSessionEventTap,
   place: .headInsertEventTap,
   options: .listenOnly,
-  eventsOfInterest: CGEventMask((1 << CGEventType.keyDown.rawValue) | (1 << CGEventType.flagsChanged.rawValue)),
+  eventsOfInterest: CGEventMask(
+    (1 << CGEventType.keyDown.rawValue)
+      | (1 << CGEventType.flagsChanged.rawValue)
+      | (1 << CGEventType.leftMouseDown.rawValue)
+      | (1 << CGEventType.rightMouseDown.rawValue)
+      | (1 << CGEventType.otherMouseDown.rawValue)
+  ),
   callback: callback,
   userInfo: nil
 ) else {

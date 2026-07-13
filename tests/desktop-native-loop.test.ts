@@ -25,6 +25,7 @@ import { normalizeAppContext } from "../apps/desktop/src/main/app-context-policy
 import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/application-compatibility.ts";
 import { createNativeAutocompleteRuntime } from "../apps/desktop/src/main/native-autocomplete-runtime.ts";
 import { createNativeSuggestionSession } from "../apps/desktop/src/main/native-suggestion-session.ts";
+import { createAppContextExtractor } from "../apps/desktop/src/main/app-context-extractor.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
 import { getMemoryEligibility } from "../packages/memory-policy/src/index.ts";
 import type { Suggestion, ActiveApplication, RecordTelemetryEventRequest } from "@tab/contracts";
@@ -1658,6 +1659,21 @@ describe("desktop native suggestion loop", () => {
       expect(buffer.getState().context).toBe("Hello");
     });
 
+    it("clears an uncertain terminal draft after an unmodeled edit", async () => {
+      const { buffer, calls, session } = makeSession();
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("Explain this");
+      await wait(10);
+      expect(session.getCurrentSuggestion()).not.toBeNull();
+
+      session.invalidateContext();
+
+      expect(buffer.getState().context).toBe("");
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).toContain("clearSuggestion");
+    });
+
     it("routes reliable Text Session snapshots through the loop and falls back to Typing Context when unreliable", async () => {
       const { calls, session } = makeSession();
       const textSession = (overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot => ({
@@ -1751,6 +1767,42 @@ describe("desktop native suggestion loop", () => {
 
       expect(session.getCurrentSnapshot().sanitizedContext).toBe("Analyze this");
       expect(buffer.getState().context).toBe("Analyze this");
+    });
+
+    it("uses Ghostty Accessibility text as separate OpenCode App Context", async () => {
+      const appContext = createAppContextExtractor();
+      let requestedSnapshot: RequestableTypingContextSnapshot | null = null;
+      const { session } = makeSession({
+        getAppContext: (snapshot) => appContext.getSnapshot(snapshot),
+        requestSuggestion: async (snapshot) => {
+          requestedSnapshot = snapshot;
+          return null;
+        },
+      });
+
+      session.setActiveApplication("com.mitchellh.ghostty", "window:1");
+      session.appendText("Explain this");
+      session.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.mitchellh.ghostty", windowId: "window:1" },
+        focusedElementId: "ghostty:text-area",
+        textElementId: "ghostty:text-area",
+        selectedRange: { location: 0, length: 0 },
+        caretIdentity: "range:0:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        terminalTitle: "OC | Fix terminal context",
+        terminalContents: "┃ Fix terminal context\n\n  The previous implementation dropped this context.\n▣ Build · model · 2s\n╹",
+      });
+      await wait(10);
+
+      expect(requestedSnapshot?.sanitizedContext).toBe("Explain this");
+      expect(requestedSnapshot?.textSession).toBeUndefined();
+      expect(requestedSnapshot?.appContext?.metadata.provider).toBe("ghostty-terminal");
+      expect(requestedSnapshot?.appContext?.fragments[0]).toMatchObject({
+        kind: "terminal_visible_context",
+        memoryEligible: false,
+        metadata: { terminalApplication: "opencode" },
+      });
     });
 
     it("does not let raw dead-key fallback text overwrite a reliable Text Session snapshot", async () => {

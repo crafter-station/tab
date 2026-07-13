@@ -8,6 +8,7 @@ const SECRET_LIKE_CONTEXT_SUPPRESSION_REASON = "secret_like_context";
 export type AppContextCandidateRequestPayloadPolicy = {
   readonly maxLength: number;
   readonly preserveWholeWords?: boolean;
+  readonly from?: "start" | "end";
 };
 
 export type AppContextCandidateFragment = Omit<
@@ -41,10 +42,12 @@ function boundFragmentText(
     : MAX_FRAGMENT_LENGTH;
   if (text.length <= limit) return text;
 
-  const bounded = text.slice(0, limit);
+  const bounded = requestPayloadPolicy?.from === "end" ? text.slice(-limit) : text.slice(0, limit);
   if (!requestPayloadPolicy?.preserveWholeWords) return bounded;
 
-  return bounded.replace(/\s+\S*$/, "").trim();
+  return requestPayloadPolicy.from === "end"
+    ? bounded.replace(/^\S*\s+/, "").trim()
+    : bounded.replace(/\s+\S*$/, "").trim();
 }
 
 function normalizeFragment(fragment: NormalizableAppContextFragment): NormalizedFragmentResult {

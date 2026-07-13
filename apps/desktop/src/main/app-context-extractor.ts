@@ -14,7 +14,8 @@ import {
 } from "./app-context.ts";
 import { extractWhatsAppConversationContextCandidate } from "./whatsapp-app-context.ts";
 import type { AccessibilityNode as WhatsAppAccessibilityNode } from "./whatsapp-app-context.ts";
-import type { SafeTypingContextSnapshot } from "./typing-context.ts";
+import type { SafeTypingContextSnapshot, TextSessionSnapshot } from "./typing-context.ts";
+import type { OpenCodeConversationContext } from "./opencode-session-context.ts";
 
 export type AppContextAccessibilityTree = {
   readonly id?: string;
@@ -47,6 +48,7 @@ export type AppContextExtractor = {
     readonly accessibilityTree: AppContextAccessibilityTree | null | undefined;
   }): void;
   getSnapshot(snapshot: SafeTypingContextSnapshot): AppContextSnapshot;
+  ingestTextSession?(snapshot: TextSessionSnapshot): void;
   clear(): void;
 };
 
@@ -108,25 +110,43 @@ function createAccessibilityCandidateProviderRegistry(): readonly AccessibilityA
   ];
 }
 
-function createSnapshotCandidateProviderRegistry(getZedAppContext: AppContextCandidateProvider): readonly SnapshotCandidateProvider[] {
+function combineCandidates(primary: AppContextCandidate, fallback: AppContextCandidate): AppContextCandidate {
+  if (!isAvailable(primary)) return fallback;
+  if (!isAvailable(fallback)) return primary;
+  return {
+    fragments: [...primary.fragments, ...fallback.fragments],
+    metadata: primary.metadata,
+  };
+}
+
+function createSnapshotCandidateProviderRegistry(
+  getZedAppContext: AppContextCandidateProvider,
+  openCodeConversation?: OpenCodeConversationContext,
+): readonly SnapshotCandidateProvider[] {
   return [
     {
       getCandidate: (snapshot) =>
         snapshot.textSession ? createObsidianDocumentAppContextCandidate(snapshot.textSession) : { fragments: [], metadata: { status: "empty" } },
     },
     { getCandidate: getZedAppContext },
+    {
+      getCandidate: (snapshot) => combineCandidates(
+        openCodeConversation?.getCandidate(snapshot) ?? { fragments: [], metadata: { status: "empty" } },
+        createGhosttyAppContextCandidate(snapshot),
+      ),
+    },
     { getCandidate: getAppContextCandidateFromTextSession },
-    { getCandidate: createGhosttyAppContextCandidate },
   ];
 }
 
 export function createAppContextExtractor(options: {
   readonly zedCandidateProvider?: AppContextCandidateProvider;
+  readonly openCodeConversation?: OpenCodeConversationContext;
 } = {}): AppContextExtractor {
   const managedContext = createAppContextManager();
   const getZedAppContext = options.zedCandidateProvider ?? createZedFocusedEditorAppContextCandidateProvider();
   const accessibilityProviders = createAccessibilityCandidateProviderRegistry();
-  const snapshotProviders = createSnapshotCandidateProviderRegistry(getZedAppContext);
+  const snapshotProviders = createSnapshotCandidateProviderRegistry(getZedAppContext, options.openCodeConversation);
 
   return {
     ingestAccessibilityTree(input) {
@@ -146,8 +166,12 @@ export function createAppContextExtractor(options: {
           ?? { fragments: [], metadata: { status: "empty" } },
       );
     },
+    ingestTextSession(snapshot) {
+      void options.openCodeConversation?.observe(snapshot);
+    },
     clear() {
       managedContext.clear();
+      options.openCodeConversation?.clear();
     },
   };
 }

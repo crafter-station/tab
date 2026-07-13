@@ -13,6 +13,8 @@ export type DesktopEventIngressHandlers = {
   readonly onError: (message: unknown) => void;
   readonly onActiveApplicationChanged: (bundleId: string, windowId: string | null) => void;
   readonly onTextInput: (text: string) => void;
+  readonly onPastedText: (text: string) => void;
+  readonly onContextInvalidated: (reason: string) => void;
   readonly onDeleteBackward: (unit: TypingDeletionUnit) => void;
   readonly onSuggestNow: () => void;
   readonly onTextSessionSnapshot: (snapshot: TextSessionSnapshot) => void;
@@ -57,6 +59,14 @@ export function createDesktopEventIngress(handlers: DesktopEventIngressHandlers)
       }
       if (payload.type === "text" && typeof payload.text === "string") {
         handlers.onTextInput(payload.text);
+        return;
+      }
+      if (payload.type === "paste" && typeof payload.text === "string") {
+        handlers.onPastedText(payload.text);
+        return;
+      }
+      if (payload.type === "context-invalidated" && typeof payload.message === "string") {
+        handlers.onContextInvalidated(payload.message);
         return;
       }
       if (payload.type === "delete") {
@@ -127,6 +137,8 @@ function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
     typeof snapshot.secureLike === "boolean" &&
     isTextSessionReliability(snapshot.accessibilityReliability) &&
     (snapshot.supportsSemanticInsertion === undefined || typeof snapshot.supportsSemanticInsertion === "boolean") &&
+    (snapshot.terminalTitle === undefined || typeof snapshot.terminalTitle === "string") &&
+    (snapshot.terminalContents === undefined || typeof snapshot.terminalContents === "string") &&
     (snapshot.surroundingContext === undefined || isTextSessionSurroundingContext(snapshot.surroundingContext)) &&
     (snapshot.caretBounds === undefined || isTextSessionCaretBounds(snapshot.caretBounds))
   );

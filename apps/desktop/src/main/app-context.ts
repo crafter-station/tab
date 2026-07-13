@@ -375,6 +375,7 @@ function controlCharacterRatio(text: string): number {
 }
 
 function terminalSessionText(snapshot: TextSessionSnapshot): string {
+  if (snapshot.terminalContents) return snapshot.terminalContents;
   return [
     snapshot.surroundingContext?.beforeCaret ?? "",
     snapshot.selectedText ?? "",
@@ -415,6 +416,7 @@ export function createGhosttyAppContextCandidate(snapshot: SafeTypingContextSnap
   }
 
   const confidence = 0.86;
+  const openCode = isOpenCodeTerminal(snapshot.textSession?.terminalTitle, text);
   return {
     fragments: [
       {
@@ -423,10 +425,23 @@ export function createGhosttyAppContextCandidate(snapshot: SafeTypingContextSnap
         kind: "terminal_visible_context",
         text,
         confidence,
+        requestPayloadPolicy: { maxLength: 600, preserveWholeWords: true, from: "end" },
+        ...(openCode ? { metadata: { terminalApplication: "opencode" } } : {}),
       },
     ],
     metadata: { provider: GHOSTTY_PROVIDER, status: "available", confidence },
   };
+}
+
+export function isOpenCodeTerminal(title: string | undefined, contents: string): boolean {
+  if (title === "OpenCode" || title?.startsWith("OC | ")) return true;
+
+  const markers = [
+    /(?:^|\n)\s*┃/,
+    /(?:^|\n)\s*╹/,
+    /(?:^|\n)\s*▣\s+.+?\s+·\s+.+?\s+·/,
+  ];
+  return markers.filter((marker) => marker.test(contents)).length >= 2;
 }
 
 type ProviderDefinition = {
