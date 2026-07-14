@@ -52,7 +52,7 @@ export function OverlaySurface() {
   }, []);
 
   return (
-    <main className="overlay-shell" data-mode={mode}>
+    <main className="overlay-shell" data-mode={mode} aria-hidden="true">
       {mode === "suggestion" && suggestion?.presentation === "inline" ? (
         <span
           className="inline-suggestion"
@@ -63,7 +63,7 @@ export function OverlaySurface() {
             "--inline-line-height": `${suggestion.inlineMetrics.lineHeight}px`,
           } as CSSProperties : undefined}
         >
-          {suggestion.text}
+          {suggestion.text.replace(/\s+/g, " ")}
         </span>
       ) : (
         <FloatingSuggestionBar
@@ -71,6 +71,7 @@ export function OverlaySurface() {
           source={suggestion?.source}
           refreshing={suggestionRefreshing}
           onAccept={() => window.tab?.acceptSuggestion()}
+          onPointerInteractionChange={(interactive) => window.tab?.setOverlayPointerInteraction(interactive)}
         />
       )}
       {showDeveloperDiagnostics ? <DebugContextCard debug={mode === "debug" ? debugContext : null} /> : null}

@@ -12,6 +12,7 @@ type FloatingSuggestionBarProps = {
   source?: "local" | "cloud";
   refreshing?: boolean;
   onAccept: () => void;
+  onPointerInteractionChange?: (interactive: boolean) => void;
   className?: string;
 };
 
@@ -29,7 +30,7 @@ const visibleShellClassName = "visible";
 const hiddenShellClassName = "invisible";
 
 const commandClassName =
-  "tab-suggestion-command pointer-events-auto isolate grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] py-2 pr-2 pl-2.5 text-[var(--tab-overlay-text)] shadow-[var(--tab-overlay-shadow)] backdrop-blur-xl active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tab-overlay-focus-ring)] disabled:pointer-events-none disabled:scale-100";
+  "tab-suggestion-command pointer-events-auto isolate grid min-h-11 w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2.5 overflow-hidden rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] py-2 pr-2 pl-2.5 text-[var(--tab-overlay-text)] shadow-[var(--tab-overlay-shadow)] active:scale-[0.985] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--tab-overlay-focus-ring)] disabled:pointer-events-none disabled:scale-100";
 const iconClassName =
   "tab-suggestion-source grid size-7 shrink-0 place-items-center rounded-[var(--radius-control)] border";
 const shortcutClassName =
@@ -57,7 +58,7 @@ export function SuggestionCommand({
       <span className={iconClassName} aria-hidden="true">
         <TabMark className="size-4 text-current" />
       </span>
-      <span className="tab-suggestion-content min-w-0 truncate text-left text-[13px] font-medium leading-tight">{suggestion}</span>
+      <span className="tab-suggestion-content line-clamp-2 min-w-0 text-left text-[13px] font-medium leading-snug">{suggestion}</span>
       <kbd aria-label={shortcutLabel} className={shortcutClassName}>
         <span aria-hidden="true">{shortcut}</span>
         <span className="sr-only">Option+Tab</span>
@@ -66,7 +67,7 @@ export function SuggestionCommand({
   );
 }
 
-export function FloatingSuggestionBar({ suggestion, source, refreshing, onAccept, className }: FloatingSuggestionBarProps) {
+export function FloatingSuggestionBar({ suggestion, source, refreshing, onAccept, onPointerInteractionChange, className }: FloatingSuggestionBarProps) {
   return (
     <section
       className={cn(shellClassName, suggestion ? visibleShellClassName : hiddenShellClassName, className)}
@@ -75,6 +76,8 @@ export function FloatingSuggestionBar({ suggestion, source, refreshing, onAccept
       <SuggestionCommand
         className="w-[min(100%,536px)]"
         onClick={onAccept}
+        onPointerEnter={() => onPointerInteractionChange?.(true)}
+        onPointerLeave={() => onPointerInteractionChange?.(false)}
         disabled={!suggestion || refreshing}
         aria-label={suggestion
           ? `Accept ${source === "cloud" ? "Deep Complete " : ""}suggestion: ${suggestion.text}`

@@ -19,12 +19,22 @@
   opacity: 0.32;
   text-overflow: clip;
   white-space: pre;
-  transition: filter 140ms ease, opacity 140ms ease;
 }
 
 .inline-suggestion[data-refreshing="true"] {
-  filter: blur(2px);
-  opacity: 0.18;
+  opacity: 0.22;
+}
+
+body[data-surface="overlay"] .tab-suggestion-command,
+body[data-surface="overlay"] .tab-suggestion-command::before,
+body[data-surface="overlay"] .tab-suggestion-source,
+body[data-surface="overlay"] .tab-suggestion-content {
+  transition: none;
+}
+
+body[data-surface="overlay"] .tab-suggestion-command[data-refreshing="true"] .tab-suggestion-content {
+  filter: none;
+  opacity: 0.58;
 }
 
 .debug-card {

@@ -44,6 +44,7 @@ export type TabPreloadApi = {
   onDebugContext: (callback: (debug: DebugContext) => void) => () => void;
   onHide: (callback: () => void) => () => void;
   overlayReady: () => void;
+  setOverlayPointerInteraction: (interactive: boolean) => void;
   acceptSuggestion: () => void;
 
   // Onboarding
@@ -114,6 +115,9 @@ contextBridge.exposeInMainWorld("tab", {
   },
   overlayReady: () => {
     ipcRenderer.send("overlay-ready");
+  },
+  setOverlayPointerInteraction: (interactive: boolean) => {
+    ipcRenderer.send("overlay-pointer-interaction", interactive);
   },
   acceptSuggestion: () => {
     ipcRenderer.send("accept-suggestion");

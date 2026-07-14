@@ -179,13 +179,13 @@ const DEBUG_TYPING_HIDE_MS = 3_600;
 const DEBUG_TYPING_WORD_LIMIT = 100;
 const CLIPBOARD_RESTORE_DELAY_MS = 250;
 const OVERLAY_WIDTH = 560;
-const OVERLAY_SUGGESTION_HEIGHT = 64;
+const OVERLAY_SUGGESTION_HEIGHT = 76;
 const INLINE_OVERLAY_LEFT_BLEED = 4;
+const INLINE_OVERLAY_MIN_WIDTH = 160;
 const OVERLAY_DEBUG_WIDTH = 540;
 const OVERLAY_DEBUG_HEIGHT = 220;
 const OVERLAY_BOTTOM_MARGIN = 8;
 const OVERLAY_POSITION_CHECK_MS = 400;
-const OVERLAY_HIT_TEST_MS = 50;
 const SUGGESTION_VISIBLE_MS = 4_000;
 const OBSIDIAN_BUNDLE_ID = "md.obsidian";
 const OBSIDIAN_ACCEPTANCE_SHORTCUT = "Tab";
@@ -650,22 +650,26 @@ function getCurrentDisplay(): Electron.Display {
 function getSuggestionOverlayBounds(height = OVERLAY_SUGGESTION_HEIGHT): Electron.Rectangle {
   const display = getCurrentDisplay();
   const { x, y, width, height: workAreaHeight } = display.workArea;
+  const overlayWidth = Math.max(1, Math.min(OVERLAY_WIDTH, width - 16));
+  const overlayHeight = Math.max(1, Math.min(height, workAreaHeight));
 
   return {
-    width: OVERLAY_WIDTH,
-    height,
-    x: x + Math.round((width - OVERLAY_WIDTH) / 2),
-    y: y + workAreaHeight - height - OVERLAY_BOTTOM_MARGIN,
+    width: overlayWidth,
+    height: overlayHeight,
+    x: x + Math.round((width - overlayWidth) / 2),
+    y: Math.max(y, y + workAreaHeight - overlayHeight - OVERLAY_BOTTOM_MARGIN),
   };
 }
 
 function getInlineSuggestionOverlayBounds(caretBounds: NonNullable<TextSessionSnapshot["caretBounds"]>): Electron.Rectangle {
   const display = screen.getDisplayNearestPoint({ x: Math.round(caretBounds.x), y: Math.round(caretBounds.y) });
   const textX = Math.round(caretBounds.x + Math.max(caretBounds.width, 1));
-  const x = textX - INLINE_OVERLAY_LEFT_BLEED;
-  const height = Math.max(1, Math.round(caretBounds.height));
-  const y = Math.round(caretBounds.y);
-  const availableWidth = display.workArea.x + display.workArea.width - x;
+  const workAreaRight = display.workArea.x + display.workArea.width;
+  const workAreaBottom = display.workArea.y + display.workArea.height;
+  const x = Math.max(display.workArea.x, textX - INLINE_OVERLAY_LEFT_BLEED);
+  const height = Math.max(1, Math.min(Math.round(caretBounds.height), display.workArea.height));
+  const y = Math.max(display.workArea.y, Math.min(Math.round(caretBounds.y), workAreaBottom - height));
+  const availableWidth = workAreaRight - x;
 
   return {
     x,
@@ -755,61 +759,6 @@ function installOverlayPositionTracking(win: BrowserWindow, getBounds: () => Ele
   });
 }
 
-function installAlphaClickThrough(win: BrowserWindow): void {
-  win.setIgnoreMouseEvents(true, { forward: true });
-
-  let lastIgnoreState = true;
-  let captureInFlight = false;
-  const interval = setInterval(async () => {
-    if (win.isDestroyed() || !win.isVisible() || captureInFlight) return;
-
-    const cursor = screen.getCursorScreenPoint();
-    const bounds = win.getBounds();
-    const inside =
-      cursor.x >= bounds.x &&
-      cursor.x < bounds.x + bounds.width &&
-      cursor.y >= bounds.y &&
-      cursor.y < bounds.y + bounds.height;
-
-    if (!inside) {
-      if (!lastIgnoreState) {
-        win.setIgnoreMouseEvents(true, { forward: true });
-        lastIgnoreState = true;
-      }
-      return;
-    }
-
-    captureInFlight = true;
-    try {
-      const image = await win.webContents.capturePage({
-        x: Math.floor(cursor.x - bounds.x),
-        y: Math.floor(cursor.y - bounds.y),
-        width: 1,
-        height: 1,
-      });
-      const bitmap = image.toBitmap();
-      const alpha = bitmap.length >= 4 ? (bitmap[3] ?? 0) : 0;
-
-      if (alpha > 0 && lastIgnoreState) {
-        win.setIgnoreMouseEvents(false);
-        lastIgnoreState = false;
-      } else if (alpha === 0 && !lastIgnoreState) {
-        win.setIgnoreMouseEvents(true, { forward: true });
-        lastIgnoreState = true;
-      }
-    } catch {
-      if (!lastIgnoreState) {
-        win.setIgnoreMouseEvents(true, { forward: true });
-        lastIgnoreState = true;
-      }
-    } finally {
-      captureInFlight = false;
-    }
-  }, OVERLAY_HIT_TEST_MS);
-
-  win.on("closed", () => clearInterval(interval));
-}
-
 function createOverlayWindow(): BrowserWindow {
   const bounds = getSuggestionOverlayBounds();
 
@@ -836,7 +785,7 @@ function createOverlayWindow(): BrowserWindow {
 
   configureFloatingPanel(win);
   installOverlayPositionTracking(win, getCurrentOverlayBounds);
-  installAlphaClickThrough(win);
+  win.setIgnoreMouseEvents(true, { forward: true });
   win.on("closed", () => {
     if (overlayWindow === win) {
       overlayWindow = null;
@@ -897,10 +846,12 @@ function resizeOverlayWindow(height: number): void {
 }
 
 function isObsidianInlineTarget(snapshot: ReturnType<typeof nativeAutocompleteApp.getCurrentSnapshot>): boolean {
+  const caretBounds = snapshot.textSession?.caretBounds;
   return snapshot.activeApplication?.bundleId === OBSIDIAN_BUNDLE_ID
     && snapshot.textSession?.accessibilityReliability === "reliable"
     && snapshot.textSession.selectedRange?.length === 0
-    && snapshot.textSession.caretBounds !== undefined;
+    && caretBounds !== undefined
+    && getInlineSuggestionOverlayBounds(caretBounds).width >= INLINE_OVERLAY_MIN_WIDTH;
 }
 
 function unregisterObsidianTabAcceptance(): void {
@@ -938,7 +889,7 @@ function showOverlay(suggestion: Suggestion, provenance: SuggestionProvenance): 
     presentation: inline ? "inline" : "floating",
     ...(inline ? {
       inlineMetrics: {
-        fontSize: Math.max(11, Math.round(snapshot.textSession!.caretBounds!.height * 0.82)),
+        fontSize: Math.max(11, Math.min(20, Math.round(snapshot.textSession!.caretBounds!.height * 0.78))),
         lineHeight: Math.max(1, Math.round(snapshot.textSession!.caretBounds!.height)),
       },
     } : {}),
@@ -952,6 +903,8 @@ function clearSuggestionOverlay(): void {
   unregisterObsidianTabAcceptance();
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   overlayWindow.webContents.send("hide");
+  overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+  overlayWindow.hide();
 }
 
 function hideOverlay(): void {
@@ -1151,6 +1104,11 @@ async function bootstrap(): Promise<void> {
     }
   });
 
+  ipcMain.on("overlay-pointer-interaction", (event, interactive: boolean) => {
+    if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
+    overlayWindow.setIgnoreMouseEvents(!interactive, interactive ? undefined : { forward: true });
+  });
+
   overlayWindow = createOverlayWindow();
   debugOverlayWindow = SHOW_DEBUG_TYPING_OVERLAY ? createDebugOverlayWindow() : null;
   enablePackagedAuthCallbackHandling();
@@ -1165,7 +1123,8 @@ async function bootstrap(): Promise<void> {
     console.error("Failed to register Option+Tab acceptance shortcut");
   }
 
-  ipcMain.on("accept-suggestion", () => {
+  ipcMain.on("accept-suggestion", (event) => {
+    if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
     acceptCurrentSuggestion().catch((error) => {
       console.error("Failed to accept suggestion via overlay click:", error);
     });

@@ -144,7 +144,7 @@ describe("shared app patterns", () => {
     expect(styles).toInclude("background-color: var(--tab-overlay-deep-shortcut-bg)");
   });
 
-  it("keeps suggestion content mounted and blurred while a replacement refreshes", () => {
+  it("keeps suggestion content mounted while a replacement refreshes", () => {
     const markup = renderToStaticMarkup(
       <FloatingSuggestionBar
         suggestion={{ id: "s-local", text: " local suggestion" }}
