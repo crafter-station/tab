@@ -45,6 +45,63 @@
   animation-delay: 160ms;
 }
 
+.tab-action-link {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  width: fit-content;
+  text-decoration: none;
+  transition: transform 140ms var(--tab-ease-out);
+}
+
+.tab-action-link::before,
+.tab-action-link::after {
+  position: absolute;
+  right: 0;
+  bottom: -0.2rem;
+  left: 0;
+  height: 1px;
+  content: "";
+  pointer-events: none;
+}
+
+.tab-action-link::before {
+  background: var(--border);
+}
+
+.tab-action-link::after {
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 220ms var(--tab-ease-out);
+}
+
+.tab-action-link > svg {
+  transition: transform 180ms var(--tab-ease-out);
+}
+
+.tab-action-link:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tab-action-link:hover::after,
+  .tab-action-link:focus-visible::after {
+    transform: scaleX(1);
+  }
+
+  .tab-action-link:hover > svg,
+  .tab-action-link:focus-visible > svg {
+    transform: translate3d(0.125rem, 0, 0);
+  }
+
+  .tab-action-link-external:hover > svg,
+  .tab-action-link-external:focus-visible > svg {
+    transform: translate3d(0.125rem, -0.125rem, 0);
+  }
+}
+
 .tab-app-marquee-viewport {
   color: var(--foreground);
   -webkit-mask-image: linear-gradient(to right, transparent, currentColor 7%, currentColor 93%, transparent);
@@ -502,6 +559,18 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tab-action-link,
+  .tab-action-link::after,
+  .tab-action-link > svg {
+    transition: none;
+  }
+
+  .tab-action-link:active,
+  .tab-action-link:hover > svg,
+  .tab-action-link:focus-visible > svg {
+    transform: none;
+  }
+
   .brand-asset-action {
     transition: none;
   }

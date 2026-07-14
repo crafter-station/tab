@@ -338,8 +338,8 @@ function PrivacyPipeline() {
         })}
       </div>
       <div className="mt-10 flex flex-wrap gap-x-6 gap-y-3 text-sm font-semibold">
-        <a className="inline-flex items-center gap-1.5 underline decoration-border underline-offset-4" href="/privacy">Read the privacy policy <ArrowRight aria-hidden="true" /></a>
-        <a className="inline-flex items-center gap-1.5 underline decoration-border underline-offset-4" href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">Inspect the source <ArrowUpRight aria-hidden="true" /></a>
+        <a className="tab-action-link" href="/privacy">Read the privacy policy <ArrowRight aria-hidden="true" /></a>
+        <a className="tab-action-link tab-action-link-external" href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">Inspect the source <ArrowUpRight aria-hidden="true" /></a>
       </div>
     </section>
   );
@@ -446,7 +446,7 @@ export function HomePage() {
         <PricingPlanGrid className="mt-12" plans={pricingPlans} />
         <div className="mt-8 flex flex-col justify-between gap-4 text-sm leading-relaxed text-muted-foreground sm:flex-row sm:items-center">
           <p>Free counts only words you insert. There are no automatic overage charges.</p>
-          <a className="shrink-0 font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare full plan details</a>
+          <a className="tab-action-link shrink-0 font-semibold text-foreground" href="/pricing">Compare full plan details <ArrowRight aria-hidden="true" /></a>
         </div>
       </section>
 
