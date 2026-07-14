@@ -8,6 +8,7 @@
     "./components/*": "./src/components/*",
     "./hooks/*": "./src/hooks/*",
     "./lib/*": "./src/lib/*",
+    "./theme": "./src/theme.ts",
     "./platform-colors": "./src/platform-colors.ts",
     "./styles.css": "./src/styles/globals.css"
   },

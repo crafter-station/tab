@@ -1,4 +1,4 @@
-import { FloatingSuggestionBar, type Suggestion } from "@tab/ui";
+import { FloatingSuggestionBar, type Suggestion } from "@tab/ui/components/app/floating-suggestion-bar";
 import { useEffect, useState, type CSSProperties } from "react";
 import { DebugContextCard, type DebugContext } from "../components/DebugContextCard";
 

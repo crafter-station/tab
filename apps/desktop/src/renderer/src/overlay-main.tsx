@@ -1,7 +1,7 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import "@tab/ui/styles.css";
-import { initializeThemePreference, subscribeToSystemThemeChanges } from "@tab/ui";
+import { initializeThemePreference, subscribeToSystemThemeChanges } from "@tab/ui/theme";
 import { OverlaySurface } from "./surfaces/OverlaySurface";
 import "./styles/base.css";
 import "./styles/overlay.css";

@@ -27,3 +27,4 @@ export * from "./components/app/permission-card";
 export * from "./components/app/semantic-tone";
 export * from "./components/app/section-card";
 export * from "./components/app/status-badge";
+export * from "./components/app/tab-mark";
