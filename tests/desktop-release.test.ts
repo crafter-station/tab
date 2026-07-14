@@ -54,6 +54,9 @@ describe("Desktop release packaging", () => {
     expect(config).toInclude("gatekeeperAssess: false");
     expect(config).toInclude("entitlements: build/entitlements.mac.plist");
     expect(config).toInclude("icon: ../web/public/brand/tab-mark.png");
+    expect(config).toInclude(
+      'x64ArchFiles: "Contents/Resources/app.asar.unpacked/dist/local-runtime/**/*"',
+    );
     expect(config).toInclude("- universal");
     expect(config).toInclude('artifactName: "${productName}-${version}-${arch}.${ext}"');
     expect(config).toInclude("protocols:");
@@ -61,6 +64,11 @@ describe("Desktop release packaging", () => {
     expect(config).toInclude("provider: github");
     expect(config).toInclude("owner: crafter-station");
     expect(config).toInclude("repo: tab");
+
+    const runtimeBuild = await Bun.file(
+      "apps/desktop/scripts/build-local-runtime.ts",
+    ).text();
+    expect(runtimeBuild).toInclude("dereference: true");
   });
 
   it("publishes signed tags with a stable universal download asset", async () => {

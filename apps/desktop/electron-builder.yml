@@ -14,6 +14,10 @@ asarUnpack:
 mac:
   icon: ../web/public/brand/tab-mark.png
   category: public.app-category.productivity
+  # The architecture-specific local runtime folders are bundled together in
+  # both intermediate apps. Preserve those pinned binaries when electron-builder
+  # combines the intermediate apps into one universal application.
+  x64ArchFiles: "Contents/Resources/app.asar.unpacked/dist/local-runtime/**/*"
   protocols:
     - name: Tab
       schemes:

@@ -66,7 +66,9 @@ async function prepareRuntime(runtimeName: RuntimeName, architecture: RuntimeArc
     for (const fileName of readdirSync(extractedDirectory)) {
       if (fileName === "llama-server" || fileName === "LICENSE" || fileName.endsWith(".dylib")) {
         cpSync(path.join(extractedDirectory, fileName), path.join(outputDirectory, fileName), {
-          dereference: false,
+          // Universal packaging merges the x64 and arm64 app trees. Materialize
+          // archive symlinks so duplicate dylib link chains cannot collide.
+          dereference: true,
         });
       }
     }
