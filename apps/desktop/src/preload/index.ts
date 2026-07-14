@@ -56,6 +56,7 @@ export type TabPreloadApi = {
   completeOnboarding: () => void;
   completeOnboardingAndRelaunch: () => void;
   skipOnboarding: () => void;
+  onOnboardingOptionTab: (callback: () => void) => () => void;
 
   // Settings / status
   onStatusChanged: (callback: (status: DesktopStatus) => void) => () => void;
@@ -136,6 +137,11 @@ contextBridge.exposeInMainWorld("tab", {
   },
   skipOnboarding: () => {
     ipcRenderer.send("complete-onboarding");
+  },
+  onOnboardingOptionTab: (callback: () => void) => {
+    const listener = () => callback();
+    ipcRenderer.on("onboarding-option-tab", listener);
+    return () => ipcRenderer.off("onboarding-option-tab", listener);
   },
 
   onStatusChanged: (callback: (status: DesktopStatus) => void) => {

@@ -5,6 +5,7 @@ describe("desktop renderer setup surfaces", () => {
   it("renders sign-in and onboarding around the shared Tab setup story", () => {
     const signInSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SignInSurface.tsx", "utf8");
     const onboardingSource = readFileSync("apps/desktop/src/renderer/src/surfaces/OnboardingSurface.tsx", "utf8");
+    const desktopMainSource = readFileSync("apps/desktop/src/main/index.ts", "utf8");
 
     expect(signInSource).toInclude("Connect this Mac");
     expect(signInSource).toInclude("Accessibility");
@@ -15,8 +16,14 @@ describe("desktop renderer setup surfaces", () => {
     expect(signInSource).toInclude("pug-dot-grid");
     expect(signInSource).toInclude("<TabMark />");
     expect(onboardingSource).toInclude("Try accepting a Suggestion");
+    expect(onboardingSource).toInclude("Download local model");
+    expect(onboardingSource).toInclude("onOnboardingOptionTab");
     expect(onboardingSource).toInclude("I turned it on");
     expect(onboardingSource).toInclude("<SuggestionCommand");
+    expect(onboardingSource).not.toInclude("Try another");
+    expect(desktopMainSource).toInclude("onboardingWindowManager.isFocused()");
+    expect(desktopMainSource).toInclude("onboardingWindowManager.sendOptionTab()");
+    expect(desktopMainSource).toInclude("if (onboardingWindowManager.isOpen()) return null");
   });
 
   it("uses plan-neutral paid entitlement copy in settings", () => {

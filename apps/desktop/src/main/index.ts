@@ -384,6 +384,7 @@ const localInference = createLocalInferencePrototype({
     : undefined,
   onStatusChange: (status) => {
     settingsWindowManager.sendLocalInferenceStatus(status);
+    onboardingWindowManager.sendLocalInferenceStatus(status);
     if (status.status === "unavailable") {
       updateDebugApiState({ status: "local-unavailable", reason: status.reason });
     }
@@ -394,6 +395,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
   appContext: appContextExtractor,
   memoryExtraction: memoryExtractionDispatcher,
   getAutomaticSuggestion: async (snapshot, options) => {
+    if (onboardingWindowManager.isOpen()) return null;
     updateDebugApiState({ status: "loading" });
     const startedAt = performance.now();
     try {
@@ -628,6 +630,7 @@ function showSignedOutSurface(): void {
 
 function showAuthenticatedDesktopSurface(): void {
   if (onboardingManager.shouldShowOnboarding()) {
+    clearContextAndHide();
     settingsWindowManager.close();
     onboardingWindowManager.show();
     return;
@@ -876,6 +879,7 @@ function registerObsidianTabAcceptance(): void {
 }
 
 function showOverlay(suggestion: Suggestion, provenance: SuggestionProvenance): void {
+  if (onboardingWindowManager.isOpen()) return;
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   const snapshot = nativeAutocompleteApp.getCurrentSnapshot();
   const inline = isObsidianInlineTarget(snapshot);
@@ -1022,6 +1026,7 @@ async function requestSuggestionNow(): Promise<void> {
 }
 
 function handleSuggestNow(): void {
+  if (onboardingWindowManager.isOpen()) return;
   requestSuggestionNow().catch((error) => {
     console.error("Failed to suggest now from double-tap Option:", error);
   });
@@ -1117,6 +1122,10 @@ async function bootstrap(): Promise<void> {
   enablePackagedAuthCallbackHandling();
 
   const registered = globalShortcut.register("Alt+Tab", () => {
+    if (onboardingWindowManager.isFocused()) {
+      onboardingWindowManager.sendOptionTab();
+      return;
+    }
     acceptCurrentSuggestion().catch((error) => {
       console.error("Failed to accept suggestion:", error);
     });

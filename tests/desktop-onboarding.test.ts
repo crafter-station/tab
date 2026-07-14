@@ -57,7 +57,8 @@ describe("desktop onboarding", () => {
   });
 
   it("defines the first-run onboarding steps in order", () => {
-    expect(ONBOARDING_STEPS).toEqual(["try", "permissions", "done"]);
+    expect(ONBOARDING_STEPS).toEqual(["model", "try", "permissions", "done"]);
+    expect(ONBOARDING_STEP_COPY.model.subtitle.toLowerCase()).toContain("local");
     expect(ONBOARDING_STEP_COPY.try.title.toLowerCase()).toContain("try");
     expect(ONBOARDING_STEP_COPY.try.subtitle.toLowerCase()).toContain("suggestion");
   });

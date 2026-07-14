@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Eyebrow, SuggestionCommand, TabMark, Textarea } from "@tab/ui";
 import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
+import type { LocalInferenceStatus } from "../../../main/local-inference-prototype";
 import { ONBOARDING_STEP_COPY, ONBOARDING_STEPS, type OnboardingStep } from "../../../main/onboarding";
 
 type Feedback = {
@@ -11,11 +12,7 @@ type Feedback = {
 type PermissionState = "complete" | "current" | "upcoming";
 
 const INITIAL_DRAFT = "Hi Jordan, quick update on the launch plan:";
-const SAMPLE_SUGGESTIONS = [
-  "I can review the final details this afternoon and send next steps.",
-  "Everything is on track for Friday. I will share the final checklist shortly.",
-  "The team has what it needs, and I will follow up after the last review.",
-];
+const SAMPLE_SUGGESTION = "Everything is on track for Friday. I will share the final checklist shortly.";
 
 function CheckIcon({ className }: { className?: string }) {
   return (
@@ -67,20 +64,26 @@ function PermissionRow({
 }
 
 export function OnboardingSurface() {
-  const [step, setStep] = useState<OnboardingStep>("try");
+  const [step, setStep] = useState<OnboardingStep>("model");
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [inputMonitoringOpened, setInputMonitoringOpened] = useState(false);
   const [inputMonitoringConfirmed, setInputMonitoringConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [practiceText, setPracticeText] = useState(INITIAL_DRAFT);
-  const [suggestionIndex, setSuggestionIndex] = useState(0);
   const [acceptedPractice, setAcceptedPractice] = useState(false);
+  const [localInferenceStatus, setLocalInferenceStatus] = useState<LocalInferenceStatus>({ status: "stopped" });
+  const acceptedPracticeRef = useRef(false);
   const pollRef = useRef<number | null>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const initialStepRef = useRef(true);
 
   const currentStepIndex = ONBOARDING_STEPS.indexOf(step);
+  const modelNeedsDownload = localInferenceStatus.status === "unavailable"
+    && ["missing_model", "artifact_mismatch", "download_failed"].includes(localInferenceStatus.reason);
+  const modelIsPreparing = localInferenceStatus.status === "stopped"
+    || localInferenceStatus.status === "starting"
+    || localInferenceStatus.status === "downloading";
 
   const stopAccessibilityPolling = useCallback(() => {
     if (pollRef.current !== null) {
@@ -118,6 +121,19 @@ export function OnboardingSurface() {
     refreshAccessibilityStatus().catch(() => setAccessibilityGranted(false));
     return stopAccessibilityPolling;
   }, [refreshAccessibilityStatus, stopAccessibilityPolling]);
+
+  useEffect(() => {
+    if (!window.tab) return;
+    let receivedStatus = false;
+    const unsubscribe = window.tab.onLocalInferenceStatusChanged((status) => {
+      receivedStatus = true;
+      setLocalInferenceStatus(status);
+    });
+    window.tab.getInitialState().then((initialState) => {
+      if (!receivedStatus) setLocalInferenceStatus(initialState.localInferenceStatus);
+    }).catch(() => {});
+    return unsubscribe;
+  }, []);
 
   useEffect(() => {
     if (initialStepRef.current) {
@@ -191,21 +207,42 @@ export function OnboardingSurface() {
     }
   }
 
-  function acceptPracticeSuggestion() {
-    if (acceptedPractice) return;
-    setPracticeText((value) => `${value.trimEnd()} ${SAMPLE_SUGGESTIONS[suggestionIndex]}`);
+  const acceptPracticeSuggestion = useCallback(() => {
+    if (acceptedPracticeRef.current) return;
+    acceptedPracticeRef.current = true;
+    setPracticeText((value) => `${value.trimEnd()} ${SAMPLE_SUGGESTION}`);
     setAcceptedPractice(true);
-  }
+  }, []);
 
-  function resetPractice() {
-    setSuggestionIndex((index) => (index + 1) % SAMPLE_SUGGESTIONS.length);
-    setPracticeText(INITIAL_DRAFT);
-    setAcceptedPractice(false);
+  useEffect(() => window.tab?.onOnboardingOptionTab?.(() => {
+    if (step === "try") acceptPracticeSuggestion();
+  }), [acceptPracticeSuggestion, step]);
+
+  async function downloadLocalModel() {
+    setBusy(true);
     setFeedback(null);
+    try {
+      await window.tab.downloadLocalModel();
+    } catch {
+      setFeedback({
+        message: "The model could not be downloaded. Check your connection and try again.",
+        tone: "warning",
+      });
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handlePrimaryAction() {
     switch (step) {
+      case "model":
+        if (modelNeedsDownload) {
+          await downloadLocalModel();
+          return;
+        }
+        if (!modelIsPreparing) goNext();
+        return;
+
       case "try":
         if (!acceptedPractice) {
           acceptPracticeSuggestion();
@@ -235,7 +272,19 @@ export function OnboardingSurface() {
   }
 
   function getPrimaryLabel() {
+    if (busy && step === "model") return "Downloading...";
     if (busy) return "Opening System Settings...";
+    if (step === "model") {
+      if (modelNeedsDownload) return "Download local model";
+      if (localInferenceStatus.status === "downloading") {
+        return localInferenceStatus.progress === null
+          ? "Downloading..."
+          : `Downloading ${Math.round(localInferenceStatus.progress * 100)}%`;
+      }
+      if (localInferenceStatus.status === "ready") return "Continue";
+      if (localInferenceStatus.status === "unavailable") return "Continue without local Suggestions";
+      return "Preparing model...";
+    }
     if (step === "try") return acceptedPractice ? "Continue" : "Accept sample Suggestion";
     if (step === "done") return "Relaunch Tab";
     if (!accessibilityGranted) return "Open Accessibility Settings";
@@ -300,6 +349,66 @@ export function OnboardingSurface() {
           </p>
 
           <section className="onboarding-step" key={step} aria-labelledby="onboarding-step-title">
+            {step === "model" ? (
+              <>
+                <header className="onboarding-hero">
+                  <Eyebrow>Private by default</Eyebrow>
+                  <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                    Bring Automatic Suggestions to this Mac.
+                  </h1>
+                  <p className="lede">
+                    Tab uses a one-time local model download for everyday completions. Your recent typing stays on this Mac.
+                  </p>
+                </header>
+
+                <div className="model-setup" data-status={localInferenceStatus.status}>
+                  <div className="model-setup__status">
+                    <span className="model-setup__dot" aria-hidden="true" />
+                    <div>
+                      <strong>
+                        {localInferenceStatus.status === "ready"
+                          ? "Local model ready"
+                          : localInferenceStatus.status === "downloading"
+                            ? "Downloading local model"
+                            : modelNeedsDownload
+                              ? "Local model required"
+                              : localInferenceStatus.status === "unavailable"
+                                ? "Local Suggestions unavailable"
+                                : "Checking this Mac"}
+                      </strong>
+                      <span>
+                        {localInferenceStatus.status === "ready"
+                          ? "Automatic Suggestions can run entirely on this Mac."
+                          : localInferenceStatus.status === "downloading"
+                            ? "Keep Tab open. You can see exact progress below."
+                            : modelNeedsDownload
+                              ? "A roughly 2 GB download. Tab verifies it before use."
+                              : localInferenceStatus.status === "unavailable"
+                                ? "You can finish setup and troubleshoot the local runtime in Settings."
+                                : "Tab is checking for the model and local runtime."}
+                      </span>
+                    </div>
+                  </div>
+                  {localInferenceStatus.status === "downloading" ? (
+                    <div
+                      aria-label="Local model download progress"
+                      aria-valuemax={100}
+                      aria-valuemin={0}
+                      aria-valuenow={localInferenceStatus.progress === null ? undefined : Math.round(localInferenceStatus.progress * 100)}
+                      className="model-setup__progress"
+                      role="progressbar"
+                    >
+                      <span style={{ transform: `scaleX(${localInferenceStatus.progress ?? 0.04})` }} />
+                    </div>
+                  ) : null}
+                  <div className="model-setup__facts">
+                    <span><CheckIcon /> Routine Suggestions stay local</span>
+                    <span><CheckIcon /> No automatic cloud fallback</span>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
             {step === "try" ? (
               <>
                 <header className="onboarding-hero">
@@ -314,7 +423,7 @@ export function OnboardingSurface() {
 
                 <div className="practice-demo">
                   <div className="practice-demo__header">
-                    <span>Sample Suggestion</span>
+                    <span>Shortcut rehearsal</span>
                   </div>
                   <div className="practice-demo__body">
                     <label htmlFor="practice-draft">Your draft</label>
@@ -323,7 +432,10 @@ export function OnboardingSurface() {
                       id="practice-draft"
                       onChange={(event) => {
                         setPracticeText(event.target.value);
-                        if (acceptedPractice) setAcceptedPractice(false);
+                        if (acceptedPractice) {
+                          acceptedPracticeRef.current = false;
+                          setAcceptedPractice(false);
+                        }
                       }}
                       rows={4}
                       value={practiceText}
@@ -338,20 +450,17 @@ export function OnboardingSurface() {
                           <strong>Suggestion accepted</strong>
                           <span>Tab added it to your draft.</span>
                         </div>
-                        <Button onClick={resetPractice} size="sm" variant="ghost">
-                          Try another
-                        </Button>
                       </div>
                     ) : (
                       <SuggestionCommand
-                        aria-label={`Accept sample suggestion: ${SAMPLE_SUGGESTIONS[suggestionIndex]}`}
+                        aria-label={`Accept sample suggestion: ${SAMPLE_SUGGESTION}`}
                         onClick={acceptPracticeSuggestion}
-                        suggestion={SAMPLE_SUGGESTIONS[suggestionIndex]}
+                        suggestion={SAMPLE_SUGGESTION}
                       />
                     )}
 
                     <p className="practice-demo__hint">
-                      Select the Suggestion here. In other apps, press Option+Tab. Keep typing to dismiss it.
+                      Press Option+Tab now. This rehearsal stays inside setup; real Suggestions appear at the bottom of your screen after relaunch.
                     </p>
                   </div>
                 </div>
@@ -465,11 +574,11 @@ export function OnboardingSurface() {
                       <small>Tab inserts the Suggestion in the app you are using.</small>
                     </p>
                   </div>
-                  <div>
+                  <div className="ready-list__secondary">
                     <span>03</span>
                     <p>
-                      <strong>Double-tap Option for Deep Complete</strong>
-                      <small>Tab sends a limited, redacted excerpt to the cloud only when you ask.</small>
+                      <strong>Need more help? Double-tap Option.</strong>
+                      <small>Deep Complete uses bounded, redacted cloud context only when you ask. Accept its Suggestion with the same Option+Tab shortcut.</small>
                     </p>
                   </div>
                   <div>
@@ -498,7 +607,7 @@ export function OnboardingSurface() {
                 </Button>
               ) : null}
             </div>
-            <Button className="onboarding-primary" disabled={busy} onClick={handlePrimaryAction} size="lg">
+            <Button className="onboarding-primary" disabled={busy || (step === "model" && modelIsPreparing)} onClick={handlePrimaryAction} size="lg">
               {getPrimaryLabel()}
             </Button>
           </footer>

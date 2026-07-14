@@ -7,11 +7,15 @@ export type OnboardingManagerDependencies = {
   setPreferences(prefs: Partial<OnboardingPreferences>): void;
 };
 
-export const ONBOARDING_STEPS = ["try", "permissions", "done"] as const;
+export const ONBOARDING_STEPS = ["model", "try", "permissions", "done"] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
 export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subtitle: string }> = {
+  model: {
+    title: "Prepare Tab",
+    subtitle: "Set up private, local Suggestions.",
+  },
   try: {
     title: "Try Tab",
     subtitle: "Practice accepting a Suggestion.",
@@ -22,7 +26,7 @@ export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subti
   },
   done: {
     title: "Finish setup",
-    subtitle: "Relaunch Tab once.",
+    subtitle: "Start using Tab everywhere.",
   },
 };
 

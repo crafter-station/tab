@@ -1,6 +1,7 @@
 import { BrowserWindow, nativeTheme, screen } from "electron";
 import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
+import type { LocalInferenceStatus } from "./local-inference-prototype.ts";
 
 export type CreateOnboardingWindowDependencies = {
   rendererPath: string;
@@ -79,10 +80,25 @@ export function createOnboardingWindowManager(deps: OnboardingWindowManagerDepen
     }
   }
 
+  function sendLocalInferenceStatus(status: LocalInferenceStatus): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("local-inference-status-changed", status);
+    }
+  }
+
+  function sendOptionTab(): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("onboarding-option-tab");
+    }
+  }
+
   return {
     show,
     close,
     isOpen: () => win !== null && !win.isDestroyed(),
+    isFocused: () => win?.isFocused() ?? false,
     sendStatus,
+    sendLocalInferenceStatus,
+    sendOptionTab,
   };
 }
