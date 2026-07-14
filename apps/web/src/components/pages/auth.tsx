@@ -91,7 +91,7 @@ export function SignupPage({ search = {}, error }: { search?: AuthSearch; error?
   const handoff = hasDesktopHandoff(search);
 
   return (
-    <AuthShell eyebrow={handoff ? "Mac sign-in" : "30-day Pro trial"} title="Create your Tab account" description="Try Pro for 30 days. No card required." handoff={handoff}>
+    <AuthShell eyebrow={handoff ? "Mac sign-in" : "Tab account"} title="Create your Tab account" description="Use Free or start a paid plan with one month free." handoff={handoff}>
       <form className="flex flex-col gap-4" method="post" action="/signup">
         <ErrorMessage message={error} />
         <HandoffFields search={search} />

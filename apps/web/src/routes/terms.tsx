@@ -6,5 +6,5 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: "terms",
   component: TermsPage,
-  head: () => ({ meta: [{ title: "Terms of Service - Tab" }, { name: "description", content: "Terms governing Tab Free, Pro, and Max, the 30-day trial, billing, renewal, cancellation, and use of the native macOS app." }] }),
+  head: () => ({ meta: [{ title: "Terms of Service - Tab" }, { name: "description", content: "Terms governing Tab Free, Pro, and Max, paid-plan trials, billing, renewal, cancellation, and use of the native macOS app." }] }),
 });

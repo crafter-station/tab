@@ -23,8 +23,7 @@ describe("local-first plan capabilities", () => {
     expect(planCapabilities.max.deepCompletesPerMonth).toBe(1_000);
   });
 
-  it("defines the launch trial, pricing, devices, and paid capabilities", () => {
-    expect(planCapabilities.free.trialDays).toBe(30);
+  it("defines launch pricing, devices, and paid capabilities", () => {
     expect(planCapabilities.free.personalDeviceLimit).toBe(1);
     expect(planCapabilities.pro.personalDeviceLimit).toBe(3);
     expect(planCapabilities.pro.monthlyPriceUsd).toBe(10);

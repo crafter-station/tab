@@ -266,7 +266,7 @@ export function createWebApp(config: WebAppConfig) {
       `Pricing - ${appName}`,
       200,
       user,
-      "Compare Tab Free, Pro, and Max, including the 30-day Pro trial, monthly pricing, Local Suggestion and Deep Complete allowances, and cancellation.",
+      "Compare Tab Free, Pro, and Max, including one month free on paid plans, monthly pricing, Local Suggestion and Deep Complete allowances, and cancellation.",
     );
   }
 
@@ -873,7 +873,7 @@ export function createWebApp(config: WebAppConfig) {
           `Terms of Service - ${appName}`,
           200,
           undefined,
-          "Terms governing Tab Free, Pro, and Max, the 30-day trial, billing, renewal, cancellation, and use of the native macOS app.",
+          "Terms governing Tab Free, Pro, and Max, paid-plan trials, billing, renewal, cancellation, and use of the native macOS app.",
         );
       }
 

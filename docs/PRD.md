@@ -59,7 +59,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 37. As a new user, I want to sign in through the browser, so that account authentication is familiar and secure.
 38. As a desktop user, I want the native app to stay signed in through a device token, so that I do not need browser cookies in the app.
 39. As a user, I want to revoke old devices, so that lost or unused installations stop accessing my account.
-40. As a new user, I want a 30-day Pro trial without a credit card, so that I can experience unlimited local writing, Deep Complete, and continuous personalization before choosing a plan.
+40. As a new customer, I want the first month of Pro or Max free, so that I can experience unlimited local writing, Deep Complete, and continuous personalization before the first charge.
 41. As a free user, I want up to 100 Accepted Words from Local Suggestions each day, so that Tab remains useful for occasional writing.
 42. As a Pro user, I want unlimited Accepted Words from Local Suggestions for $10 per month, so that I can use Tab throughout every writing day.
 43. As a free user, I want 10 Deep Completes per month, so that I can use the higher-capability path for occasional difficult writing.
@@ -104,7 +104,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Treat allowance exhaustion as an entitlement state with a visible upgrade path, not an empty Suggestion result.
 - Use Polar for paid products, checkout, subscription management, customer portal, and paid entitlement reconciliation.
 - Enforce Accepted Word and Deep Complete allowances from local app/backend entitlement state without calling Polar synchronously in either hot path.
-- Start every new account with one 30-day Pro trial without requiring a payment card. Reinstalling or linking another Mac does not restart the trial.
+- Configure a one-month trial on both paid products in Polar. The trial starts only after checkout, requires a payment method, converts to the selected monthly plan unless canceled, and uses Polar's trial-abuse prevention.
 - After the trial, Free includes 100 Accepted Words per day, 10 Deep Completes per month, one Mac, and management of existing Personal Memory.
 - Pro costs $10 per month and includes unlimited Accepted Words, 300 Deep Completes per month, continuous Memory Extraction, custom writing instructions, the supported model catalog, and up to three personal Macs.
 - Max costs $20 per month and includes 1,000 Deep Completes per month. Its other capabilities and three-device limit are the same as Pro.
@@ -148,12 +148,12 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - API tests should assert that `suggestions: []` is a successful no-Suggestion result and that Deep Complete allowance exhaustion is an entitlement error.
 - Local allowance tests should cover Accepted Word counting, word boundaries, daily reset, offline use, restart persistence, and multi-device reconciliation without counting ignored, dismissed, stale, empty, or failed Suggestions.
 - Deep Complete allowance tests should assert that one successful returned Suggestion consumes one allowance, internal retries do not double-count, and empty or failed requests do not count.
-- Trial and plan tests should cover the 30-day no-card Pro trial, Free fallback, monthly Pro and Max entitlements, one-versus-three-device enforcement, downgrade, and cancellation.
+- Trial and plan tests should cover Free-by-default accounts, Polar trialing Pro and Max entitlements, monthly paid conversion, one-versus-three-device enforcement, downgrade, and cancellation.
 - Memory entitlement tests should verify that paid plans receive continuous Memory Extraction while every user can view, edit, export, and delete existing memories.
 - Memory policy tests should focus on external policy behavior: typed text can produce memory jobs, pasted text cannot create memory by default, terminal user input is eligible, terminal output is not.
 - Redaction tests should include common environment variable values, API keys, bearer tokens, private key blocks, database URLs, auth cookies, payment data, government identifiers, and high-entropy strings.
 - Background memory workflow tests should verify that unsafe memory tool writes are rejected by deterministic validators even if the model proposes them.
-- Web app tests should cover Free, Pro, and Max pricing display, plan-only monthly Polar checkout forwarding, trial state, product-value metrics, allowance state, account login, retained memory controls, and device revocation.
+- Web app tests should cover Free, Pro, and Max pricing display, plan-only monthly Polar checkout forwarding, Polar trial state, product-value metrics, allowance state, account login, retained memory controls, and device revocation.
 - Desktop auth tests should cover browser handoff, device-token exchange, Keychain storage, revoked token handling, and sign-in-required status.
 - Telemetry tests should cover local/cloud and automatic/explicit dimensions, outcomes, Accepted Word/character counts, app category, memory-use metadata, conversion events, and cloud cost while asserting that raw Typing Context, Suggestion text, and Personal Memory contents are not persisted.
 - Tests should prefer shared schema fixtures and public API boundaries over testing private functions.

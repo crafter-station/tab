@@ -4,7 +4,6 @@ export const planCapabilities = {
   free: {
     name: "Free",
     monthlyPriceUsd: 0,
-    trialDays: 30,
     localAcceptedWordsPerDay: 100,
     deepCompletesPerMonth: 10,
     personalDeviceLimit: 1,
@@ -15,7 +14,6 @@ export const planCapabilities = {
   pro: {
     name: "Pro",
     monthlyPriceUsd: 10,
-    trialDays: 0,
     localAcceptedWordsPerDay: null,
     deepCompletesPerMonth: 300,
     personalDeviceLimit: 3,
@@ -26,7 +24,6 @@ export const planCapabilities = {
   max: {
     name: "Max",
     monthlyPriceUsd: 20,
-    trialDays: 0,
     localAcceptedWordsPerDay: null,
     deepCompletesPerMonth: 1_000,
     personalDeviceLimit: 3,

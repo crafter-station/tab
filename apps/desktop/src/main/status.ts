@@ -89,6 +89,7 @@ function expireCachedEntitlement(
 ): BillingStatusData {
   const trialExpired =
     entitlement.entitlementSource === "trial" &&
+    entitlement.trial.active &&
     new Date(entitlement.trial.endsAt) <= now;
   const paidAccessExpired =
     entitlement.entitlementSource === "paid" &&

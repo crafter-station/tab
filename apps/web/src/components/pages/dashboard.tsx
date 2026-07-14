@@ -494,7 +494,7 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
         <DashboardMetric label="Words completed" value={formatCount(data.localSuggestionActivity.acceptedWords)} description="From Local Suggestions this month" />
         <DashboardMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} description="This month" />
         <DashboardMetric label="Deep Completes" value={formatCount(data.billing.deepCompletes.used)} description="Successful results this month" />
-        <DashboardMetric label="Plan" value={formatPlanName(data.billing.planId)} description={data.billing.entitlementSource === "trial" ? `Trial ends ${formatDate(data.billing.trial.endsAt)}` : undefined} />
+        <DashboardMetric label="Plan" value={formatPlanName(data.billing.planId)} description={data.billing.trial.active ? `Trial ends ${formatDate(data.billing.trial.endsAt)}` : undefined} />
       </section>
       <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
         <div className="grid gap-7 rounded-[var(--radius-card)] bg-muted/30 p-5 sm:p-6">
@@ -563,9 +563,9 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
         <div className="flex items-center justify-between gap-4 rounded-[var(--radius-card)] bg-muted/30 p-5">
           <div>
             <p className="text-xs font-semibold uppercase text-muted-foreground">Current plan</p>
-            <p className="mt-2 text-xl font-bold">{formatPlanName(billing.planId)}{billing.entitlementSource === "trial" ? " trial" : ""}</p>
+            <p className="mt-2 text-xl font-bold">{formatPlanName(billing.planId)}{billing.trial.active ? " trial" : ""}</p>
           </div>
-          <p className="text-sm text-muted-foreground">{billing.entitlementSource === "trial" ? `Ends ${formatDate(billing.trial.endsAt)}` : billing.billingInterval ? `${billing.billingInterval} billing` : "Free account"}</p>
+          <p className="text-sm text-muted-foreground">{billing.trial.active ? `Ends ${formatDate(billing.trial.endsAt)}` : billing.billingInterval ? `${billing.billingInterval} billing` : "Free account"}</p>
         </div>
         <QuotaProgressPanel title="Local Accepted Words today" usage={billing.localAcceptedWords.used} quota={billing.localAcceptedWords.limit} resetAt={billing.localAcceptedWords.resetAt} />
         <QuotaProgressPanel title="Deep Completes this month" usage={billing.deepCompletes.used} quota={billing.deepCompletes.limit} resetAt={billing.deepCompletes.resetAt} />

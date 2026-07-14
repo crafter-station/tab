@@ -349,8 +349,6 @@ describe("SuggestionUseCase", () => {
       userId: "user-1",
       planId: "free",
       status: "inactive",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
   }
@@ -396,6 +394,16 @@ describe("SuggestionUseCase", () => {
     const trial = createUseCase(async (input) => {
       trialInput = input;
       return { text: " world" };
+    });
+    await trial.billingService.applyEntitlement({
+      userId: "user-1",
+      planId: "pro",
+      polarCustomerId: "polar-customer-trial",
+      polarSubscriptionId: "polar-subscription-trial",
+      status: "trialing",
+      trialStartedAt: new Date("2026-07-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2099-08-01T00:00:00.000Z"),
+      cachedAt: new Date(),
     });
     await trial.useCase.handle(validDevice, {
       ...validRequest,

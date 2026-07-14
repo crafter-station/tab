@@ -220,9 +220,9 @@ describe("Web account surface", () => {
     expect(body).toInclude("data-theme-choice=\"system\"");
     expect(body).toInclude("Personal Memory stays visible");
     expect(body).toInclude("Automatic Suggestions run on your Mac");
-    expect(body).toInclude("Try Pro. Keep Free if you do not upgrade.");
+    expect(body).toInclude("Try Pro or Max before the first charge.");
     expect(body).toInclude("100 Accepted Words each day");
-    expect(body).toInclude("No card required");
+    expect(body).toInclude("Payment details required");
   });
 
   it("renders redesigned auth handoff forms without dropping desktop fields", async () => {
@@ -288,7 +288,8 @@ describe("Web account surface", () => {
     expect(body).toInclude("supported model catalog");
     expect(body).toInclude("No automatic overages");
     expect(body).toInclude("Sign in, then continue to secure checkout");
-    expect(body).toInclude("Start 30-day Pro trial");
+    expect(body).toInclude("Start Pro with one month free");
+    expect(body).toInclude("Start Max with one month free");
     expect(body).toInclude('href="/signup"');
     expect(body).toInclude('action="/billing/checkout"');
     expect(body).not.toInclude('name="interval"');
@@ -297,7 +298,7 @@ describe("Web account surface", () => {
     expect(body).toInclude('data-pricing-plan="pro"');
     expect(body).toInclude('data-pricing-plan="max"');
     expect(body.match(/data-pricing-plan=/g)?.length).toBe(3);
-    expect(body).toInclude("Free begins automatically after your trial");
+    expect(body).toInclude("Free is available without checkout");
   });
 
   it("explains local processing, billing, cancellation, and retained data controls", async () => {
@@ -312,7 +313,8 @@ describe("Web account surface", () => {
 
     const terms = await termsResponse.text();
     expect(terms).toInclude("Updated July 13, 2026");
-    expect(terms).toInclude("one 30-day Pro trial without a payment card");
+    expect(terms).toInclude("Pro and Max each include a one-month free trial");
+    expect(terms).toInclude("requires payment details");
     expect(terms).toInclude("does not charge automatic usage overages");
     expect(terms).toInclude("paid benefits remain active through the end of the current paid period");
     expect(terms).toInclude("Paid plans renew monthly");
@@ -435,7 +437,7 @@ describe("Web account surface", () => {
     );
   });
 
-  it("starts signed-in users without a Polar entitlement on a Pro trial", async () => {
+  it("starts signed-in users without a Polar entitlement on Free", async () => {
     const { apiApp, database, webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;
     const password = "password123456";
@@ -445,8 +447,8 @@ describe("Web account surface", () => {
 
     expect(response.status).toBe(200);
     const body = await response.text();
-    expect(body).toInclude("Trial ends");
-    expect(body).toInclude("0 of 300");
+    expect(body).not.toInclude("Trial ends");
+    expect(body).toInclude("0 of 10");
     expect(body).toInclude("Deep Completes this month");
   });
 

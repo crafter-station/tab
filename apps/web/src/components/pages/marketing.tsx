@@ -38,16 +38,16 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       <section className="grid gap-10" aria-labelledby="pricing-heading">
         <div>
           <PageKicker>Simple pricing</PageKicker>
-          <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Try Pro for 30 days. No card.</h1>
-          <p className="mt-6 max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose a paid plan or keep using Free.</p>
-          <a className={buttonVariants({ size: "lg", className: "mt-6" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
+          <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Your first month of Pro or Max is free.</h1>
+          <p className="mt-6 max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Choose a paid plan and complete secure Polar checkout. You will not be charged until the one-month trial ends.</p>
+          <a className={buttonVariants({ size: "lg", className: "mt-6" })} href={authenticated ? "#paid-plans" : "/signup"}>{authenticated ? "Choose a plan" : "Create an account"}</a>
         </div>
 
         <div className="grid items-stretch gap-4 lg:grid-cols-3" data-pricing-grid>
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="free">
             <div className="flex min-h-7 items-center justify-between gap-3">
               <h2 className="text-2xl font-bold">Free</h2>
-              <span className="text-xs font-semibold text-muted-foreground">After your trial</span>
+              <span className="text-xs font-semibold text-muted-foreground">No subscription</span>
             </div>
             <p className="mt-3 min-h-12 text-sm leading-relaxed text-muted-foreground">Private local help and occasional Deep Complete for lighter writing.</p>
             <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">$0</p>
@@ -60,13 +60,13 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             </ul>
             <div className="mt-8 grid gap-3">
               <p className="text-xs font-semibold text-muted-foreground">No billing details</p>
-              <div className="flex h-11 items-center rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 text-sm font-semibold">Free begins automatically after your trial</div>
-              <a className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
+              <div className="flex h-11 items-center rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 text-sm font-semibold">Free is available without checkout</div>
+              <a className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Create a Free account"}</a>
             </div>
             <p className="mt-3 text-center text-xs text-muted-foreground">No charge unless you choose a paid plan.</p>
           </article>
 
-          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8" data-pricing-plan="pro">
+          <article id="paid-plans" className="flex h-full scroll-mt-24 flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8" data-pricing-plan="pro">
             <div className="flex min-h-7 items-center justify-between gap-3">
               <h2 className="text-2xl font-bold">Pro</h2>
               <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/75">Best for daily use</span>
@@ -83,9 +83,9 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             </ul>
             <form action="/billing/checkout" method="get" className="mt-8 grid gap-3">
               <input type="hidden" name="plan" value="pro" />
-              <button className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} type="submit">Choose Pro</button>
+              <button className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} type="submit">Start Pro with one month free</button>
             </form>
-            <p className="mt-3 text-center text-xs text-background/70">{authenticated ? "Continue to secure checkout." : "Sign in, then continue to secure checkout."}</p>
+            <p className="mt-3 text-center text-xs text-background/70">{authenticated ? "Payment details required. No charge today." : "Sign in, then continue to secure checkout."}</p>
           </article>
 
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="max">
@@ -105,9 +105,9 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             </ul>
             <form action="/billing/checkout" method="get" className="mt-8 grid gap-3">
               <input type="hidden" name="plan" value="max" />
-              <button className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} type="submit">Choose Max</button>
+              <button className={buttonVariants({ variant: "secondary", size: "lg", className: "w-full" })} type="submit">Start Max with one month free</button>
             </form>
-            <p className="mt-3 text-center text-xs text-muted-foreground">{authenticated ? "Continue to secure checkout." : "Sign in, then continue to secure checkout."}</p>
+            <p className="mt-3 text-center text-xs text-muted-foreground">{authenticated ? "Payment details required. No charge today." : "Sign in, then continue to secure checkout."}</p>
           </article>
         </div>
       </section>
@@ -137,7 +137,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
           <CaretDown className="tab-disclosure-chevron shrink-0" aria-hidden="true" />
         </summary>
         <div className="tab-disclosure-panel mt-6 grid gap-6 text-sm leading-relaxed text-muted-foreground sm:grid-cols-3">
-          <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">The 30-day trial starts once per account and cannot charge you without checkout.</p></div>
+          <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">Polar starts the one-month trial at paid-plan checkout, collects payment details, and prevents repeat trial redemption.</p></div>
           <div><h3 className="font-bold text-foreground">Paid plans</h3><p className="mt-2">Paid plans renew monthly. Cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing portal</a>.</p></div>
           <div><h3 className="font-bold text-foreground">Personal Memory</h3><p className="mt-2">Downgrading does not remove your controls to view, edit, export, or delete existing Personal Memory.</p></div>
         </div>

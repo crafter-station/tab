@@ -58,10 +58,12 @@ async function signUpAndAuthorize(
   if (!userId) throw new Error("Missing signed-in user id");
   await billingService.applyEntitlement({
     userId,
-    planId: "free",
-    polarCustomerId: "polar-customer-free",
-    polarSubscriptionId: "polar-sub-free",
-    status: "active",
+    planId: "pro",
+    polarCustomerId: "polar-customer-trial",
+    polarSubscriptionId: "polar-sub-trial",
+    status: "trialing",
+    trialStartedAt: new Date("2026-07-01T00:00:00.000Z"),
+    trialEndsAt: new Date("2099-08-01T00:00:00.000Z"),
     cachedAt: new Date(),
   });
 

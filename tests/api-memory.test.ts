@@ -23,7 +23,11 @@ import {
   type PersonalMemoryVectorMetadata,
   type UpsertPersonalMemoryVectorInput,
 } from "../apps/api/src/personal-memory.ts";
-import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
+import {
+  BillingService,
+  D1BillingStorage,
+  InMemoryBillingStorage,
+} from "../apps/api/src/billing.ts";
 import { createDatabase } from "../apps/api/src/db/index.ts";
 import {
   ApiResponseSchema,
@@ -90,9 +94,9 @@ async function createAuthenticatedTestApp(
   });
   await billingService.applyEntitlement({
     userId: "user-1",
-    planId: "free",
-    polarCustomerId: "polar-customer-free",
-    polarSubscriptionId: "polar-sub-free",
+    planId: "pro",
+    polarCustomerId: "polar-customer-pro",
+    polarSubscriptionId: "polar-sub-pro",
     status: "active",
     cachedAt: new Date(),
   });
@@ -1102,6 +1106,16 @@ describe("Personal Memory API", () => {
         .bind("user-production-d1", "D1 User", "d1@example.com", 1, now, now)
         .run();
       const database = createDatabase(platform.env.DB);
+      await new BillingService({
+        storage: new D1BillingStorage(database),
+      }).applyEntitlement({
+        userId: "user-production-d1",
+        planId: "pro",
+        polarCustomerId: "polar-customer-production-d1",
+        polarSubscriptionId: "polar-sub-production-d1",
+        status: "active",
+        cachedAt: new Date(),
+      });
       const deviceTokenService = new DeviceTokenService({
         storage: new D1DeviceTokenStorage(database),
       });

@@ -25,8 +25,6 @@ import { env } from "./env.ts";
 type PolarServer = "production" | "sandbox";
 export type AllowanceMetric = "local_accepted_words" | "deep_completes";
 
-const DAY_MS = 24 * 60 * 60 * 1_000;
-
 function getPolarServer(server?: PolarServer): PolarServer {
   return server ?? env.POLAR_SERVER;
 }
@@ -62,14 +60,15 @@ export type UserEntitlement = {
   readonly polarSubscriptionId?: string;
   readonly status:
     | "active"
+    | "trialing"
     | "canceled"
     | "past_due"
     | "unpaid"
     | "inactive";
   readonly currentPeriodEnd?: Date;
   readonly billingInterval?: BillingInterval;
-  readonly trialStartedAt: Date;
-  readonly trialEndsAt: Date;
+  readonly trialStartedAt?: Date;
+  readonly trialEndsAt?: Date;
   readonly lastWebhookEventId?: string;
   readonly lastWebhookOccurredAt?: Date;
   readonly cachedAt: Date;
@@ -432,6 +431,9 @@ export function hasActivePolarEntitlement(
     return false;
   }
   if (entitlement.status === "active") return true;
+  if (entitlement.status === "trialing") {
+    return Boolean(entitlement.trialEndsAt && entitlement.trialEndsAt > now);
+  }
   return Boolean(
     entitlement.status === "canceled" &&
       entitlement.currentPeriodEnd &&
@@ -465,21 +467,13 @@ export class BillingService {
 
   async getEntitlement(userId: string): Promise<UserEntitlement> {
     const cached = await this.storage.getEntitlement(userId);
-    if (cached) {
-      const normalized = this.withTrial(cached);
-      if (!cached.trialStartedAt || !cached.trialEndsAt) {
-        await this.storage.setEntitlement(normalized);
-      }
-      return normalized;
-    }
+    if (cached) return cached;
 
     const now = this.now();
     const defaultEntitlement: UserEntitlement = {
       userId,
       planId: "free",
       status: "inactive",
-      trialStartedAt: now,
-      trialEndsAt: new Date(now.getTime() + planCapabilities.free.trialDays * DAY_MS),
       cachedAt: now,
     };
     await this.storage.setEntitlement(defaultEntitlement);
@@ -490,10 +484,11 @@ export class BillingService {
     const stored = await this.getEntitlement(userId);
     const now = this.now();
     if (hasActivePolarEntitlement(stored, now)) {
-      return { stored, planId: stored.planId, source: "paid" };
-    }
-    if (stored.trialEndsAt > now) {
-      return { stored, planId: "pro", source: "trial" };
+      return {
+        stored,
+        planId: stored.planId,
+        source: stored.trialEndsAt && stored.trialEndsAt > now ? "trial" : "paid",
+      };
     }
     return { stored, planId: "free", source: "free" };
   }
@@ -540,11 +535,16 @@ export class BillingService {
         customWritingInstructions: capabilities.customWritingInstructions,
         modelCatalogAccess: capabilities.modelCatalogAccess,
       },
-      trial: {
-        active: entitlement.source === "trial",
-        startedAt: entitlement.stored.trialStartedAt.toISOString(),
-        endsAt: entitlement.stored.trialEndsAt.toISOString(),
-      },
+      trial:
+        entitlement.source === "trial" &&
+        entitlement.stored.trialStartedAt &&
+        entitlement.stored.trialEndsAt
+          ? {
+              active: true,
+              startedAt: entitlement.stored.trialStartedAt.toISOString(),
+              endsAt: entitlement.stored.trialEndsAt.toISOString(),
+            }
+          : { active: false },
       localAcceptedWords: allowanceState(
         localPeriod,
         localUsage,
@@ -669,7 +669,7 @@ export class BillingService {
   }
 
   async applyEntitlement(entitlement: UserEntitlement): Promise<void> {
-    await this.storage.setEntitlement(this.withTrial(entitlement));
+    await this.storage.setEntitlement(entitlement);
   }
 
   validatePaidEntitlementEvent(
@@ -683,18 +683,6 @@ export class BillingService {
     await this.webhookHandler.handle(payload);
   }
 
-  private withTrial(entitlement: UserEntitlement): UserEntitlement {
-    const startedAt = entitlement.trialStartedAt ?? this.now();
-    return {
-      ...entitlement,
-      trialStartedAt: startedAt,
-      trialEndsAt:
-        entitlement.trialEndsAt ??
-        new Date(
-          startedAt.getTime() + planCapabilities.free.trialDays * DAY_MS,
-        ),
-    };
-  }
 }
 
 export type UsageMeterServiceDependencies = {
@@ -872,13 +860,6 @@ function entitlementRowToEntitlement(
   row: typeof userEntitlements.$inferSelect,
 ): UserEntitlement {
   const cachedAt = new Date(row.cachedAt);
-  const initializedAt = new Date();
-  const trialStartedAt = row.trialStartedAt
-    ? new Date(row.trialStartedAt)
-    : initializedAt;
-  const trialEndsAt = row.trialEndsAt
-    ? new Date(row.trialEndsAt)
-    : new Date(trialStartedAt.getTime() + planCapabilities.free.trialDays * DAY_MS);
   return {
     userId: row.userId,
     planId: isPlanId(row.planId) ? row.planId : "free",
@@ -890,8 +871,10 @@ function entitlementRowToEntitlement(
       : undefined,
     billingInterval:
       row.billingInterval === "monthly" ? row.billingInterval : undefined,
-    trialStartedAt,
-    trialEndsAt,
+    trialStartedAt: row.trialStartedAt
+      ? new Date(row.trialStartedAt)
+      : undefined,
+    trialEndsAt: row.trialEndsAt ? new Date(row.trialEndsAt) : undefined,
     lastWebhookEventId: row.lastWebhookEventId ?? undefined,
     lastWebhookOccurredAt: row.lastWebhookOccurredAt
       ? new Date(row.lastWebhookOccurredAt)
@@ -916,28 +899,10 @@ export class D1BillingStorage implements BillingStorage {
       where: eq(userEntitlements.userId, userId),
     });
     if (!row) return null;
-    const entitlement = entitlementRowToEntitlement(row);
-    if (!row.trialStartedAt || !row.trialEndsAt) {
-      await this.db
-        .update(userEntitlements)
-        .set({
-          trialStartedAt: sql<string>`coalesce(${userEntitlements.trialStartedAt}, ${entitlement.trialStartedAt.toISOString()})`,
-          trialEndsAt: sql<string>`coalesce(${userEntitlements.trialEndsAt}, ${entitlement.trialEndsAt.toISOString()})`,
-        })
-        .where(eq(userEntitlements.userId, userId));
-      const normalized = await this.db.query.userEntitlements.findFirst({
-        where: eq(userEntitlements.userId, userId),
-      });
-      return normalized ? entitlementRowToEntitlement(normalized) : entitlement;
-    }
-    return entitlement;
+    return entitlementRowToEntitlement(row);
   }
 
   async setEntitlement(entitlement: UserEntitlement): Promise<void> {
-    const trialStartedAt = entitlement.trialStartedAt ?? entitlement.cachedAt;
-    const trialEndsAt =
-      entitlement.trialEndsAt ??
-      new Date(trialStartedAt.getTime() + planCapabilities.free.trialDays * DAY_MS);
     const values = {
       planId: entitlement.planId,
       polarCustomerId: entitlement.polarCustomerId ?? null,
@@ -945,8 +910,8 @@ export class D1BillingStorage implements BillingStorage {
       status: entitlement.status,
       currentPeriodEnd: entitlement.currentPeriodEnd?.toISOString() ?? null,
       billingInterval: entitlement.billingInterval ?? null,
-      trialStartedAt: trialStartedAt.toISOString(),
-      trialEndsAt: trialEndsAt.toISOString(),
+      trialStartedAt: entitlement.trialStartedAt?.toISOString() ?? null,
+      trialEndsAt: entitlement.trialEndsAt?.toISOString() ?? null,
       lastWebhookEventId: entitlement.lastWebhookEventId ?? null,
       lastWebhookOccurredAt:
         entitlement.lastWebhookOccurredAt?.toISOString() ?? null,
@@ -1162,6 +1127,7 @@ function firstString(...values: unknown[]): string | undefined {
 function normalizeStatus(value: string | undefined): UserEntitlement["status"] {
   switch (value) {
     case "active":
+    case "trialing":
     case "canceled":
     case "past_due":
     case "unpaid":
@@ -1350,6 +1316,12 @@ class BillingWebhookHandler {
           currentPeriodEnd:
             optionalDate(data.current_period_end ?? data.currentPeriodEnd) ??
             existing.currentPeriodEnd,
+          trialStartedAt:
+            optionalDate(data.trial_start ?? data.trialStart) ??
+            existing.trialStartedAt,
+          trialEndsAt:
+            optionalDate(data.trial_end ?? data.trialEnd) ??
+            existing.trialEndsAt,
           billingInterval,
           lastWebhookEventId: webhookEventId,
           lastWebhookOccurredAt: occurredAt,

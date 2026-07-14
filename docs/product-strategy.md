@@ -24,7 +24,7 @@ This audience already pays for productivity tools, understands local models and 
 | Entitlement | Free | Pro | Max |
 | --- | --- | --- | --- |
 | Price | $0 | $10/month | $20/month |
-| Trial | One 30-day account-level Pro trial, no card | Not applicable | Not applicable |
+| Trial | Not applicable | First month free through Polar checkout | First month free through Polar checkout |
 | Local Suggestions | 100 Accepted Words/day | Unlimited Accepted Words | Unlimited Accepted Words |
 | Deep Complete | 10/month | 300/month | 1,000/month |
 | Personal Memory | Manage existing memories; basic personalization | Continuous Memory Extraction and personalization | Same as Pro |
@@ -32,7 +32,7 @@ This audience already pays for productivity tools, understands local models and 
 | Local models | Recommended supported model | Supported model catalog | Same as Pro |
 | Personal Macs | 1 | Up to 3 | Up to 3 |
 
-Pro and Max are monthly-only subscriptions. Tab has no annual plan and no annual customers. Max differs from Pro only in its monthly Deep Complete allowance. Additional cloud packs, teams, a lifetime local license, and a separate local-only purchase are deferred until usage demonstrates demand.
+Pro and Max are monthly-only subscriptions. Both use Polar's product-level one-month trial, require payment details at checkout, and rely on Polar's trial-abuse prevention. Tab has no annual plan and no annual customers. Max differs from Pro only in its monthly Deep Complete allowance. Additional cloud packs, teams, a lifetime local license, and a separate local-only purchase are deferred until usage demonstrates demand.
 
 ## Metering Principles
 
@@ -111,7 +111,7 @@ User-facing statistics should emphasize completed words, approximate typing save
 ### Days 31-60: Payment
 
 - Concentrate recruitment on the strongest cohort.
-- Launch the 30-day Pro trial, $10 monthly Pro, and $20 monthly Max.
+- Launch one month free on $10 monthly Pro and $20 monthly Max through Polar checkout.
 - Present paid conversion only after demonstrated value.
 - Compare conversion after reaching the local allowance, repeating Deep Complete, and experiencing continuous personalization.
 - Compare Pro and Max conversion without introducing annual-plan complexity.

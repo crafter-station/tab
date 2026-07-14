@@ -109,7 +109,7 @@ const faqs = [
   },
   {
     question: "What happens after the trial?",
-    answer: `Your account moves to Free unless you choose Pro. Free includes ${formatCount(planCapabilities.free.localAcceptedWordsPerDay)} Accepted Words from Local Suggestions each day and ${planCapabilities.free.deepCompletesPerMonth} Deep Completes each month.`,
+    answer: "Your paid subscription begins automatically when the free month ends unless you cancel first. Polar collects payment details at checkout and sends a reminder before the trial converts.",
   },
   {
     question: "What happens to Personal Memory if I cancel?",
@@ -479,8 +479,9 @@ export function HomePage() {
             </a>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
-            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> 30-day Pro trial</span>
-            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> No card required</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> First month free on paid plans</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> Payment details required</span>
+            <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> Cancel before billing starts</span>
             <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> You choose every insertion</span>
           </div>
         </div>
@@ -511,16 +512,16 @@ export function HomePage() {
 
       <section id="pricing" className="scroll-mt-24 rounded-[var(--radius-surface)] bg-muted/35 px-5 py-12 sm:px-8 sm:py-16 lg:px-12">
         <div className="max-w-3xl">
-          <PageKicker>30 days of Pro, no card</PageKicker>
-          <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Try Pro. Keep Free if you do not upgrade.</h2>
-          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose a paid plan or continue on Free.</p>
+          <PageKicker>One month free</PageKicker>
+          <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Try Pro or Max before the first charge.</h2>
+          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Start either paid plan through secure Polar checkout. Your subscription begins after the free month unless you cancel first.</p>
         </div>
 
         <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-3" data-pricing-grid>
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="free">
             <div className="flex min-h-7 items-center justify-between gap-3">
               <h3 className="text-xl font-bold">Free</h3>
-              <span className="text-xs font-semibold text-muted-foreground">After your trial</span>
+              <span className="text-xs font-semibold text-muted-foreground">No subscription</span>
             </div>
             <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">$0</p>
             <p className="mt-2 min-h-10 text-sm leading-relaxed text-muted-foreground">No subscription required.</p>
@@ -530,7 +531,7 @@ export function HomePage() {
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {free.personalDeviceLimit} Mac</li>
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Manage existing Personal Memory</li>
             </ul>
-            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Start 30-day Pro trial</a>
+            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Create a Free account</a>
           </article>
 
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8" data-pricing-plan="pro">
@@ -546,7 +547,7 @@ export function HomePage() {
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Up to {pro.personalDeviceLimit} Macs</li>
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Continuous Memory Extraction</li>
             </ul>
-            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Start 30-day Pro trial</a>
+            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/pricing">Start Pro with one month free</a>
           </article>
 
           <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="max">
@@ -562,7 +563,7 @@ export function HomePage() {
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Up to {max.personalDeviceLimit} Macs</li>
               <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Continuous Memory Extraction</li>
             </ul>
-            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Start 30-day Pro trial</a>
+            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/pricing">Start Max with one month free</a>
           </article>
         </div>
         <div className="mt-8 flex flex-col justify-between gap-4 text-sm leading-relaxed text-muted-foreground sm:flex-row sm:items-center">

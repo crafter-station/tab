@@ -289,7 +289,7 @@ export function SettingsSurface() {
           <>
             {status.entitlement ? (
               <div className="settings-summary">
-                <SummaryMetric label="Plan" value={formatPlanName(status.entitlement.planId)} detail={status.entitlement.entitlementSource === "trial" ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}` : "Current tier"} />
+                <SummaryMetric label="Plan" value={formatPlanName(status.entitlement.planId)} detail={status.entitlement.trial.active ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}` : "Current tier"} />
                 <SummaryMetric label="Accepted Words today" value={formatAllowance(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit)} detail={`Resets ${formatDate(status.entitlement.localAcceptedWords.resetAt)}`} />
                 <SummaryMetric label="Deep Completes" value={formatAllowance(status.entitlement.deepCompletes.used, status.entitlement.deepCompletes.limit)} detail={`Resets ${formatDate(status.entitlement.deepCompletes.resetAt)}`} />
                 <SummaryMetric label="Words completed" value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()} detail="This month" />

@@ -72,8 +72,6 @@ async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
     userId: "user-1",
     planId: "free",
     status: "inactive",
-    trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-    trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
     cachedAt: new Date(),
   });
   return { app, token, billingService, billingStorage, usageMeterClient };
@@ -84,21 +82,37 @@ async function parseApiResponse(response: Response) {
 }
 
 describe("Billing and allowance enforcement", () => {
-  it("starts one persisted 30-day Pro trial and falls back to Free without Polar", async () => {
-    let now = new Date("2026-07-01T00:00:00.000Z");
+  it("starts on Free and grants trial access only from a Polar subscription", async () => {
+    const now = new Date("2026-07-01T00:00:00.000Z");
     const storage = new InMemoryBillingStorage();
     const billing = new BillingService({ storage, now: () => now });
+
+    const free = await billing.getStatus("trial-user");
+    expect(free.planId).toBe("free");
+    expect(free.entitlementSource).toBe("free");
+    expect(free.trial).toEqual({ active: false });
+
+    await billing.applyPaidEntitlementEvent({
+      type: "subscription.created",
+      data: {
+        customer: { external_id: "trial-user" },
+        customer_id: "polar-customer-1",
+        id: "polar-subscription-1",
+        status: "trialing",
+        product: { name: "Tab Pro" },
+        trial_start: "2026-07-01T00:00:00.000Z",
+        trial_end: "2026-08-01T00:00:00.000Z",
+      },
+    });
 
     const trial = await billing.getStatus("trial-user");
     expect(trial.planId).toBe("pro");
     expect(trial.entitlementSource).toBe("trial");
-    expect(trial.trial.endsAt).toBe("2026-07-31T00:00:00.000Z");
-
-    now = new Date("2026-08-01T00:00:00.000Z");
-    const free = await billing.getStatus("trial-user");
-    expect(free.planId).toBe("free");
-    expect(free.entitlementSource).toBe("free");
-    expect(free.trial.endsAt).toBe(trial.trial.endsAt);
+    expect(trial.trial).toEqual({
+      active: true,
+      startedAt: "2026-07-01T00:00:00.000Z",
+      endsAt: "2026-08-01T00:00:00.000Z",
+    });
   });
 
   it("keeps local and Deep Complete usage independent and reconciles duplicates", async () => {
@@ -111,8 +125,6 @@ describe("Billing and allowance enforcement", () => {
       userId: "free-user",
       planId: "free",
       status: "inactive",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
 
@@ -154,8 +166,6 @@ describe("Billing and allowance enforcement", () => {
       status: "canceled",
       currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
       billingInterval: "monthly",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: now,
     });
 
@@ -176,8 +186,6 @@ describe("Billing and allowance enforcement", () => {
       polarSubscriptionId: "subscription-max",
       status: "active",
       billingInterval: "monthly",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: now,
     });
     await storage.recordAllowanceUsage(
@@ -291,8 +299,6 @@ describe("Billing and allowance enforcement", () => {
       userId: "user-1",
       planId: "free",
       status: "inactive",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
 
@@ -395,8 +401,6 @@ describe("Billing and allowance enforcement", () => {
       userId: "user-1",
       planId: "free",
       status: "inactive",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
 
@@ -597,19 +601,10 @@ describe("Billing and allowance enforcement", () => {
         cachedAt: new Date(),
       });
 
-      await platform.env.DB.prepare(
-        "UPDATE user_entitlements SET trial_started_at = NULL, trial_ends_at = NULL, cached_at = ? WHERE user_id = ?",
-      )
-        .bind("2020-01-01T00:00:00.000Z", "user-d1")
-        .run();
-
       const entitlement = await storage.getEntitlement("user-d1");
       expect(entitlement?.planId).toBe("max");
-      expect(entitlement!.trialStartedAt.getTime()).toBeGreaterThanOrEqual(now);
-      expect(
-        entitlement!.trialEndsAt.getTime() -
-          entitlement!.trialStartedAt.getTime(),
-      ).toBe(30 * 24 * 60 * 60 * 1_000);
+      expect(entitlement?.trialStartedAt).toBeUndefined();
+      expect(entitlement?.trialEndsAt).toBeUndefined();
 
       const initialContenders = await Promise.all([
         storage.consumeUsageWithinLimit("user-d1", currentMonth(), 1),

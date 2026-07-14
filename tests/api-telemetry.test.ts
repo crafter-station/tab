@@ -42,9 +42,9 @@ async function createAuthenticatedTestApp(
   });
   await billingService.applyEntitlement({
     userId: "user-1",
-    planId: "free",
-    polarCustomerId: "polar-customer-free",
-    polarSubscriptionId: "polar-sub-free",
+    planId: "pro",
+    polarCustomerId: "polar-customer-pro",
+    polarSubscriptionId: "polar-sub-pro",
     status: "active",
     cachedAt: new Date(),
   });
@@ -350,7 +350,7 @@ describe("Metadata-only suggestion telemetry", () => {
 });
 
 describe("Metadata-only memory extraction telemetry", () => {
-  it("denies only continuous extraction after trial expiry", async () => {
+  it("denies only continuous extraction on Free", async () => {
     const { app, token, billingService } = await createAuthenticatedTestApp(
       async () => ({ text: " world" }),
     );
@@ -358,8 +358,6 @@ describe("Metadata-only memory extraction telemetry", () => {
       userId: "user-1",
       planId: "free",
       status: "inactive",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
 

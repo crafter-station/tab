@@ -201,11 +201,14 @@ export const AllowanceStateSchema = z.object({
   exhausted: z.boolean(),
 });
 
-export const TrialStateSchema = z.object({
-  active: z.boolean(),
-  startedAt: z.string().datetime(),
-  endsAt: z.string().datetime(),
-});
+export const TrialStateSchema = z.discriminatedUnion("active", [
+  z.object({
+    active: z.literal(true),
+    startedAt: z.string().datetime(),
+    endsAt: z.string().datetime(),
+  }),
+  z.object({ active: z.literal(false) }),
+]);
 
 export const BillingStatusDataSchema = z.object({
   planId: PlanIdSchema,

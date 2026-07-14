@@ -296,8 +296,6 @@ describe("Better Auth browser handoff and device tokens", () => {
       userId: freeUser.userId,
       planId: "free",
       status: "inactive",
-      trialStartedAt: new Date("2026-01-01T00:00:00.000Z"),
-      trialEndsAt: new Date("2026-01-31T00:00:00.000Z"),
       cachedAt: new Date(),
     });
 
@@ -339,6 +337,16 @@ describe("Better Auth browser handoff and device tokens", () => {
     expect((await exchange(freeUser.cookie, "free-mac-1")).status).toBe(409);
 
     const trialUser = await signUpAndSignIn(app, billingService);
+    await billingService.applyEntitlement({
+      userId: trialUser.userId,
+      planId: "pro",
+      polarCustomerId: "polar-customer-trial",
+      polarSubscriptionId: "polar-subscription-trial",
+      status: "trialing",
+      trialStartedAt: new Date("2026-07-01T00:00:00.000Z"),
+      trialEndsAt: new Date("2099-08-01T00:00:00.000Z"),
+      cachedAt: new Date(),
+    });
     for (let index = 1; index <= 3; index += 1) {
       expect(
         (await exchange(trialUser.cookie, `trial-mac-${index}`)).status,

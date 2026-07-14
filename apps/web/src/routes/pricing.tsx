@@ -6,5 +6,5 @@ export const Route = createRoute({
   getParentRoute: () => rootRoute,
   path: "pricing",
   component: PricingPage,
-  head: () => ({ meta: [{ title: "Pricing - Tab" }, { name: "description", content: "Compare Tab Free, Pro, and Max, including the 30-day Pro trial, monthly pricing, Local Suggestion and Deep Complete allowances, and cancellation." }] }),
+  head: () => ({ meta: [{ title: "Pricing - Tab" }, { name: "description", content: "Compare Tab Free, Pro, and Max, including one month free on paid plans, monthly pricing, Local Suggestion and Deep Complete allowances, and cancellation." }] }),
 });
