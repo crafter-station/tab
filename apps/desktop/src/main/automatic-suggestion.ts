@@ -7,6 +7,7 @@ import {
   type SafeTypingContextSnapshot,
 } from "./typing-context.ts";
 import type { TriggerPolicy } from "./trigger-policy.ts";
+import { createSuggestionPresentation } from "./suggestion-presentation.ts";
 
 export type AutomaticSuggestionState =
   | { status: "idle" }
@@ -17,7 +18,6 @@ export type AutomaticSuggestionState =
     suggestion: Suggestion;
     contextHash: string;
     expiresAtMs: number;
-    expiryTimer: ReturnType<typeof setTimeout>;
   };
 
 export type AutomaticSuggestionDependencies = {
@@ -41,6 +41,7 @@ export function createAutomaticSuggestion(deps: AutomaticSuggestionDependencies)
   let requestVersion = 0;
   let activeController: AbortController | null = null;
   let suspended = false;
+  const presentation = createSuggestionPresentation(deps);
 
   function diagnose(event: string, details: Record<string, unknown> = {}): void {
     deps.onDiagnostic?.(event, details);
@@ -63,10 +64,7 @@ export function createAutomaticSuggestion(deps: AutomaticSuggestionDependencies)
     activeController?.abort();
     activeController = null;
     if (state.status === "debouncing") clearTimeout(state.timer);
-    if (state.status === "showing") {
-      clearTimeout(state.expiryTimer);
-      if (hideVisible) deps.onHideSuggestion();
-    }
+    presentation.clear(hideVisible);
     state = { status: "idle" };
   }
 
@@ -75,29 +73,26 @@ export function createAutomaticSuggestion(deps: AutomaticSuggestionDependencies)
     suggestion: Suggestion,
     expiresAtMs = Date.now() + (deps.maxVisibleMs ?? 4_000),
   ): Suggestion | null {
-    const decision = deps.triggerPolicy?.onSuggestionCandidate(snapshot, suggestion);
-    if (decision && !decision.allow) {
-      diagnose("candidate_skipped", { ...contextDetails(snapshot), reason: decision.reason });
-      state = { status: "idle" };
-      return null;
-    }
-
     const contextHash = snapshot.contextHash;
-    const remainingVisibleMs = expiresAtMs - Date.now();
-    if (remainingVisibleMs <= 0) {
+    const result = presentation.present(snapshot, suggestion, expiresAtMs, {
+      onExpired: () => {
+        state = { status: "idle" };
+      },
+      onSuppressed: (reason) => {
+        diagnose("candidate_skipped", { ...contextDetails(snapshot), reason });
+      },
+    });
+    if (!result) {
       state = { status: "idle" };
       return null;
     }
-    const expiryTimer = setTimeout(() => {
-      if (state.status !== "showing" || state.contextHash !== contextHash) return;
-      deps.triggerPolicy?.recordStale(deps.getContext());
-      deps.onSuggestionStale?.(state.suggestion);
-      deps.onHideSuggestion();
-      state = { status: "idle" };
-    }, remainingVisibleMs);
-    state = { status: "showing", suggestion, contextHash, expiresAtMs, expiryTimer };
+    state = {
+      status: "showing",
+      suggestion,
+      contextHash,
+      expiresAtMs: result,
+    };
     diagnose("suggestion_shown", { ...contextDetails(snapshot), source: "local", suggestionLength: suggestion.text.length });
-    deps.onShowSuggestion(suggestion, expiresAtMs);
     return suggestion;
   }
 

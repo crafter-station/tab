@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { Suggestion } from "@tab/contracts";
 import { createAutomaticSuggestion } from "../apps/desktop/src/main/automatic-suggestion.ts";
 import { createDeepComplete } from "../apps/desktop/src/main/deep-complete.ts";
+import { createSuggestionPresentation } from "../apps/desktop/src/main/suggestion-presentation.ts";
 import { createSafeTypingContextSnapshot } from "../apps/desktop/src/main/typing-context.ts";
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -17,6 +18,51 @@ function snapshot(context = "hello") {
     memoryEligible: true,
   });
 }
+
+describe("Suggestion presentation", () => {
+  it("owns restore validation and the remaining absolute lifetime", async () => {
+    let current = snapshot();
+    const shown: Suggestion[] = [];
+    let hides = 0;
+    const presentation = createSuggestionPresentation({
+      getContext: () => current,
+      onShowSuggestion: (suggestion) => shown.push(suggestion),
+      onHideSuggestion: () => hides += 1,
+    });
+    const suggestion = { id: "shared", text: " result" };
+    const expiresAtMs = Date.now() + 30;
+
+    expect(presentation.restore(suggestion, current.contextHash, expiresAtMs)).not.toBeNull();
+    await wait(40);
+    expect(shown).toEqual([suggestion]);
+    expect(hides).toBe(1);
+
+    const previousContextHash = current.contextHash;
+    current = snapshot("changed");
+    expect(presentation.restore(suggestion, previousContextHash, Date.now() + 30)).toBeNull();
+    expect(shown).toHaveLength(1);
+  });
+
+  it("finishes its lifecycle when context changes before expiry", async () => {
+    let current = snapshot();
+    let expired = 0;
+    let hides = 0;
+    const presentation = createSuggestionPresentation({
+      getContext: () => current,
+      onShowSuggestion: () => {},
+      onHideSuggestion: () => hides += 1,
+    });
+
+    presentation.present(current, { id: "shared", text: " result" }, Date.now() + 20, {
+      onExpired: () => expired += 1,
+    });
+    current = snapshot("changed");
+    await wait(30);
+
+    expect(expired).toBe(1);
+    expect(hides).toBe(0);
+  });
+});
 
 describe("Automatic Suggestion", () => {
   it("finishes empty local inference without any cloud inference seam", async () => {

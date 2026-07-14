@@ -6,6 +6,7 @@ import {
   type SafeTypingContextSnapshot,
 } from "./typing-context.ts";
 import type { TriggerPolicy } from "./trigger-policy.ts";
+import { createSuggestionPresentation } from "./suggestion-presentation.ts";
 
 export type DeepCompleteDependencies = {
   getContext(): SafeTypingContextSnapshot;
@@ -27,14 +28,13 @@ export function createDeepComplete(deps: DeepCompleteDependencies) {
     controller: AbortController;
     request: Promise<Suggestion | null>;
   } | null = null;
-  let visibleTimer: ReturnType<typeof setTimeout> | null = null;
+  const presentation = createSuggestionPresentation(deps);
 
   function invalidate(): void {
     requestVersion += 1;
     activeRequest?.controller.abort();
     activeRequest = null;
-    if (visibleTimer) clearTimeout(visibleTimer);
-    visibleTimer = null;
+    presentation.clear(false);
   }
 
   function show(
@@ -42,21 +42,7 @@ export function createDeepComplete(deps: DeepCompleteDependencies) {
     suggestion: Suggestion,
     expiresAtMs = Date.now() + (deps.maxVisibleMs ?? 4_000),
   ): Suggestion | null {
-    const decision = deps.triggerPolicy?.onSuggestionCandidate(snapshot, suggestion);
-    if (decision && !decision.allow) return null;
-
-    const remainingVisibleMs = expiresAtMs - Date.now();
-    if (remainingVisibleMs <= 0) return null;
-    visibleTimer = setTimeout(() => {
-      const current = deps.getContext();
-      if (current.contextHash !== snapshot.contextHash) return;
-      deps.triggerPolicy?.recordStale(current);
-      deps.onSuggestionStale?.(suggestion);
-      deps.onHideSuggestion();
-      visibleTimer = null;
-    }, remainingVisibleMs);
-    deps.onShowSuggestion(suggestion, expiresAtMs);
-    return suggestion;
+    return presentation.present(snapshot, suggestion, expiresAtMs) ? suggestion : null;
   }
 
   async function requestNow(): Promise<Suggestion | null> {
@@ -102,7 +88,7 @@ export function createDeepComplete(deps: DeepCompleteDependencies) {
     }
 
     invalidate();
-    return show(current, suggestion, expiresAtMs) !== null;
+    return presentation.restore(suggestion, contextHash, expiresAtMs) !== null;
   }
 
   return { requestNow, restore, invalidate };
