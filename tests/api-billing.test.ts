@@ -760,6 +760,76 @@ describe("Billing and allowance enforcement", () => {
     expect(attempts).toBe(2);
   });
 
+  it("provisions a verified Free account when the dashboard requests billing status", async () => {
+    const database = new Database(":memory:");
+    const auth = createAuthInstance({ database, baseURL: "http://localhost:8787" });
+    await migrateAuth(auth);
+    const storage = new InMemoryBillingStorage();
+    let provisioned = 0;
+    const billingService = new BillingService({
+      storage,
+      provisioningClient: {
+        async provisionFreeSubscription() {
+          provisioned += 1;
+          return {
+            customerId: "customer-dashboard",
+            subscriptionId: "subscription-dashboard",
+            productId: "product-free",
+            status: "active",
+            currentPeriodStart: new Date("2026-07-14T16:00:00.000Z"),
+            currentPeriodEnd: new Date("2026-08-14T16:00:00.000Z"),
+            cancelAtPeriodEnd: false,
+          };
+        },
+        async getSubscription() { throw new Error("not used"); },
+      },
+    });
+    const app = createApp({
+      auth,
+      billingService,
+      deviceTokenService: new DeviceTokenService({
+        storage: new InMemoryDeviceTokenStorage(),
+      }),
+      personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
+      telemetryStorage: new InMemoryTelemetryStorage(),
+    });
+    const signUp = await app.request("/api/auth/sign-up/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:8787" },
+      body: JSON.stringify({
+        name: "Dashboard User",
+        email: "dashboard@example.com",
+        password: "password123456",
+      }),
+    });
+    const signUpBody = await signUp.json() as { user: { id: string } };
+    database.query("UPDATE user SET emailVerified = 1 WHERE id = ?").run(
+      signUpBody.user.id,
+    );
+    const signIn = await app.request("/api/auth/sign-in/email", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://localhost:8787" },
+      body: JSON.stringify({
+        email: "dashboard@example.com",
+        password: "password123456",
+      }),
+    });
+    const cookie = signIn.headers.get("set-cookie");
+    if (!cookie) throw new Error("Missing session cookie");
+
+    const response = await app.request("/api/billing/status", {
+      headers: { cookie },
+    });
+
+    expect(response.status).toBe(200);
+    expect(provisioned).toBe(1);
+    expect(await billingService.getEntitlement(signUpBody.user.id)).toMatchObject({
+      provisioningState: "ready",
+      polarCustomerId: "customer-dashboard",
+      polarSubscriptionId: "subscription-dashboard",
+    });
+  });
+
   it("allows only one concurrent Free provisioning attempt", async () => {
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });

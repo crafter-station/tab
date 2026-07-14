@@ -30,6 +30,18 @@ export function registerBillingRoutes(
   ) => {
     const sessionCheck = await requireSession(c, deps.auth);
     if (!sessionCheck.ok) return sessionCheck.response;
+    if (sessionCheck.session.user.emailVerified) {
+      const provisioning = deps.billingService.provisionAccount({
+        id: sessionCheck.session.user.id,
+        email: sessionCheck.session.user.email,
+        name: sessionCheck.session.user.name,
+      });
+      try {
+        c.executionCtx.waitUntil(provisioning);
+      } catch {
+        await provisioning;
+      }
+    }
     const devices = await deps.deviceTokenService.listDevices(
       sessionCheck.session.user.id,
     );
