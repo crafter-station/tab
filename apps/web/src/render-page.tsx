@@ -5,13 +5,12 @@ import {
   AvatarFallback,
   PLATFORM_COLORS,
   Separator,
-  THEME_MODES,
   buttonVariants,
   getThemeControlScript,
   getThemeInitScript,
-  type ThemeMode,
 } from "@tab/ui";
-import { Desktop, Gear, Moon, SignOut, Sun, UserCircle } from "@phosphor-icons/react";
+import { Gear, SignOut, UserCircle } from "@phosphor-icons/react";
+import { StaticBrandMenu } from "./components/brand-menu.tsx";
 import type { User } from "./components/pages/shared.tsx";
 import { SiteFooter, SiteHeader } from "./components/site-shell.tsx";
 
@@ -51,15 +50,6 @@ const dashboardSidebarControlScript = `(() => {
   sync();
 })();`;
 
-function ThemeIcon({ mode }: { mode: ThemeMode }) {
-  const Icon = mode === "light" ? Sun : mode === "dark" ? Moon : Desktop;
-  return <Icon aria-hidden="true" />;
-}
-
-function formatThemeModeLabel(mode: string): string {
-  return mode.charAt(0).toUpperCase() + mode.slice(1);
-}
-
 function userAvatarHash(user: User): string {
   const identity = user.email ?? user.id;
   let hash = 0;
@@ -73,26 +63,6 @@ function userAvatarHash(user: User): string {
 
 function userAvatarUrl(user: User): string {
   return `https://avatar.vercel.sh/${encodeURIComponent(userAvatarHash(user))}`;
-}
-
-function StaticThemeMenu() {
-  return (
-    <details className="group relative" name="header-menu" aria-label="Theme selection">
-      <summary className={buttonVariants({ variant: "secondary", size: "icon", className: "list-none marker:hidden [&::-webkit-details-marker]:hidden" })}>
-        <ThemeIcon mode="system" />
-        <span className="sr-only">Choose theme</span>
-      </summary>
-      <div className="tab-disclosure-panel absolute right-0 z-50 mt-2 min-w-40 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground [&_svg]:size-4 [&_svg]:shrink-0">
-        <div className="px-2 py-1.5 text-sm font-semibold">Theme</div>
-        {THEME_MODES.map((mode) => (
-          <button className="flex w-full cursor-pointer select-none items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground" data-theme-choice={mode} key={mode} type="button" aria-pressed="false">
-            <ThemeIcon mode={mode} />
-            {formatThemeModeLabel(mode)}
-          </button>
-        ))}
-      </div>
-    </details>
-  );
 }
 
 function UserMenu({ user }: { user: User }) {
@@ -168,7 +138,7 @@ function WebDocument({
         {siteShell ? (
           <div className="flex min-h-dvh flex-col">
             <SiteHeader
-              themeControl={<StaticThemeMenu />}
+              brandControl={<StaticBrandMenu destinationHref="/dashboard" destinationLabel="Dashboard" />}
               accountControl={user ? <UserMenu user={user} /> : <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>}
               authenticated={Boolean(user)}
             />

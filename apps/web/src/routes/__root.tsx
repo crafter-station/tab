@@ -1,8 +1,8 @@
 import { HeadContent, Outlet, Scripts, createRootRoute, useRouterState } from "@tanstack/react-router";
 import "../styles.css";
 import { Button, PLATFORM_COLORS } from "@tab/ui";
+import { BrandMenu } from "../components/brand-menu.tsx";
 import { SiteFooter, SiteHeader } from "../components/site-shell.tsx";
-import { ThemeModeToggle } from "../components/theme-mode-toggle.tsx";
 import { ThemeProvider } from "../components/theme-provider.tsx";
 
 function RootComponent() {
@@ -22,7 +22,7 @@ function RootComponent() {
           {isDashboard ? <Outlet /> : (
             <div className="flex min-h-dvh flex-col">
               <SiteHeader
-                themeControl={<ThemeModeToggle />}
+                brandControl={<BrandMenu destinationHref="/dashboard" destinationLabel="Dashboard" />}
                 accountControl={<Button asChild variant="secondary"><a href="/login">Sign in</a></Button>}
               />
               <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 sm:px-8">

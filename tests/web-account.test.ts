@@ -346,11 +346,21 @@ describe("Web account surface", () => {
     expect(pricingResponse.status).toBe(200);
     expect(dashboardResponse.status).toBe(200);
 
-    for (const body of [await pricingResponse.text(), await dashboardResponse.text()]) {
+    const pricingBody = await pricingResponse.text();
+    const dashboardBody = await dashboardResponse.text();
+
+    for (const body of [pricingBody, dashboardBody]) {
+      expect(body).toInclude('aria-label="Open Tab brand menu"');
       expect(body).toInclude('aria-label="Theme selection"');
       expect(body).toInclude('data-theme-choice="light"');
       expect(body).toInclude('data-theme-choice="dark"');
     }
+
+    expect(pricingBody).toInclude('href="/dashboard"');
+    expect(pricingBody).toInclude("Dashboard");
+    expect(pricingBody).not.toInclude("Choose theme");
+    expect(dashboardBody).toInclude('href="/"');
+    expect(dashboardBody).toInclude("Home page");
   });
 
   it("serves the shared component review surface in light and dark modes", async () => {

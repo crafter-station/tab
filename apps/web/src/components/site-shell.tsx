@@ -61,11 +61,11 @@ function Brand() {
 }
 
 export function SiteHeader({
-  themeControl,
+  brandControl,
   accountControl,
   authenticated = false,
 }: {
-  themeControl: ReactNode;
+  brandControl: ReactNode;
   accountControl: ReactNode;
   authenticated?: boolean;
 }) {
@@ -74,7 +74,7 @@ export function SiteHeader({
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-5 sm:px-8">
-        <Brand />
+        {brandControl}
         <div className="flex items-center gap-1.5">
           <nav className="mr-1 hidden items-center gap-0.5 text-[13px] font-semibold lg:flex" aria-label="Primary navigation">
             {primaryLinks.map((link) => (
@@ -92,7 +92,6 @@ export function SiteHeader({
               </div>
             </details>
           </nav>
-          {themeControl}
           {authenticated ? downloadControl : accountControl}
           {authenticated ? accountControl : downloadControl}
           <details className="group relative lg:hidden" name="site-navigation">

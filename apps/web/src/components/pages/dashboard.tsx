@@ -1,5 +1,5 @@
 import { isPlanId, planCapabilities } from "@tab/billing";
-import { Brain, CaretDown, ChartBar, Desktop, DotsThree, DownloadSimple, House, Moon, Palette, SidebarSimple, Sun, UserCircle } from "@phosphor-icons/react";
+import { Brain, CaretDown, ChartBar, Desktop, DotsThree, House, SidebarSimple, UserCircle } from "@phosphor-icons/react";
 import { Outlet } from "@tanstack/react-router";
 import { createContext, useContext, type ReactNode } from "react";
 import type {
@@ -14,18 +14,11 @@ import {
   AlertTitle,
   Badge,
   Button,
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
   EmptyState,
   Field,
   FieldDescription,
   FieldLabel,
   Progress,
-  Separator,
   Sidebar,
   SidebarContent,
   SidebarGroup,
@@ -39,7 +32,6 @@ import {
   SidebarRail,
   SidebarTrigger,
   SurfaceHeader,
-  TabMark,
   Table,
   TableBody,
   TableCell,
@@ -50,9 +42,8 @@ import {
   buttonVariants,
   cn,
   type SemanticTone,
-  type ThemeMode,
 } from "@tab/ui";
-import { useTheme } from "../theme-provider.tsx";
+import { BrandMenu, StaticBrandMenu } from "../brand-menu.tsx";
 import { formatCount, formatDate, type User } from "./shared.tsx";
 
 export type DashboardData = {
@@ -235,127 +226,25 @@ const dashboardNavigation = [
   { id: "memories", href: "/dashboard/memories", label: "Personal Memory", icon: Brain },
 ] as const;
 
-const dashboardThemeModes = [
-  { id: "light", label: "Light", icon: Sun },
-  { id: "dark", label: "Dark", icon: Moon },
-  { id: "system", label: "System", icon: Desktop },
-] as const;
-
-const staticBrandMenuItemClass = "flex items-center gap-3 rounded-sm px-2 py-2.5 text-sm font-semibold text-popover-foreground no-underline outline-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground";
-
-function DashboardBrandLockup() {
-  return (
-    <span className="relative flex size-5 shrink-0" aria-hidden="true">
-      <TabMark className="size-5 text-primary [&_svg]:!size-full" />
-      <span className="dashboard-sidebar-label dashboard-static-sidebar-label absolute left-7 top-0 whitespace-nowrap font-[var(--font-display)] text-sm font-bold tracking-[-0.025em] text-foreground">Tab</span>
-    </span>
-  );
-}
-
-function DashboardThemeControls({ theme, onThemeChange }: { theme?: ThemeMode; onThemeChange?: (mode: ThemeMode) => void }) {
-  return (
-    <div className="flex items-center justify-between px-2 py-1" aria-label="Theme selection">
-      <span className="text-xs font-medium text-muted-foreground">Theme</span>
-      <div className="flex items-center gap-1">
-        {dashboardThemeModes.map((mode) => {
-          const Icon = mode.icon;
-          return (
-            <button
-              key={mode.id}
-              type="button"
-              data-theme-choice={mode.id}
-              aria-pressed={theme === mode.id}
-              aria-label={`${mode.label} theme`}
-              className="grid size-7 place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] hover:bg-accent hover:text-accent-foreground aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-              onClick={() => onThemeChange?.(mode.id)}
-            >
-              <Icon className="size-3.5" aria-hidden="true" />
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 function DashboardBrandMenu() {
-  const { theme, setTheme } = useTheme();
-
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" aria-label="Open Tab brand menu" className="h-12 w-full justify-start overflow-hidden px-1.5 group-data-[collapsible=icon]:!w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
-          <DashboardBrandLockup />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" sideOffset={8} className="w-64 p-2">
-        <DropdownMenuGroup>
-          <DropdownMenuItem asChild className="py-2.5 font-semibold">
-            <a href="/brand/tab-mark.svg" download="tab-mark.svg">
-              <DownloadSimple data-icon="inline-start" aria-hidden="true" />
-              Download icon only
-            </a>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild className="py-2.5 font-semibold">
-            <a href="/brand/tab-lockup.svg" download="tab-lockup.svg">
-              <DownloadSimple data-icon="inline-start" aria-hidden="true" />
-              Download icon + wordmark
-            </a>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DropdownMenuGroup>
-          <DropdownMenuItem asChild className="py-2.5 font-semibold">
-            <a href="/brand">
-              <Palette data-icon="inline-start" aria-hidden="true" />
-              Brand guidelines
-            </a>
-          </DropdownMenuItem>
-          <DropdownMenuItem asChild className="py-2.5 font-semibold">
-            <a href="/">
-              <House data-icon="inline-start" aria-hidden="true" />
-              Home page
-            </a>
-          </DropdownMenuItem>
-        </DropdownMenuGroup>
-        <DropdownMenuSeparator />
-        <DashboardThemeControls theme={theme} onThemeChange={setTheme} />
-      </DropdownMenuContent>
-    </DropdownMenu>
+    <BrandMenu
+      destinationHref="/"
+      destinationLabel="Home page"
+      triggerClassName="h-12 w-full justify-start overflow-hidden px-1.5 group-data-[collapsible=icon]:!w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+      wordmarkClassName="dashboard-sidebar-label dashboard-static-sidebar-label"
+    />
   );
 }
 
 function DashboardStaticBrandMenu() {
   return (
-    <details className="dashboard-brand-menu group relative" name="dashboard-brand-menu">
-      <summary
-        aria-label="Open Tab brand menu"
-        className={buttonVariants({ variant: "ghost", className: "h-12 w-full list-none justify-start overflow-hidden px-3.5 marker:hidden [&::-webkit-details-marker]:hidden" })}
-      >
-        <DashboardBrandLockup />
-      </summary>
-      <div className="dashboard-brand-menu-panel tab-disclosure-panel absolute left-0 z-50 mt-2 grid w-64 gap-1 rounded-[var(--radius-card)] border border-border bg-popover p-2 text-popover-foreground shadow-[var(--tab-shadow-card)]">
-        <a href="/brand/tab-mark.svg" download="tab-mark.svg" className={staticBrandMenuItemClass}>
-          <DownloadSimple className="size-4" aria-hidden="true" />
-          Download icon only
-        </a>
-        <a href="/brand/tab-lockup.svg" download="tab-lockup.svg" className={staticBrandMenuItemClass}>
-          <DownloadSimple className="size-4" aria-hidden="true" />
-          Download icon + wordmark
-        </a>
-        <Separator className="my-1" />
-        <a href="/brand" className={staticBrandMenuItemClass}>
-          <Palette className="size-4" aria-hidden="true" />
-          Brand guidelines
-        </a>
-        <a href="/" className={staticBrandMenuItemClass}>
-          <House className="size-4" aria-hidden="true" />
-          Home page
-        </a>
-        <Separator className="my-1" />
-        <DashboardThemeControls />
-      </div>
-    </details>
+    <StaticBrandMenu
+      destinationHref="/"
+      destinationLabel="Home page"
+      triggerClassName="h-12 w-full justify-start px-3.5"
+      wordmarkClassName="dashboard-sidebar-label dashboard-static-sidebar-label"
+    />
   );
 }
 
