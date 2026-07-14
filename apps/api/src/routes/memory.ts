@@ -1,33 +1,22 @@
 import {
   MemoryDeleteResponseSchema,
-  MemoryExtractionRequestSchema,
   MemoryExtractionResponseSchema,
   MemoryExportResponseSchema,
   MemoryListResponseSchema,
   MemoryWriteRequestSchema,
   MemoryWriteResponseSchema,
-  type MemoryExtractionCounts,
-  type TelemetryEvent,
 } from "@tab/contracts";
-import { summarizeMemoryExtractionWindow } from "@tab/memory-policy";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
-import type { BillingService } from "../billing.ts";
+import type { MemoryExtractionUseCase } from "../memory-extraction-use-case.ts";
 import type { PersonalMemoryService } from "../personal-memory.ts";
-import {
-  MEMORY_EXTRACTION_MODEL_ID,
-  type MemoryExtractionService,
-} from "../personal-memory-extraction.ts";
 import { createErrorResponse } from "../http/responses.ts";
-import type { TelemetryService } from "../telemetry.ts";
 
 export function registerMemoryRoutes(
   app: ApiApp,
   deps: {
     personalMemoryService: PersonalMemoryService;
-    memoryExtractionService: MemoryExtractionService;
-    telemetryService: TelemetryService;
-    billingService: BillingService;
+    memoryExtractionUseCase: MemoryExtractionUseCase;
   },
 ) {
   type MemoryContext = Context<{ Bindings: ApiBindings; Variables: ApiVariables }>;
@@ -43,15 +32,6 @@ export function registerMemoryRoutes(
   async function readMemoryWriteBody(c: MemoryContext) {
     try {
       const parsed = MemoryWriteRequestSchema.safeParse(await c.req.json());
-      return parsed.success ? parsed.data : null;
-    } catch {
-      return null;
-    }
-  }
-
-  async function readMemoryExtractionBody(c: MemoryContext) {
-    try {
-      const parsed = MemoryExtractionRequestSchema.safeParse(await c.req.json());
       return parsed.success ? parsed.data : null;
     } catch {
       return null;
@@ -137,95 +117,24 @@ export function registerMemoryRoutes(
     );
   }
 
-  async function extractMemory(c: MemoryContext, userId: string) {
-    const entitlement = await deps.billingService.getStatus(userId);
-    if (!entitlement.capabilities.continuousMemoryExtraction) {
-      return c.json(
-        createErrorResponse(
-          "feature_unavailable",
-          "Continuous Memory Extraction requires a paid plan.",
-          {
-            capability: "memory_extraction",
-            upgradeUrl: "/pricing",
-          },
-        ),
-        403,
-      );
-    }
-
-    const body = await readMemoryExtractionBody(c);
-    if (!body) {
-      return c.json(
-        createErrorResponse("invalid_request", "Extraction batch is invalid."),
-        400,
-      );
-    }
-
-    const extractionWindow = summarizeMemoryExtractionWindow(body.entries);
-    if (!extractionWindow) {
-      return c.json(
-        createErrorResponse("invalid_request", "Extraction batch is invalid."),
-        400,
-      );
-    }
+  async function extractMemory(c: MemoryContext) {
     const device = c.get("device");
-    const startedAt = performance.now();
-    const extractionTelemetry = {
-      contextSource: extractionWindow.contextSource,
-      modelId: MEMORY_EXTRACTION_MODEL_ID,
-      redactionApplied: extractionWindow.redaction.applied,
-      redactionCount: extractionWindow.redaction.redactionCount,
-      clientAppVersion: body.clientMetadata?.appVersion,
-      clientPlatform: body.clientMetadata?.platform,
-    };
-    const recordExtractionEvent = async (
-      event: Omit<TelemetryEvent, "id" | "requestId" | "userId" | "deviceId">,
-    ): Promise<void> => {
-      try {
-        await deps.telemetryService.record({
-          ...event,
-          requestId: body.batchId,
-          userId,
-          deviceId: device.deviceId,
-        });
-      } catch {
-        // Extraction telemetry is best-effort and must not affect processing.
-      }
-    };
-
-    await recordExtractionEvent({
-      ...extractionTelemetry,
-      eventType: "memory_extraction_attempted",
-      timestamp: new Date().toISOString(),
-    });
-
-    let counts: MemoryExtractionCounts;
-    try {
-      counts = await deps.memoryExtractionService.extract(userId, body);
-    } catch (error) {
-      await recordExtractionEvent({
-        ...extractionTelemetry,
-        eventType: "memory_extraction_failed",
-        timestamp: new Date().toISOString(),
-        latencyMs: Math.round(performance.now() - startedAt),
-        errorCode: "provider_failure",
-      });
-      throw error;
+    const result = await deps.memoryExtractionUseCase.handle(
+      device,
+      () => c.req.json(),
+    );
+    if (!result.ok) {
+      return c.json(
+        createErrorResponse(result.code, result.message, result.details),
+        result.status,
+      );
     }
-
-    await recordExtractionEvent({
-      ...extractionTelemetry,
-      eventType: "memory_extraction_succeeded",
-      timestamp: new Date().toISOString(),
-      latencyMs: Math.round(performance.now() - startedAt),
-      memoryCreatedCount: counts.created,
-      memoryUpdatedCount: counts.updated,
-      memoryDeletedCount: counts.deleted,
-      memoryRejectedCount: counts.rejected,
-    });
 
     return c.json(
-      MemoryExtractionResponseSchema.parse({ status: "ok", data: { counts } }),
+      MemoryExtractionResponseSchema.parse({
+        status: "ok",
+        data: { counts: result.counts },
+      }),
       200,
     );
   }
@@ -243,9 +152,7 @@ export function registerMemoryRoutes(
       200,
     );
   });
-  app.post("/api/memory/extract", async (c) =>
-    extractMemory(c, c.get("device").userId),
-  );
+  app.post("/api/memory/extract", extractMemory);
   app.post("/api/memory", async (c) => createMemory(c, c.get("device").userId));
   app.patch("/api/memory/:id", async (c) =>
     updateMemory(c, c.get("device").userId),

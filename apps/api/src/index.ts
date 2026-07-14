@@ -30,6 +30,7 @@ import {
   type MemoryAgentModel,
   type MemoryExtractionStorage,
 } from "./personal-memory-extraction.ts";
+import { MemoryExtractionUseCase } from "./memory-extraction-use-case.ts";
 import {
   D1TelemetryStorage,
   TelemetryService,
@@ -140,6 +141,11 @@ export function createApp(deps: ApiDependencies = {}) {
   });
   const telemetryService =
     deps.telemetryService ?? new TelemetryService({ storage: telemetryStorage! });
+  const memoryExtractionUseCase = new MemoryExtractionUseCase({
+    billingService,
+    memoryExtractionService,
+    telemetryService,
+  });
   const suggestionUseCase = new SuggestionUseCase({
     billingService,
     personalMemoryService,
@@ -198,9 +204,7 @@ export function createApp(deps: ApiDependencies = {}) {
   });
   registerMemoryRoutes(app, {
     personalMemoryService,
-    memoryExtractionService,
-    telemetryService,
-    billingService,
+    memoryExtractionUseCase,
   });
   registerBillingRoutes(app, {
     billingService,
