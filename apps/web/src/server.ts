@@ -248,13 +248,22 @@ export function createWebApp(config: WebAppConfig) {
     return getSession(cookieHeader);
   }
 
-  async function homePage(cookieHeader: string | undefined): Promise<Response> {
+  async function publicPage(
+    cookieHeader: string | undefined,
+    body: ReactNode,
+    title: string,
+    description?: string,
+    status = 200,
+  ): Promise<Response> {
     const user = await getOptionalUser(cookieHeader);
-    return html(
+    return html(body, title, status, user, description);
+  }
+
+  async function homePage(cookieHeader: string | undefined): Promise<Response> {
+    return publicPage(
+      cookieHeader,
       createElement(HomePage),
       `${appName} - Native autocomplete for your Mac`,
-      200,
-      user,
       "Private Local Suggestions as you type, explicit Deep Complete for harder writing, and autocomplete across the Mac apps where you already work.",
     );
   }
@@ -352,15 +361,17 @@ export function createWebApp(config: WebAppConfig) {
     );
   }
 
-  function forgotPasswordPage(error?: string, sent = false): Response {
-    return html(
+  function forgotPasswordPage(cookieHeader: string | undefined, error?: string, sent = false): Promise<Response> {
+    return publicPage(
+      cookieHeader,
       createElement(ForgotPasswordPage, { error, sent }),
       `Reset password - ${appName}`,
     );
   }
 
-  function resetPasswordPage(error?: string, token?: string): Response {
-    return html(
+  function resetPasswordPage(cookieHeader: string | undefined, error?: string, token?: string): Promise<Response> {
+    return publicPage(
+      cookieHeader,
       createElement(ResetPasswordPage, { error, token }),
       `Choose a new password - ${appName}`,
     );
@@ -477,12 +488,12 @@ export function createWebApp(config: WebAppConfig) {
     return response;
   }
 
-  async function forgotPasswordHandler(request: Request): Promise<Response> {
+  async function forgotPasswordHandler(request: Request, cookieHeader: string | undefined): Promise<Response> {
     let formData;
     try {
       formData = await request.formData();
     } catch {
-      return forgotPasswordPage("Invalid form submission.");
+      return forgotPasswordPage(cookieHeader, "Invalid form submission.");
     }
 
     const email = String(formData.get("email") ?? "");
@@ -497,18 +508,18 @@ export function createWebApp(config: WebAppConfig) {
     });
 
     if (response.status !== 200) {
-      return forgotPasswordPage("Could not send a reset link. Please try again.");
+      return forgotPasswordPage(cookieHeader, "Could not send a reset link. Please try again.");
     }
 
-    return forgotPasswordPage(undefined, true);
+    return forgotPasswordPage(cookieHeader, undefined, true);
   }
 
-  async function resetPasswordHandler(request: Request): Promise<Response> {
+  async function resetPasswordHandler(request: Request, cookieHeader: string | undefined): Promise<Response> {
     let formData;
     try {
       formData = await request.formData();
     } catch {
-      return resetPasswordPage("Invalid form submission.");
+      return resetPasswordPage(cookieHeader, "Invalid form submission.");
     }
 
     const token = String(formData.get("token") ?? "");
@@ -523,7 +534,7 @@ export function createWebApp(config: WebAppConfig) {
     });
 
     if (response.status !== 200) {
-      return resetPasswordPage("Could not update your password. Request a new reset link and try again.", token);
+      return resetPasswordPage(cookieHeader, "Could not update your password. Request a new reset link and try again.", token);
     }
 
     return redirect("/login");
@@ -796,8 +807,7 @@ export function createWebApp(config: WebAppConfig) {
   }
 
   async function downloadPage(cookieHeader: string | undefined): Promise<Response> {
-    const user = await getOptionalUser(cookieHeader);
-    return html(createElement(DownloadPage, { latestVersion }), `${appName} Download`, 200, user);
+    return publicPage(cookieHeader, createElement(DownloadPage, { latestVersion }), `${appName} Download`);
   }
 
   return {
@@ -828,58 +838,52 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/brand" && request.method === "GET") {
-        return html(
+        return publicPage(
+          cookieHeader,
           createElement(BrandPage),
           "Tab Brand Assets - Logos, colors, and usage",
-          200,
-          undefined,
           "Download the Tab mark and lockup in SVG, PNG, WebP, and JPG, with light and dark variants, brand colors, typography, and usage guidance.",
         );
       }
 
       if (path === "/about" && request.method === "GET") {
-        return html(
+        return publicPage(
+          cookieHeader,
           createElement(AboutPage),
           `About ${appName} - Native autocomplete for macOS`,
-          200,
-          undefined,
           "Why Tab brings deliberate, controllable autocomplete to the Mac apps where you already write.",
         );
       }
 
       if (path === "/contact" && request.method === "GET") {
-        return html(
+        return publicPage(
+          cookieHeader,
           createElement(ContactPage),
           `Contact ${appName}`,
-          200,
-          undefined,
           "Contact Tab for setup, privacy, billing, account help, or technical product feedback.",
         );
       }
 
       if (path === "/privacy" && request.method === "GET") {
-        return html(
+        return publicPage(
+          cookieHeader,
           createElement(PrivacyPage),
           `Privacy Policy - ${appName}`,
-          200,
-          undefined,
           "How Tab keeps Automatic Suggestions local and processes explicit Deep Complete requests, Personal Memory, telemetry, account, device, and billing data.",
         );
       }
 
       if (path === "/terms" && request.method === "GET") {
-        return html(
+        return publicPage(
+          cookieHeader,
           createElement(TermsPage),
           `Terms of Service - ${appName}`,
-          200,
-          undefined,
           "Terms governing Tab Free, Pro, and Max, paid-plan trials, billing, renewal, cancellation, and use of the native macOS app.",
         );
       }
 
       if (path === "/components" && request.method === "GET") {
-        const user = await getOptionalUser(cookieHeader);
-        return html(createElement(ComponentReviewSurface), `${appName} Component Review`, 200, user);
+        return publicPage(cookieHeader, createElement(ComponentReviewSurface), `${appName} Component Review`);
       }
 
       if (path === "/login") {
@@ -893,8 +897,8 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/forgot-password") {
-        if (request.method === "GET") return forgotPasswordPage();
-        if (request.method === "POST") return forgotPasswordHandler(request);
+        if (request.method === "GET") return forgotPasswordPage(cookieHeader);
+        if (request.method === "POST") return forgotPasswordHandler(request, cookieHeader);
       }
 
       if (path === "/reset-password") {
@@ -902,9 +906,9 @@ export function createWebApp(config: WebAppConfig) {
           const error = url.searchParams.get("error") === "INVALID_TOKEN"
             ? "This reset link is invalid or expired."
             : undefined;
-          return resetPasswordPage(error, url.searchParams.get("token") ?? undefined);
+          return resetPasswordPage(cookieHeader, error, url.searchParams.get("token") ?? undefined);
         }
-        if (request.method === "POST") return resetPasswordHandler(request);
+        if (request.method === "POST") return resetPasswordHandler(request, cookieHeader);
       }
 
       if (path === "/logout" && request.method === "POST") {
@@ -1004,9 +1008,11 @@ export function createWebApp(config: WebAppConfig) {
         });
       }
 
-      return html(
+      return publicPage(
+        cookieHeader,
         createElement(MessagePage, { title: "Not found", message: `The page ${path} does not exist.` }),
         "Not found",
+        undefined,
         404,
       );
     },

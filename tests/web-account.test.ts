@@ -384,6 +384,46 @@ describe("Web account surface", () => {
     expect(body).not.toInclude('href="/login?next=');
   });
 
+  it("keeps the signed-in header across public pages", async () => {
+    const { apiApp, database, webApp } = await createWebTestEnv();
+    const email = `user-${crypto.randomUUID()}@example.com`;
+    const { cookie } = await signUpUser(apiApp, database, email, "password123456");
+    const publicPaths = [
+      "/",
+      "/about",
+      "/brand",
+      "/components",
+      "/contact",
+      "/download",
+      "/forgot-password",
+      "/pricing",
+      "/privacy",
+      "/reset-password",
+      "/terms",
+      "/missing-page",
+    ];
+
+    for (const path of publicPaths) {
+      const response = await webRequest(webApp, path, {}, cookie);
+      expect(response.status).toBe(path === "/missing-page" ? 404 : 200);
+      const body = await response.text();
+      expect(body).toInclude('href="/dashboard"');
+      expect(body).not.toInclude('href="/login">Sign in</a>');
+    }
+
+    for (const path of ["/forgot-password", "/reset-password"]) {
+      const response = await webRequest(webApp, path, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }, cookie);
+      expect(response.status).toBe(200);
+      const body = await response.text();
+      expect(body).toInclude('href="/dashboard"');
+      expect(body).not.toInclude('href="/login">Sign in</a>');
+    }
+  });
+
   it("asks a new web signup to verify email before checkout", async () => {
     const { webApp } = await createWebTestEnv();
     const email = `user-${crypto.randomUUID()}@example.com`;

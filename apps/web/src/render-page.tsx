@@ -170,6 +170,7 @@ function WebDocument({
             <SiteHeader
               themeControl={<StaticThemeMenu />}
               accountControl={user ? <UserMenu user={user} /> : <a className={buttonVariants({ variant: "secondary" })} href="/login">Sign in</a>}
+              authenticated={Boolean(user)}
             />
             <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 sm:px-8">
               <main id="main-content" className="flex-1 py-8 sm:py-12">{children}</main>
