@@ -27,19 +27,24 @@ class FakeUpdater extends EventEmitter {
 }
 
 describe("Desktop release packaging", () => {
-  it("loads electron-updater from its CommonJS named exports", async () => {
-    const result = await Bun.build({
+  it("loads electron-updater in development ESM and packaged CommonJS", async () => {
+    const build = (format: "esm" | "cjs") => Bun.build({
       entrypoints: ["apps/desktop/src/main/index.ts"],
       target: "node",
-      format: "cjs",
+      format,
       external: ["electron", "electron-updater"],
       write: false,
     });
+    const [esmResult, cjsResult] = await Promise.all([build("esm"), build("cjs")]);
 
-    expect(result.success).toBe(true);
-    const bundle = await result.outputs[0].text();
-    expect(bundle).toInclude('require("electron-updater")');
-    expect(bundle).not.toMatch(/import_electron_updater\.default/);
+    expect(esmResult.success).toBe(true);
+    expect(cjsResult.success).toBe(true);
+    const esmBundle = await esmResult.outputs[0].text();
+    const cjsBundle = await cjsResult.outputs[0].text();
+    expect(esmBundle).toInclude('import * as electronUpdaterModule from "electron-updater"');
+    expect(esmBundle).not.toInclude('import { autoUpdater } from "electron-updater"');
+    expect(cjsBundle).toInclude('require("electron-updater")');
+    expect(cjsBundle).toMatch(/"default" in electronUpdaterModule/);
   });
 
   it("has an electron-builder config that targets macOS direct distribution", async () => {
