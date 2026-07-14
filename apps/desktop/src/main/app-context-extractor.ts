@@ -91,10 +91,6 @@ function getAppContextCandidateFromTextSession(snapshot: SafeTypingContextSnapsh
   });
 }
 
-function firstAvailableOrSuppressed(snapshots: readonly AppContextCandidate[]): AppContextCandidate | null {
-  return snapshots.find((snapshot) => isAvailable(snapshot) || snapshot.metadata.status === "suppressed") ?? null;
-}
-
 function createAccessibilityCandidateProviderRegistry(): readonly AccessibilityAppContextCandidateProvider[] {
   return [
     {
@@ -167,13 +163,13 @@ export function createAppContextExtractor(options: {
       };
     }
 
-    const candidates = snapshotProviders.map((provider) => provider.getCandidate(snapshot));
+    let candidate: AppContextCandidate = { fragments: [], metadata: { status: "empty" } };
+    for (const provider of snapshotProviders) {
+      candidate = provider.getCandidate(snapshot);
+      if (isAvailable(candidate) || candidate.metadata.status === "suppressed") break;
+    }
     return {
-      snapshot: normalizeAppContext(
-        firstAvailableOrSuppressed(candidates)
-          ?? candidates[candidates.length - 1]
-          ?? { fragments: [], metadata: { status: "empty" } },
-      ),
+      snapshot: normalizeAppContext(candidate),
       pending: openCodeState?.pending ?? false,
       revision: openCodeState?.revision ?? 0,
     };
@@ -181,8 +177,14 @@ export function createAppContextExtractor(options: {
 
   return {
     ingestAccessibilityTree(input) {
-      const candidates = accessibilityProviders.map((provider) => provider.getCandidate(input));
-      managedContext.setCandidate(firstAvailableOrSuppressed(candidates) ?? { fragments: [], metadata: { status: "unsupported" } });
+      for (const provider of accessibilityProviders) {
+        const candidate = provider.getCandidate(input);
+        if (isAvailable(candidate) || candidate.metadata.status === "suppressed") {
+          managedContext.setCandidate(candidate);
+          return;
+        }
+      }
+      managedContext.setCandidate({ fragments: [], metadata: { status: "unsupported" } });
     },
     getSnapshot(snapshot) {
       return getSnapshotState(snapshot).snapshot;

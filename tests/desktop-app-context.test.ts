@@ -542,6 +542,7 @@ describe("App Context extraction module", () => {
   });
 
   it("keeps fallback order behind the extraction interface", () => {
+    let openCodeCandidateCalls = 0;
     const extractor = createAppContextExtractor({
       zedCandidateProvider: () => ({
         fragments: [
@@ -555,6 +556,20 @@ describe("App Context extraction module", () => {
         ],
         metadata: { provider: "zed-focused-editor", status: "available", confidence: 0.82 },
       }),
+      openCodeConversation: {
+        observe: async () => {},
+        getCandidate: () => {
+          openCodeCandidateCalls += 1;
+          return { fragments: [], metadata: { status: "empty" } };
+        },
+        getState: () => ({
+          candidate: { fragments: [], metadata: { status: "empty" } },
+          pending: false,
+          revision: 0,
+        }),
+        subscribe: () => () => {},
+        clear: () => {},
+      },
     });
 
     const snapshot = extractor.getSnapshot(makeSnapshot({
@@ -567,5 +582,6 @@ describe("App Context extraction module", () => {
       status: "available",
     });
     expect(snapshot.fragments[0]?.memoryEligible).toBe(false);
+    expect(openCodeCandidateCalls).toBe(0);
   });
 });
