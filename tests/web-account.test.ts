@@ -490,6 +490,14 @@ describe("Web account surface", () => {
     expect(body).not.toInclude("Trial ends");
     expect(body).toInclude("0 of 10");
     expect(body).toInclude("Deep Completes this month");
+    expect(body).toInclude('aria-label="Open Tab brand menu"');
+    expect(body).toInclude('href="/brand/tab-mark.svg" download="tab-mark.svg"');
+    expect(body).toInclude("Download icon only");
+    expect(body).toInclude('href="/brand/tab-lockup.svg" download="tab-lockup.svg"');
+    expect(body).toInclude("Download icon + wordmark");
+    expect(body).toInclude('href="/brand"');
+    expect(body).toInclude("Brand guidelines");
+    expect(body).toInclude("Home page");
   });
 
   it("renders the sign-in entry point", async () => {
