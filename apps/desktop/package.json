@@ -7,8 +7,8 @@
   "scripts": {
     "dev": "bun scripts/dev.ts",
     "build": "bun run build:main && bun run build:preload && bun run build:renderer && bun run build:native && bun run build:copy",
-    "build:main": "bun build src/main/index.ts --outfile=dist/main.cjs --target=node --format=cjs --external electron --external electron-updater && node --check dist/main.cjs",
-    "build:preload": "bun build src/preload/index.ts --outfile=dist/preload.cjs --target=node --format=cjs --external electron",
+    "build:main": "bun build src/main/index.ts --outfile=dist/main.cjs --target=node --format=cjs --external electron --external electron-updater --drop=console && node --check dist/main.cjs",
+    "build:preload": "bun build src/preload/index.ts --outfile=dist/preload.cjs --target=node --format=cjs --external electron --drop=console",
     "build:renderer": "electron-vite build",
     "build:native": "bun scripts/build-native.ts",
     "build:copy": "cp -R assets dist/",

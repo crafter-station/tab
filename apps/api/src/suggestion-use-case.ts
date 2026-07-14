@@ -220,12 +220,20 @@ export class SuggestionUseCase {
         clientAppVersion: request.clientMetadata?.appVersion,
         clientPlatform: request.clientMetadata?.platform,
       };
-      await recordSuggestionEvent(suggestionEvent);
-      if (suggestions.length > 0) {
-        await recordSuggestionEvent({
-          ...suggestionEvent,
-          eventType: "suggestion_shown",
-        });
+      const recordTelemetry = async () => {
+        await recordSuggestionEvent(suggestionEvent);
+        if (suggestions.length > 0) {
+          await recordSuggestionEvent({
+            ...suggestionEvent,
+            eventType: "suggestion_shown",
+          });
+        }
+      };
+      const telemetryPromise = recordTelemetry();
+      if (options.waitUntil) {
+        options.waitUntil(telemetryPromise);
+      } else {
+        await telemetryPromise;
       }
 
       if (shouldConsume) {
@@ -285,34 +293,18 @@ export class SuggestionUseCase {
     request: SuggestionRequest,
   ): Promise<readonly PersonalMemory[]> {
     if (!request.memoryEnabled) {
-      console.log("[suggestions] memory skipped", {
-        requestId: request.requestId,
-        reason: "disabled",
-      });
       return [];
     }
 
     try {
-      const retrievalStartedAt = performance.now();
-      const memories = await this.deps.personalMemoryService.selectRelevantMemories({
+      return await this.deps.personalMemoryService.selectRelevantMemories({
         userId: device.userId,
         typingContext: request.typingContext,
         activeApplication: request.activeApplication,
         memoryEnabled: true,
       });
-      console.log("[suggestions] memory selected", {
-        requestId: request.requestId,
-        count: memories.length,
-        latencyMs: Math.round(performance.now() - retrievalStartedAt),
-      });
-      return memories;
-    } catch (error) {
+    } catch {
       // Memory retrieval is best-effort; suggestions continue without memory.
-      console.warn("[suggestions] memory skipped", {
-        requestId: request.requestId,
-        reason: "retrieval_failed",
-        error: error instanceof Error ? error.message : String(error),
-      });
       return [];
     }
   }

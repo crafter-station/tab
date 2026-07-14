@@ -16,9 +16,7 @@ async function deliverAuthEmail(
 ): Promise<void> {
   try {
     await sendEmail(email);
-  } catch (error) {
-    console.error("Failed to send auth email", error);
-  }
+  } catch {}
 }
 
 export type CreateAuthInstanceOptions = {
@@ -82,6 +80,9 @@ export function createAuthInstance(
     },
     rateLimit: {
       enabled: false,
+    },
+    logger: {
+      disabled: true,
     },
   };
 

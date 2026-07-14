@@ -64,6 +64,7 @@ import { createOpenCodeConversationContext } from "./opencode-session-context.ts
 import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
+if (app.isPackaged) autoUpdater.logger = null;
 
 let authCallbackHandlingReady = false;
 const pendingAuthCallbackUrls: string[] = [];
@@ -167,6 +168,7 @@ function getOrCreateDeviceId(): string {
 }
 
 const DEVICE_ID = getOrCreateDeviceId();
+const DEVELOPMENT_LOGGING = !app.isPackaged;
 const SHOW_SETTINGS_ON_START = process.argv.includes("--permission-debug") || env.TAB_SHOW_SETTINGS_ON_START === "1";
 const SHOW_DEBUG_TYPING_OVERLAY =
   env.TAB_DEBUG_TYPING_OVERLAY !== "0" &&
@@ -373,7 +375,9 @@ const localInference = createLocalInferencePrototype({
     currentDesktopStatus?.entitlement?.capabilities.customWritingInstructions
       ? preferencesManager.get().suggestions.customWritingInstructions || undefined
       : undefined,
-  onDiagnostic: (event, details) => logLocalSuggestion(`inference.${event}`, details),
+  onDiagnostic: DEVELOPMENT_LOGGING
+    ? (event, details) => logLocalSuggestion(`inference.${event}`, details)
+    : undefined,
   onStatusChange: (status) => {
     settingsWindowManager.sendLocalInferenceStatus(status);
     if (status.status === "unavailable") {
@@ -413,7 +417,9 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
     }
   },
   fallbackToCloudOnLocalMiss: false,
-  onSuggestionDiagnostic: (event, details) => logLocalSuggestion(`loop.${event}`, details),
+  onSuggestionDiagnostic: DEVELOPMENT_LOGGING
+    ? (event, details) => logLocalSuggestion(`loop.${event}`, details)
+    : undefined,
   requestSuggestion,
   outputs: {
     showSuggestion: showOverlay,
@@ -699,8 +705,8 @@ function configureFloatingPanel(win: BrowserWindow): void {
   win.setAlwaysOnTop(true, "screen-saver");
 }
 
-function isBoundsOnScreen(bounds: Electron.Rectangle): boolean {
-  return screen.getAllDisplays().some((display) => {
+function isBoundsOnScreen(bounds: Electron.Rectangle, displays = screen.getAllDisplays()): boolean {
+  return displays.some((display) => {
     const workArea = display.workArea;
     const overlapsX = bounds.x < workArea.x + workArea.width && bounds.x + bounds.width > workArea.x;
     const overlapsY = bounds.y < workArea.y + workArea.height && bounds.y + bounds.height > workArea.y;
@@ -712,7 +718,8 @@ function installOverlayPositionTracking(win: BrowserWindow, getBounds: () => Ele
   const reposition = () => {
     if (win.isDestroyed()) return;
     const currentBounds = win.getBounds();
-    if (!isBoundsOnScreen(currentBounds) || screen.getAllDisplays().length > 1) {
+    const displays = screen.getAllDisplays();
+    if (!isBoundsOnScreen(currentBounds, displays) || displays.length > 1) {
       win.setBounds(getBounds(), false);
     }
   };
@@ -736,7 +743,7 @@ function installAlphaClickThrough(win: BrowserWindow): void {
   let lastIgnoreState = true;
   let captureInFlight = false;
   const interval = setInterval(async () => {
-    if (win.isDestroyed() || captureInFlight) return;
+    if (win.isDestroyed() || !win.isVisible() || captureInFlight) return;
 
     const cursor = screen.getCursorScreenPoint();
     const bounds = win.getBounds();

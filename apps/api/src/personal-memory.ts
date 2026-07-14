@@ -1175,11 +1175,7 @@ export class PersonalMemoryService {
         tokenMemories,
         this.maxRelevantMemories,
       );
-    } catch (error) {
-      console.warn("[memory] vector retrieval failed; using lexical fallback", {
-        userId: input.userId,
-        error: error instanceof Error ? error.message : String(error),
-      });
+    } catch {
       return selectTokenRelevantMemories(
         await this.storage.listMemoriesByUser(input.userId),
         input,

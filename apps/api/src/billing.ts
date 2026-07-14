@@ -732,11 +732,6 @@ export class UsageMeterService {
         }
       }
     }
-    console.error("Polar usage metering failed after retries:", {
-      userId: event.userId,
-      requestId: event.requestId,
-      error: lastError?.message,
-    });
     throw lastError ?? new Error("Usage metering failed after retries");
   }
 }

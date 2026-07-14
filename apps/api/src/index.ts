@@ -1,5 +1,4 @@
 import { Hono } from "hono";
-import { logger } from "hono/logger";
 import { ApiSuccessResponseSchema, SuggestionRequestSchema } from "@tab/contracts";
 import { createAuthInstance, type AuthInstance } from "./auth.ts";
 import {
@@ -154,8 +153,6 @@ export function createApp(deps: ApiDependencies = {}) {
 
   const app = new Hono<{ Bindings: ApiBindings; Variables: ApiVariables }>();
   const authenticateDevice = createDeviceAuthenticator(deviceTokenService);
-
-  app.use("*", logger());
 
   registerDeviceAuthRoutes(app, { auth, billingService, deviceTokenService });
   app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));

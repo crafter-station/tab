@@ -7,6 +7,9 @@ export default defineConfig({
   renderer: {
     root: path.resolve(__dirname, "src/renderer"),
     plugins: [tailwindcss() as never, react()],
+    esbuild: {
+      drop: ["console"],
+    },
     build: {
       outDir: path.resolve(__dirname, "dist/renderer"),
       emptyOutDir: true,

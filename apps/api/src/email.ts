@@ -17,12 +17,11 @@ export async function sendEmail({
   html,
 }: SendEmailInput): Promise<void> {
   if (!env.RESEND_API_KEY) {
-    console.warn(`Skipping email to ${to}: RESEND_API_KEY is not configured.`);
     return;
   }
 
   const resend = new Resend(env.RESEND_API_KEY);
-  const { data, error } = await resend.emails.send({
+  const { error } = await resend.emails.send({
     from: resendFromEmail,
     to,
     subject,
@@ -33,8 +32,4 @@ export async function sendEmail({
   if (error) {
     throw new Error(`Resend email failed: ${error.message}`);
   }
-
-  console.log(
-    `Sent email to ${to} from ${resendFromEmail}, id: ${data?.id ?? "unknown"}`,
-  );
 }

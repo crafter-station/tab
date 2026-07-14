@@ -20,12 +20,10 @@ export function registerSuggestionRoutes(
   deps: { suggestionUseCase: SuggestionUseCase },
 ) {
   app.post("/suggestions", async (c) => {
-    console.log("[suggestions] request received");
     let payload: unknown;
     try {
       payload = await c.req.json();
     } catch {
-      console.warn("[suggestions] invalid JSON body");
       return c.json(
         createErrorResponse("invalid_request", "Request body must be valid JSON."),
         400,
@@ -34,10 +32,6 @@ export function registerSuggestionRoutes(
 
     const parseResult = SuggestionRequestSchema.safeParse(payload);
     if (!parseResult.success) {
-      console.warn(
-        "[suggestions] invalid request",
-        formatValidationIssues(parseResult.error.issues),
-      );
       return c.json(
         createErrorResponse(
           "invalid_request",

@@ -58,6 +58,7 @@ export function createSuggestionLoop(deps: SuggestionLoopDependencies) {
   }
 
   function contextDetails(snapshot: SafeTypingContextSnapshot): Record<string, unknown> {
+    if (!deps.onDiagnostic) return {};
     return {
       contextId: createHash("sha256").update(snapshot.contextHash).digest("hex").slice(0, 12),
       contextLength: snapshot.sanitizedContext.length,
