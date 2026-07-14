@@ -1,5 +1,5 @@
 import { isPlanId, planCapabilities } from "@tab/billing";
-import { ArrowLeft, Brain, CaretDown, ChartBar, Copy, Desktop, DotsThree, House, Moon, SidebarSimple, Sun, TextT, UserCircle } from "@phosphor-icons/react";
+import { Brain, CaretDown, ChartBar, Copy, Desktop, DotsThree, House, Moon, SidebarSimple, Sun, TextT, UserCircle } from "@phosphor-icons/react";
 import { Outlet } from "@tanstack/react-router";
 import { createContext, useContext, type ReactNode } from "react";
 import type {
@@ -22,7 +22,6 @@ import {
   Progress,
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -325,18 +324,6 @@ function DashboardSidebar({ active }: { active: DashboardSection }) {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t border-sidebar-border p-3">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton asChild tooltip="Back to website">
-              <a href="/">
-                <ArrowLeft aria-hidden="true" />
-                <span>Back to website</span>
-              </a>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
-      </SidebarFooter>
       <SidebarRail />
     </Sidebar>
   );
@@ -372,10 +359,6 @@ function DashboardStaticSidebar({ active }: { active: DashboardSection }) {
           );
         })}
       </nav>
-      <a className="dashboard-static-sidebar-footer m-3 flex items-center gap-2 rounded-[var(--radius-control)] px-2 py-3 text-sm font-medium text-sidebar-foreground no-underline hover:bg-sidebar-accent" href="/">
-        <ArrowLeft className="size-4" aria-hidden="true" />
-        <span className="dashboard-static-sidebar-label whitespace-nowrap">Back to website</span>
-      </a>
     </aside>
   );
 }

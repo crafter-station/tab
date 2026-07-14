@@ -17,8 +17,7 @@
 }
 
 [data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-brand,
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-nav a,
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-footer {
+[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-nav a {
   width: 2.5rem;
   gap: 0;
   justify-content: center;
@@ -31,10 +30,6 @@
 
 [data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-nav {
   padding-inline: 0.75rem;
-}
-
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-footer {
-  margin-inline: 0.75rem;
 }
 
 [data-dashboard-sidebar-motion="none"] .dashboard-static-sidebar {
