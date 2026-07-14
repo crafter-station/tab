@@ -83,7 +83,7 @@ describe("Web download surface", () => {
     expect(body).toInclude('id="privacy-showcase-animation"');
     expect(body).toInclude("Pause animation");
     expect(body.match(/data-motion-region/g)?.length).toBe(4);
-    expect(body).toInclude('src="/marketing-demo.js?v=restored-motion"');
+    expect(body).toInclude('src="/marketing-demo.js?v=option-tab"');
     expect(body).toInclude('id="pricing"');
     expect(body).toInclude('data-pricing-plan="free"');
     expect(body).toInclude('data-pricing-plan="pro"');

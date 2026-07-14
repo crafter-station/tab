@@ -36,6 +36,27 @@
     workflowResetTimers.set(workflow, resetTimer);
   }
 
+  function acceptanceSurfaceFor(element) {
+    return element?.closest?.("[data-tab-demo]")
+      ?? element?.closest?.("[data-tab-workflow]")
+      ?? null;
+  }
+
+  function acceptSurface(surface) {
+    if (surface.hasAttribute?.("data-tab-workflow")) acceptWorkflow(surface);
+    else accept(surface);
+  }
+
+  let activeAcceptanceSurface = document.querySelector("[data-tab-demo]");
+
+  function rememberAcceptanceSurface(event) {
+    const surface = acceptanceSurfaceFor(event.target);
+    if (surface) activeAcceptanceSurface = surface;
+  }
+
+  document.addEventListener("focusin", rememberAcceptanceSurface);
+  document.addEventListener("pointerover", rememberAcceptanceSurface);
+
   function replayShowcase(showcase) {
     showcase.dataset.restarting = "true";
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -115,13 +136,17 @@
   });
 
   document.addEventListener("keydown", (event) => {
-    const focusedDemo = document.activeElement?.closest?.("[data-tab-demo]");
-    if (event.altKey && event.key === "Tab" && focusedDemo) {
+    const focusedSurface = acceptanceSurfaceFor(document.activeElement);
+    if (event.altKey && (event.key === "Tab" || event.code === "Tab")) {
+      const surface = focusedSurface ?? activeAcceptanceSurface;
+      if (!surface) return;
       event.preventDefault();
-      accept(focusedDemo);
+      activeAcceptanceSurface = surface;
+      acceptSurface(surface);
       return;
     }
 
+    const focusedDemo = document.activeElement?.closest?.("[data-tab-demo]");
     const currentTab = document.activeElement?.closest?.("[data-demo-target]");
     if (!currentTab || !focusedDemo) return;
 

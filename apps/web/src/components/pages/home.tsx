@@ -603,7 +603,7 @@ export function HomePage() {
           <a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" /> Download for Mac</a>
         </div>
       </section>
-      <script src="/marketing-demo.js?v=restored-motion" defer />
+      <script src="/marketing-demo.js?v=option-tab" defer />
     </>
   );
 }
