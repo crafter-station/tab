@@ -11,8 +11,8 @@ import {
   systemPreferences,
 } from "electron";
 import path from "node:path";
-import { exec, spawn } from "node:child_process";
-import { existsSync, mkdirSync } from "node:fs";
+import { exec } from "node:child_process";
+import { mkdirSync } from "node:fs";
 import { promisify } from "node:util";
 import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import {
@@ -34,6 +34,7 @@ import {
 } from "./app-context.ts";
 import { createAppContextExtractor, type AppContextAccessibilityTree } from "./app-context-extractor.ts";
 import { createDesktopEventIngress } from "./desktop-event-ingress.ts";
+import { createMacOSInputTap } from "./macos-input-tap.ts";
 import {
   createDesktopAuthClient,
   createDesktopAuthSession,
@@ -134,14 +135,6 @@ let overlayRendererReady = false;
 let tray: TabTray | null = null;
 let relaunchAfterPermissionQuit = false;
 const authCallback = createLoopbackAuthCallback({ onCallback: completeBrowserHandoff });
-type InputTapProcess = {
-  stdout: { on(event: "data", callback: (chunk: Buffer) => void): void };
-  stderr: { on(event: "data", callback: (chunk: Buffer) => void): void };
-  on(event: "exit", callback: (code: number | null, signal: string | null) => void): void;
-  kill(): boolean;
-};
-
-let inputTapProcess: InputTapProcess | null = null;
 let pendingSyntheticPaste: { text: string; expiresAt: number } | null = null;
 
 const typingContextBuffer = createTypingContextBuffer();
@@ -531,6 +524,11 @@ const desktopEventIngress = createDesktopEventIngress({
   onSuggestNow: handleSuggestNow,
   onTextSessionSnapshot: handleTextSessionSnapshot,
   onAppContextTree: handleAppContextTree,
+});
+const macOSInputTap = createMacOSInputTap({
+  executablePath: INPUT_TAP_PATH,
+  onMessage: (message) => desktopEventIngress.handleMessage(message),
+  onError: (...details) => console.error(...details),
 });
 
 function delay(ms: number): Promise<void> {
@@ -1055,49 +1053,8 @@ function checkForUpdates(errorMessage: string): void {
   });
 }
 
-function handleInputTapMessage(message: unknown): void {
-  desktopEventIngress.handleMessage(message);
-}
-
 function handleAppContextTree(accessibilityTree: AppContextAccessibilityTree): void {
   nativeAutocompleteApp.ingestAppContextTree(accessibilityTree);
-}
-
-function startMacOSInputTap(): void {
-  if (process.platform !== "darwin") return;
-  if (!existsSync(INPUT_TAP_PATH)) {
-    console.error(`macOS input tap helper missing at ${INPUT_TAP_PATH}`);
-    return;
-  }
-
-  const child = spawn(INPUT_TAP_PATH, [], { stdio: ["ignore", "pipe", "pipe"] }) as unknown as InputTapProcess;
-  inputTapProcess = child;
-  let stdoutBuffer = "";
-
-  child.stdout.on("data", (chunk) => {
-    stdoutBuffer += chunk.toString("utf8");
-    const lines = stdoutBuffer.split("\n");
-    stdoutBuffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (line.trim().length === 0) continue;
-      try {
-        handleInputTapMessage(JSON.parse(line));
-      } catch (error) {
-        console.error("Failed to parse macOS input tap message:", error);
-      }
-    }
-  });
-
-  child.stderr.on("data", (chunk) => {
-    console.error("macOS input tap stderr:", chunk.toString("utf8"));
-  });
-
-  child.on("exit", (code, signal) => {
-    if (inputTapProcess === child) {
-      inputTapProcess = null;
-    }
-    console.error(`macOS input tap exited with code ${code ?? "null"} signal ${signal ?? "null"}`);
-  });
 }
 
 async function bootstrap(): Promise<void> {
@@ -1334,7 +1291,7 @@ async function bootstrap(): Promise<void> {
   // in-memory buffer. In a production build these are fed by a macOS native
   // input tap (IOKit/Quartz Event Services) and an active-app observer.
   handleActiveApplicationChanged("com.apple.TextEdit", null);
-  startMacOSInputTap();
+  macOSInputTap.start();
 
   // Initial status and memory refresh.
   statusService.refresh().catch((error) => console.error("Failed initial status refresh:", error));
@@ -1356,7 +1313,7 @@ app.on("will-quit", () => {
   if (isUsableWindow(debugOverlayWindow)) {
     debugOverlayWindow.close();
   }
-  inputTapProcess?.kill();
+  macOSInputTap.stop();
   localInference.stop();
   memoryExtractionDispatcher.stop();
   typingContextBuffer.clearAll();
