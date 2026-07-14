@@ -21,10 +21,10 @@ export function AutomaticSuggestionAllowance({ allowance, planName }: { allowanc
 
   return (
     <AllowanceMeter
-      title="Automatic Suggestions"
+      title="Suggestions"
       usage={usage}
       remaining={finite ? `${formatCount(allowance.remaining ?? 0)} words left` : "Unlimited"}
-      detail={finite ? "Resets daily at local midnight" : `No daily limit on ${planName}`}
+      detail={finite ? "Resets daily" : `No daily limit on ${planName}`}
       percentage={allowancePercentage(allowance)}
     />
   );
@@ -33,9 +33,9 @@ export function AutomaticSuggestionAllowance({ allowance, planName }: { allowanc
 export function DeepCompleteAllowance({ allowance, cancelAtPeriodEnd = false, planEndsAt, trialEndsAt }: { allowance: AllowanceState; cancelAtPeriodEnd?: boolean; planEndsAt?: string; trialEndsAt?: string }) {
   return (
     <AllowanceMeter
-      title="Deep Complete"
-      usage={`${formatCount(allowance.used)} of ${formatCount(allowance.limit ?? 0)} used this billing period`}
-      remaining={`${formatCount(allowance.remaining ?? 0)} Deep Completes left`}
+      title="Deep Suggestions"
+      usage={`${formatCount(allowance.used)} of ${formatCount(allowance.limit ?? 0)} used`}
+      remaining={`${formatCount(allowance.remaining ?? 0)} left`}
       detail={trialEndsAt
         ? `Trial ends ${formatDate(trialEndsAt)}; the paid billing period follows`
         : cancelAtPeriodEnd

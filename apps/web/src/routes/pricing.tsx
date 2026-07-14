@@ -10,5 +10,5 @@ function PricingRoute() {
 
 export const Route = createFileRoute("/pricing")({
   component: PricingRoute,
-  head: () => ({ meta: [{ title: "Pricing - Tab" }, { name: "description", content: "Compare Tab Free, Pro, and Max, including one month free on paid plans, monthly pricing, Local Suggestion and Deep Complete allowances, and cancellation." }] }),
+  head: () => ({ meta: [{ title: "Pricing - Tab" }, { name: "description", content: "Compare Tab Free, Pro, and Max plans. Paid plans include one month free." }] }),
 });

@@ -31,11 +31,11 @@ const dashboardNavigation = [
 ] as const;
 
 const dashboardSectionCopy: Record<DashboardSection, { title: string; description: string }> = {
-  overview: { title: "Dashboard", description: "Your Tab activity this month." },
+  overview: { title: "Dashboard", description: "Your activity this month." },
   account: { title: "Account", description: "Email and sign-in status." },
-  usage: { title: "Usage and billing", description: "Review this month's activity and manage your plan." },
+  usage: { title: "Usage and billing", description: "Your limits and plan." },
   devices: { title: "Devices", description: "Review Macs with access to your account." },
-  memories: { title: "Personal Memory", description: "Add, review, export, or delete details Tab can use in Suggestions." },
+  memories: { title: "Personal Memory", description: "What Tab remembers about you." },
 };
 
 function DashboardSidebar() {

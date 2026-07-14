@@ -14,15 +14,15 @@ export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subtitle: string }> = {
   model: {
     title: "Prepare Tab",
-    subtitle: "Set up private, local Suggestions.",
+    subtitle: "Download what Tab needs.",
   },
   try: {
     title: "Try Tab",
     subtitle: "Practice accepting a Suggestion.",
   },
   deep: {
-    title: "Try Deep Complete",
-    subtitle: "Ask for more help when you need it.",
+    title: "Try a Deep Suggestion",
+    subtitle: "Get more help when you need it.",
   },
   permissions: {
     title: "Allow access",

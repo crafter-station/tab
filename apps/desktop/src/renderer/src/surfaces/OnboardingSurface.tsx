@@ -405,7 +405,7 @@ export function OnboardingSurface() {
               <LockIcon />
               <div>
                 <strong>No Screen Recording or Full Disk Access</strong>
-                <span>Automatic Suggestions use recent typing on this Mac.</span>
+                <span>Suggestions use recent typing on this Mac.</span>
               </div>
             </div>
           )}
@@ -429,10 +429,10 @@ export function OnboardingSurface() {
                 <header className="onboarding-hero">
                   <Eyebrow>Private by default</Eyebrow>
                   <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
-                    Bring Automatic Suggestions to this Mac.
+                    Get Tab ready.
                   </h1>
                   <p className="lede">
-                    Tab uses a one-time local model download for everyday completions. Your recent typing stays on this Mac.
+                    Download what Tab needs to suggest text privately. Your recent typing stays on this Mac.
                   </p>
                 </header>
 
@@ -448,19 +448,19 @@ export function OnboardingSurface() {
                             : modelNeedsDownload
                               ? "Local model required"
                               : localInferenceStatus.status === "unavailable"
-                                ? "Local Suggestions unavailable"
+                                ? "Suggestions unavailable"
                                 : "Checking this Mac"}
                       </strong>
                       <span>
                         {localInferenceStatus.status === "ready"
-                          ? "Automatic Suggestions can run entirely on this Mac."
+                          ? "Suggestions are ready on this Mac."
                           : localInferenceStatus.status === "downloading"
-                            ? "Keep Tab open. You can see exact progress below."
+                            ? "Keep Tab open until the download finishes."
                             : modelNeedsDownload
-                              ? "A roughly 2 GB download. Tab verifies it before use."
+                              ? "About 2 GB."
                               : localInferenceStatus.status === "unavailable"
-                                ? "You can finish setup and troubleshoot the local runtime in Settings."
-                                : "Tab is checking for the model and local runtime."}
+                                ? "You can finish setup and try again in Settings."
+                                : "Tab is checking this Mac."}
                       </span>
                     </div>
                   </div>
@@ -477,8 +477,8 @@ export function OnboardingSurface() {
                     </div>
                   ) : null}
                   <div className="model-setup__facts">
-                    <span><CheckIcon /> Routine Suggestions stay local</span>
-                    <span><CheckIcon /> No automatic cloud fallback</span>
+                    <span><CheckIcon /> Suggestions stay on this Mac</span>
+                    <span><CheckIcon /> Cloud use only when you ask</span>
                   </div>
                 </div>
               </>
@@ -547,17 +547,17 @@ export function OnboardingSurface() {
                 <header className="onboarding-hero">
                   <Eyebrow>More context, when you ask</Eyebrow>
                   <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
-                    Ask for a Deep Complete Suggestion.
+                    Ask for a Deep Suggestion.
                   </h1>
                   <p className="lede">
-                    Double-tap Option when a thought needs more context. Then accept the Suggestion with the same Option+Tab shortcut.
+                    Double-tap Option when you want more help. Press Option+Tab to insert the result.
                   </p>
                 </header>
 
                 <div className="practice-demo deep-practice">
                   <div className="practice-demo__header">
-                    <span>Deep Complete rehearsal</span>
-                    <small>Cloud, only when requested</small>
+                    <span>Deep Suggestion practice</span>
+                    <small>Uses the cloud only when requested</small>
                   </div>
                   <div className="practice-demo__body">
                     <label htmlFor="deep-practice-draft">Your draft</label>
@@ -578,13 +578,12 @@ export function OnboardingSurface() {
                           <CheckIcon />
                         </div>
                         <div>
-                          <strong>Deep Complete accepted</strong>
-                          <span>You requested more context, then chose to add it.</span>
+                          <strong>Deep Suggestion inserted</strong>
                         </div>
                       </div>
                     ) : deepPracticeState === "suggestion" ? (
                       <SuggestionCommand
-                        aria-label={`Accept Deep Complete suggestion: ${DEEP_SUGGESTION}`}
+                        aria-label={`Accept Deep Suggestion: ${DEEP_SUGGESTION}`}
                         onClick={acceptDeepPracticeSuggestion}
                         source="cloud"
                         suggestion={DEEP_SUGGESTION}
@@ -597,7 +596,7 @@ export function OnboardingSurface() {
                         </div>
                         <div>
                           <strong>{deepPracticeState === "armed" ? "Option once. Press it again." : "Double-tap Option"}</strong>
-                          <span>Request a higher-capability Suggestion for this draft.</span>
+                          <span>Get a more detailed suggestion.</span>
                         </div>
                         <Button onClick={requestDeepPracticeSuggestion} size="sm" variant="ghost">
                           Show sample
@@ -607,10 +606,10 @@ export function OnboardingSurface() {
 
                     <p className="practice-demo__hint" aria-live="polite">
                       {deepPracticeState === "suggestion"
-                        ? "Now press Option+Tab to accept the Deep Complete Suggestion."
+                        ? "Press Option+Tab to insert the Deep Suggestion."
                         : deepPracticeState === "accepted"
-                          ? "That is the full Deep Complete flow: request, review, then accept."
-                          : "This rehearsal does not send anything. In other apps, the gesture sends bounded, redacted context only when you request it."}
+                          ? "Deep Suggestion inserted."
+                          : "This practice sends nothing. In other apps, Tab sends limited, protected context only when you ask."}
                     </p>
                   </div>
                 </div>
@@ -728,7 +727,7 @@ export function OnboardingSurface() {
                     <span>03</span>
                     <p>
                       <strong>Need more help? Double-tap Option.</strong>
-                      <small>Deep Complete uses bounded, redacted cloud context only when you ask. Accept its Suggestion with the same Option+Tab shortcut.</small>
+                     <small>Deep Suggestions use the cloud only when you ask. Press Option+Tab to insert one.</small>
                     </p>
                   </div>
                   <div>

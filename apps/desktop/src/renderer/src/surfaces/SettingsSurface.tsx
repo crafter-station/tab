@@ -40,13 +40,13 @@ type InitialState = Awaited<ReturnType<NonNullable<typeof window.tab>["getInitia
 type SettingsTab = "account" | "completions" | "controls" | "appearance" | "permissions" | "memory" | "updates";
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
-  { value: "account", label: "Account", description: "Plan, usage, and connection status." },
-  { value: "completions", label: "Suggestion history", description: "Accepted Local Suggestions from this session." },
-  { value: "controls", label: "Suggestions", description: "Control when Tab suggests and how it writes." },
-  { value: "appearance", label: "Appearance", description: "Choose how Tab looks on this Mac." },
-  { value: "permissions", label: "Permissions", description: "Review the macOS access Tab needs." },
-  { value: "memory", label: "Personal Memory", description: "Control saved details used in Suggestions." },
-  { value: "updates", label: "Updates", description: "Keep Tab secure and up to date." },
+  { value: "account", label: "Account", description: "Plan and usage." },
+  { value: "completions", label: "History", description: "Suggestions used this session." },
+  { value: "controls", label: "Suggestions", description: "Choose how Tab writes." },
+  { value: "appearance", label: "Appearance", description: "How Tab looks." },
+  { value: "permissions", label: "Permissions", description: "macOS access for Tab." },
+  { value: "memory", label: "Personal Memory", description: "What Tab remembers about you." },
+  { value: "updates", label: "Updates", description: "Keep Tab up to date." },
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
@@ -96,7 +96,7 @@ function describeLocalInference(status: LocalInferenceStatus, error: string | nu
       return { label: "Ready", description: "Generated on this Mac." };
     case "starting":
     case "stopped":
-      return { label: "Starting", description: "Preparing Automatic Suggestions." };
+      return { label: "Starting", description: "Preparing Suggestions." };
     case "downloading":
       return {
         label: status.progress === null ? "Downloading" : `Downloading ${Math.round(status.progress * 100)}%`,
@@ -106,8 +106,8 @@ function describeLocalInference(status: LocalInferenceStatus, error: string | nu
       return {
         label: status.reason === "missing_model" ? "Download required" : "Unavailable",
         description: status.reason === "missing_model"
-          ? "Download the local model to use Automatic Suggestions."
-          : "Automatic Suggestions are unavailable. Try again or relaunch Tab.",
+          ? "Download the model to use Suggestions."
+          : "Suggestions are unavailable. Try again or relaunch Tab.",
       };
   }
 }
@@ -341,13 +341,13 @@ export function SettingsSurface() {
                 description={`${formatPlanName(status.entitlement.planId)} plan${status.entitlement.trial.active ? ` trial ends ${formatDate(status.entitlement.trial.endsAt)}` : ""}.`}
               >
                 <div className="settings-summary">
-                  <SummaryMetric label="Automatic Suggestions accepted" value={(status.localSuggestionActivity?.acceptedSuggestions ?? 0).toLocaleString()} detail="This month" />
-                  <SummaryMetric label="Words inserted" value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()} detail="From Automatic Suggestions this month" />
-                  <SummaryMetric label="Deep Completes used" value={status.entitlement.deepCompletes.used.toLocaleString()} detail="Successful results this billing period" />
+                  <SummaryMetric label="Suggestions used" value={(status.localSuggestionActivity?.acceptedSuggestions ?? 0).toLocaleString()} detail="This month" />
+                  <SummaryMetric label="Words inserted" value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()} detail="This month" />
+                  <SummaryMetric label="Deep Suggestions used" value={status.entitlement.deepCompletes.used.toLocaleString()} detail="This period" />
                 </div>
                 <div className="mt-4 grid gap-3">
                   <AllowanceMeter
-                    title="Automatic Suggestions"
+                    title="Suggestions"
                     usage={status.entitlement.localAcceptedWords.limit === null
                       ? `${status.entitlement.localAcceptedWords.used.toLocaleString()} accepted words today`
                       : `${status.entitlement.localAcceptedWords.used.toLocaleString()} of ${status.entitlement.localAcceptedWords.limit.toLocaleString()} accepted words used today`}
@@ -360,9 +360,9 @@ export function SettingsSurface() {
                     percentage={allowancePercentage(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit)}
                   />
                   <AllowanceMeter
-                    title="Deep Complete"
+                    title="Deep Suggestions"
                     usage={`${status.entitlement.deepCompletes.used.toLocaleString()} of ${(status.entitlement.deepCompletes.limit ?? 0).toLocaleString()} used this billing period`}
-                    remaining={`${(status.entitlement.deepCompletes.remaining ?? 0).toLocaleString()} Deep Completes left`}
+                    remaining={`${(status.entitlement.deepCompletes.remaining ?? 0).toLocaleString()} left`}
                     detail={status.entitlement.trial.active
                       ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}; the paid billing period follows`
                       : status.entitlement.cancelAtPeriodEnd
@@ -384,7 +384,7 @@ export function SettingsSurface() {
                 label="Account services"
                 value={status.connectivity === "online" ? "Online" : "Offline"}
                 tone={status.connectivity === "online" ? "brand" : "warning"}
-                description="Used for Deep Complete and Personal Memory sync."
+                description="Used for Deep Suggestions and Personal Memory."
               />
               <div className="settings-group__actions">
                 {status.entitlement?.upgradeUrl ? (
@@ -406,12 +406,12 @@ export function SettingsSurface() {
 
       case "controls":
         return (
-          <SettingsGroup title="Automatic Suggestions" description="Control Suggestions on this Mac.">
+          <SettingsGroup title="Suggestions" description="Control suggestions on this Mac.">
             <SettingsRow label="Status" description={pauseState.description}>
               <div className="flex flex-wrap items-center justify-end gap-2">
                 <StatusBadge tone={paused ? "warning" : "brand"}>{pauseState.label}</StatusBadge>
                 <Switch
-                  aria-label="Automatic Suggestions"
+                  aria-label="Suggestions"
                   checked={!paused}
                   onCheckedChange={handleSuggestionsEnabled}
                 />
@@ -468,7 +468,7 @@ export function SettingsSurface() {
               className="settings-row--stacked"
               label="Custom writing instructions"
               description={status.entitlement?.capabilities.customWritingInstructions
-                ? "Used for Local Suggestions and Deep Complete. Not included in telemetry."
+                ? "Used for Suggestions and Deep Suggestions."
                 : "Available during the Pro trial and on a paid plan."}
             >
               <Textarea
@@ -489,10 +489,10 @@ export function SettingsSurface() {
           <SettingsGroup
             className="completion-history"
             title="This session"
-            description={`${completionHistory.length} accepted ${completionHistory.length === 1 ? "suggestion" : "suggestions"}. Cleared when Tab quits.`}
+            description={`${completionHistory.length} ${completionHistory.length === 1 ? "suggestion" : "suggestions"}. Cleared when Tab quits.`}
           >
             {completionHistory.length === 0 ? (
-              <EmptyState className="m-4 mt-0" title="No accepted Suggestions yet" description="Accepted Local Suggestions from this session will appear here." />
+              <EmptyState className="m-4 mt-0" title="No suggestions yet" description="Suggestions you use will appear here until Tab quits." />
             ) : (
               <div className="completion-history__list" role="list" aria-label="Suggestion history">
                 <div className="completion-history__columns" aria-hidden="true">

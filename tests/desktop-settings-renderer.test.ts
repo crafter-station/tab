@@ -6,13 +6,13 @@ describe("desktop settings renderer", () => {
   it("uses plain-language pause copy for suggestions", () => {
     expect(describePauseState(true)).toEqual({
       label: "Paused",
-      description: "Tab has stopped Suggestions and recent typing checks.",
+      description: "Tab will not suggest as you type.",
       action: "Resume Suggestions",
     });
 
     expect(describePauseState(false)).toEqual({
       label: "On",
-      description: "Tab can suggest as you type.",
+      description: "Tab suggests as you type.",
       action: "Pause Suggestions",
     });
   });
@@ -44,7 +44,7 @@ describe("desktop settings renderer", () => {
 
     expect(source).toInclude('className="completion-history__row"');
     expect(source).toInclude('tone="neutral"');
-    expect(source).toInclude("Accepted Local Suggestions from this session");
+    expect(source).toInclude("Suggestions used this session");
     expect(source).not.toInclude('entry.mode === "local"');
   });
 

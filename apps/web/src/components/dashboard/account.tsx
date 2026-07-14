@@ -21,7 +21,7 @@ export function DashboardAccountPage({ data }: { data: DashboardData }) {
             label="Email status"
             value={needsVerification ? "Verify your email" : "Email verified"}
             tone={needsVerification ? "warning" : "success"}
-            description={needsVerification ? "Verify your email before choosing a paid plan." : "Your email is ready for paid checkout."}
+            description={needsVerification ? "Verify your email before choosing a paid plan." : undefined}
           />
         </CardContent>
       </SectionCard>

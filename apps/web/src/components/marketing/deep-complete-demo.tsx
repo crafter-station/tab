@@ -15,7 +15,7 @@ type Phase = "local" | "requesting" | "ready" | "accepted";
 export function DeepCompleteDemo() {
   const [phase, setPhase] = useState<Phase>("local");
   const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const [announcement, setAnnouncement] = useState("A Local Suggestion is ready. Double-tap Option to request Deep Complete.");
+  const [announcement, setAnnouncement] = useState("A suggestion is ready. Double-tap Option to request a Deep Suggestion.");
   const timer = useRef<number | undefined>(undefined);
   const deepSuggestion = deepSuggestions[suggestionIndex];
   const showingDeepSuggestion = phase === "ready" || phase === "accepted";
@@ -25,14 +25,14 @@ export function DeepCompleteDemo() {
     if (phase === "requesting") return;
     window.clearTimeout(timer.current);
     setPhase("requesting");
-    setAnnouncement("Deep Complete requested with a double-tap of Option.");
+    setAnnouncement("Deep Suggestion requested.");
   };
 
   const accept = () => {
     if (phase !== "ready") return;
     window.clearTimeout(timer.current);
     setPhase("accepted");
-    setAnnouncement("Deep Complete suggestion accepted.");
+    setAnnouncement("Deep Suggestion accepted.");
   };
 
   const surface = useAcceptanceSurface<HTMLDivElement>(accept, false, requestDeepComplete);
@@ -40,17 +40,17 @@ export function DeepCompleteDemo() {
     const advance = () => {
       if (phase === "local") {
         setPhase("requesting");
-        setAnnouncement("Deep Complete requested with a double-tap of Option.");
+        setAnnouncement("Deep Suggestion requested.");
       } else if (phase === "requesting") {
         setPhase("ready");
-        setAnnouncement("A Deep Complete suggestion is ready. Press Option plus Tab to accept.");
+        setAnnouncement("A Deep Suggestion is ready. Press Option plus Tab to accept.");
       } else if (phase === "ready") {
         setPhase("accepted");
-        setAnnouncement("Deep Complete suggestion accepted.");
+        setAnnouncement("Deep Suggestion accepted.");
       } else {
         setSuggestionIndex((current) => (current + 1) % deepSuggestions.length);
         setPhase("local");
-        setAnnouncement("A Local Suggestion is ready. Double-tap Option to request Deep Complete.");
+        setAnnouncement("A suggestion is ready. Double-tap Option to request a Deep Suggestion.");
       }
     };
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -67,15 +67,15 @@ export function DeepCompleteDemo() {
       data-deep-complete-demo
       data-phase={phase}
       role="region"
-      aria-label="Interactive Deep Complete example"
+      aria-label="Interactive Deep Suggestion example"
       tabIndex={0}
     >
       <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
         <div>
           <p className="text-sm font-bold">A harder writing moment</p>
-          <p className="text-xs text-muted-foreground">Double-tap Option to explicitly ask for Deep Complete</p>
+          <p className="text-xs text-muted-foreground">Double-tap Option for a Deep Suggestion</p>
         </div>
-        <ReplayButton label="Request another Deep Complete" onReplay={requestDeepComplete} />
+        <ReplayButton label="Request another Deep Suggestion" onReplay={requestDeepComplete} />
       </div>
 
       <div className="tab-deep-canvas grid gap-5 p-5 md:grid-cols-[minmax(0,1fr)_12rem] md:p-8 lg:gap-8 lg:p-10">
@@ -91,7 +91,7 @@ export function DeepCompleteDemo() {
           </div>
 
           <SuggestionCommand
-            aria-label={showingDeepSuggestion ? "Accept the Deep Complete suggestion with Option plus Tab" : "Local Suggestion before Deep Complete"}
+            aria-label={showingDeepSuggestion ? "Accept the Deep Suggestion with Option plus Tab" : "Suggestion before a Deep Suggestion"}
             className="tab-deep-overlay"
             data-deep-accept
             disabled={phase !== "ready"}
@@ -107,7 +107,7 @@ export function DeepCompleteDemo() {
             className="tab-deep-trigger rounded-[var(--radius-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             type="button"
             onClick={showingDeepSuggestion ? accept : requestDeepComplete}
-            aria-label={showingDeepSuggestion ? "Accept Deep Complete with Option plus Tab" : "Request Deep Complete by double-tapping Option"}
+            aria-label={showingDeepSuggestion ? "Accept Deep Suggestion with Option plus Tab" : "Request a Deep Suggestion by double-tapping Option"}
           >
             <span className="flex gap-2" aria-hidden="true">
               <kbd className="tab-deep-key"><Option /></kbd>
@@ -116,10 +116,10 @@ export function DeepCompleteDemo() {
           </button>
           <div>
             <p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">{showingDeepSuggestion ? "Option+Tab" : "Double-tap Option"}</p>
-            <p className="mt-2 text-sm font-semibold">{showingDeepSuggestion ? "Accept Deep Complete" : "Request Deep Complete"}</p>
+            <p className="mt-2 text-sm font-semibold">{showingDeepSuggestion ? "Accept Deep Suggestion" : "Request Deep Suggestion"}</p>
           </div>
           <div className="h-10 w-px bg-border" aria-hidden="true"><span className="tab-deep-signal block size-2 -translate-x-[0.21875rem] rounded-full bg-[var(--tab-overlay-deep-accent)]" /></div>
-          <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground"><Cloud aria-hidden="true" /> Explicit cloud path</span>
+          <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground"><Cloud aria-hidden="true" /> Uses the cloud when asked</span>
         </div>
       </div>
       <p className="sr-only" aria-live="polite" data-deep-announcement>{announcement}</p>

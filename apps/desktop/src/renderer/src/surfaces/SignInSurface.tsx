@@ -9,15 +9,15 @@ type SetupStep = {
 const setupSteps: SetupStep[] = [
   {
     title: "Connect this Mac",
-    description: "Sign in securely in your browser.",
+    description: "Sign in in your browser.",
   },
   {
     title: "Allow access",
-    description: "Turn on Accessibility and Input Monitoring with a guided explanation.",
+    description: "Turn on two macOS permissions.",
   },
   {
     title: "Try a Suggestion",
-    description: "Practice accepting with Option+Tab before Tab runs in another app.",
+    description: "Practice using Option+Tab.",
   },
 ];
 
@@ -61,7 +61,7 @@ export function SignInSurface() {
 
           <div className="sign-in-copy">
             <h2>Connect this Mac to Tab.</h2>
-            <p className="lede">We will open your browser and return you to Tab when you finish.</p>
+            <p className="lede">Sign in in your browser, then return to Tab.</p>
           </div>
 
           <Button className="sign-in-cta" onClick={handleSignIn}>

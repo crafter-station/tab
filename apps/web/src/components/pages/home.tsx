@@ -48,35 +48,35 @@ const steps = [
   {
     number: "01",
     title: "Keep typing",
-    description: "Tab uses recent Typing Context from the active text field to prepare the next short phrase.",
+    description: "Tab suggests a short continuation as you write.",
   },
   {
     number: "02",
     title: "Press Option+Tab",
-    description: "Accept the current Suggestion without leaving the keyboard. Nothing changes until you act.",
+    description: "Insert the suggestion without leaving the keyboard.",
   },
   {
     number: "03",
     title: "Keep going",
-    description: "The inserted phrase becomes context for the next Suggestion. Repeat, or keep typing to ignore it.",
+    description: "Press it again for the next suggestion, or keep typing to ignore it.",
   },
 ] as const;
 
 const trustPoints = [
   {
     icon: ShieldCheck,
-    title: "Automatic Suggestions stay local",
-    description: "They run on your Mac without sending Typing Context to Tab.",
+    title: "Suggestions stay on your Mac",
+    description: "Your recent typing stays on your Mac.",
   },
   {
     icon: CheckCircle,
-    title: "Cloud only when you ask",
-    description: "Deep Complete sends bounded, redacted context after you double-tap Option.",
+    title: "More help when you ask",
+    description: "Deep Suggestions use the cloud only when you double-tap Option.",
   },
   {
     icon: Brain,
-    title: "Personal Memory stays visible",
-    description: "Add, edit, export, or delete saved details from your account.",
+    title: "You control what Tab remembers",
+    description: "Review, edit, or delete saved details anytime.",
   },
 ] as const;
 
@@ -108,11 +108,11 @@ const faqs = [
   },
   {
     question: "What leaves my Mac?",
-    answer: "Automatic Suggestions run locally. Deep Complete sends bounded, redacted context only when you double-tap Option.",
+    answer: "Suggestions run on your Mac. Deep Suggestions use limited, protected context only when you double-tap Option.",
   },
   {
     question: "What happens after the trial?",
-    answer: "Your paid subscription begins automatically when the free month ends unless you cancel first. Polar collects payment details at checkout and sends a reminder before the trial converts.",
+    answer: "Your paid subscription begins when the free month ends unless you cancel first. We will remind you before you are charged.",
   },
   {
     question: "What happens to Personal Memory if I cancel?",
@@ -283,12 +283,12 @@ function PrivacyPipeline() {
       <div className="max-w-3xl">
         <PageKicker>Privacy and control</PageKicker>
         <h2 id="trust-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Local unless you ask for the cloud.</h2>
-        <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">Automatic Suggestions stay on your Mac. Deep Complete sends bounded, redacted context only after you double-tap Option.</p>
+        <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">Suggestions stay on your Mac. Deep Suggestions use the cloud only when you ask.</p>
       </div>
 
       <div id="privacy-showcase-animation" className="mt-12 overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card shadow-[var(--tab-shadow-card)]" data-animated-showcase data-restarting="false" data-motion-region data-motion-paused="false">
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
-          <div><p className="text-sm font-bold">Deep Complete boundary</p><p className="text-xs text-muted-foreground">What moves after your explicit action</p></div>
+          <div><p className="text-sm font-bold">What Deep Suggestions use</p><p className="text-xs text-muted-foreground">Only when you ask</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="privacy-showcase-animation" />
             <ReplayButton showcase />
@@ -302,7 +302,7 @@ function PrivacyPipeline() {
               <p>Send the launch notes to Maya</p>
               <p className="text-muted-foreground">token: <span className="rounded bg-[var(--tab-destructive-tint)] px-1.5 py-0.5 text-destructive">[REDACTED]</span></p>
             </div>
-            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Navigation, shortcuts, and passive app content are not Typing Context.</p>
+            <p className="mt-4 text-xs leading-relaxed text-muted-foreground">Tab ignores shortcuts and text you did not type.</p>
           </div>
 
           <div className="relative mx-auto h-10 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-privacy-transfer-dot absolute size-2 rounded-full bg-foreground" /></div>
@@ -319,7 +319,7 @@ function PrivacyPipeline() {
           <div className="relative mx-auto h-10 w-px bg-border md:h-px md:w-full" aria-hidden="true"><span className="tab-privacy-transfer-dot tab-privacy-transfer-dot-delayed absolute size-2 rounded-full bg-foreground" /></div>
 
           <div className="tab-privacy-request relative overflow-hidden rounded-[var(--radius-card)] border border-border bg-background p-4 shadow-[var(--tab-shadow-card)] sm:p-5">
-            <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Deep Complete request</p><span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success)]"><span className="size-1.5 rounded-full bg-[var(--success)]" /> Explicit</span></div>
+            <div className="flex items-center justify-between gap-3"><p className="text-sm font-bold">Deep Suggestion</p><span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success)]"><span className="size-1.5 rounded-full bg-[var(--success)]" /> Requested by you</span></div>
             <dl className="mt-5 grid gap-2 font-[var(--font-code)] text-xs">
               <div className="flex justify-between gap-3 border-b border-border pb-2"><dt className="text-muted-foreground">typing_context</dt><dd>bounded</dd></div>
               <div className="flex justify-between gap-3 border-b border-border pb-2"><dt className="text-muted-foreground">secret_like_text</dt><dd>redacted</dd></div>
@@ -361,8 +361,8 @@ export function HomePage() {
       billing: "No subscription required.",
       badge: "No subscription",
       features: [
-        `${formatCount(free.localAcceptedWordsPerDay)} Accepted Words each day`,
-        `${free.deepCompletesPerMonth} Deep Completes each month`,
+        `${formatCount(free.localAcceptedWordsPerDay)} inserted words each day`,
+        `${free.deepCompletesPerMonth} Deep Suggestions each month`,
         `${free.personalDeviceLimit} Mac`,
         "Manage existing Personal Memory",
       ],
@@ -374,10 +374,10 @@ export function HomePage() {
       billing: "Billed monthly",
       badge: "Best for daily use",
       features: [
-        "Unlimited Accepted Words",
-        `${pro.deepCompletesPerMonth} Deep Completes each month`,
+        "Unlimited inserted words",
+        `${pro.deepCompletesPerMonth} Deep Suggestions each month`,
         `Up to ${pro.personalDeviceLimit} Macs`,
-        "Continuous Memory Extraction",
+        "Automatic Personal Memory",
       ],
       action: { kind: "link" as const, href: "/pricing", label: "Start Pro with one month free" },
       featured: true,
@@ -386,12 +386,12 @@ export function HomePage() {
       name: "Max" as const,
       price: formatMonthlyPrice(max.monthlyPriceUsd),
       billing: "Billed monthly",
-      badge: "Most Deep Completes",
+      badge: "Most Deep Suggestions",
       features: [
-        "Unlimited Accepted Words",
-        `${formatCount(max.deepCompletesPerMonth)} Deep Completes each month`,
+        "Unlimited inserted words",
+        `${formatCount(max.deepCompletesPerMonth)} Deep Suggestions each month`,
         `Up to ${max.personalDeviceLimit} Macs`,
-        "Continuous Memory Extraction",
+        "Automatic Personal Memory",
       ],
       action: { kind: "link" as const, href: "/pricing", label: "Start Max with one month free" },
     },
@@ -404,7 +404,7 @@ export function HomePage() {
           <PageKicker>Autocomplete across your Mac</PageKicker>
           <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.625rem,7vw,6.4rem)] font-bold leading-[0.96] tracking-[-0.035em] sm:leading-[0.9] lg:leading-[0.88]">Keep the thought moving without leaving the app.</h1>
           <p className="max-w-[38rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next phrase in supported Mac text fields. Press Option+Tab to insert it, then again for the next. Keep typing whenever you want to ignore one.</p>
-          <p className="max-w-[38rem] text-pretty text-sm leading-relaxed text-muted-foreground">Automatic Suggestions run on your Mac. Double-tap Option when you want Deep Complete.</p>
+          <p className="max-w-[38rem] text-pretty text-sm leading-relaxed text-muted-foreground">Suggestions stay on your Mac. Double-tap Option for a Deep Suggestion.</p>
           <div className="flex flex-col gap-3 min-[420px]:flex-row">
             <Button asChild size="lg"><a href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" />Download for Mac</a></Button>
             <Button asChild variant="secondary" size="lg"><a href="#how-it-works">See how it works<ArrowRight data-icon="inline-end" aria-hidden="true" /></a></Button>
@@ -433,13 +433,13 @@ export function HomePage() {
         <div className="max-w-3xl">
           <PageKicker>When the next words are not enough</PageKicker>
           <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Keep tapping. Go deeper when you need to.</h2>
-          <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">Use Option+Tab repeatedly for the next phrase. Double-tap Option when the thought needs more context, then accept the Deep Complete Suggestion with Option+Tab.</p>
+          <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">Press Option+Tab for the next phrase. For more help, double-tap Option to request a Deep Suggestion.</p>
         </div>
         <div className="mt-12"><DeepCompleteDemo /></div>
         <div className="mt-8 grid gap-6 border-y border-border py-6 sm:grid-cols-3">
-          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Automatic</p><p className="mt-2 text-sm font-semibold">A Local Suggestion appears after a short pause.</p></div>
-          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Explicit</p><p className="mt-2 text-sm font-semibold">Double-tap Option to request Deep Complete.</p></div>
-          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">One acceptance key</p><p className="mt-2 text-sm font-semibold">Option+Tab inserts either kind of Suggestion.</p></div>
+          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Suggestions</p><p className="mt-2 text-sm font-semibold">A short continuation appears after you pause.</p></div>
+          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Deep Suggestions</p><p className="mt-2 text-sm font-semibold">Double-tap Option when you want more help.</p></div>
+          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Insert</p><p className="mt-2 text-sm font-semibold">Option+Tab inserts either suggestion.</p></div>
         </div>
       </section>
 
@@ -459,7 +459,7 @@ export function HomePage() {
         <div className="max-w-3xl">
           <PageKicker>One month free</PageKicker>
           <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-4xl font-bold leading-tight tracking-[-0.02em] sm:text-5xl">Try Pro or Max before the first charge.</h2>
-          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Start either paid plan through secure Polar checkout. Your subscription begins after the free month unless you cancel first.</p>
+          <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Your subscription begins after the free month unless you cancel first.</p>
         </div>
 
         <PricingPlanGrid className="mt-12" plans={pricingPlans} />

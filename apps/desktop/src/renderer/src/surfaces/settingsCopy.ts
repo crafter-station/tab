@@ -10,14 +10,14 @@ export function describePauseState(paused: boolean): PauseStateDescription {
   if (paused) {
     return {
       label: "Paused",
-      description: "Tab has stopped Suggestions and recent typing checks.",
+      description: "Tab will not suggest as you type.",
       action: "Resume Suggestions",
     };
   }
 
   return {
     label: "On",
-    description: "Tab can suggest as you type.",
+    description: "Tab suggests as you type.",
     action: "Pause Suggestions",
   };
 }

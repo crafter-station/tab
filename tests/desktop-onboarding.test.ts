@@ -58,10 +58,10 @@ describe("desktop onboarding", () => {
 
   it("defines the first-run onboarding steps in order", () => {
     expect(ONBOARDING_STEPS).toEqual(["model", "try", "deep", "permissions", "done"]);
-    expect(ONBOARDING_STEP_COPY.model.subtitle.toLowerCase()).toContain("local");
+    expect(ONBOARDING_STEP_COPY.model.subtitle).toBe("Download what Tab needs.");
     expect(ONBOARDING_STEP_COPY.try.title.toLowerCase()).toContain("try");
     expect(ONBOARDING_STEP_COPY.try.subtitle.toLowerCase()).toContain("suggestion");
-    expect(ONBOARDING_STEP_COPY.deep.title).toContain("Deep Complete");
+    expect(ONBOARDING_STEP_COPY.deep.title).toContain("Deep Suggestion");
   });
 
   it("explains Accessibility and Input Monitoring permissions in product language", () => {

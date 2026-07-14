@@ -34,10 +34,10 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       price: "$0",
       billing: "No card or subscription required",
       badge: "No subscription",
-      description: "Private local help and occasional Deep Complete for lighter writing.",
+      description: "Everyday suggestions with occasional deeper help.",
       features: [
-        <><strong className="text-foreground">{formatCount(free.localAcceptedWordsPerDay)} Accepted Words</strong> from Local Suggestions each day</>,
-        <><strong className="text-foreground">{formatCount(free.deepCompletesPerMonth)} Deep Completes</strong> each month</>,
+        <><strong className="text-foreground">{formatCount(free.localAcceptedWordsPerDay)} inserted words</strong> each day</>,
+        <><strong className="text-foreground">{formatCount(free.deepCompletesPerMonth)} Deep Suggestions</strong> each month</>,
         <><strong className="text-foreground">{formatCount(free.personalDeviceLimit)} Mac</strong></>,
         <>View, edit, export, and delete existing Personal Memory</>,
       ],
@@ -50,16 +50,16 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       price: formatMonthlyPrice(pro.monthlyPriceUsd),
       billing: "Billed monthly",
       badge: "Best for daily use",
-      description: "Unlimited local writing, more Deep Complete, and continuous personalization.",
+      description: "Unlimited suggestions, more Deep Suggestions, and automatic memory.",
       features: [
-        <><strong className="text-background">Unlimited Accepted Words</strong> from Local Suggestions</>,
-        <><strong className="text-background">{formatCount(pro.deepCompletesPerMonth)} Deep Completes</strong> each month</>,
+        <><strong className="text-background">Unlimited inserted words</strong></>,
+        <><strong className="text-background">{formatCount(pro.deepCompletesPerMonth)} Deep Suggestions</strong> each month</>,
         <>Up to <strong className="text-background">{formatCount(pro.personalDeviceLimit)} Macs</strong></>,
-        <>Continuous Memory Extraction</>,
+        <>Automatic Personal Memory</>,
         <>Custom writing instructions and supported model catalog</>,
       ],
       action: { kind: "checkout" as const, plan: "pro" as const, label: authenticated ? "Choose Pro" : "Start Pro with one month free" },
-      actionNote: authenticated ? "Free accounts continue to checkout. Plan changes open in Polar." : "Sign in, then continue to secure checkout.",
+      actionNote: authenticated ? "Continue to checkout or manage your current plan." : "Sign in, then continue to checkout.",
       featured: true,
       id: "paid-plans",
     },
@@ -67,17 +67,17 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       name: "Max" as const,
       price: formatMonthlyPrice(max.monthlyPriceUsd),
       billing: "Billed monthly",
-      badge: "Most Deep Completes",
-      description: "The same complete toolkit as Pro, with more Deep Complete capacity.",
+      badge: "Most Deep Suggestions",
+      description: "Everything in Pro, with more Deep Suggestions.",
       features: [
-        <><strong className="text-foreground">Unlimited Accepted Words</strong> from Local Suggestions</>,
-        <><strong className="text-foreground">{formatCount(max.deepCompletesPerMonth)} Deep Completes</strong> each month</>,
+        <><strong className="text-foreground">Unlimited inserted words</strong></>,
+        <><strong className="text-foreground">{formatCount(max.deepCompletesPerMonth)} Deep Suggestions</strong> each month</>,
         <>Up to <strong className="text-foreground">{formatCount(max.personalDeviceLimit)} Macs</strong></>,
-        <>Continuous Memory Extraction</>,
+        <>Automatic Personal Memory</>,
         <>Custom writing instructions and supported model catalog</>,
       ],
       action: { kind: "checkout" as const, plan: "max" as const, label: authenticated ? "Choose Max" : "Start Max with one month free" },
-      actionNote: authenticated ? "Free accounts continue to checkout. Plan changes open in Polar." : "Sign in, then continue to secure checkout.",
+      actionNote: authenticated ? "Continue to checkout or manage your current plan." : "Sign in, then continue to checkout.",
     },
   ];
 
@@ -87,7 +87,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
         <div>
           <PageKicker>Simple pricing</PageKicker>
           <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Your first month of Pro or Max is free.</h1>
-          <p className="mt-6 max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Choose a paid plan and complete secure Polar checkout. You will not be charged until the one-month trial ends.</p>
+          <p className="mt-6 max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Choose a paid plan. You will not be charged until the one-month trial ends.</p>
           <Button asChild size="lg" className="mt-6"><a href={authenticated ? "#paid-plans" : "/signup"}>{authenticated ? "Choose a plan" : "Create an account"}</a></Button>
         </div>
 
@@ -99,12 +99,12 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
         <h2 id="allowances-heading" className="mt-3 max-w-[18ch] text-balance font-[var(--font-display)] text-3xl font-bold tracking-[-0.015em] sm:text-4xl">Only completed work counts.</h2>
         <div className="mt-8 grid gap-8 md:grid-cols-3 md:gap-12">
           <article>
-            <h3 className="font-bold">Local Suggestions</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Free counts only words you insert. Ignored, dismissed, empty, stale, and failed Suggestions do not count.</p>
+            <h3 className="font-bold">Suggestions</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Only words you insert count. Ignored suggestions do not.</p>
           </article>
           <article>
-            <h3 className="font-bold">Deep Complete</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">One request counts only when it returns a Suggestion. Retries, empty responses, and failures do not count.</p>
+            <h3 className="font-bold">Deep Suggestions</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Only successful suggestions count.</p>
           </article>
           <article>
             <h3 className="font-bold">No automatic overages</h3>
@@ -119,8 +119,8 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
           <CaretDown className="tab-disclosure-chevron shrink-0" aria-hidden="true" />
         </summary>
         <div className="tab-disclosure-panel mt-6 grid gap-6 text-sm leading-relaxed text-muted-foreground sm:grid-cols-3">
-          <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">Polar starts the one-month trial at paid-plan checkout, collects payment details, and prevents repeat trial redemption.</p></div>
-          <div><h3 className="font-bold text-foreground">Paid plans</h3><p className="mt-2">Paid plans renew monthly. Change plans, inspect usage, or cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">Polar portal</a>.</p></div>
+          <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">Your free month starts at checkout. Payment details are required.</p></div>
+          <div><h3 className="font-bold text-foreground">Paid plans</h3><p className="mt-2">Plans renew monthly. Change or cancel your plan in <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing settings</a>.</p></div>
           <div><h3 className="font-bold text-foreground">Personal Memory</h3><p className="mt-2">Downgrading does not remove your controls to view, edit, export, or delete existing Personal Memory.</p></div>
         </div>
       </details>

@@ -56,7 +56,7 @@ export const rootRoute = createRootRoute({
       { property: "og:type", content: "website" },
       { property: "og:url", content: "https://tab.cueva.io/" },
       { property: "og:title", content: "Tab - Native autocomplete for your Mac" },
-      { property: "og:description", content: "Private Local Suggestions as you type, explicit Deep Complete for harder writing, and autocomplete across the Mac apps where you already work." },
+      { property: "og:description", content: "Private suggestions and deeper help across the Mac apps where you write." },
       { property: "og:image", content: "https://tab.cueva.io/brand-assets/og-image.png" },
       { property: "og:image:width", content: "1200" },
       { property: "og:image:height", content: "630" },

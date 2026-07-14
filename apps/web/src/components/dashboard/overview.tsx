@@ -14,10 +14,10 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
       <div className="grid gap-10">
         <SectionCard>
           <CardContent className="grid gap-x-8 gap-y-2 p-5 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryMetric label="Automatic Suggestions accepted" value={formatCount(data.localSuggestionActivity.acceptedSuggestions)} detail="This month" />
-            <SummaryMetric label="Words inserted" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="From Automatic Suggestions this month" />
+            <SummaryMetric label="Suggestions used" value={formatCount(data.localSuggestionActivity.acceptedSuggestions)} detail="This month" />
+            <SummaryMetric label="Words inserted" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="This month" />
             <SummaryMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} detail="This month" />
-            <SummaryMetric label="Deep Completes used" value={formatCount(data.billing.deepCompletes.used)} detail="Successful results this month" />
+            <SummaryMetric label="Deep Suggestions used" value={formatCount(data.billing.deepCompletes.used)} detail="This month" />
           </CardContent>
         </SectionCard>
         <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
@@ -33,7 +33,7 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
           </SectionCard>
           <div className="grid gap-3 lg:pt-2">
             <p className="text-sm font-semibold text-foreground">{formatCount(connectedDevices)} of {formatCount(data.billing.devices.limit)} Macs connected</p>
-            <p className="text-sm leading-relaxed text-muted-foreground">{emailStatus}. Allowances are independent, so reaching one does not disable the other mode.</p>
+            <p className="text-sm leading-relaxed text-muted-foreground">{emailStatus}.</p>
             <p><Button asChild variant="secondary" size="sm"><Link to="/dashboard/usage">View usage and billing</Link></Button></p>
           </div>
         </section>
