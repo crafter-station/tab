@@ -1,5 +1,5 @@
 import { Brain, ChartBar, Desktop, House, UserCircle } from "@phosphor-icons/react";
-import { Outlet, useRouterState } from "@tanstack/react-router";
+import { Link, Outlet, useRouterState } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import {
   Sidebar,
@@ -42,11 +42,11 @@ function DashboardSidebar() {
 
   return (
     <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border p-2">
+      <SidebarHeader className="h-16 shrink-0 border-b border-sidebar-border p-2">
         <BrandMenu
           destinationHref="/"
           destinationLabel="Home page"
-          triggerClassName="h-12 w-full justify-start overflow-hidden px-1.5 group-data-[collapsible=icon]:!w-8 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+          triggerClassName="h-12 w-full justify-start overflow-hidden px-1.5 group-data-[collapsible=icon]:!w-8 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:px-0"
           wordmarkClassName="dashboard-sidebar-label"
         />
       </SidebarHeader>
@@ -60,10 +60,10 @@ function DashboardSidebar() {
                 return (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild isActive={active} tooltip={item.label} className="h-10 group-data-[collapsible=icon]:!h-10">
-                      <a href={item.href} aria-current={active ? "page" : undefined}>
-                        <Icon aria-hidden="true" />
+                      <Link to={item.href} aria-current={active ? "page" : undefined}>
+                        <Icon weight={active ? "fill" : "regular"} aria-hidden="true" />
                         <span className="dashboard-sidebar-label">{item.label}</span>
-                      </a>
+                      </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 );

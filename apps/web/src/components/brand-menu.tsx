@@ -5,7 +5,6 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuSeparator,
@@ -40,18 +39,31 @@ function BrandLockup({ wordmarkClassName }: { wordmarkClassName?: string }) {
 
 function ThemeControls({ theme, onThemeChange }: { theme: ThemeMode; onThemeChange: (mode: ThemeMode) => void }) {
   return (
-    <DropdownMenuRadioGroup value={theme} onValueChange={(value) => onThemeChange(value as ThemeMode)}>
-      <DropdownMenuLabel className="text-xs text-muted-foreground">Theme</DropdownMenuLabel>
-      {themeModes.map((mode) => {
-        const Icon = mode.icon;
-        return (
-          <DropdownMenuRadioItem key={mode.id} value={mode.id} data-theme-choice={mode.id}>
-            <Icon aria-hidden="true" />
-            {mode.label}
-          </DropdownMenuRadioItem>
-        );
-      })}
-    </DropdownMenuRadioGroup>
+    <div className="flex items-center justify-between px-2 py-1" aria-label="Theme selection">
+      <span className="text-xs font-medium text-muted-foreground">Theme</span>
+      <DropdownMenuRadioGroup
+        className="flex items-center gap-1"
+        value={theme}
+        onValueChange={(value) => onThemeChange(value as ThemeMode)}
+        aria-label="Theme selection"
+      >
+        {themeModes.map((mode) => {
+          const Icon = mode.icon;
+          return (
+            <DropdownMenuRadioItem
+              key={mode.id}
+              value={mode.id}
+              data-theme-choice={mode.id}
+              aria-label={`${mode.label} theme`}
+              title={`${mode.label} theme`}
+              className="size-7 justify-center p-0 data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground [&>span]:hidden"
+            >
+              <Icon aria-hidden="true" />
+            </DropdownMenuRadioItem>
+          );
+        })}
+      </DropdownMenuRadioGroup>
+    </div>
   );
 }
 
@@ -66,7 +78,7 @@ export function BrandMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" aria-label="Open Tab brand menu" className={cn("h-10 w-[4.75rem] justify-start px-1.5", triggerClassName)}>
+        <Button variant="ghost" aria-label="Open Tab brand menu" className={cn("group/brand-menu h-10 w-[4.75rem] justify-start px-1.5 data-[state=open]:bg-[var(--tab-hover)] data-[state=open]:text-foreground", triggerClassName)}>
           <BrandLockup wordmarkClassName={wordmarkClassName} />
         </Button>
       </DropdownMenuTrigger>

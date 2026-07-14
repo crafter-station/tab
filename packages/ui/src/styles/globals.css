@@ -309,6 +309,20 @@ summary:focus-visible:active {
   scale: 1;
 }
 
+.tab-sidebar-gap {
+  transition: width 160ms var(--tab-ease-out);
+}
+
+.tab-sidebar-panel {
+  transition-property: left, right, width;
+  transition-duration: 160ms;
+  transition-timing-function: var(--tab-ease-out);
+}
+
+[data-sidebar-motion="none"] :is(.tab-sidebar-gap, .tab-sidebar-panel) {
+  transition-duration: 0ms;
+}
+
 .tab-disclosure-panel,
 .tab-popover-content,
 .tab-tooltip-content {
@@ -339,6 +353,38 @@ details[open] > summary .tab-disclosure-chevron {
 .tab-popover-content {
   transform-origin: var(--radix-dropdown-menu-content-transform-origin);
   transition-duration: 160ms;
+}
+
+@keyframes tab-popover-close-lifecycle {
+  from {
+    --tab-popover-close-progress: 0;
+  }
+
+  to {
+    --tab-popover-close-progress: 1;
+  }
+}
+
+.tab-popover-content[data-state="closed"] {
+  opacity: 0;
+  transition-duration: 120ms;
+  animation: tab-popover-close-lifecycle 120ms;
+}
+
+.tab-popover-content[data-state="closed"][data-side="bottom"] {
+  transform: translate3d(0, -4px, 0) scale(0.98);
+}
+
+.tab-popover-content[data-state="closed"][data-side="top"] {
+  transform: translate3d(0, 4px, 0) scale(0.98);
+}
+
+.tab-popover-content[data-state="closed"][data-side="left"] {
+  transform: translate3d(4px, 0, 0) scale(0.98);
+}
+
+.tab-popover-content[data-state="closed"][data-side="right"] {
+  transform: translate3d(-4px, 0, 0) scale(0.98);
 }
 
 .tab-tooltip-content {
@@ -593,6 +639,11 @@ a:not([class]) {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .tab-sidebar-gap,
+  .tab-sidebar-panel {
+    transition-duration: 0ms;
+  }
+
   button:active,
   a:active,
   summary:active {

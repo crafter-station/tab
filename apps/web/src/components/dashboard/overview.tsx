@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { Button, CardContent, SectionCard, SummaryMetric } from "@tab/ui";
 import { formatCount, formatDate } from "../pages/shared.tsx";
 import { DashboardSectionContent } from "./layout.tsx";
@@ -29,7 +30,7 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
           <div className="grid gap-3 lg:pt-2">
             <p className="text-sm font-semibold text-foreground">{formatCount(connectedDevices)} of {formatCount(data.billing.devices.limit)} Macs connected</p>
             <p className="text-sm leading-relaxed text-muted-foreground">{emailStatus}. Allowances are independent, so reaching one does not disable the other mode.</p>
-            <p><Button asChild variant="secondary" size="sm"><a href="/dashboard/usage">View usage and billing</a></Button></p>
+            <p><Button asChild variant="secondary" size="sm"><Link to="/dashboard/usage">View usage and billing</Link></Button></p>
           </div>
         </section>
       </div>
