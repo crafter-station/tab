@@ -6,7 +6,14 @@ import { dirname } from "node:path";
 import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { promisify } from "node:util";
-import type { PersonalMemory, Suggestion } from "@tab/contracts";
+import type {
+  LocalInferenceStatus,
+  LocalInferenceUnavailableReason,
+  LocalModelId,
+  PersonalMemory,
+  Suggestion,
+} from "@tab/contracts";
+export type { LocalInferenceStatus, LocalInferenceUnavailableReason } from "@tab/contracts";
 import {
   createSuggestionMessages,
   isSuggestionContractValid,
@@ -16,7 +23,7 @@ import {
 import type { SuggestionSource } from "./suggestion-source.ts";
 
 export type LocalModelConfiguration = {
-  readonly id: string;
+  readonly id: LocalModelId;
   readonly modelRevision: string;
   readonly artifactSha256: string;
   readonly runtimeVersion: string;
@@ -35,26 +42,6 @@ export const QWEN_25_3B_Q4_K_M: LocalModelConfiguration = {
   temperature: 0.3,
 } as const;
 
-export type LocalInferenceUnavailableReason =
-  | "missing_model"
-  | "download_failed"
-  | "artifact_mismatch"
-  | "runtime_mismatch"
-  | "helper_start_failed"
-  | "helper_readiness_timeout"
-  | "helper_exited"
-  | "request_failed";
-
-export type LocalInferenceStatus =
-  | { readonly status: "stopped" }
-  | { readonly status: "downloading"; readonly modelId: string; readonly progress: number | null }
-  | { readonly status: "starting"; readonly modelId: string }
-  | { readonly status: "ready"; readonly modelId: string }
-  | {
-      readonly status: "unavailable";
-      readonly modelId: string;
-      readonly reason: LocalInferenceUnavailableReason;
-    };
 
 export type LocalInferenceTiming = {
   readonly firstTextMs: number | null;
@@ -174,6 +161,29 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
     markUnavailable("helper_readiness_timeout");
   }
 
+  async function verifyInstallation(): Promise<boolean> {
+    if (!modelExists(options.modelPath)) {
+      markUnavailable("missing_model");
+      return false;
+    }
+    const controller = new AbortController();
+    const artifactMatches = await (
+      options.verifyModelArtifact
+        ? verifyModelArtifact(options.modelPath, model.artifactSha256, controller.signal)
+        : verifyCachedArtifact(options.modelPath, model, verifyModelArtifact, controller.signal)
+    ).catch(() => false);
+    if (!artifactMatches) {
+      markUnavailable("artifact_mismatch");
+      return false;
+    }
+    const runtimeVersion = await getRuntimeVersion(options.executablePath, controller.signal).catch(() => "");
+    if (!hasExactRuntimeIdentity(runtimeVersion, model)) {
+      markUnavailable("runtime_mismatch");
+      return false;
+    }
+    return true;
+  }
+
   async function start(): Promise<void> {
     if (startup) return startup;
     if (status.status === "ready" || status.status === "starting") return;
@@ -241,7 +251,7 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
     return startup;
   }
 
-  async function downloadModel(): Promise<void> {
+  async function downloadModel(downloadOptions: { readonly startAfterDownload?: boolean } = {}): Promise<void> {
     if (download) return download;
     const modelUrl = options.modelUrl;
     if (!modelUrl) throw new Error("No model download URL is configured");
@@ -282,7 +292,11 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
         }
         await rename(temporaryPath, options.modelPath);
         await writeVerificationMarker(options.modelPath, model);
-        await start();
+        if (downloadOptions.startAfterDownload === false) {
+          publish({ status: "stopped" });
+        } else {
+          await start();
+        }
       } catch (error) {
         await rm(temporaryPath, { force: true });
         markUnavailable("download_failed");
@@ -426,6 +440,7 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
   return {
     start,
     downloadModel,
+    verifyInstallation,
     stop,
     getSuggestion,
     getStatus: (): LocalInferenceStatus => status,

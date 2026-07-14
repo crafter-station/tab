@@ -4,7 +4,7 @@ import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
 import type { PersonalMemory } from "@tab/contracts";
 import type { DesktopPreferences } from "./preferences.ts";
-import type { LocalInferenceStatus } from "./local-inference-prototype.ts";
+import type { LocalInferenceStatus, LocalModelCatalogState } from "@tab/contracts";
 import type { CompletionHistoryEntry } from "./completion-history.ts";
 import type { DesktopUpdateState } from "./release.ts";
 
@@ -128,6 +128,12 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     }
   }
 
+  function sendLocalModelCatalog(catalog: LocalModelCatalogState): void {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send("local-model-catalog-changed", catalog);
+    }
+  }
+
   function sendCompletionHistory(entries: readonly CompletionHistoryEntry[]): void {
     if (win && !win.isDestroyed()) {
       win.webContents.send("completion-history-changed", entries);
@@ -153,6 +159,7 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     sendPaused,
     sendPreferences,
     sendLocalInferenceStatus,
+    sendLocalModelCatalog,
     sendCompletionHistory,
     sendUpdateState,
   };

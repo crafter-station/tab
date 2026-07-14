@@ -47,4 +47,16 @@ describe("desktop settings renderer", () => {
     expect(source).toInclude("Accepted Local Suggestions from this session");
     expect(source).not.toInclude('entry.mode === "local"');
   });
+
+  it("presents model recommendation, support, and repair controls", () => {
+    const source = readFileSync(
+      "apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx",
+      "utf8",
+    );
+
+    expect(source).toInclude('model.downloaded ? "Repair" : "Download"');
+    expect(source).toInclude('model.experimental ? "Experimental · " : ""');
+    expect(source).toInclude("model.supportSummary");
+    expect(source).toInclude("model.license");
+  });
 });

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Eyebrow, SuggestionCommand, TabMark, Textarea } from "@tab/ui";
 import { APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
-import type { LocalInferenceStatus } from "../../../main/local-inference-prototype";
+import type { LocalInferenceStatus } from "@tab/contracts";
 import { ONBOARDING_STEP_COPY, ONBOARDING_STEPS, type OnboardingStep } from "../../../main/onboarding";
 
 type Feedback = {

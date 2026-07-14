@@ -77,6 +77,7 @@ type NativeSuggestionSessionDependencies = {
   }) => void | Promise<void>;
   readonly onLocalSuggestionAccepted?: (suggestionId: string) => void;
   readonly localSuggestionModelId?: string;
+  readonly getLocalSuggestionModelId?: () => string | undefined;
   readonly triggerPolicy?: TriggerPolicy;
   readonly onSuggestionDiagnostic?: (event: string, details: Record<string, unknown>) => void;
   readonly compatibilityStore?: ApplicationCompatibilityStore;
@@ -182,6 +183,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   function buildTelemetry(suggestion: Suggestion, provenance: SuggestionProvenance): VisibleSuggestionTelemetry {
     const activeApplication = deps.typingContext.getState().activeApplication;
     const local = provenance === "automatic";
+    const localSuggestionModelId = deps.getLocalSuggestionModelId?.() ?? deps.localSuggestionModelId;
     return {
       requestId: requestIdFromSuggestion(suggestion),
       activeApplicationBundleId: activeApplication?.bundleId,
@@ -190,8 +192,8 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       inferenceSource: local ? "local" : "deep_complete",
       trigger: local ? "automatic" : "explicit",
       applicationCategory: applicationCategory(activeApplication?.bundleId),
-      ...(local && deps.localSuggestionModelId
-        ? { modelId: deps.localSuggestionModelId }
+      ...(local && localSuggestionModelId
+        ? { modelId: localSuggestionModelId }
         : {}),
     };
   }

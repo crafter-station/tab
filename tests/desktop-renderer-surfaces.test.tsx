@@ -50,6 +50,16 @@ describe("desktop renderer setup surfaces", () => {
     expect(settingsSource).not.toInclude('label="Accepted Words today"');
   });
 
+  it("lets users download and select supported local models", () => {
+    const settingsSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx", "utf8");
+    const catalogSource = readFileSync("apps/desktop/src/main/local-model-catalog.ts", "utf8");
+
+    expect(catalogSource).toInclude("Ternary Bonsai 8B");
+    expect(settingsSource).toInclude("downloadLocalModel(modelId)");
+    expect(settingsSource).toInclude("selectLocalModel(modelId)");
+    expect(settingsSource).toInclude("Use model");
+  });
+
   it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {
     const setupCss = [
       readFileSync("apps/desktop/src/renderer/src/styles/sign-in.css", "utf8"),

@@ -2,6 +2,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import {
   BillingStatusDataSchema,
   type BillingStatusData,
+  LocalModelIdSchema,
+  type LocalModelId,
 } from "@tab/contracts";
 import type { OnboardingPreferences } from "./onboarding.ts";
 
@@ -11,6 +13,7 @@ export type DesktopPreferences = {
     usePersonalMemory: boolean;
     continuousMemoryExtraction: boolean;
     customWritingInstructions: string;
+    localModelId: LocalModelId;
   };
   cachedEntitlement?: {
     userId: string;
@@ -34,6 +37,7 @@ const DEFAULT_PREFERENCES: DesktopPreferences = {
     usePersonalMemory: false,
     continuousMemoryExtraction: false,
     customWritingInstructions: "",
+    localModelId: "qwen2.5-3b-instruct-q4_k_m",
   },
 };
 
@@ -87,7 +91,8 @@ function isStoredDesktopPreferences(value: unknown): value is StoredDesktopPrefe
         typeof suggestions.continuousMemoryExtraction === "boolean") &&
       (!("customWritingInstructions" in suggestions) ||
         (typeof suggestions.customWritingInstructions === "string" &&
-          suggestions.customWritingInstructions.length <= 1_000));
+          suggestions.customWritingInstructions.length <= 1_000)) &&
+      (!("localModelId" in suggestions) || LocalModelIdSchema.safeParse(suggestions.localModelId).success);
     if (!hasValidSuggestions) return false;
   }
 

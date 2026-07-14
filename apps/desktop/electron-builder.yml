@@ -10,6 +10,7 @@ files:
   - assets/**/*
 asarUnpack:
   - dist/macos-input-tap
+  - dist/local-runtime/**/*
 mac:
   icon: ../web/public/brand/tab-mark.png
   category: public.app-category.productivity

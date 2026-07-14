@@ -5,6 +5,7 @@ export const env = createEnv({
   server: {
     TAB_API_BASE_URL: z.url().default("https://api.tab.cueva.io"),
     TAB_APP_RENDERER_PATH: z.string().optional(),
+    TAB_BONSAI_INFERENCE_EXECUTABLE: z.string().optional(),
     TAB_DEBUG_TYPING_OVERLAY: z.enum(["0", "1"]).optional(),
     TAB_DEVICE_ID: z.string().optional(),
     TAB_INPUT_TAP_PATH: z.string().optional(),

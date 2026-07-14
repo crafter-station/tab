@@ -16,6 +16,59 @@ const errorCodes = [
   "provider_failure",
 ] as const;
 
+export const LocalModelIdSchema = z.enum([
+  "qwen2.5-3b-instruct-q4_k_m",
+  "ternary-bonsai-8b-q2_0",
+]);
+
+export const LocalInferenceUnavailableReasonSchema = z.enum([
+  "missing_model",
+  "download_failed",
+  "artifact_mismatch",
+  "runtime_mismatch",
+  "helper_start_failed",
+  "helper_readiness_timeout",
+  "helper_exited",
+  "request_failed",
+]);
+
+export const LocalInferenceStatusSchema = z.discriminatedUnion("status", [
+  z.object({ status: z.literal("stopped") }),
+  z.object({
+    status: z.literal("downloading"),
+    modelId: LocalModelIdSchema,
+    progress: z.number().min(0).max(1).nullable(),
+  }),
+  z.object({ status: z.literal("starting"), modelId: LocalModelIdSchema }),
+  z.object({ status: z.literal("ready"), modelId: LocalModelIdSchema }),
+  z.object({
+    status: z.literal("unavailable"),
+    modelId: LocalModelIdSchema,
+    reason: LocalInferenceUnavailableReasonSchema,
+  }),
+]);
+
+export const LocalModelCatalogItemSchema = z.object({
+  id: LocalModelIdSchema,
+  name: z.string().min(1),
+  description: z.string().min(1),
+  downloadSizeBytes: z.number().int().positive(),
+  selected: z.boolean(),
+  downloaded: z.boolean(),
+  available: z.boolean(),
+  requiresCatalogAccess: z.boolean(),
+  experimental: z.boolean(),
+  recommended: z.boolean(),
+  license: z.string().min(1),
+  supportSummary: z.string().min(1),
+  status: LocalInferenceStatusSchema,
+});
+
+export const LocalModelCatalogStateSchema = z.object({
+  selectedModelId: LocalModelIdSchema,
+  models: z.array(LocalModelCatalogItemSchema).min(1),
+});
+
 export const ActiveApplicationSchema = z.object({
   bundleId: z.string().min(1),
   name: z.string().min(1).optional(),
@@ -517,6 +570,11 @@ export type ActiveApplication = z.infer<typeof ActiveApplicationSchema>;
 export type SuggestionContextSource = z.infer<
   typeof SuggestionContextSourceSchema
 >;
+export type LocalModelId = z.infer<typeof LocalModelIdSchema>;
+export type LocalInferenceUnavailableReason = z.infer<typeof LocalInferenceUnavailableReasonSchema>;
+export type LocalInferenceStatus = z.infer<typeof LocalInferenceStatusSchema>;
+export type LocalModelCatalogItem = z.infer<typeof LocalModelCatalogItemSchema>;
+export type LocalModelCatalogState = z.infer<typeof LocalModelCatalogStateSchema>;
 export type RedactionSummary = z.infer<typeof RedactionSummarySchema>;
 export type ClientMetadata = z.infer<typeof ClientMetadataSchema>;
 export type AppContextFragment = z.infer<typeof AppContextFragmentSchema>;

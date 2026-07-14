@@ -15,6 +15,7 @@ describe("desktop preferences", () => {
 
     expect(manager.get().onboarding.completed).toBe(false);
     expect(manager.get().suggestions.usePersonalMemory).toBe(false);
+    expect(manager.get().suggestions.localModelId).toBe("qwen2.5-3b-instruct-q4_k_m");
   });
 
   it("persists onboarding completion", () => {
@@ -62,6 +63,19 @@ describe("desktop preferences", () => {
 
     const reloaded = createPreferencesManager({ storage });
     expect(reloaded.get().suggestions.usePersonalMemory).toBe(true);
+  });
+
+  it("persists the selected local model", () => {
+    const storage = createMemoryPreferencesStorage();
+    const manager = createPreferencesManager({ storage });
+    const preferences = manager.get();
+
+    manager.update({
+      suggestions: { ...preferences.suggestions, localModelId: "ternary-bonsai-8b-q2_0" },
+    });
+
+    const reloaded = createPreferencesManager({ storage });
+    expect(reloaded.get().suggestions.localModelId).toBe("ternary-bonsai-8b-q2_0");
   });
 
   describe("file-backed storage", () => {

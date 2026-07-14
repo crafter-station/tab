@@ -23,9 +23,13 @@ import {
   setThemePreference,
   type ThemeMode,
 } from "@tab/ui";
-import type { PersonalMemory } from "@tab/contracts";
+import type {
+  LocalInferenceStatus,
+  LocalModelCatalogState,
+  LocalModelId,
+  PersonalMemory,
+} from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
-import type { LocalInferenceStatus } from "../../../main/local-inference-prototype";
 import type { CompletionHistoryEntry } from "../../../main/completion-history";
 import type { DesktopUpdateState } from "../../../main/release";
 import { APP_CONTEXT_SUPPORTED_APP_MATRIX, APP_CONTEXT_TRUST_COPY } from "../../../main/app-context";
@@ -78,6 +82,10 @@ function formatPlanName(planId: string) {
 function allowancePercentage(used: number, limit: number | null) {
   if (limit === null) return null;
   return Math.round((Math.min(used, limit) / limit) * 100);
+}
+
+function formatDownloadSize(bytes: number) {
+  return `${(bytes / 1_000_000_000).toFixed(1)} GB download`;
 }
 
 function describeLocalInference(status: LocalInferenceStatus, error: string | null): { label: string; description: string } {
@@ -146,14 +154,21 @@ export function SettingsSurface() {
   const [continuousMemoryExtraction, setContinuousMemoryExtraction] = useState(false);
   const [customWritingInstructions, setCustomWritingInstructions] = useState("");
   const [localInferenceStatus, setLocalInferenceStatus] = useState<LocalInferenceStatus>({ status: "stopped" });
-  const [modelDownloadError, setModelDownloadError] = useState<string | null>(null);
+  const [localModelCatalog, setLocalModelCatalog] = useState<LocalModelCatalogState>({
+    selectedModelId: "qwen2.5-3b-instruct-q4_k_m",
+    models: [],
+  });
+  const [modelDownloadError, setModelDownloadError] = useState<{ modelId: string; message: string } | null>(null);
   const [completionHistory, setCompletionHistory] = useState<readonly CompletionHistoryEntry[]>([]);
   const [accessibilityGranted, setAccessibilityGranted] = useState(false);
   const [permissionBusy, setPermissionBusy] = useState<"accessibility" | "input-monitoring" | null>(null);
   const [updateState, setUpdateState] = useState<DesktopUpdateState>({ status: "idle", currentVersion: "0.0.0" });
   const activeTabConfig = SETTINGS_TABS.find((tab) => tab.value === activeTab);
   const pauseState = describePauseState(paused);
-  const localInference = describeLocalInference(localInferenceStatus, modelDownloadError);
+  const localInference = describeLocalInference(
+    localInferenceStatus,
+    modelDownloadError?.modelId === localModelCatalog.selectedModelId ? modelDownloadError.message : null,
+  );
   const update = describeUpdate(updateState);
 
   const refreshAccessibility = useCallback(async () => {
@@ -181,6 +196,11 @@ export function SettingsSurface() {
       receivedLocalInferenceStatus = true;
       setLocalInferenceStatus(status);
     });
+    let receivedLocalModelCatalog = false;
+    const unsubscribeLocalModelCatalog = window.tab.onLocalModelCatalogChanged((catalog) => {
+      receivedLocalModelCatalog = true;
+      setLocalModelCatalog(catalog);
+    });
     let receivedCompletionHistory = false;
     const unsubscribeCompletionHistory = window.tab.onCompletionHistoryChanged?.((entries) => {
       receivedCompletionHistory = true;
@@ -202,6 +222,7 @@ export function SettingsSurface() {
         setContinuousMemoryExtraction(initialState.preferences.suggestions.continuousMemoryExtraction);
         setCustomWritingInstructions(initialState.preferences.suggestions.customWritingInstructions);
         if (!receivedLocalInferenceStatus) setLocalInferenceStatus(initialState.localInferenceStatus);
+        if (!receivedLocalModelCatalog) setLocalModelCatalog(initialState.localModelCatalog);
         if (!receivedCompletionHistory) setCompletionHistory(initialState.completionHistory ?? []);
         if (!receivedUpdateState) setUpdateState(initialState.updateState);
         setHydrationState("ready");
@@ -215,6 +236,7 @@ export function SettingsSurface() {
       unsubscribePause();
       unsubscribePreferences();
       unsubscribeLocalInference();
+      unsubscribeLocalModelCatalog();
       unsubscribeCompletionHistory();
       unsubscribeUpdateState();
     };
@@ -269,12 +291,27 @@ export function SettingsSurface() {
     if (nextEnabled === paused) window.tab?.togglePause?.();
   }
 
-  async function handleDownloadModel() {
+  async function handleDownloadModel(modelId?: LocalModelId) {
     setModelDownloadError(null);
     try {
-      await window.tab.downloadLocalModel();
+      await window.tab.downloadLocalModel(modelId);
     } catch {
-      setModelDownloadError("The model could not be downloaded. Check your connection and try again.");
+      setModelDownloadError({
+        modelId: modelId ?? localModelCatalog.selectedModelId,
+        message: "The model could not be downloaded. Check your connection and try again.",
+      });
+    }
+  }
+
+  async function handleSelectModel(modelId: LocalModelId) {
+    setModelDownloadError(null);
+    try {
+      await window.tab.selectLocalModel(modelId);
+    } catch {
+      setModelDownloadError({
+        modelId,
+        message: "The model could not be selected. Relaunch Tab and try again.",
+      });
     }
   }
 
@@ -379,20 +416,53 @@ export function SettingsSurface() {
                 />
               </div>
             </SettingsRow>
-            <SettingsRow
-              label="Local model"
-              description={localInference.description}
-            >
-              <div className="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge tone={localInferenceStatus.status === "ready" ? "brand" : "warning"}>
-                  {localInference.label}
-                </StatusBadge>
-                {localInferenceStatus.status === "unavailable"
-                  && ["missing_model", "artifact_mismatch", "download_failed"].includes(localInferenceStatus.reason) && (
-                  <Button onClick={handleDownloadModel} size="sm">Download model</Button>
-                )}
-              </div>
-            </SettingsRow>
+            {localModelCatalog.models.map((model) => {
+              const modelStatus = model.selected ? localInferenceStatus : model.status;
+              const isDownloading = modelStatus.status === "downloading";
+              const needsDownload = !model.downloaded || (
+                modelStatus.status === "unavailable"
+                && ["missing_model", "artifact_mismatch", "download_failed"].includes(modelStatus.reason)
+              );
+              return (
+                <SettingsRow
+                  key={model.id}
+                  label={model.name}
+                  description={`${model.description} ${formatDownloadSize(model.downloadSizeBytes)}. ${model.supportSummary} License: ${model.license}.`}
+                >
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    <StatusBadge tone={model.selected && modelStatus.status === "ready" ? "brand" : "neutral"}>
+                      {!model.available
+                        ? "Paid plan"
+                        : isDownloading
+                        ? modelStatus.progress === null
+                          ? "Downloading"
+                          : `Downloading ${Math.round(modelStatus.progress * 100)}%`
+                        : model.selected
+                          ? `${model.experimental ? "Experimental · " : ""}Selected · ${localInference.label}`
+                          : model.downloaded
+                            ? `${model.experimental ? "Experimental · " : ""}Downloaded`
+                            : model.recommended
+                              ? "Recommended · Not downloaded"
+                              : `${model.experimental ? "Experimental · " : ""}Not downloaded`}
+                    </StatusBadge>
+                    {!model.available ? (
+                      <Button onClick={() => window.tab?.openPricing?.()} size="sm" variant="secondary">View plans</Button>
+                    ) : null}
+                    {model.available && needsDownload && !isDownloading ? (
+                      <Button onClick={() => handleDownloadModel(model.id)} size="sm">
+                        {model.downloaded ? "Repair" : "Download"}
+                      </Button>
+                    ) : null}
+                    {model.available && model.downloaded && !model.selected && !isDownloading ? (
+                      <Button onClick={() => handleSelectModel(model.id)} size="sm" variant="secondary">Use model</Button>
+                    ) : null}
+                  </div>
+                </SettingsRow>
+              );
+            })}
+            {modelDownloadError ? (
+              <p className="text-sm text-destructive">{modelDownloadError.message}</p>
+            ) : null}
             <SettingsRow
               className="settings-row--stacked"
               label="Custom writing instructions"

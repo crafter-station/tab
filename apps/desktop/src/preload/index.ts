@@ -2,7 +2,12 @@ import { contextBridge, ipcRenderer } from "electron";
 import type { DesktopStatus } from "../main/status.ts";
 import type { DesktopPreferences } from "../main/preferences.ts";
 import type { PersonalMemory } from "@tab/contracts";
-import type { LocalInferenceStatus } from "../main/local-inference-prototype.ts";
+import {
+  type LocalInferenceStatus,
+  LocalModelCatalogStateSchema,
+  type LocalModelCatalogState,
+  type LocalModelId,
+} from "@tab/contracts";
 import type { CompletionHistoryEntry } from "../main/completion-history.ts";
 import type { DesktopUpdateState } from "../main/release.ts";
 
@@ -64,14 +69,16 @@ export type TabPreloadApi = {
   onPauseChanged: (callback: (paused: boolean) => void) => () => void;
   onPreferencesChanged: (callback: (preferences: DesktopPreferences) => void) => () => void;
   onLocalInferenceStatusChanged: (callback: (status: LocalInferenceStatus) => void) => () => void;
+  onLocalModelCatalogChanged: (callback: (catalog: LocalModelCatalogState) => void) => () => void;
   onCompletionHistoryChanged: (callback: (entries: readonly CompletionHistoryEntry[]) => void) => () => void;
   onUpdateStateChanged: (callback: (state: DesktopUpdateState) => void) => () => void;
-  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences; localInferenceStatus: LocalInferenceStatus; completionHistory: readonly CompletionHistoryEntry[]; updateState: DesktopUpdateState }>;
+  getInitialState: () => Promise<{ status: DesktopStatus; memories: PersonalMemory[]; paused: boolean; preferences: DesktopPreferences; localInferenceStatus: LocalInferenceStatus; localModelCatalog: LocalModelCatalogState; completionHistory: readonly CompletionHistoryEntry[]; updateState: DesktopUpdateState }>;
   signIn: () => void;
   signOut: () => void;
   openPricing: () => void;
   togglePause: () => void;
-  downloadLocalModel: () => Promise<void>;
+  downloadLocalModel: (modelId?: LocalModelId) => Promise<void>;
+  selectLocalModel: (modelId: LocalModelId) => Promise<void>;
   checkForUpdates: () => Promise<void>;
   downloadUpdate: () => Promise<void>;
   installUpdate: () => Promise<void>;
@@ -169,6 +176,13 @@ contextBridge.exposeInMainWorld("tab", {
     ipcRenderer.on("local-inference-status-changed", listener);
     return () => ipcRenderer.off("local-inference-status-changed", listener);
   },
+  onLocalModelCatalogChanged: (callback: (catalog: LocalModelCatalogState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, catalog: unknown) => {
+      callback(LocalModelCatalogStateSchema.parse(catalog));
+    };
+    ipcRenderer.on("local-model-catalog-changed", listener);
+    return () => ipcRenderer.off("local-model-catalog-changed", listener);
+  },
   onCompletionHistoryChanged: (callback: (entries: readonly CompletionHistoryEntry[]) => void) => {
     const listener = (_event: Electron.IpcRendererEvent, entries: readonly CompletionHistoryEntry[]) => callback(entries);
     ipcRenderer.on("completion-history-changed", listener);
@@ -179,7 +193,13 @@ contextBridge.exposeInMainWorld("tab", {
     ipcRenderer.on("update-state-changed", listener);
     return () => ipcRenderer.off("update-state-changed", listener);
   },
-  getInitialState: () => ipcRenderer.invoke("get-initial-state"),
+  getInitialState: async () => {
+    const initialState = await ipcRenderer.invoke("get-initial-state");
+    return {
+      ...initialState,
+      localModelCatalog: LocalModelCatalogStateSchema.parse(initialState.localModelCatalog),
+    };
+  },
   signIn: () => {
     ipcRenderer.send("sign-in");
   },
@@ -192,7 +212,8 @@ contextBridge.exposeInMainWorld("tab", {
   togglePause: () => {
     ipcRenderer.send("toggle-pause");
   },
-  downloadLocalModel: () => ipcRenderer.invoke("download-local-model"),
+  downloadLocalModel: (modelId?: LocalModelId) => ipcRenderer.invoke("download-local-model", modelId),
+  selectLocalModel: (modelId: LocalModelId) => ipcRenderer.invoke("select-local-model", modelId),
   checkForUpdates: () => ipcRenderer.invoke("check-for-updates"),
   downloadUpdate: () => ipcRenderer.invoke("download-update"),
   installUpdate: () => ipcRenderer.invoke("install-update"),

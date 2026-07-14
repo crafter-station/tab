@@ -71,6 +71,22 @@ async function buildNativeInputTap() {
   return inputTapPath;
 }
 
+async function buildLocalRuntime() {
+  if (process.platform !== "darwin") return null;
+  const runtimeRoot = path.join(desktopRoot, "dist", "local-runtime");
+  const child = Bun.spawn(["bun", path.join(desktopRoot, "scripts", "build-local-runtime.ts"), process.arch], {
+    cwd: workspaceRoot,
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+  const exitCode = await child.exited;
+  if (exitCode !== 0) throw new Error("Failed to prepare the local inference runtime");
+  return {
+    qwen: path.join(runtimeRoot, "qwen", process.arch, "llama-server"),
+    bonsai: path.join(runtimeRoot, "bonsai", process.arch, "llama-server"),
+  };
+}
+
 async function main() {
   const buildOnly = process.argv.includes("--build-only");
 
@@ -85,7 +101,11 @@ async function main() {
     copyRuntimeFiles(),
   ]);
 
-  const [trayIconPath, inputTapPath] = await Promise.all([copyTrayIcon(), buildNativeInputTap()]);
+  const [trayIconPath, inputTapPath, localRuntimePaths] = await Promise.all([
+    copyTrayIcon(),
+    buildNativeInputTap(),
+    buildLocalRuntime(),
+  ]);
   if (buildOnly) {
     console.log(`Built desktop dev app at ${devRoot}`);
     return;
@@ -100,6 +120,10 @@ async function main() {
       TAB_OVERLAY_RENDERER_PATH: overlayRendererHtmlPath,
       TAB_TRAY_ICON_PATH: trayIconPath,
       ...(inputTapPath ? { TAB_INPUT_TAP_PATH: inputTapPath } : {}),
+      ...(localRuntimePaths ? {
+        TAB_LOCAL_INFERENCE_EXECUTABLE: localRuntimePaths.qwen,
+        TAB_BONSAI_INFERENCE_EXECUTABLE: localRuntimePaths.bonsai,
+      } : {}),
       TAB_DEVICE_ID: env.TAB_DEVICE_ID,
     },
     stdin: "inherit",

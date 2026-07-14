@@ -55,9 +55,9 @@ import { createSettingsWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createDesktopUpdater } from "./release.ts";
-import { createLocalInferencePrototype, QWEN_25_3B_Q4_K_M } from "./local-inference-prototype.ts";
+import { createDefaultLocalModelCatalog, createLocalModelManager } from "./local-model-catalog.ts";
 import { createCompletionHistory } from "./completion-history.ts";
-import type { Suggestion, PersonalMemory } from "@tab/contracts";
+import { LocalModelIdSchema, type Suggestion, type PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
 import { boundsEqual } from "./window-position.ts";
@@ -98,6 +98,24 @@ const OVERLAY_RENDERER_PATH = env.TAB_OVERLAY_RENDERER_PATH ?? path.join(runtime
 const APP_RENDERER_PATH = env.TAB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
 const TRAY_ICON_PATH = env.TAB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
+const packagedQwenRuntimePath = path.join(
+  process.resourcesPath,
+  "app.asar.unpacked",
+  "dist",
+  "local-runtime",
+  "qwen",
+  process.arch,
+  "llama-server",
+);
+const packagedBonsaiRuntimePath = path.join(
+  process.resourcesPath,
+  "app.asar.unpacked",
+  "dist",
+  "local-runtime",
+  "bonsai",
+  process.arch,
+  "llama-server",
+);
 const INPUT_TAP_PATH = env.TAB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
 const LOCAL_INFERENCE_MODEL_PATH = env.TAB_LOCAL_INFERENCE_MODEL_PATH ?? path.join(
   app.getPath("userData"),
@@ -106,6 +124,8 @@ const LOCAL_INFERENCE_MODEL_PATH = env.TAB_LOCAL_INFERENCE_MODEL_PATH ?? path.jo
 );
 const LOCAL_INFERENCE_MODEL_URL = env.TAB_LOCAL_INFERENCE_MODEL_URL
   ?? "https://huggingface.co/Qwen/Qwen2.5-3B-Instruct-GGUF/resolve/7dabda4d13d513e3e842b20f0d435c732f172cbe/qwen2.5-3b-instruct-q4_k_m.gguf";
+const LOCAL_INFERENCE_EXECUTABLE = env.TAB_LOCAL_INFERENCE_EXECUTABLE
+  ?? (app.isPackaged ? packagedQwenRuntimePath : "/opt/homebrew/bin/llama-server");
 
 let overlayWindow: BrowserWindow | null = null;
 let debugOverlayWindow: BrowserWindow | null = null;
@@ -270,6 +290,7 @@ const authSession = createDesktopAuthSession({
 });
 
 const notifiedUpdateVersions = new Set<string>();
+let reconcileLocalModelAccess = () => {};
 const desktopUpdater = createDesktopUpdater({
   currentVersion: APP_VERSION,
   nativeUpdater: autoUpdater,
@@ -310,6 +331,7 @@ const statusService = createDesktopStatusService({
     settingsWindowManager.sendStatus(status);
     onboardingWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
+    reconcileLocalModelAccess();
     if (credentialGeneration !== null) {
       void authSession.handleStatus(status.auth, credentialGeneration);
     }
@@ -353,11 +375,22 @@ function logLocalSuggestion(event: string, details: Record<string, unknown>): vo
   console.log(`[local-suggestions] ${event}`, details);
 }
 
-const localInference = createLocalInferencePrototype({
-  executablePath: env.TAB_LOCAL_INFERENCE_EXECUTABLE ?? "/opt/homebrew/bin/llama-server",
-  modelPath: LOCAL_INFERENCE_MODEL_PATH,
-  modelUrl: LOCAL_INFERENCE_MODEL_URL,
+const localModelCatalog = createDefaultLocalModelCatalog({
+  modelsDirectory: path.join(app.getPath("userData"), "models"),
+  qwenModelPath: LOCAL_INFERENCE_MODEL_PATH,
+  qwenModelUrl: LOCAL_INFERENCE_MODEL_URL,
+  qwenExecutablePath: LOCAL_INFERENCE_EXECUTABLE,
+  bonsaiExecutablePath: env.TAB_BONSAI_INFERENCE_EXECUTABLE
+    ?? (app.isPackaged ? packagedBonsaiRuntimePath : LOCAL_INFERENCE_EXECUTABLE),
+});
+const localInference = createLocalModelManager({
+  entries: localModelCatalog,
+  selectedModelId: preferencesManager.get().suggestions.localModelId,
   port: env.TAB_LOCAL_INFERENCE_PORT,
+  canAccessCatalog: () =>
+    currentDesktopStatus?.entitlement?.capabilities.modelCatalogAccess
+    ?? preferencesManager.get().cachedEntitlement?.entitlement.capabilities.modelCatalogAccess
+    ?? false,
   getMemories: () =>
     preferencesManager.get().suggestions.usePersonalMemory
       ? currentMemories
@@ -376,7 +409,22 @@ const localInference = createLocalInferencePrototype({
       updateDebugApiState({ status: "local-unavailable", reason: status.reason });
     }
   },
+  onCatalogChange: (catalog) => settingsWindowManager.sendLocalModelCatalog(catalog),
+  onSelectedModelChange: (localModelId) => {
+    const preferences = preferencesManager.get();
+    const nextPreferences = {
+      ...preferences,
+      suggestions: { ...preferences.suggestions, localModelId },
+    };
+    preferencesManager.update(nextPreferences);
+    settingsWindowManager.sendPreferences(nextPreferences);
+  },
 });
+reconcileLocalModelAccess = () => {
+  void localInference.reconcileAccess()
+    .then(() => localInference.start())
+    .catch((error) => console.error("Failed to reconcile Local Model Catalog access:", error));
+};
 const nativeAutocompleteApp = createNativeAutocompleteApp({
   typingContext: typingContextBuffer,
   appContext: appContextExtractor,
@@ -394,7 +442,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
           output: suggestion.text,
           latencyMs: Math.round(performance.now() - startedAt),
           ...(timing ?? {}),
-          model: QWEN_25_3B_Q4_K_M.id,
+          model: localInference.getSelectedModelId(),
         });
       }
       updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
@@ -473,7 +521,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
   onLocalSuggestionAccepted: (suggestionId) => {
     completionHistory.acceptLocalSuggestion(suggestionId);
   },
-  localSuggestionModelId: QWEN_25_3B_Q4_K_M.id,
+  getLocalSuggestionModelId: () => localInference.getSelectedModelId(),
 });
 
 const desktopEventIngress = createDesktopEventIngress({
@@ -1183,7 +1231,10 @@ async function bootstrap(): Promise<void> {
   ipcMain.on("toggle-pause", () => {
     togglePause().catch((error) => console.error("Failed to toggle pause:", error));
   });
-  ipcMain.handle("download-local-model", () => localInference.downloadModel());
+  ipcMain.handle("download-local-model", (_event, modelId?: unknown) =>
+    localInference.downloadModel(modelId === undefined ? undefined : LocalModelIdSchema.parse(modelId)));
+  ipcMain.handle("select-local-model", (_event, modelId: unknown) =>
+    localInference.selectModel(LocalModelIdSchema.parse(modelId)));
   ipcMain.handle("check-for-updates", (event) => {
     if (!settingsWindowManager.ownsFrame(event.senderFrame)) {
       throw new Error("Update controls are only available from the control window");
@@ -1231,6 +1282,7 @@ async function bootstrap(): Promise<void> {
     paused: nativeAutocompleteApp.isPaused(),
     preferences: preferencesManager.get(),
     localInferenceStatus: localInference.getStatus(),
+    localModelCatalog: localInference.getCatalogState(),
     completionHistory: completionHistory.getEntries(),
     updateState: desktopUpdater.getState(),
   }));

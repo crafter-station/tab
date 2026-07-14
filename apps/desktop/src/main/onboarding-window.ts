@@ -1,7 +1,7 @@
 import { BrowserWindow, nativeTheme, screen } from "electron";
 import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
-import type { LocalInferenceStatus } from "./local-inference-prototype.ts";
+import type { LocalInferenceStatus } from "@tab/contracts";
 
 export type CreateOnboardingWindowDependencies = {
   rendererPath: string;

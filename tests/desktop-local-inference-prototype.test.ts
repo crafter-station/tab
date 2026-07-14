@@ -244,6 +244,22 @@ describe("local inference prototype", () => {
     });
   });
 
+  it("reports a damaged model when an installed artifact fails verification", async () => {
+    const runtime = createLocalInferencePrototype({
+      executablePath: "llama-server",
+      modelPath: "/tmp/damaged-model.gguf",
+      modelExists: () => true,
+      verifyModelArtifact: async () => false,
+    });
+
+    expect(await runtime.verifyInstallation()).toBe(false);
+    expect(runtime.getStatus()).toEqual({
+      status: "unavailable",
+      modelId: "qwen2.5-3b-instruct-q4_k_m",
+      reason: "artifact_mismatch",
+    });
+  });
+
   it("rejects runtime versions that only contain the pinned values as substrings", async () => {
     let spawned = false;
     const runtime = createLocalInferencePrototype({

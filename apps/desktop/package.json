@@ -6,11 +6,12 @@
   "main": "dist/main.cjs",
   "scripts": {
     "dev": "bun scripts/dev.ts",
-    "build": "bun run build:main && bun run build:preload && bun run build:renderer && bun run build:native && bun run build:copy",
+    "build": "bun run build:runtime && bun run build:main && bun run build:preload && bun run build:renderer && bun run build:native && bun run build:copy",
     "build:main": "bun build src/main/index.ts --outfile=dist/main.cjs --target=node --format=cjs --external electron --external electron-updater --drop=console && node --check dist/main.cjs",
     "build:preload": "bun build src/preload/index.ts --outfile=dist/preload.cjs --target=node --format=cjs --external electron --drop=console",
     "build:renderer": "electron-vite build",
     "build:native": "bun scripts/build-native.ts",
+    "build:runtime": "bun scripts/build-local-runtime.ts",
     "build:copy": "cp -R assets dist/",
     "dev:permissions": "bun run build && CSC_IDENTITY_AUTO_DISCOVERY=false bunx electron-builder --mac dir && open -n release/mac*/Tab.app --args --permission-debug --typing-debug",
     "dist": "bun run build && bunx electron-builder",
