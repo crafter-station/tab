@@ -23,6 +23,7 @@ describe("Local Model Catalog", () => {
       downloadSizeBytes: 2_182_184_672,
       fileName: "Ternary-Bonsai-8B-Q2_0.gguf",
       executablePath: "/runtime/prism-llama-server",
+      requiresCatalogAccess: false,
       configuration: BONSAI_8B_Q2_0,
     });
     expect(catalog[1]?.modelUrl).toContain(
@@ -92,22 +93,35 @@ describe("Local Model Catalog", () => {
     ]);
   });
 
-  it("enforces paid catalog access before downloading or selecting Bonsai", async () => {
+  it("allows Free users to download and select Bonsai", async () => {
     const entries = createDefaultLocalModelCatalog({
       modelsDirectory: "/models",
       qwenExecutablePath: "/runtime/llama-server",
       bonsaiExecutablePath: "/runtime/prism-llama-server",
     });
+    const downloadedPaths = new Set([entries[0]!.modelPath]);
     const manager = createLocalModelManager({
       entries,
       selectedModelId: entries[0]!.configuration.id,
       canAccessCatalog: () => false,
+      modelExists: (path) => downloadedPaths.has(path),
+      runtimeFactory: (options) => ({
+        start: async () => {},
+        downloadModel: async () => { downloadedPaths.add(options.modelPath); },
+        verifyInstallation: async () => true,
+        stop: () => {},
+        getSuggestion: async () => null,
+        getStatus: () => ({ status: "stopped" }),
+        getLastTiming: () => null,
+      }),
     });
     const bonsaiId = entries[1]!.configuration.id;
 
-    expect(manager.getCatalogState().models[1]?.available).toBe(false);
-    await expect(manager.downloadModel(bonsaiId)).rejects.toThrow("requires model catalog access");
-    await expect(manager.selectModel(bonsaiId)).rejects.toThrow("requires model catalog access");
+    expect(manager.getCatalogState().models[1]?.available).toBe(true);
+    await manager.downloadModel(bonsaiId);
+    expect(manager.getCatalogState().models[1]?.downloaded).toBe(true);
+    await manager.selectModel(bonsaiId);
+    expect(manager.getSelectedModelId()).toBe(bonsaiId);
   });
 
   it("keeps the working selection when another installation fails verification", async () => {

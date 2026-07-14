@@ -4,6 +4,8 @@ Tab offers Free, Pro, and Max. This ADR supersedes ADR-0043's Free-and-Pro-only 
 
 Free remains unchanged: 100 Accepted Words from Local Suggestions per day, 10 successful Deep Completes per month, one Mac, and management of existing Personal Memory. New accounts start on Free rather than receiving an app-owned trial.
 
+Experimental local models may be offered outside the supported model catalog on every plan. Ternary Bonsai 8B is explicitly available for download and selection on Free, Pro, and Max while it remains experimental; this does not grant Free the paid supported-model-catalog capability.
+
 Pro costs $10 per month and includes unlimited Accepted Words, 300 successful Deep Completes per month, continuous Memory Extraction, custom writing instructions, the supported model catalog, and up to three personal Macs. Max costs $20 per month and includes 1,000 successful Deep Completes per month. Max otherwise has the same capabilities and three-device limit as Pro. Both paid products provide a one-month trial through Polar checkout; Polar collects payment details, converts the trial to the selected monthly subscription unless canceled, and enforces trial-abuse prevention.
 
 Paid plans are monthly only. Tab does not offer an annual plan and has no annual customers to migrate or grandfather. Checkout therefore selects only a plan; the billing interval is fixed to monthly. User-facing subscription copy should remain plan-neutral where it applies to both Pro and Max, while account status should render the specific plan returned by the entitlement authority.

@@ -227,7 +227,7 @@ export function createDefaultLocalModelCatalog(options: {
       modelPath: join(options.modelsDirectory, "Ternary-Bonsai-8B-Q2_0.gguf"),
       modelUrl: "https://huggingface.co/prism-ml/Ternary-Bonsai-8B-gguf/resolve/c2aefbeb4b24469cd11579c3384b990404c17a30/Ternary-Bonsai-8B-Q2_0.gguf",
       executablePath: options.bonsaiExecutablePath ?? options.qwenExecutablePath,
-      requiresCatalogAccess: true,
+      requiresCatalogAccess: false,
       experimental: true,
       recommended: false,
       license: "Apache-2.0",
