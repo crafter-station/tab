@@ -221,20 +221,7 @@ const requestCloudSuggestion = createApiSuggestionClient({
 const completionHistory = createCompletionHistory((entries) => {
   settingsWindowManager.sendCompletionHistory(entries);
 });
-const requestDeepComplete: ReturnType<typeof createApiSuggestionClient> = async (snapshot, options) => {
-  const startedAt = performance.now();
-  const suggestion = await requestCloudSuggestion(snapshot, options);
-  if (suggestion && !options?.signal?.aborted) {
-    completionHistory.record({
-      input: snapshot.sanitizedContext,
-      output: suggestion.text,
-      latencyMs: Math.round(performance.now() - startedAt),
-      mode: "cloud",
-      model: "openai/gpt-oss-20b",
-    });
-  }
-  return suggestion;
-};
+const requestDeepComplete: ReturnType<typeof createApiSuggestionClient> = requestCloudSuggestion;
 const recordInteractionTelemetry = createDesktopTelemetryClient({
   apiBaseUrl: API_BASE_URL,
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
@@ -402,12 +389,11 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
       const suggestion = await localInference.getSuggestion(snapshot, options);
       if (suggestion && !options?.signal?.aborted) {
         const timing = localInference.getLastTiming();
-        completionHistory.record({
+        completionHistory.stageLocalSuggestion(suggestion.id, {
           input: snapshot.sanitizedContext,
           output: suggestion.text,
           latencyMs: Math.round(performance.now() - startedAt),
           ...(timing ?? {}),
-          mode: "local",
           model: QWEN_25_3B_Q4_K_M.id,
         });
       }
@@ -483,6 +469,9 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
   recordAcceptedUsage: (event) => {
     acceptedWordLedger.record(event);
     void synchronizeAcceptedWordLedger();
+  },
+  onLocalSuggestionAccepted: (suggestionId) => {
+    completionHistory.acceptLocalSuggestion(suggestionId);
   },
   localSuggestionModelId: QWEN_25_3B_Q4_K_M.id,
 });

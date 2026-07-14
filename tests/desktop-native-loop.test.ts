@@ -758,6 +758,7 @@ describe("desktop native suggestion loop", () => {
         wordCount: number;
         characterCount: number;
       }) => void | Promise<void>;
+      onLocalSuggestionAccepted?: (suggestionId: string) => void;
       sendPaste?: () => Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
       insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
@@ -842,6 +843,7 @@ describe("desktop native suggestion loop", () => {
         canAcceptLocalSuggestion: overrides.canAcceptLocalSuggestion,
         onLocalAllowanceExhausted: overrides.onLocalAllowanceExhausted,
         recordAcceptedUsage: overrides.recordAcceptedUsage,
+        onLocalSuggestionAccepted: overrides.onLocalSuggestionAccepted,
         localSuggestionModelId: overrides.localSuggestionModelId,
         triggerPolicy: overrides.triggerPolicy,
         compatibilityStore: overrides.compatibilityStore,
@@ -1934,6 +1936,24 @@ describe("desktop native suggestion loop", () => {
       ]);
       expect(JSON.stringify(telemetry)).not.toContain("hello, world");
       expect(JSON.stringify(telemetry)).not.toContain("private context");
+    });
+
+    it("publishes local suggestions to history only after successful Acceptance", async () => {
+      const acceptedSuggestionIds: string[] = [];
+      const { session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "sg-local-history", text: " accepted words" }),
+        onLocalSuggestionAccepted: (suggestionId) => acceptedSuggestionIds.push(suggestionId),
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("private context");
+      await wait(10);
+
+      expect(acceptedSuggestionIds).toEqual([]);
+
+      await session.acceptCurrentSuggestion();
+
+      expect(acceptedSuggestionIds).toEqual(["sg-local-history"]);
     });
 
     it("does not insert or count a later local Acceptance after its allowance is exhausted", async () => {

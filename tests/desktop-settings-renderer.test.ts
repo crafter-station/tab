@@ -36,14 +36,15 @@ describe("desktop settings renderer", () => {
     expect(source).toInclude("window.tab.installUpdate()");
   });
 
-  it("distinguishes compact Local and Deep Complete history entries", () => {
+  it("labels history entries as Local Suggestions", () => {
     const source = readFileSync(
       "apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx",
       "utf8",
     );
 
     expect(source).toInclude('className="completion-history__row"');
-    expect(source).toInclude('tone={entry.mode === "local" ? "neutral" : "brand"}');
-    expect(source).toInclude('{entry.mode === "local" ? "Local" : "Deep Complete"}');
+    expect(source).toInclude('tone="neutral"');
+    expect(source).toInclude("Accepted Local Suggestions from this session");
+    expect(source).not.toInclude('entry.mode === "local"');
   });
 });

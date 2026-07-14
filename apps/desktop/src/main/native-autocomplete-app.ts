@@ -75,6 +75,7 @@ type NativeSuggestionSessionDependencies = {
     readonly wordCount: number;
     readonly characterCount: number;
   }) => void | Promise<void>;
+  readonly onLocalSuggestionAccepted?: (suggestionId: string) => void;
   readonly localSuggestionModelId?: string;
   readonly triggerPolicy?: TriggerPolicy;
   readonly onSuggestionDiagnostic?: (event: string, details: Record<string, unknown>) => void;
@@ -682,6 +683,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
           acceptedText: acceptedSuggestion?.text,
         });
         if (acceptedVisibleSuggestion?.provenance === "automatic" && acceptedSuggestion) {
+          deps.onLocalSuggestionAccepted?.(acceptedSuggestion.id);
           Promise.resolve(
             deps.recordAcceptedUsage?.({
               acceptanceId,

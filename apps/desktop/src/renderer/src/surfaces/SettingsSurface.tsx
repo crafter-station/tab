@@ -36,7 +36,7 @@ type SettingsTab = "account" | "completions" | "controls" | "appearance" | "perm
 
 const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[] = [
   { value: "account", label: "Account", description: "Plan, usage, and connection status." },
-  { value: "completions", label: "Suggestion history", description: "Suggestions from this session." },
+  { value: "completions", label: "Suggestion history", description: "Accepted Local Suggestions from this session." },
   { value: "controls", label: "Suggestions", description: "Control when Tab suggests and how it writes." },
   { value: "appearance", label: "Appearance", description: "Choose how Tab looks on this Mac." },
   { value: "permissions", label: "Permissions", description: "Review the macOS access Tab needs." },
@@ -408,10 +408,10 @@ export function SettingsSurface() {
           <SettingsGroup
             className="completion-history"
             title="This session"
-            description={`${completionHistory.length} ${completionHistory.length === 1 ? "suggestion" : "suggestions"}. Cleared when Tab quits.`}
+            description={`${completionHistory.length} accepted ${completionHistory.length === 1 ? "suggestion" : "suggestions"}. Cleared when Tab quits.`}
           >
             {completionHistory.length === 0 ? (
-              <EmptyState className="m-4 mt-0" title="No Suggestions yet" description="Suggestions from this session will appear here." />
+              <EmptyState className="m-4 mt-0" title="No accepted Suggestions yet" description="Accepted Local Suggestions from this session will appear here." />
             ) : (
               <div className="completion-history__list" role="list" aria-label="Suggestion history">
                 <div className="completion-history__columns" aria-hidden="true">
@@ -424,9 +424,9 @@ export function SettingsSurface() {
                     <div className="completion-history__meta">
                       <StatusBadge
                         className="px-2 py-0.5 text-[10px]"
-                        tone={entry.mode === "local" ? "neutral" : "brand"}
+                        tone="neutral"
                       >
-                        {entry.mode === "local" ? "Local" : "Deep Complete"}
+                        Local
                       </StatusBadge>
                       <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleTimeString()}</time>
                     </div>
