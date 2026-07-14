@@ -61,6 +61,7 @@ import { createCompletionHistory } from "./completion-history.ts";
 import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
+import { boundsEqual } from "./window-position.ts";
 import electronUpdater from "electron-updater";
 
 const { autoUpdater } = electronUpdater;
@@ -720,7 +721,10 @@ function installOverlayPositionTracking(win: BrowserWindow, getBounds: () => Ele
     const currentBounds = win.getBounds();
     const displays = screen.getAllDisplays();
     if (!isBoundsOnScreen(currentBounds, displays) || displays.length > 1) {
-      win.setBounds(getBounds(), false);
+      const nextBounds = getBounds();
+      if (!boundsEqual(currentBounds, nextBounds)) {
+        win.setBounds(nextBounds, false);
+      }
     }
   };
 
