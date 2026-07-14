@@ -1,6 +1,6 @@
 import {
   LocalSuggestionActivityResponseSchema,
-  RecordTelemetryEventRequestSchema,
+  RecordTelemetryEventsRequestSchema,
   TelemetryEventsResponseSchema,
 } from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
@@ -35,7 +35,7 @@ export function registerTelemetryRoutes(
       );
     }
 
-    const parseResult = RecordTelemetryEventRequestSchema.safeParse(payload);
+    const parseResult = RecordTelemetryEventsRequestSchema.safeParse(payload);
     if (!parseResult.success) {
       return c.json(
         createErrorResponse(
@@ -46,32 +46,32 @@ export function registerTelemetryRoutes(
       );
     }
 
-    const request = parseResult.data;
     const device = c.get("device");
 
-    try {
-      await deps.telemetryService.record({
-        id: request.eventId,
-        eventType: request.eventType,
-        requestId: request.requestId,
-        userId: device.userId,
-        deviceId: device.deviceId,
-        timestamp: request.timestamp,
-        suggestionLength: request.suggestionLength,
-        latencyMs: request.latencyMs,
-        errorCode: request.errorCode,
-        modelId: request.modelId,
-        inferenceSource: request.inferenceSource,
-        trigger: request.trigger,
-        acceptedWordCount: request.acceptedWordCount,
-        acceptedCharacterCount: request.acceptedCharacterCount,
-        applicationCategory: request.applicationCategory,
-        memoryUsed: request.memoryUsed,
-        memoryCount: request.memoryCount,
-      });
-    } catch {
-      // Telemetry ingestion is best-effort; still return success to the client
-      // so acceptance/dismissal reporting does not block typing.
+    for (const request of parseResult.data) {
+      try {
+        await deps.telemetryService.record({
+          id: request.eventId,
+          eventType: request.eventType,
+          requestId: request.requestId,
+          userId: device.userId,
+          deviceId: device.deviceId,
+          timestamp: request.timestamp,
+          suggestionLength: request.suggestionLength,
+          latencyMs: request.latencyMs,
+          errorCode: request.errorCode,
+          modelId: request.modelId,
+          inferenceSource: request.inferenceSource,
+          trigger: request.trigger,
+          acceptedWordCount: request.acceptedWordCount,
+          acceptedCharacterCount: request.acceptedCharacterCount,
+          applicationCategory: request.applicationCategory,
+          memoryUsed: request.memoryUsed,
+          memoryCount: request.memoryCount,
+        });
+      } catch {
+        // Telemetry ingestion is best-effort; one failed event must not block the batch.
+      }
     }
 
     return c.json(

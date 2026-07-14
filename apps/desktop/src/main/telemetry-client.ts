@@ -12,11 +12,13 @@ export type DesktopTelemetryClientDependencies = {
 
 export function createDesktopTelemetryClient(deps: DesktopTelemetryClientDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
+  const pending: Array<{
+    event: RecordTelemetryEventRequest;
+    resolve: () => void;
+  }> = [];
+  let flushScheduled = false;
 
-  return async function recordInteractionTelemetry(event: RecordTelemetryEventRequest): Promise<void> {
-    const parsed = RecordTelemetryEventRequestSchema.safeParse(event);
-    if (!parsed.success) return;
-
+  async function sendBatch(events: RecordTelemetryEventRequest[]): Promise<void> {
     try {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -29,7 +31,7 @@ export function createDesktopTelemetryClient(deps: DesktopTelemetryClientDepende
       const response = await http(`${deps.apiBaseUrl}/telemetry/events`, {
         method: "POST",
         headers,
-        body: JSON.stringify(parsed.data),
+        body: JSON.stringify(events),
       });
 
       if (!response.ok) return;
@@ -40,5 +42,30 @@ export function createDesktopTelemetryClient(deps: DesktopTelemetryClientDepende
     } catch {
       // Interaction telemetry is best-effort and must never block desktop input.
     }
+  }
+
+  function flush(): void {
+    flushScheduled = false;
+    const batch = pending.splice(0, pending.length);
+    const requests: Array<Promise<void>> = [];
+    for (let index = 0; index < batch.length; index += 20) {
+      requests.push(sendBatch(batch.slice(index, index + 20).map(({ event }) => event)));
+    }
+    void Promise.all(requests).finally(() => {
+      for (const item of batch) item.resolve();
+    });
+  }
+
+  return function recordInteractionTelemetry(event: RecordTelemetryEventRequest): Promise<void> {
+    const parsed = RecordTelemetryEventRequestSchema.safeParse(event);
+    if (!parsed.success) return Promise.resolve();
+
+    return new Promise((resolve) => {
+      pending.push({ event: parsed.data, resolve });
+      if (!flushScheduled) {
+        flushScheduled = true;
+        queueMicrotask(flush);
+      }
+    });
   };
 }

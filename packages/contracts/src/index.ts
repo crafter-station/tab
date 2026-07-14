@@ -406,6 +406,13 @@ export const RecordTelemetryEventRequestSchema = z
   })
   .strict();
 
+export const RecordTelemetryEventsRequestSchema = z
+  .union([
+    RecordTelemetryEventRequestSchema,
+    z.array(RecordTelemetryEventRequestSchema).min(1).max(20),
+  ])
+  .transform((events) => Array.isArray(events) ? events : [events]);
+
 export const TelemetryEventsResponseSchema = z.object({
   status: z.literal("ok"),
   data: z.object({

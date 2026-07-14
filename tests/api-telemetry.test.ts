@@ -293,6 +293,32 @@ describe("Metadata-only suggestion telemetry", () => {
     assertNoRawText(events, "accepted suggestion text");
   });
 
+  it("records a bounded batch of metadata-only client events", async () => {
+    const { app, token, telemetryService } = await createAuthenticatedTestApp(
+      async () => ({ text: " world" }),
+    );
+    const requestId = crypto.randomUUID();
+    const response = await app.request("/telemetry/events", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify(["suggestion_generated", "suggestion_shown"].map((eventType) => ({
+        eventType,
+        eventId: crypto.randomUUID(),
+        requestId,
+        timestamp: new Date().toISOString(),
+        inferenceSource: "local",
+        trigger: "automatic",
+        suggestionLength: 5,
+      }))),
+    });
+
+    expect(response.status).toBe(200);
+    expect((await telemetryService.listEvents()).map((event) => event.eventType)).toEqual([
+      "suggestion_generated",
+      "suggestion_shown",
+    ]);
+  });
+
   it("records client suggestion failure error codes", async () => {
     const { app, token, telemetryService } = await createAuthenticatedTestApp(
       async () => ({ text: " world" }),
