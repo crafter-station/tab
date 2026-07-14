@@ -31,8 +31,8 @@ export function SignInSurface() {
 
   return (
     <main className="sign-in-shell">
-      <section className="sign-in-hero drag-region" aria-label="Tab setup preview">
-        <div className="sign-in-proof pug-dot-grid">
+      <section className="sign-in-hero" aria-label="Tab setup preview">
+        <div className="sign-in-proof pug-dot-grid no-drag">
           <Eyebrow>Tab for Mac</Eyebrow>
           <h1 className="sign-in-proof__title">Autocomplete where you already write.</h1>
           <div className="sign-in-proof__steps">
@@ -68,7 +68,7 @@ export function SignInSurface() {
             {opened ? "Open browser again" : "Continue in browser"}
           </Button>
 
-          {opened ? <p className="sign-in-hint" role="status">Finish signing in in your browser.</p> : null}
+          <p className="sign-in-hint" role="status">{opened ? "Finish signing in in your browser." : ""}</p>
         </div>
       </section>
     </main>

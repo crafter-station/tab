@@ -351,7 +351,7 @@ export function OnboardingSurface() {
                     )}
 
                     <p className="practice-demo__hint">
-                      Click the Suggestion here. In other apps, press Option+Tab. Keep typing to dismiss it.
+                      Select the Suggestion here. In other apps, press Option+Tab. Keep typing to dismiss it.
                     </p>
                   </div>
                 </div>

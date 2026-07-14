@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeTheme } from "electron";
+import { BrowserWindow, nativeTheme, screen } from "electron";
 import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
 
@@ -8,14 +8,17 @@ export type CreateOnboardingWindowDependencies = {
 };
 
 export function createOnboardingWindow(deps: CreateOnboardingWindowDependencies): BrowserWindow {
+  const workArea = screen.getPrimaryDisplay().workAreaSize;
+  const width = Math.min(760, workArea.width - 32);
+  const height = Math.min(760, workArea.height - 32);
   const win = new BrowserWindow({
-    width: 760,
-    height: 760,
-    minWidth: 720,
-    minHeight: 720,
+    width,
+    height,
+    minWidth: Math.min(600, width),
+    minHeight: Math.min(600, height),
     useContentSize: true,
     center: true,
-    resizable: false,
+    resizable: true,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,

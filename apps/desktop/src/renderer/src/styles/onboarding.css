@@ -210,9 +210,6 @@
   display: grid;
   align-content: start;
   gap: 22px;
-  opacity: 1;
-  transform: translate3d(0, 0, 0);
-  transition: opacity 180ms ease, transform 220ms var(--tab-ease-out);
 }
 
 .onboarding-hero {
@@ -485,6 +482,18 @@
   padding: 9px 12px;
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .onboarding-privacy summary:hover,
+  .dev-note summary:hover {
+    background: var(--tab-hover);
+  }
+}
+
+.onboarding-privacy summary:active,
+.dev-note summary:active {
+  transform: scale(0.99);
+}
+
 .onboarding-privacy summary > svg {
   width: 17px;
   height: 17px;
@@ -656,11 +665,6 @@
 }
 
 @starting-style {
-  .onboarding-step {
-    opacity: 0;
-    transform: translate3d(0, 7px, 0);
-  }
-
   .practice-result {
     opacity: 0;
     transform: translate3d(0, 4px, 0) scale(0.985);
@@ -776,5 +780,13 @@
   .onboarding-progress__marker,
   .permission-row__marker {
     transform: none !important;
+    transition-duration: 0ms !important;
+  }
+
+  .onboarding-privacy summary,
+  .dev-note summary,
+  .onboarding-privacy__chevron {
+    transform: none !important;
+    transition-duration: 0ms !important;
   }
 }

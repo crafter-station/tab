@@ -21,11 +21,17 @@ const controlWindowSizes = {
   onboarding: { width: 760, height: 760, minWidth: 720, minHeight: 720 },
 } satisfies Record<ControlWindowRoute, { width: number; height: number; minWidth: number; minHeight: number }>;
 
+const controlWindowTitles: Record<ControlWindowRoute, string> = {
+  settings: "Tab Settings",
+  "sign-in": "Sign in to Tab",
+  onboarding: "Welcome to Tab",
+};
+
 function applyControlWindowSize(win: BrowserWindow, route: ControlWindowRoute): void {
   const size = controlWindowSizes[route];
   win.setMinimumSize(size.minWidth, size.minHeight);
   win.setSize(size.width, size.height);
-  win.center();
+  win.setTitle(controlWindowTitles[route]);
 }
 
 export function createSettingsWindow(deps: CreateSettingsWindowDependencies, route: ControlWindowRoute = "settings"): BrowserWindow {
@@ -42,7 +48,7 @@ export function createSettingsWindow(deps: CreateSettingsWindowDependencies, rou
     maximizable: false,
     fullscreenable: false,
     show: false,
-    title: "Tab Settings",
+    title: controlWindowTitles[route],
     backgroundColor: PLATFORM_COLORS.theme[nativeTheme.shouldUseDarkColors ? "dark" : "light"].canvas,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
     trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,
@@ -67,8 +73,9 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
 
   function show(route: ControlWindowRoute = "settings"): BrowserWindow {
     if (win && !win.isDestroyed()) {
-      applyControlWindowSize(win, route);
-      if (win.webContents.getURL() && !win.webContents.getURL().endsWith(`#${route}`)) {
+      const routeChanged = Boolean(win.webContents.getURL()) && !win.webContents.getURL().endsWith(`#${route}`);
+      if (routeChanged) {
+        applyControlWindowSize(win, route);
         win.loadFile(deps.rendererPath, { hash: route });
       }
       win.focus();

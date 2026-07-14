@@ -44,7 +44,7 @@ const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
-  if (auth === "signed_in") return "brand";
+  if (auth === "signed_in") return "success";
   if (auth === "revoked_device") return "warning";
   return "neutral";
 }
@@ -95,20 +95,20 @@ function describeLocalInference(status: LocalInferenceStatus, error: string | nu
   }
 }
 
-function describeUpdate(state: DesktopUpdateState): { label: string; description: string; tone: "brand" | "neutral" | "warning" } {
+function describeUpdate(state: DesktopUpdateState): { label: string; description: string; tone: "brand" | "neutral" | "success" | "warning" } {
   switch (state.status) {
     case "idle":
       return { label: "Ready to check", description: "Check GitHub Releases for a newer signed version of Tab.", tone: "neutral" };
     case "checking":
       return { label: "Checking", description: "Looking for the latest version of Tab.", tone: "neutral" };
     case "not-available":
-      return { label: "Up to date", description: `Tab ${state.currentVersion} is the latest version.`, tone: "brand" };
+      return { label: "Up to date", description: `Tab ${state.currentVersion} is the latest version.`, tone: "success" };
     case "available":
       return { label: "Available", description: `Tab ${state.version} is ready to download.`, tone: "warning" };
     case "downloading":
       return { label: `${Math.round(state.percent)}%`, description: `Downloading Tab ${state.version}. Keep Tab open.`, tone: "brand" };
     case "downloaded":
-      return { label: "Ready to install", description: `Restart Tab to install version ${state.version}.`, tone: "brand" };
+      return { label: "Ready to install", description: `Restart Tab to install version ${state.version}.`, tone: "success" };
     case "error":
       return { label: "Try again", description: state.message, tone: "warning" };
   }
@@ -126,6 +126,7 @@ function createFallbackStatus(): DesktopStatus {
 }
 
 export function SettingsSurface() {
+  const [hydrationState, setHydrationState] = useState<"loading" | "ready" | "error">("loading");
   const [activeTab, setActiveTab] = useState<SettingsTab>("account");
   const [themeMode, setThemeMode] = useState<ThemeMode>(
     () => getStoredThemePreference(window.localStorage) ?? "system",
@@ -195,8 +196,9 @@ export function SettingsSurface() {
         if (!receivedLocalInferenceStatus) setLocalInferenceStatus(initialState.localInferenceStatus);
         if (!receivedCompletionHistory) setCompletionHistory(initialState.completionHistory ?? []);
         if (!receivedUpdateState) setUpdateState(initialState.updateState);
+        setHydrationState("ready");
       })
-      .catch(() => {});
+      .catch(() => setHydrationState("error"));
 
     refreshAccessibility().catch(() => setAccessibilityGranted(false));
     return () => {
@@ -305,7 +307,7 @@ export function SettingsSurface() {
               <StatusRow
                 label="Account services"
                 value={status.connectivity === "online" ? "Online" : "Offline"}
-                tone={status.connectivity === "online" ? "brand" : "warning"}
+                tone={status.connectivity === "online" ? "success" : "warning"}
                 description="Used for Deep Complete and Personal Memory sync."
               />
               <div className="settings-group__actions">
@@ -344,7 +346,7 @@ export function SettingsSurface() {
               description={localInference.description}
             >
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge tone={localInferenceStatus.status === "ready" ? "brand" : "warning"}>
+                <StatusBadge tone={localInferenceStatus.status === "ready" ? "success" : "warning"}>
                   {localInference.label}
                 </StatusBadge>
                 {localInferenceStatus.status === "unavailable"
@@ -354,6 +356,7 @@ export function SettingsSurface() {
               </div>
             </SettingsRow>
             <SettingsRow
+              className="settings-row--stacked"
               label="Custom writing instructions"
               description={status.entitlement?.capabilities.customWritingInstructions
                 ? "Used for Local Suggestions and Deep Complete. Not included in telemetry."
@@ -437,7 +440,7 @@ export function SettingsSurface() {
                 description="Required to read the text field you are using and add suggestions you accept."
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <StatusBadge tone={accessibilityGranted ? "brand" : "warning"}>
+                  <StatusBadge tone={accessibilityGranted ? "success" : "warning"}>
                     {accessibilityGranted ? "Enabled" : "Needs access"}
                   </StatusBadge>
                   {accessibilityGranted ? null : <Button disabled={permissionBusy === "accessibility"} onClick={handleAccessibility}>Open System Settings</Button>}
@@ -544,7 +547,7 @@ export function SettingsSurface() {
                       <p className="text-sm leading-relaxed">{memory.content}</p>
                       <p className="mt-1 text-xs text-muted-foreground">{describePersonalMemorySource(memory.createdBy)}</p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => window.tab?.deleteMemory?.(memory.id)}>
+                    <Button aria-label={`Delete memory: ${memory.content}`} className="text-destructive hover:text-destructive" variant="ghost" size="sm" onClick={() => window.tab?.deleteMemory?.(memory.id)}>
                       Delete
                     </Button>
                   </div>
@@ -658,11 +661,16 @@ export function SettingsSurface() {
                   </Button>
                 </div>
               ) : null}
-              {SETTINGS_TABS.map((tab) => (
+              {hydrationState === "ready" ? SETTINGS_TABS.map((tab) => (
                 <TabsContent className="settings-tabs__panel" key={tab.value} value={tab.value}>
                   {activeTab === tab.value ? renderActiveTab() : null}
                 </TabsContent>
-              ))}
+              )) : (
+                <EmptyState
+                  title={hydrationState === "loading" ? "Loading settings" : "Settings unavailable"}
+                  description={hydrationState === "loading" ? "Reading this Mac's current Tab settings." : "Quit and reopen Tab to try again."}
+                />
+              )}
             </div>
           </section>
         </div>
