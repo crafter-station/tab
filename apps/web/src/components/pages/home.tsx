@@ -3,7 +3,6 @@ import {
   ArrowUpRight,
   Brain,
   CheckCircle,
-  Command,
   DownloadSimple,
   Plus,
   ShieldCheck,
@@ -147,10 +146,15 @@ function AppMarquee() {
 
 function WorkflowMap() {
   const incomingLeft = "M380 76V112C380 137 318 149 250 149H132V164";
-  const incomingRight = "M380 112C380 137 442 149 510 149H628V164";
+  const incomingRight = "M380 76V112C380 137 442 149 510 149H628V164";
   const outgoingLeft = "M132 206V228C132 252 228 266 315 266H342";
   const outgoingRight = "M628 206V228C628 252 532 266 445 266H418";
-  const paths = [incomingLeft, incomingRight, outgoingLeft, outgoingRight];
+  const paths = [
+    { path: incomingLeft, duration: "3.2s" },
+    { path: incomingRight, duration: "3.2s" },
+    { path: outgoingLeft, duration: "2.486s" },
+    { path: outgoingRight, duration: "2.486s" },
+  ];
 
   return (
     <WorkflowInteraction id="workflow-animation" className="tab-workflow overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card">
@@ -160,11 +164,11 @@ function WorkflowMap() {
       </div>
       <div className="tab-workflow-map relative isolate min-h-[19rem] overflow-hidden bg-[var(--tab-surface-sunken)] sm:min-h-[23rem]">
         <svg className="absolute inset-0 size-full text-border" viewBox="0 0 760 340" preserveAspectRatio="none" aria-hidden="true">
-          {paths.map((path) => <path className="tab-workflow-line" d={path} fill="none" stroke="currentColor" key={path} />)}
-          {paths.map((path, index) => (
-            <circle className="tab-workflow-signal text-foreground" r="4" fill="currentColor" key={`signal-${path}`}>
-              <animateMotion begin={`${index * 0.65}s`} dur="3.2s" repeatCount="indefinite" path={path} />
-            </circle>
+          {paths.map(({ path }) => <path className="tab-workflow-line" d={path} fill="none" stroke="currentColor" key={path} />)}
+          {paths.map(({ path, duration }) => (
+            <path className="tab-workflow-signal text-foreground" d="M0 0h0.001" fill="none" stroke="currentColor" strokeLinecap="round" strokeWidth="8" vectorEffect="non-scaling-stroke" key={`signal-${path}`}>
+              <animateMotion begin="0s" dur={duration} repeatCount="indefinite" path={path} />
+            </path>
           ))}
         </svg>
 
@@ -197,13 +201,12 @@ function WorkflowMap() {
       </div>
 
       <ol className="grid border-t border-border md:grid-cols-3">
-        {steps.map((step, index) => (
+        {steps.map((step) => (
           <li className="grid min-h-44 content-between gap-7 border-b border-border p-5 last:border-b-0 md:border-b-0 md:border-l md:first:border-l-0 md:p-6" key={step.number}>
             <span className="font-[var(--font-code)] text-xs font-semibold text-muted-foreground">{step.number}</span>
             <div>
               <h3 className="text-lg font-bold">{step.title}</h3>
               <p className="mt-2 text-pretty text-sm leading-relaxed text-muted-foreground">{step.description}</p>
-              {index === 2 ? <p className="mt-4 font-[var(--font-code)] text-[0.6875rem] font-semibold"><Command aria-hidden="true" /> Try the overlay above</p> : null}
             </div>
           </li>
         ))}
