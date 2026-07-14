@@ -11,7 +11,6 @@ import {
   systemPreferences,
 } from "electron";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { exec, spawn } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { promisify } from "node:util";
@@ -62,7 +61,9 @@ import { createCompletionHistory } from "./completion-history.ts";
 import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
-import { autoUpdater } from "electron-updater";
+import electronUpdater from "electron-updater";
+
+const { autoUpdater } = electronUpdater;
 
 let authCallbackHandlingReady = false;
 const pendingAuthCallbackUrls: string[] = [];
@@ -86,9 +87,8 @@ app.on("open-url", (event, url) => {
   if (dispatchPackagedAuthCallback(url)) event.preventDefault();
 });
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const execAsync = promisify(exec);
-const runtimeRoot = app.isPackaged ? path.join(app.getAppPath(), "dist") : __dirname;
+const runtimeRoot = path.join(app.getAppPath(), app.isPackaged ? "dist" : "src");
 const PRELOAD_PATH = env.TAB_PRELOAD_PATH ?? path.join(runtimeRoot, "preload.cjs");
 const OVERLAY_RENDERER_PATH = env.TAB_OVERLAY_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "overlay.html");
 const APP_RENDERER_PATH = env.TAB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
