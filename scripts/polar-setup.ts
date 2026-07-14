@@ -26,6 +26,25 @@ const polar = new Polar({ accessToken: env.POLAR_ACCESS_TOKEN, server: env.POLAR
 const organizationScope = env.POLAR_SEND_ORGANIZATION_ID
   ? { organizationId: env.POLAR_ORGANIZATION_ID }
   : {};
+let organization = await polar.organizations.get({ id: env.POLAR_ORGANIZATION_ID });
+if (
+  !organization.customerPortalSettings.usage.show ||
+  !organization.customerPortalSettings.subscription.updatePlan
+) {
+  organization = await polar.organizations.update({
+    id: organization.id,
+    organizationUpdate: {
+      customerPortalSettings: {
+        ...organization.customerPortalSettings,
+        usage: { show: true },
+        subscription: {
+          ...organization.customerPortalSettings.subscription,
+          updatePlan: true,
+        },
+      },
+    },
+  });
+}
 
 const listed = await polar.webhooks.listWebhookEndpoints({
   ...organizationScope,
@@ -68,5 +87,9 @@ console.log(JSON.stringify({
   webhookEndpointId: endpoint.id,
   url: endpoint.url,
   events: endpoint.events,
+  customerPortal: {
+    planChanges: organization.customerPortalSettings.subscription.updatePlan,
+    usage: organization.customerPortalSettings.usage.show,
+  },
   secretStoredIn: envFile,
 }, null, 2));

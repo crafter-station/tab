@@ -68,4 +68,13 @@ describe("hydrated dashboard component architecture", () => {
     expect(source).toContain('"Unlimited"');
     expect(source).toContain("No daily limit on");
   });
+
+  it("uses Polar as the billing, plan change, and metered usage surface", () => {
+    const source = readFileSync("apps/web/src/components/dashboard/usage.tsx", "utf8");
+    expect(source).toContain("Billing & usage");
+    expect(source).toContain("change plans, and inspect metered usage in Polar");
+    expect(source).toContain('href="/billing/portal"');
+    expect(source).toContain("Open Polar portal");
+    expect(source).not.toContain("Manage subscription");
+  });
 });

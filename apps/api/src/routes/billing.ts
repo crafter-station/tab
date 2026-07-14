@@ -97,46 +97,6 @@ export function registerBillingRoutes(
       name: sessionCheck.session.user.name,
     });
     if (hasActivePolarEntitlement(entitlement, new Date())) {
-      if (entitlement.planId === planId) {
-        return c.json(
-          BillingCheckoutResponseSchema.parse({
-            status: "ok",
-            data: { url: "/dashboard" },
-          }),
-          200,
-        );
-      }
-      if (deps.billingCheckoutClient.changePlan && entitlement.polarSubscriptionId) {
-        const requested = c.req.query("proration") ?? "next_period";
-        if (requested !== "invoice" && requested !== "next_period" && requested !== "reset") {
-          return c.json(
-            createErrorResponse("invalid_request", "Invalid plan change timing."),
-            400,
-          );
-        }
-        try {
-          await deps.billingCheckoutClient.changePlan(
-            planId,
-            entitlement.polarSubscriptionId,
-            requested,
-          );
-          return c.json(
-            BillingCheckoutResponseSchema.parse({
-              status: "ok",
-              data: { url: "/dashboard?billing=success" },
-            }),
-            200,
-          );
-        } catch (error) {
-          return c.json(
-            createErrorResponse(
-              "provider_failure",
-              error instanceof Error ? error.message : "Plan change failed.",
-            ),
-            503,
-          );
-        }
-      }
       try {
         const url = await deps.billingCheckoutClient.createPortalUrl(
           userId,
@@ -181,45 +141,17 @@ export function registerBillingRoutes(
     }
   });
 
-  app.post("/api/billing/downgrade", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    const entitlement = await deps.billingService.getEntitlement(
-      sessionCheck.session.user.id,
-    );
-    if (
-      !deps.billingCheckoutClient.changePlan ||
-      !entitlement.polarSubscriptionId ||
-      entitlement.planId === "free"
-    ) {
-      return c.json(
-        createErrorResponse("plan_change_required", "No paid subscription can be downgraded."),
-        409,
-      );
-    }
-    try {
-      await deps.billingCheckoutClient.changePlan(
-        "free",
-        entitlement.polarSubscriptionId,
-        "next_period",
-      );
-      return c.json({ status: "ok", data: { scheduled: true } }, 200);
-    } catch (error) {
-      return c.json(
-        createErrorResponse(
-          "provider_failure",
-          error instanceof Error ? error.message : "Downgrade failed.",
-        ),
-        503,
-      );
-    }
-  });
-
   app.get("/api/billing/portal", async (c) => {
     const sessionCheck = await requireSession(c, deps.auth);
     if (!sessionCheck.ok) return sessionCheck.response;
     const userId = sessionCheck.session.user.id;
-    const entitlement = await deps.billingService.getEntitlement(userId);
+    const entitlement = sessionCheck.session.user.emailVerified
+      ? await deps.billingService.provisionAccount({
+          id: userId,
+          email: sessionCheck.session.user.email,
+          name: sessionCheck.session.user.name,
+        })
+      : await deps.billingService.getEntitlement(userId);
     try {
       const url = await deps.billingCheckoutClient.createPortalUrl(
         userId,

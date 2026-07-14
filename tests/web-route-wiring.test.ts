@@ -28,6 +28,7 @@ const virtualCloudflareWorkers = "\0test-cloudflare-workers";
 let database: Database;
 let personalMemoryStorage: InMemoryPersonalMemoryStorage;
 let vite: ViteDevServer;
+let billingService: BillingService;
 let userId = "";
 let sessionCookie = "";
 const verificationEmails: string[] = [];
@@ -51,11 +52,12 @@ beforeAll(async () => {
 	});
 	await migrateAuth(auth);
 	personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+	billingService = new BillingService({
+		storage: new InMemoryBillingStorage(),
+	});
 	const app = createApp({
 		auth,
-		billingService: new BillingService({
-			storage: new InMemoryBillingStorage(),
-		}),
+		billingService,
 		billingCheckoutClient: {
 			createCheckoutUrl: async (planId) => `https://checkout.example/${planId}`,
 			createPortalUrl: async () => "https://portal.example/account",
@@ -269,6 +271,28 @@ describe("TanStack Start request routing", () => {
 		expect(response.status).toBe(303);
 		expect(response.headers.get("location")).toBe(
 			"https://checkout.example/max",
+		);
+	});
+
+	it("sends active paid Plan Changes to the Polar portal", async () => {
+		await billingService.applyEntitlement({
+			userId,
+			planId: "pro",
+			polarCustomerId: "polar-customer-1",
+			polarSubscriptionId: "polar-subscription-1",
+			status: "active",
+			currentPeriodStart: new Date("2026-07-01T00:00:00.000Z"),
+			currentPeriodEnd: new Date("2099-08-01T00:00:00.000Z"),
+			billingInterval: "monthly",
+			cachedAt: new Date(),
+		});
+
+		const response = await webRequest("/billing/checkout?plan=max", {
+			headers: { cookie: sessionCookie },
+		});
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location")).toBe(
+			"https://portal.example/account",
 		);
 	});
 

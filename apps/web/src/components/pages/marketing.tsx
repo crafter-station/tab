@@ -58,8 +58,8 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
         <>Continuous Memory Extraction</>,
         <>Custom writing instructions and supported model catalog</>,
       ],
-      action: { kind: "checkout" as const, plan: "pro" as const, label: "Start Pro with one month free" },
-      actionNote: authenticated ? "Payment details required. No charge today." : "Sign in, then continue to secure checkout.",
+      action: { kind: "checkout" as const, plan: "pro" as const, label: authenticated ? "Choose Pro" : "Start Pro with one month free" },
+      actionNote: authenticated ? "Free accounts continue to checkout. Plan changes open in Polar." : "Sign in, then continue to secure checkout.",
       featured: true,
       id: "paid-plans",
     },
@@ -76,8 +76,8 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
         <>Continuous Memory Extraction</>,
         <>Custom writing instructions and supported model catalog</>,
       ],
-      action: { kind: "checkout" as const, plan: "max" as const, label: "Start Max with one month free" },
-      actionNote: authenticated ? "Payment details required. No charge today." : "Sign in, then continue to secure checkout.",
+      action: { kind: "checkout" as const, plan: "max" as const, label: authenticated ? "Choose Max" : "Start Max with one month free" },
+      actionNote: authenticated ? "Free accounts continue to checkout. Plan changes open in Polar." : "Sign in, then continue to secure checkout.",
     },
   ];
 
@@ -120,7 +120,7 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
         </summary>
         <div className="tab-disclosure-panel mt-6 grid gap-6 text-sm leading-relaxed text-muted-foreground sm:grid-cols-3">
           <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">Polar starts the one-month trial at paid-plan checkout, collects payment details, and prevents repeat trial redemption.</p></div>
-          <div><h3 className="font-bold text-foreground">Paid plans</h3><p className="mt-2">Paid plans renew monthly. Cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing portal</a>.</p></div>
+          <div><h3 className="font-bold text-foreground">Paid plans</h3><p className="mt-2">Paid plans renew monthly. Change plans, inspect usage, or cancel in the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">Polar portal</a>.</p></div>
           <div><h3 className="font-bold text-foreground">Personal Memory</h3><p className="mt-2">Downgrading does not remove your controls to view, edit, export, or delete existing Personal Memory.</p></div>
         </div>
       </details>

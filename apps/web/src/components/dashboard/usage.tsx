@@ -1,4 +1,5 @@
 import { isPaidPlanId } from "@tab/billing";
+import { ArrowSquareOut } from "@phosphor-icons/react";
 import { Alert, AlertDescription, AlertTitle, Button, CardContent, SectionCard, SummaryMetric } from "@tab/ui";
 import { formatCount, formatDate } from "../pages/shared.tsx";
 import { DashboardSectionContent } from "./layout.tsx";
@@ -60,10 +61,15 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
         <SectionCard>
           <CardContent className="flex flex-col gap-5 p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6">
             <div>
-              <h2 className="text-xl font-bold">{hasPaidPlan ? `${formatPlanName(billing.planId)} subscription` : "Need higher allowances?"}</h2>
-              <p className="mt-1 text-sm text-muted-foreground">{hasPaidPlan ? `Your paid plan includes ${formatCount(billing.deepCompletes.limit ?? 0)} Deep Completes each month.` : "Compare paid plans for unlimited Local Accepted Words and higher Deep Complete allowances."}</p>
+              <h2 className="text-xl font-bold">Billing & usage</h2>
+              <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">{hasPaidPlan ? `Manage your ${formatPlanName(billing.planId)} subscription, change plans, and inspect metered usage in Polar.` : "Inspect metered usage in Polar, or compare plans when you need higher allowances."}</p>
             </div>
-            <Button asChild variant="secondary" size="sm"><a href={hasPaidPlan ? "/billing/portal" : "/pricing"}>{hasPaidPlan ? "Manage subscription" : "Compare plans"}</a></Button>
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              {!hasPaidPlan ? <Button asChild variant="ghost" size="sm"><a href="/pricing">Compare plans</a></Button> : null}
+              <Button asChild variant="secondary" size="sm">
+                <a href="/billing/portal">Open Polar portal <ArrowSquareOut aria-hidden="true" /></a>
+              </Button>
+            </div>
           </CardContent>
         </SectionCard>
       </div>

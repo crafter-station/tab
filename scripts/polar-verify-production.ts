@@ -37,6 +37,12 @@ if (
 ) {
   readinessIssues.push("checkout or subscription renewal capabilities are disabled");
 }
+if (
+  !organization.customerPortalSettings.subscription.updatePlan ||
+  !organization.customerPortalSettings.usage.show
+) {
+  throw new Error("Polar customer portal must enable plan changes and metered usage");
+}
 
 const meterId = required.meterId as string;
 const meter = await polar.meters.get({ id: meterId });
@@ -135,6 +141,10 @@ console.log(JSON.stringify({
   readinessIssues,
   environment: env.POLAR_SERVER,
   organizationId: organization.id,
+  customerPortal: {
+    planChanges: organization.customerPortalSettings.subscription.updatePlan,
+    usage: organization.customerPortalSettings.usage.show,
+  },
   meterId,
   acceptedWordsMeterId: acceptedWordsMeter.id,
   products: planIds.map((planId) => ({

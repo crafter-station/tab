@@ -350,11 +350,6 @@ export interface BillingCheckoutClient {
     subscriptionId?: string,
   ): Promise<string>;
   createPortalUrl(userId: string, customerId?: string): Promise<string>;
-  changePlan?(
-    planId: PlanId,
-    subscriptionId: string,
-    prorationBehavior: "invoice" | "next_period" | "reset",
-  ): Promise<void>;
 }
 
 export type CreatePolarBillingCheckoutClientOptions = {
@@ -459,37 +454,6 @@ export class PolarBillingCheckoutClient implements BillingCheckoutClient {
     }
     const session = await this.polar.customerSessions.create({ customerId });
     return session.customerPortalUrl;
-  }
-
-  async changePlan(
-    planId: PlanId,
-    subscriptionId: string,
-    prorationBehavior: "invoice" | "next_period" | "reset",
-  ): Promise<void> {
-    let productId = planId === "free"
-      ? env.POLAR_PRODUCT_ID_FREE_MONTHLY
-      : this.productIds[planId];
-    if (planId === "free" && !productId) {
-      const listed = await this.polar.products.list({
-        metadata: { planId: "free", billingInterval: "monthly" },
-        isArchived: false,
-        isRecurring: true,
-        limit: 100,
-      });
-      productId = listed.result.items.find((item) =>
-        item.recurringInterval === "month" &&
-        item.prices.some((price) =>
-          !price.isArchived &&
-          (price.amountType === "free" ||
-            (price.amountType === "fixed" && price.priceAmount === 0))
-        )
-      )?.id;
-    }
-    if (!productId) throw new Error(`Polar ${planId} monthly product id is not configured`);
-    await this.polar.subscriptions.update({
-      id: subscriptionId,
-      subscriptionUpdate: { productId, prorationBehavior },
-    });
   }
 }
 

@@ -609,16 +609,33 @@ describe("Billing and allowance enforcement", () => {
         .bind("user-d1", "Test User", "user-d1@example.com", 1, now, now)
         .run();
       const storage = new D1BillingStorage(createDatabase(platform.env.DB));
+      const billing = new BillingService({ storage });
 
       await storage.setEntitlement({
         userId: "user-d1",
-        planId: "max",
+        planId: "pro",
+        polarCustomerId: "customer-d1",
+        polarSubscriptionId: "subscription-d1",
         status: "active",
         cachedAt: new Date(),
+      });
+      await billing.applyPaidEntitlementEvent({
+        id: "portal-plan-change-d1",
+        type: "subscription.updated",
+        data: {
+          customer: { external_id: "user-d1" },
+          customer_id: "customer-d1",
+          id: "subscription-d1",
+          status: "active",
+          product: { name: "Tab Max" },
+          current_period_start: "2026-07-14T00:00:00.000Z",
+          current_period_end: "2026-08-14T00:00:00.000Z",
+        },
       });
 
       const entitlement = await storage.getEntitlement("user-d1");
       expect(entitlement?.planId).toBe("max");
+      expect(entitlement?.polarSubscriptionId).toBe("subscription-d1");
       expect(entitlement?.trialStartedAt).toBeUndefined();
       expect(entitlement?.trialEndsAt).toBeUndefined();
 
@@ -1148,16 +1165,12 @@ describe("Billing and allowance enforcement", () => {
 
   it("passes the existing Free subscription to paid checkout", async () => {
     const captured: unknown[] = [];
-    const updates: unknown[] = [];
     const polar = {
       checkouts: {
         async create(input: unknown) {
           captured.push(input);
           return { url: "https://checkout.example/session" };
         },
-      },
-      subscriptions: {
-        async update(input: unknown) { updates.push(input); },
       },
     } as unknown as import("@polar-sh/sdk").Polar;
     const checkout = new PolarBillingCheckoutClient({
@@ -1175,14 +1188,6 @@ describe("Billing and allowance enforcement", () => {
       products: ["product-pro"],
       externalCustomerId: "user-1",
       subscriptionId: "subscription-free",
-    });
-    await checkout.changePlan("max", "subscription-free", "next_period");
-    expect(updates[0]).toEqual({
-      id: "subscription-free",
-      subscriptionUpdate: {
-        productId: "product-max",
-        prorationBehavior: "next_period",
-      },
     });
   });
 });

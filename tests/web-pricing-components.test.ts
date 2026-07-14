@@ -32,6 +32,7 @@ describe("pricing plan composition", () => {
     expect(marketingSource).toInclude('authenticated ? "#paid-plans" : "/signup"');
     expect(marketingSource).toInclude('authenticated ? "/dashboard" : "/signup"');
     expect(marketingSource).toInclude("Sign in, then continue to secure checkout.");
-    expect(marketingSource).toInclude("Payment details required. No charge today.");
+    expect(marketingSource).toInclude("Free accounts continue to checkout. Plan changes open in Polar.");
+    expect(marketingSource).toInclude("Change plans, inspect usage, or cancel");
   });
 });
