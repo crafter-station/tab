@@ -38,18 +38,18 @@ if (matches.length > 1) {
   throw new Error(`Multiple Polar webhook endpoints already target ${url}`);
 }
 
-const endpoint = matches[0]
-  ? await polar.webhooks.updateWebhookEndpoint({
-      id: matches[0].id,
-      webhookEndpointUpdate: {
-        name: "Tab billing sync",
-        url,
-        format: "raw",
-        events: [...events],
-        enabled: true,
-      },
-    })
-  : await polar.webhooks.createWebhookEndpoint({
+const existing = matches[0];
+if (
+  existing &&
+  (!existing.enabled ||
+    existing.format !== "raw" ||
+    existing.url !== url ||
+    existing.events.length !== events.length ||
+    existing.events.some((event) => !events.includes(event as (typeof events)[number])))
+) {
+  throw new Error("Existing Polar webhook differs from the required configuration; refusing to modify it");
+}
+const endpoint = existing ?? await polar.webhooks.createWebhookEndpoint({
       name: "Tab billing sync",
       url,
       format: "raw",
@@ -63,7 +63,7 @@ await updatePolarEnvFile(envFile, {
 });
 
 console.log(JSON.stringify({
-  status: matches[0] ? "updated" : "created",
+  status: existing ? "reused" : "created",
   environment: env.POLAR_SERVER,
   webhookEndpointId: endpoint.id,
   url: endpoint.url,

@@ -34,6 +34,8 @@ This audience already pays for productivity tools, understands local models and 
 
 Pro and Max are monthly-only subscriptions. Both use Polar's product-level one-month trial, require payment details at checkout, and rely on Polar's trial-abuse prevention. Tab has no annual plan and no annual customers. Max differs from Pro only in its monthly Deep Complete allowance. Additional cloud packs, teams, a lifetime local license, and a separate local-only purchase are deferred until usage demonstrates demand.
 
+Free is also represented by a monthly recurring Polar subscription created asynchronously without checkout. Polar's exact subscription period is the Deep Complete billing period for every plan; Accepted Words retain their Mac-local daily reset. Both value streams are delivered durably to Polar for reporting while Tab remains the enforcement authority.
+
 ## Metering Principles
 
 - Meter value received, not model activity.

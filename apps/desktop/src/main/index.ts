@@ -133,13 +133,15 @@ const appContextExtractor = createAppContextExtractor({
 
 const userDataPath = app.getPath("userData");
 mkdirSync(userDataPath, { recursive: true });
+let currentDesktopStatus: DesktopStatus | null = null;
 const preferencesManager = createPreferencesManager({
   storage: createFilePreferencesStorage(path.join(userDataPath, "preferences.json")),
 });
 const acceptedWordLedger = createAcceptedWordLedger({
   storage: createFileAcceptedWordLedgerStorage(
-    path.join(userDataPath, "accepted-word-ledger.v1.json"),
+    path.join(userDataPath, "accepted-word-ledger.v2.json"),
   ),
+  getUserId: () => currentDesktopStatus?.userId ?? undefined,
 });
 
 const onboardingManager = createOnboardingManager({
@@ -245,7 +247,6 @@ const memoryClient = createDesktopMemoryClient({
   getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
 });
 
-let currentDesktopStatus: DesktopStatus | null = null;
 const memoryExtractionWindow = createMemoryExtractionWindow({
   memoryEnabled: () =>
     preferencesManager.get().suggestions.continuousMemoryExtraction &&

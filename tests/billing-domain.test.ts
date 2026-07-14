@@ -63,21 +63,28 @@ describe("Deep Complete accounting", () => {
 });
 
 describe("billing status projection", () => {
-  it("uses an explicit local day and an account-authoritative UTC month", () => {
+  it("uses an explicit local day and exact Polar subscription period", () => {
     expect(
       getAllowancePeriods({
         now: new Date("2026-12-31T23:30:00.000Z"),
         localDay: "2027-01-01",
         localResetAt: new Date("2027-01-02T08:00:00.000Z"),
+        deepCompletePeriod: {
+          period: "sub-1:2026-12-15T10:00:00.000Z",
+          periodStartsAt: "2026-12-15T10:00:00.000Z",
+          periodEndsAt: "2027-01-15T10:00:00.000Z",
+        },
       }),
     ).toEqual({
       localAcceptedWords: {
         period: "2027-01-01",
-        resetAt: "2027-01-02T08:00:00.000Z",
+        periodStartsAt: "2027-01-01T00:00:00",
+        periodEndsAt: "2027-01-02T08:00:00.000Z",
       },
       deepCompletes: {
-        period: "2026-12",
-        resetAt: "2027-01-01T00:00:00.000Z",
+        period: "sub-1:2026-12-15T10:00:00.000Z",
+        periodStartsAt: "2026-12-15T10:00:00.000Z",
+        periodEndsAt: "2027-01-15T10:00:00.000Z",
       },
     });
   });
@@ -88,12 +95,15 @@ describe("billing status projection", () => {
         planId: "pro",
         source: "paid",
         effectiveEnd: "2026-07-01T00:00:00.000Z",
+        subscriptionId: "sub-1",
+        currentPeriodStart: "2026-06-01T00:00:00.000Z",
+        currentPeriodEnd: "2026-07-01T00:00:00.000Z",
       },
       now: new Date("2026-07-13T12:00:00.000Z"),
       localDay: "2026-07-13",
       localResetAt: new Date("2026-07-14T07:00:00.000Z"),
       localAcceptedWords: { period: "2026-07-12", used: 80 },
-      deepCompletes: { period: "2026-06", used: 200 },
+      deepCompletes: { period: "sub-1:2026-06-01T00:00:00.000Z", used: 200 },
       activeDevices: 2,
     });
 
@@ -106,16 +116,16 @@ describe("billing status projection", () => {
         used: 0,
         limit: 100,
         remaining: 100,
-        resetAt: "2026-07-14T07:00:00.000Z",
+        periodEndsAt: "2026-07-14T07:00:00.000Z",
         exhausted: false,
       },
       deepCompletes: {
-        period: "2026-07",
-        used: 0,
+        period: "sub-1:2026-06-01T00:00:00.000Z",
+        used: 200,
         limit: 10,
-        remaining: 10,
-        resetAt: "2026-08-01T00:00:00.000Z",
-        exhausted: false,
+        remaining: 0,
+        periodEndsAt: "2026-07-01T00:00:00.000Z",
+        exhausted: true,
       },
       devices: { active: 2, limit: 1, canLink: false },
       upgradeUrl: "/pricing",
@@ -128,12 +138,15 @@ describe("billing status projection", () => {
         planId: "max",
         source: "paid",
         effectiveEnd: "2026-08-01T00:00:00.000Z",
+        subscriptionId: "sub-max",
+        currentPeriodStart: "2026-07-01T00:00:00.000Z",
+        currentPeriodEnd: "2026-08-01T00:00:00.000Z",
       },
       now: new Date("2026-07-13T12:00:00.000Z"),
       localDay: "2026-07-13",
       localResetAt: new Date("2026-07-14T07:00:00.000Z"),
       localAcceptedWords: { period: "2026-07-13", used: 120 },
-      deepCompletes: { period: "2026-07", used: 400 },
+      deepCompletes: { period: "sub-max:2026-07-01T00:00:00.000Z", used: 400 },
       activeDevices: 1,
     });
 
@@ -146,16 +159,23 @@ describe("billing status projection", () => {
 
   it("does not move a cached local allowance backward after a clock rollback", () => {
     const status = projectBillingStatus({
-      entitlement: { planId: "free", source: "free" },
+      entitlement: {
+        planId: "free",
+        source: "free",
+        subscriptionId: "sub-free",
+        currentPeriodStart: "2026-07-01T00:00:00.000Z",
+        currentPeriodEnd: "2026-08-01T00:00:00.000Z",
+      },
       now: new Date("2026-07-12T12:00:00.000Z"),
       localDay: "2026-07-12",
       localResetAt: new Date("2026-07-13T07:00:00.000Z"),
       localAcceptedWords: {
         period: "2026-07-13",
         used: 80,
-        resetAt: "2026-07-14T07:00:00.000Z",
+        periodStartsAt: "2026-07-13T00:00:00",
+        periodEndsAt: "2026-07-14T07:00:00.000Z",
       },
-      deepCompletes: { period: "2026-07", used: 0 },
+      deepCompletes: { period: "sub-free:2026-07-01T00:00:00.000Z", used: 0 },
       activeDevices: 1,
     });
 
@@ -163,7 +183,7 @@ describe("billing status projection", () => {
       period: "2026-07-13",
       used: 80,
       remaining: 20,
-      resetAt: "2026-07-14T07:00:00.000Z",
+      periodEndsAt: "2026-07-14T07:00:00.000Z",
     });
   });
 });

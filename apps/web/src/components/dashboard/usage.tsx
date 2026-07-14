@@ -18,7 +18,7 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
             <CardContent className="grid gap-x-8 gap-y-2 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <SummaryMetric label="Automatic Suggestions accepted" value={formatCount(data.localSuggestionActivity.acceptedSuggestions)} detail="This month" />
               <SummaryMetric label="Words inserted" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="From Automatic Suggestions this month" />
-              <SummaryMetric label="Deep Completes used" value={formatCount(billing.deepCompletes.used)} detail="Successful results this month" />
+              <SummaryMetric label="Deep Completes used" value={formatCount(billing.deepCompletes.used)} detail="Successful results this billing period" />
               <SummaryMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} detail="This month" />
             </CardContent>
           </SectionCard>
@@ -38,7 +38,12 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
                 <p className="mt-1 text-sm text-muted-foreground">Automatic Suggestions and Deep Complete reset independently.</p>
               </div>
               <AutomaticSuggestionAllowance allowance={billing.localAcceptedWords} planName={formatPlanName(billing.planId)} />
-              <DeepCompleteAllowance allowance={billing.deepCompletes} />
+              <DeepCompleteAllowance
+                allowance={billing.deepCompletes}
+                cancelAtPeriodEnd={billing.cancelAtPeriodEnd}
+                planEndsAt={billing.accessEndsAt}
+                trialEndsAt={billing.trial.active ? billing.trial.endsAt : undefined}
+              />
             </CardContent>
           </SectionCard>
           {billing.localAcceptedWords.exhausted || billing.deepCompletes.exhausted ? (

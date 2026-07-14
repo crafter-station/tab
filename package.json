@@ -26,6 +26,7 @@
     "polar:verify:prod": "bun --env-file=dev.vars.prod scripts/polar-verify-production.ts --env-file=dev.vars.prod",
     "polar:verify-usage": "bun --env-file=.dev.vars scripts/polar-verify-usage.ts",
     "polar:diagnose-customer": "bun --env-file=.dev.vars scripts/polar-diagnose-customer.ts",
+    "polar:retry-outbox": "bunx wrangler d1 execute tab-db --remote --config wrangler.jsonc --command \"UPDATE polar_usage_outbox SET status = 'pending', next_attempt_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now'), lease_owner = NULL, lease_expires_at = NULL, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE status = 'failed'\"",
     "sandcastle": "bun --env-file=.sandcastle/.env .sandcastle/main.ts",
     "sandcastle:verify-gh": "bun --env-file=.sandcastle/.env .sandcastle/verify-gh.ts"
   },

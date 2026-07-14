@@ -51,7 +51,9 @@ describe("hydrated dashboard component architecture", () => {
     expect(sources).toContain("Words inserted");
     expect(sources).toContain("accepted words used today");
     expect(sources).toContain("words left");
-    expect(sources).toContain("used this month");
+    expect(sources).toContain("used this billing period");
+    expect(sources).toContain("Resets with your billing cycle on");
+    expect(sources).toContain("Resets daily at local midnight");
     expect(sources).toContain("Deep Completes left");
     expect(sources).not.toContain("Words completed");
     expect(sources).not.toContain("Local Accepted Words today");

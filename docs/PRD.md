@@ -89,7 +89,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Make device tokens opaque, per-installation, rotatable, and revocable.
 - Use Cloudflare D1 for durable product data: users, devices, Personal Memory, memory mutations, subscription/entitlement cache, settings, local usage state, and metadata-only suggestion events.
 - Use Cloudflare KV for short-lived exchange, rate-limit, and cache data where appropriate.
-- Use Cloudflare Queues for background memory jobs and Polar meter ingestion retries.
+- Use durable background delivery for memory jobs and Polar meter ingestion retries; Polar usage uses a D1 transactional outbox drained by the Worker schedule.
 - Do not use R2 for raw typing or suggestion storage by default.
 - Use a local inference runtime for Automatic Suggestions and the AI SDK through the configured cloud provider for Deep Complete and Memory Extraction.
 - Never silently fall back from local inference to Deep Complete.
@@ -102,7 +102,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Count Free local allowance in Accepted Words, with a daily reset. Ignored, dismissed, stale, empty, and failed Local Suggestions do not count.
 - Count one Deep Complete when an explicit request returns at least one Suggestion. Internal retries, empty responses, and failures do not count.
 - Treat allowance exhaustion as an entitlement state with a visible upgrade path, not an empty Suggestion result.
-- Use Polar for paid products, checkout, subscription management, customer portal, and paid entitlement reconciliation.
+- Model Free, Pro, and Max as monthly Polar products. Provision Free asynchronously after verified signup and use Polar for paid checkout, subscription management, customer portal, and lifecycle reconciliation.
 - Enforce Accepted Word and Deep Complete allowances from local app/backend entitlement state without calling Polar synchronously in either hot path.
 - Configure a one-month trial on both paid products in Polar. The trial starts only after checkout, requires a payment method, converts to the selected monthly plan unless canceled, and uses Polar's trial-abuse prevention.
 - After the trial, Free includes 100 Accepted Words per day, 10 Deep Completes per month, one Mac, and management of existing Personal Memory.
@@ -111,7 +111,8 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Offer paid plans monthly only. There is no annual plan and there are no annual customers.
 - Do not use Personal Memory record count as the primary pricing metric. Keep a generous technical abuse ceiling and gate continuous learning rather than access to user data.
 - Preserve view, edit, export, and delete controls for Personal Memory after trial expiration, downgrade, or cancellation.
-- Meter successful Deep Completes for cost and entitlement reporting; local Accepted Words are product-usage telemetry rather than cloud-cost events.
+- Use exact cached Polar subscription period boundaries for every Deep Complete allowance; never substitute a fixed 30-day or UTC calendar month.
+- Durably meter successful Deep Completes and Local Accepted Words to Polar for reporting. Local Accepted Words remain Mac-local daily allowances enforced by Tab, not Polar credits.
 - Do not call Polar synchronously on every Suggestion or Acceptance.
 - Keep the native rolling typing context buffer in process memory only.
 - Clear the local typing context buffer on app switch, pause, secure input, sleep/lock, secret-like context detection, app quit, and explicit user action.

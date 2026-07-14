@@ -3,6 +3,12 @@ import { requireSession } from "./session-api.server.ts";
 
 export async function loadDashboardData(request: Request, api: ApiClient, onResponse?: (response: Response) => void) {
   const user = await requireSession(request, api, onResponse);
+  if (new URL(request.url).searchParams.get("billing") === "success") {
+    const reconciliation = await api.request("/api/billing/reconcile", request, {
+      method: "POST",
+    });
+    onResponse?.(reconciliation);
+  }
   const [billingResponse, devicesResponse, memoriesResponse, localActivityResponse] = await Promise.all([
     api.request("/api/billing/status", request),
     api.request("/api/auth/devices", request),

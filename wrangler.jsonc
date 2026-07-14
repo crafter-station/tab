@@ -13,10 +13,12 @@
   "vars": {
     "BETTER_AUTH_URL": "https://api.tab.cueva.io",
     "TAB_WEB_BASE_URL": "https://tab.cueva.io",
-    "POLAR_CHECKOUT_SUCCESS_URL": "https://tab.cueva.io/dashboard",
+    "POLAR_CHECKOUT_SUCCESS_URL": "https://tab.cueva.io/dashboard?billing=success",
     "POLAR_SERVER": "production",
     "POLAR_SEND_ORGANIZATION_ID": "false",
     "POLAR_DEEP_COMPLETE_METER_ID": "040d4a0d-7db7-46b4-a349-c800190602f6",
+    "POLAR_LOCAL_ACCEPTED_WORDS_METER_ID": "fc0deae8-87cd-4d08-b187-6b7bb8c4c1be",
+    "POLAR_PRODUCT_ID_FREE_MONTHLY": "27b19502-c5f8-4bb1-8e54-d264610cd7c1",
     "POLAR_PRODUCT_ID_PRO_MONTHLY": "aaeb77eb-bcda-445c-9b2f-a2ea6f556cb0",
     "POLAR_PRODUCT_ID_MAX_MONTHLY": "b4a147c5-b7f4-4050-8899-f02ad2c42191"
   },

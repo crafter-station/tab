@@ -1,5 +1,5 @@
 import { Polar } from "@polar-sh/sdk";
-import { planCapabilities, type PaidPlanId } from "@tab/billing";
+import { planCapabilities, type PlanId } from "@tab/billing";
 import { env } from "./env.ts";
 import { getPolarEnvFile } from "./polar-env-file.ts";
 
@@ -10,6 +10,9 @@ if (env.POLAR_SERVER !== "production") {
 
 const required = {
   meterId: env.POLAR_DEEP_COMPLETE_METER_ID,
+  acceptedWordsMeterId: env.POLAR_LOCAL_ACCEPTED_WORDS_METER_ID,
+  freeBenefitId: env.POLAR_CREDITS_BENEFIT_ID_FREE_MONTHLY,
+  freeProductId: env.POLAR_PRODUCT_ID_FREE_MONTHLY,
   proBenefitId: env.POLAR_CREDITS_BENEFIT_ID_PRO_MONTHLY,
   proProductId: env.POLAR_PRODUCT_ID_PRO_MONTHLY,
   maxBenefitId: env.POLAR_CREDITS_BENEFIT_ID_MAX_MONTHLY,
@@ -37,6 +40,9 @@ if (
 
 const meterId = required.meterId as string;
 const meter = await polar.meters.get({ id: meterId });
+const acceptedWordsMeter = await polar.meters.get({
+  id: required.acceptedWordsMeterId as string,
+});
 const meterSelectsDeepCompletes = meter.filter.clauses.some((clause) =>
   !("clauses" in clause) &&
   clause.property === "name" &&
@@ -53,8 +59,17 @@ if (
 ) {
   throw new Error("Deep Complete meter verification failed");
 }
+if (
+  acceptedWordsMeter.archivedAt ||
+  acceptedWordsMeter.metadata.slug !== "local_accepted_words.used" ||
+  acceptedWordsMeter.aggregation.func !== "sum" ||
+  !("property" in acceptedWordsMeter.aggregation) ||
+  acceptedWordsMeter.aggregation.property !== "words"
+) {
+  throw new Error("Local Accepted Words meter verification failed");
+}
 
-const planIds = ["pro", "max"] as const satisfies readonly PaidPlanId[];
+const planIds = ["free", "pro", "max"] as const satisfies readonly PlanId[];
 for (const planId of planIds) {
   const benefitId = required[`${planId}BenefitId`];
   const productId = required[`${planId}ProductId`];
@@ -79,12 +94,13 @@ for (const planId of planIds) {
     product.metadata.billingInterval !== "monthly" ||
     product.recurringInterval !== "month" ||
     activePrices.length !== 1 ||
-    !activePrices.some((price) =>
-      price.amountType === "fixed" &&
-      !price.isArchived &&
-      price.priceCurrency === "usd" &&
-      price.priceAmount === plan.monthlyPriceUsd * 100
-    ) ||
+    !activePrices.some((price) => planId === "free"
+      ? price.amountType === "free" ||
+        (price.amountType === "fixed" && price.priceAmount === 0)
+      : price.amountType === "fixed" &&
+        !price.isArchived &&
+        price.priceCurrency === "usd" &&
+        price.priceAmount === plan.monthlyPriceUsd * 100) ||
     !product.benefits.some((item) => item.id === benefit.id)
   ) {
     throw new Error(`${plan.name} product verification failed`);
@@ -120,6 +136,7 @@ console.log(JSON.stringify({
   environment: env.POLAR_SERVER,
   organizationId: organization.id,
   meterId,
+  acceptedWordsMeterId: acceptedWordsMeter.id,
   products: planIds.map((planId) => ({
     planId,
     productId: required[`${planId}ProductId`],

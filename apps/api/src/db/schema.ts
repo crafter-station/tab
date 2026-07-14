@@ -184,13 +184,23 @@ export const userEntitlements = sqliteTable("user_entitlements", {
   planId: text("plan_id").notNull(),
   polarCustomerId: text("polar_customer_id"),
   polarSubscriptionId: text("polar_subscription_id"),
+  polarProductId: text("polar_product_id"),
   status: text("status").notNull(),
+  currentPeriodStart: text("current_period_start"),
   currentPeriodEnd: text("current_period_end"),
+  cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" })
+    .notNull()
+    .default(false),
   billingInterval: text("billing_interval"),
   trialStartedAt: text("trial_started_at"),
   trialEndsAt: text("trial_ends_at"),
   lastWebhookEventId: text("last_webhook_event_id"),
   lastWebhookOccurredAt: text("last_webhook_occurred_at"),
+  provisioningState: text("provisioning_state").notNull().default("pending"),
+  provisioningAttempts: integer("provisioning_attempts").notNull().default(0),
+  provisioningError: text("provisioning_error"),
+  provisioningUpdatedAt: text("provisioning_updated_at"),
+  reconciledAt: text("reconciled_at"),
   cachedAt: text("cached_at").notNull(),
 });
 
@@ -225,6 +235,34 @@ export const allowanceUsageEvents = sqliteTable(
       table.userId,
       table.metric,
       table.period,
+    ),
+  ],
+);
+
+export const polarUsageOutbox = sqliteTable(
+  "polar_usage_outbox",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    eventName: text("event_name").notNull(),
+    eventTimestamp: text("event_timestamp").notNull(),
+    metadata: text("metadata").notNull(),
+    status: text("status").notNull().default("pending"),
+    attemptCount: integer("attempt_count").notNull().default(0),
+    nextAttemptAt: text("next_attempt_at").notNull(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: text("lease_expires_at"),
+    deliveredAt: text("delivered_at"),
+    lastError: text("last_error"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_polar_usage_outbox_pending").on(
+      table.status,
+      table.nextAttemptAt,
     ),
   ],
 );
@@ -285,6 +323,7 @@ export const userRelations = relations(user, ({ many }) => ({
   memoryExtractionIdempotency: many(memoryExtractionIdempotency),
   usage: many(usageRecords),
   allowanceUsageEvents: many(allowanceUsageEvents),
+  polarUsageOutbox: many(polarUsageOutbox),
   telemetryEvents: many(telemetryEvents),
 }));
 

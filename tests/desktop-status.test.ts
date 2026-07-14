@@ -335,12 +335,12 @@ describe("desktop status service", () => {
       remaining: 100,
       exhausted: false,
     });
-    expect(status.entitlement?.localAcceptedWords.resetAt).toBe(
+    expect(status.entitlement?.localAcceptedWords.periodEndsAt).toBe(
       new Date(2026, 6, 14).toISOString(),
     );
   });
 
-  it("resets cached Deep Complete usage when a new UTC month starts offline", async () => {
+  it("migrates legacy cached Deep Complete identity without inventing a UTC month", async () => {
     const cached = BillingStatusDataSchema.parse({
       ...statusPayload(0).entitlement,
       deepCompletes: {
@@ -368,11 +368,12 @@ describe("desktop status service", () => {
     const status = await service.refresh();
 
     expect(status.entitlement?.deepCompletes).toEqual({
-      period: "2026-07",
+      period: "2026-06:2026-07-01T00:00:00.000Z",
       used: 0,
       limit: 10,
       remaining: 10,
-      resetAt: "2026-08-01T00:00:00.000Z",
+      periodStartsAt: "2026-07-01T00:00:00.000Z",
+      periodEndsAt: "2026-07-01T00:00:00.000Z",
       exhausted: false,
     });
   });

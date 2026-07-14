@@ -212,14 +212,32 @@ export const PlanCapabilitiesSchema = z.object({
   modelCatalogAccess: z.boolean(),
 });
 
-export const AllowanceStateSchema = z.object({
-  period: z.string().min(1).optional(),
-  used: z.number().int().nonnegative(),
-  limit: z.number().int().positive().nullable(),
-  remaining: z.number().int().nonnegative().nullable(),
-  resetAt: z.string().datetime(),
-  exhausted: z.boolean(),
-});
+export const AllowanceStateSchema = z
+  .object({
+    period: z.string().min(1).optional(),
+    used: z.number().int().nonnegative(),
+    limit: z.number().int().positive().nullable(),
+    remaining: z.number().int().nonnegative().nullable(),
+    periodStartsAt: z.string().min(1).optional(),
+    periodEndsAt: z.string().datetime().optional(),
+    resetAt: z.string().datetime().optional(),
+    exhausted: z.boolean(),
+  })
+  .refine((allowance) => Boolean(allowance.periodEndsAt ?? allowance.resetAt), {
+    message: "Allowance period end is required",
+  })
+  .transform(({ resetAt, ...allowance }) => {
+    const periodEndsAt = allowance.periodEndsAt ?? resetAt!;
+    return {
+      ...allowance,
+      periodStartsAt:
+        allowance.periodStartsAt ??
+        (allowance.period?.match(/^\d{4}-\d{2}-\d{2}$/)
+          ? `${allowance.period}T00:00:00`
+          : periodEndsAt),
+      periodEndsAt,
+    };
+  });
 
 export const TrialStateSchema = z.discriminatedUnion("active", [
   z.object({
@@ -235,6 +253,7 @@ export const BillingStatusDataSchema = z.object({
   entitlementSource: EntitlementSourceSchema,
   billingInterval: BillingIntervalSchema.optional(),
   accessEndsAt: z.string().datetime().optional(),
+  cancelAtPeriodEnd: z.boolean().default(false),
   capabilities: PlanCapabilitiesSchema,
   trial: TrialStateSchema,
   localAcceptedWords: AllowanceStateSchema,

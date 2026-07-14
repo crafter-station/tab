@@ -13,8 +13,10 @@ import {
   InMemoryBillingStorage,
   InMemoryUsageMeterClient,
   PolarUsageMeterClient,
+  PolarBillingCheckoutClient,
   UsageMeterService,
   createBillingCheckoutClient,
+  type BillingProvisioningClient,
 } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
@@ -59,7 +61,6 @@ async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
     auth,
     deviceTokenService,
     billingService,
-    usageMeterService,
     personalMemoryStorage: new InMemoryPersonalMemoryStorage(),
     telemetryStorage: new InMemoryTelemetryStorage(),
   });
@@ -74,7 +75,14 @@ async function createBillingTestApp(generateSuggestion: SuggestionGenerator) {
     status: "inactive",
     cachedAt: new Date(),
   });
-  return { app, token, billingService, billingStorage, usageMeterClient };
+  return {
+    app,
+    token,
+    billingService,
+    billingStorage,
+    usageMeterClient,
+    usageMeterService,
+  };
 }
 
 async function parseApiResponse(response: Response) {
@@ -191,7 +199,7 @@ describe("Billing and allowance enforcement", () => {
     await storage.recordAllowanceUsage(
       "max-user",
       "deep_completes",
-      "2026-07",
+      (await billing.getStatus("max-user")).deepCompletes.period!,
       "max-usage",
       1_000,
     );
@@ -221,7 +229,10 @@ describe("Billing and allowance enforcement", () => {
     });
     expect(second.status).toBe(200);
 
-    const usage = await billingStorage.getUsage("user-1", currentMonth());
+    const usage = await billingStorage.getUsage(
+      "user-1",
+      (await billingServicePeriod(billingStorage, "user-1")),
+    );
     expect(usage).toBe(2);
   });
 
@@ -249,7 +260,7 @@ describe("Billing and allowance enforcement", () => {
     expect(replay.status).toBe(409);
     expect(generationCount).toBe(1);
     expect(
-      await billingStorage.getUsage("user-1", currentMonth()),
+      await billingStorage.getUsage("user-1", await billingServicePeriod(billingStorage, "user-1")),
     ).toBe(1);
   });
 
@@ -330,7 +341,7 @@ describe("Billing and allowance enforcement", () => {
   });
 
   it("records a Polar usage event when a suggestion is returned", async () => {
-    const { app, token, usageMeterClient } = await createBillingTestApp(
+    const { app, token, billingStorage, usageMeterClient, usageMeterService } = await createBillingTestApp(
       async () => ({ text: " world" }),
     );
 
@@ -341,16 +352,17 @@ describe("Billing and allowance enforcement", () => {
     });
 
     expect(response.status).toBe(200);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await usageMeterService.drainOutbox(billingStorage);
     const events = usageMeterClient.getEvents();
     expect(events).toHaveLength(1);
     expect(events[0].userId).toBe("user-1");
-    expect(events[0].requestId).toBe("req-1");
-    expect(events[0].creditsSpent).toBe(1);
+    expect(events[0].eventId).toBe("req-1");
+    expect(events[0].eventName).toBe("deep_complete.used");
+    expect(events[0].metadata.creditsSpent).toBe(1);
   });
 
   it("does not record a Polar usage event for empty suggestions", async () => {
-    const { app, token, usageMeterClient } = await createBillingTestApp(
+    const { app, token, billingStorage, usageMeterClient, usageMeterService } = await createBillingTestApp(
       async () => null,
     );
 
@@ -361,12 +373,12 @@ describe("Billing and allowance enforcement", () => {
     });
 
     expect(response.status).toBe(200);
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await usageMeterService.drainOutbox(billingStorage);
     expect(usageMeterClient.getEvents()).toHaveLength(0);
   });
 
   it("retries Polar usage ingestion and eventually succeeds", async () => {
-    const { app, token, usageMeterClient } = await createBillingTestApp(
+    const { app, token, billingStorage, usageMeterClient, usageMeterService } = await createBillingTestApp(
       async () => ({ text: " world" }),
     );
 
@@ -379,7 +391,11 @@ describe("Billing and allowance enforcement", () => {
     });
 
     expect(response.status).toBe(200);
-    await new Promise((resolve) => setTimeout(resolve, 150));
+    const firstDrain = await usageMeterService.drainOutbox(billingStorage);
+    expect(firstDrain.retried).toBe(1);
+    await usageMeterService.drainOutbox(billingStorage, {
+      now: new Date(Date.now() + 10_000),
+    });
     expect(usageMeterClient.getEvents()).toHaveLength(1);
   });
 
@@ -466,7 +482,7 @@ describe("Billing and allowance enforcement", () => {
       data: {
         customer: { external_id: "user-1" },
         customer_id: "polar-customer-1",
-        id: "polar-sub-1",
+        id: "polar-sub-free",
         status: "active",
         product: { name: "Tab Pro" },
         current_period_end: new Date(
@@ -477,7 +493,7 @@ describe("Billing and allowance enforcement", () => {
 
     const entitlement = await billingService.getEntitlement("user-1");
     expect(entitlement.planId).toBe("pro");
-    expect(entitlement.polarSubscriptionId).toBe("polar-sub-1");
+    expect(entitlement.polarSubscriptionId).toBe("polar-sub-free");
 
     for (let i = 0; i < 300; i++) {
       const response = await app.request("/suggestions", {
@@ -633,6 +649,34 @@ describe("Billing and allowance enforcement", () => {
 
       const usage = await storage.getUsage("user-d1", currentMonth());
       expect(usage).toBe(2);
+
+      await storage.recordLocalAcceptedWordsWithUsage({
+        userId: "user-d1",
+        acceptanceId: "accept-d1",
+        localDay: "2026-07-14",
+        acceptedAt: new Date("2026-07-14T00:00:00.000Z"),
+        words: 2,
+      });
+      const claimNow = new Date(Date.now() + 1_000);
+      const firstClaim = await storage.claimPolarUsageOutbox({
+        now: claimNow,
+        leaseOwner: "worker-1",
+        leaseDurationMs: 60_000,
+        limit: 10,
+      });
+      expect(firstClaim).toHaveLength(1);
+      expect(await storage.claimPolarUsageOutbox({
+        now: new Date(claimNow.getTime() + 30_000),
+        leaseOwner: "worker-2",
+        leaseDurationMs: 60_000,
+        limit: 10,
+      })).toHaveLength(0);
+      expect(await storage.claimPolarUsageOutbox({
+        now: new Date(claimNow.getTime() + 61_000),
+        leaseOwner: "worker-2",
+        leaseDurationMs: 60_000,
+        limit: 10,
+      })).toHaveLength(1);
     } finally {
       await platform.dispose();
     }
@@ -664,6 +708,413 @@ describe("Billing and allowance enforcement", () => {
 
     expect(await storage.getEntitlement("missing-user")).toBeNull();
   });
+
+  it("provisions Free idempotently and retries without blocking local access", async () => {
+    let attempts = 0;
+    const provisioningClient: BillingProvisioningClient = {
+      async provisionFreeSubscription() {
+        attempts += 1;
+        if (attempts === 1) throw new Error("Polar unavailable");
+        return {
+          customerId: "customer-free",
+          subscriptionId: "subscription-free",
+          productId: "product-free",
+          status: "active",
+          currentPeriodStart: new Date("2026-07-14T15:00:00.000Z"),
+          currentPeriodEnd: new Date("2026-08-14T15:00:00.000Z"),
+          cancelAtPeriodEnd: false,
+        };
+      },
+      async getSubscription() {
+        throw new Error("not used");
+      },
+    };
+    const billing = new BillingService({
+      storage: new InMemoryBillingStorage(),
+      provisioningClient,
+      now: () => new Date("2026-07-14T15:00:00.000Z"),
+    });
+
+    const unavailable = await billing.provisionAccount({
+      id: "new-user",
+      email: "new@example.com",
+    });
+    expect(unavailable.planId).toBe("free");
+    expect(unavailable.provisioningState).toBe("retrying");
+    expect((await billing.getStatus("new-user")).planId).toBe("free");
+    await billing.consumeDeepComplete("new-user", "pending-deep-complete");
+
+    const ready = await billing.provisionAccount({
+      id: "new-user",
+      email: "new@example.com",
+    });
+    expect(ready.provisioningState).toBe("ready");
+    expect(ready.currentPeriodStart).toEqual(new Date("2026-07-14T15:00:00.000Z"));
+    const readyStatus = await billing.getStatus("new-user");
+    expect(readyStatus.deepCompletes.period).toBe(
+      "subscription-free:2026-07-14T15:00:00.000Z",
+    );
+    expect(readyStatus.deepCompletes.used).toBe(1);
+
+    await billing.provisionAccount({ id: "new-user", email: "new@example.com" });
+    expect(attempts).toBe(2);
+  });
+
+  it("allows only one concurrent Free provisioning attempt", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => { started = resolve; });
+    let attempts = 0;
+    const provisioningClient: BillingProvisioningClient = {
+      async provisionFreeSubscription() {
+        attempts += 1;
+        started();
+        await gate;
+        return {
+          customerId: "customer-one",
+          subscriptionId: "subscription-one",
+          productId: "product-free",
+          status: "active",
+          currentPeriodStart: new Date("2026-07-14T15:00:00.000Z"),
+          currentPeriodEnd: new Date("2026-08-14T15:00:00.000Z"),
+          cancelAtPeriodEnd: false,
+        };
+      },
+      async getSubscription() { throw new Error("not used"); },
+    };
+    const billing = new BillingService({
+      storage: new InMemoryBillingStorage(),
+      provisioningClient,
+    });
+
+    const first = billing.provisionAccount({ id: "race-user", email: "race@example.com" });
+    await startedPromise;
+    const second = await billing.provisionAccount({ id: "race-user", email: "race@example.com" });
+    expect(second.provisioningState).not.toBe("ready");
+    release();
+    expect((await first).provisioningState).toBe("ready");
+    expect(attempts).toBe(1);
+  });
+
+  it("does not overwrite a paid webhook that arrives during Free provisioning", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => { release = resolve; });
+    let started!: () => void;
+    const startedPromise = new Promise<void>((resolve) => { started = resolve; });
+    const billing = new BillingService({
+      storage: new InMemoryBillingStorage(),
+      provisioningClient: {
+        async provisionFreeSubscription() {
+          started();
+          await gate;
+          return {
+            customerId: "customer-1",
+            subscriptionId: "subscription-free",
+            productId: "product-free",
+            status: "active",
+            currentPeriodStart: new Date("2026-07-14T15:00:00.000Z"),
+            currentPeriodEnd: new Date("2026-08-14T15:00:00.000Z"),
+            cancelAtPeriodEnd: false,
+          };
+        },
+        async getSubscription() { throw new Error("not used"); },
+      },
+    });
+    const provisioning = billing.provisionAccount({
+      id: "upgrade-race",
+      email: "upgrade@example.com",
+    });
+    await startedPromise;
+    await billing.applyPaidEntitlementEvent({
+      id: "paid-webhook",
+      type: "subscription.updated",
+      data: {
+        customer: { external_id: "upgrade-race" },
+        customer_id: "customer-1",
+        id: "subscription-paid",
+        status: "active",
+        product: { name: "Tab Pro" },
+        current_period_start: "2026-07-14T15:00:00.000Z",
+        current_period_end: "2026-08-14T15:00:00.000Z",
+      },
+    });
+    release();
+
+    expect(await provisioning).toMatchObject({
+      planId: "pro",
+      polarSubscriptionId: "subscription-paid",
+      provisioningState: "ready",
+    });
+  });
+
+  it("ignores lifecycle events from a replaced subscription", async () => {
+    const billing = new BillingService({ storage: new InMemoryBillingStorage() });
+    await billing.applyEntitlement({
+      userId: "replacement-user",
+      planId: "max",
+      polarCustomerId: "customer-1",
+      polarSubscriptionId: "subscription-current",
+      status: "active",
+      currentPeriodStart: new Date("2026-07-01T00:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      cachedAt: new Date("2026-07-14T00:00:00.000Z"),
+    });
+    await billing.applyPaidEntitlementEvent({
+      id: "late-old-subscription",
+      timestamp: "2026-07-15T00:00:00.000Z",
+      type: "subscription.active",
+      data: {
+        customer: { external_id: "replacement-user" },
+        customer_id: "customer-1",
+        id: "subscription-old",
+        status: "active",
+        product: { name: "Tab Pro" },
+      },
+    });
+    expect(await billing.getEntitlement("replacement-user")).toMatchObject({
+      planId: "max",
+      polarSubscriptionId: "subscription-current",
+    });
+  });
+
+  it("returns a revoked paid subscription to pending Free", async () => {
+    const billing = new BillingService({ storage: new InMemoryBillingStorage() });
+    await billing.applyEntitlement({
+      userId: "revoked-user",
+      planId: "pro",
+      polarCustomerId: "customer-1",
+      polarSubscriptionId: "subscription-paid",
+      status: "active",
+      currentPeriodStart: new Date("2026-07-01T00:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      cachedAt: new Date(),
+    });
+    await billing.applyPaidEntitlementEvent({
+      id: "revoke-paid",
+      type: "subscription.revoked",
+      data: {
+        customer: { external_id: "revoked-user" },
+        customer_id: "customer-1",
+        id: "subscription-paid",
+        status: "canceled",
+        product: { name: "Tab Pro" },
+      },
+    });
+    expect(await billing.getEntitlement("revoked-user")).toMatchObject({
+      planId: "free",
+      provisioningState: "retrying",
+    });
+  });
+
+  it("recovers a missed revocation during subscription reconciliation", async () => {
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({
+      storage,
+      provisioningClient: {
+        async provisionFreeSubscription() { throw new Error("not used"); },
+        async getSubscription() {
+          return {
+            customerId: "customer-1",
+            subscriptionId: "subscription-paid",
+            productId: "product-pro",
+            status: "canceled",
+            currentPeriodStart: new Date("2026-07-01T00:00:00.000Z"),
+            currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+            cancelAtPeriodEnd: false,
+          };
+        },
+      },
+      now: () => new Date("2026-08-01T00:00:01.000Z"),
+    });
+    await billing.applyEntitlement({
+      userId: "missed-revoke",
+      planId: "pro",
+      polarCustomerId: "customer-1",
+      polarSubscriptionId: "subscription-paid",
+      status: "active",
+      currentPeriodStart: new Date("2026-07-01T00:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-08-01T00:00:00.000Z"),
+      provisioningState: "ready",
+      cachedAt: new Date("2026-07-31T00:00:00.000Z"),
+    });
+
+    expect(await billing.reconcileEntitlement("missed-revoke")).toMatchObject({
+      planId: "free",
+      provisioningState: "retrying",
+    });
+  });
+
+  it("starts fresh exact periods at mid-month renewal and trial conversion", async () => {
+    let now = new Date("2026-08-13T23:59:00.000Z");
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({ storage, now: () => now });
+    await billing.applyEntitlement({
+      userId: "period-user",
+      planId: "pro",
+      polarCustomerId: "customer-1",
+      polarSubscriptionId: "subscription-1",
+      status: "trialing",
+      currentPeriodStart: new Date("2026-07-14T00:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-08-14T00:00:00.000Z"),
+      trialStartedAt: new Date("2026-07-14T00:00:00.000Z"),
+      trialEndsAt: new Date("2026-08-14T00:00:00.000Z"),
+      cachedAt: now,
+    });
+    const oldPeriod = (await billing.getStatus("period-user")).deepCompletes.period!;
+    await storage.recordAllowanceUsage(
+      "period-user",
+      "deep_completes",
+      oldPeriod,
+      "trial-usage",
+      12,
+    );
+    now = new Date("2026-08-14T00:00:01.000Z");
+    await billing.applyPaidEntitlementEvent({
+      id: "trial-converted",
+      timestamp: now.toISOString(),
+      type: "subscription.updated",
+      data: {
+        customer: { external_id: "period-user" },
+        customer_id: "customer-1",
+        id: "subscription-1",
+        status: "active",
+        product: { name: "Tab Pro" },
+        current_period_start: "2026-08-14T00:00:00.000Z",
+        current_period_end: "2026-09-14T00:00:00.000Z",
+      },
+    });
+    const converted = await billing.getStatus("period-user");
+    expect(converted.trial).toEqual({ active: false });
+    expect(converted.deepCompletes.period).toBe(
+      "subscription-1:2026-08-14T00:00:00.000Z",
+    );
+    expect(converted.deepCompletes.used).toBe(0);
+  });
+
+  it("creates an entitlement when a known-user webhook arrives before lazy initialization", async () => {
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({ storage });
+    await billing.applyPaidEntitlementEvent({
+      id: "event-before-read",
+      type: "subscription.created",
+      data: {
+        customer: { external_id: "webhook-user" },
+        customer_id: "customer-1",
+        id: "subscription-1",
+        status: "active",
+        product: { name: "Tab Free" },
+        current_period_start: "2026-07-14T15:00:00.000Z",
+        current_period_end: "2026-08-14T15:00:00.000Z",
+      },
+    });
+
+    expect(await storage.getEntitlement("webhook-user")).toMatchObject({
+      planId: "free",
+      polarSubscriptionId: "subscription-1",
+      currentPeriodStart: new Date("2026-07-14T15:00:00.000Z"),
+      currentPeriodEnd: new Date("2026-08-14T15:00:00.000Z"),
+      provisioningState: "ready",
+    });
+  });
+
+  it("deduplicates Local Accepted Words and durably delivers the original timestamp", async () => {
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({ storage });
+    const client = new InMemoryUsageMeterClient();
+    const meter = new UsageMeterService({ client });
+    const acceptedAt = new Date("2026-07-14T06:30:00.000Z");
+
+    await billing.recordLocalAcceptedWords({
+      userId: "accept-user",
+      acceptanceId: "acceptance-1",
+      localDay: "2026-07-13",
+      acceptedAt,
+      words: 7,
+    });
+    await billing.recordLocalAcceptedWords({
+      userId: "accept-user",
+      acceptanceId: "acceptance-1",
+      localDay: "2026-07-13",
+      acceptedAt,
+      words: 7,
+    });
+    expect((await meter.drainOutbox(storage)).delivered).toBe(1);
+    expect(client.getEvents()).toEqual([{
+      userId: "accept-user",
+      eventId: "acceptance-1",
+      eventName: "local_accepted_words.used",
+      timestamp: acceptedAt,
+      metadata: { words: 7, localDay: "2026-07-13" },
+    }]);
+  });
+
+  it("stops retrying a permanently failing outbox event after eight attempts", async () => {
+    const storage = new InMemoryBillingStorage();
+    const billing = new BillingService({ storage });
+    const meter = new UsageMeterService({
+      client: { async ingest() { throw new Error("Polar unavailable"); } },
+    });
+    await billing.recordLocalAcceptedWords({
+      userId: "failed-user",
+      acceptanceId: "failed-acceptance",
+      localDay: "2026-07-14",
+      acceptedAt: new Date("2026-07-14T00:00:00.000Z"),
+      words: 1,
+    });
+
+    let failed = 0;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const result = await meter.drainOutbox(storage, {
+        now: new Date(Date.UTC(2026, 6, 14, attempt + 1)),
+      });
+      failed += result.failed;
+    }
+    expect(failed).toBe(1);
+    expect((await meter.drainOutbox(storage, {
+      now: new Date("2026-07-15T00:00:00.000Z"),
+    })).delivered).toBe(0);
+  });
+
+  it("passes the existing Free subscription to paid checkout", async () => {
+    const captured: unknown[] = [];
+    const updates: unknown[] = [];
+    const polar = {
+      checkouts: {
+        async create(input: unknown) {
+          captured.push(input);
+          return { url: "https://checkout.example/session" };
+        },
+      },
+      subscriptions: {
+        async update(input: unknown) { updates.push(input); },
+      },
+    } as unknown as import("@polar-sh/sdk").Polar;
+    const checkout = new PolarBillingCheckoutClient({
+      polar,
+      productIds: { pro: "product-pro", max: "product-max" },
+    });
+
+    await checkout.createCheckoutUrl(
+      "pro",
+      "monthly",
+      { id: "user-1", email: "user@example.com" },
+      "subscription-free",
+    );
+    expect(captured[0]).toMatchObject({
+      products: ["product-pro"],
+      externalCustomerId: "user-1",
+      subscriptionId: "subscription-free",
+    });
+    await checkout.changePlan("max", "subscription-free", "next_period");
+    expect(updates[0]).toEqual({
+      id: "subscription-free",
+      subscriptionUpdate: {
+        productId: "product-max",
+        prorationBehavior: "next_period",
+      },
+    });
+  });
 });
 
 describe("PolarUsageMeterClient", () => {
@@ -685,9 +1136,10 @@ describe("PolarUsageMeterClient", () => {
 
     await client.ingest({
       userId: "user-1",
-      requestId: "req-1",
+      eventId: "req-1",
+      eventName: "deep_complete.used",
       timestamp: new Date("2026-07-07T00:00:00.000Z"),
-      creditsSpent: 1,
+      metadata: { requestId: "req-1", creditsSpent: 1 },
     });
 
     expect(captured).toHaveLength(1);
@@ -770,4 +1222,15 @@ function insertBillingTestUser(db: Database, userId: string): void {
 function currentMonth(): string {
   const now = new Date();
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+async function billingServicePeriod(
+  storage: InMemoryBillingStorage,
+  userId: string,
+): Promise<string> {
+  const entitlement = await storage.getEntitlement(userId);
+  if (!entitlement?.polarSubscriptionId || !entitlement.currentPeriodStart) {
+    throw new Error("Expected an initialized billing period");
+  }
+  return `${entitlement.polarSubscriptionId}:${entitlement.currentPeriodStart.toISOString()}`;
 }

@@ -5,6 +5,7 @@ import { authorizeExistingDevice } from "../lib/auth.functions.ts";
 import { AuthSearchSchema } from "../lib/search.ts";
 import { getViewer } from "../lib/viewer.functions.ts";
 import { routeHandlers } from "../lib/route-handlers.server.ts";
+import { safeNextPath } from "../lib/search.ts";
 
 function SignupRouteComponent() {
   const search = Route.useSearch();
@@ -20,7 +21,7 @@ export const Route = createFileRoute("/signup")({
     const viewer = await getViewer();
     if (!viewer) return;
     if (search.device_id && search.callback) await authorizeExistingDevice({ data: { callback: search.callback } });
-    throw redirect({ href: "/dashboard" });
+    throw redirect({ href: safeNextPath(search.next) ?? "/dashboard" });
   },
   component: SignupRouteComponent,
   head: () => ({ meta: [{ title: "Sign up - Tab" }] }),

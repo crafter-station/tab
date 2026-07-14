@@ -78,13 +78,33 @@ function projectCachedEntitlement(
   entitlement: BillingStatusData,
   now: Date,
 ): BillingStatusData {
-  let facts: EntitlementFacts = { planId: "free", source: "free" };
+  const localAllowance = entitlement.localAcceptedWords as typeof entitlement.localAcceptedWords & {
+    resetAt?: string;
+  };
+  const deepAllowance = entitlement.deepCompletes as typeof entitlement.deepCompletes & {
+    resetAt?: string;
+  };
+  const deepPeriod = deepAllowance.period ?? "legacy";
+  const deepPeriodEnd = deepAllowance.periodEndsAt ?? deepAllowance.resetAt ?? now.toISOString();
+  const deepPeriodStart = deepAllowance.periodStartsAt ??
+    (deepPeriod.match(/^\d{4}-\d{2}$/)
+      ? `${deepPeriod}-01T00:00:00.000Z`
+      : deepPeriodEnd);
+  const separator = deepPeriod.indexOf(":");
+  const periodFacts = {
+    subscriptionId: separator >= 0 ? deepPeriod.slice(0, separator) : deepPeriod,
+    currentPeriodStart: deepPeriodStart,
+    currentPeriodEnd: deepPeriodEnd,
+    cancelAtPeriodEnd: entitlement.cancelAtPeriodEnd,
+  };
+  let facts: EntitlementFacts = { planId: "free", source: "free", ...periodFacts };
   if (entitlement.entitlementSource === "trial" && entitlement.trial.active) {
     facts = {
       planId: entitlement.planId,
       source: "trial",
       effectiveEnd: entitlement.trial.endsAt,
       trialStartedAt: entitlement.trial.startedAt,
+      ...periodFacts,
     };
   } else if (entitlement.entitlementSource === "paid") {
     facts = {
@@ -92,6 +112,7 @@ function projectCachedEntitlement(
       source: "paid",
       effectiveEnd: entitlement.accessEndsAt,
       billingInterval: entitlement.billingInterval,
+      ...periodFacts,
     };
   }
 
@@ -101,12 +122,14 @@ function projectCachedEntitlement(
     localAcceptedWords: {
       period: entitlement.localAcceptedWords.period ?? "",
       used: entitlement.localAcceptedWords.used,
-      resetAt: entitlement.localAcceptedWords.resetAt,
+      periodStartsAt: localAllowance.periodStartsAt,
+      periodEndsAt: localAllowance.periodEndsAt ?? localAllowance.resetAt,
     },
     deepCompletes: {
       period: entitlement.deepCompletes.period ?? "",
       used: entitlement.deepCompletes.used,
-      resetAt: entitlement.deepCompletes.resetAt,
+      periodStartsAt: deepPeriodStart,
+      periodEndsAt: deepPeriodEnd,
     },
     activeDevices: entitlement.devices.active,
   });

@@ -37,6 +37,7 @@ export function registerUsageRoutes(
       userId: device.userId,
       acceptanceId: parsed.data.acceptanceId,
       localDay: parsed.data.localDay,
+      acceptedAt: new Date(parsed.data.acceptedAt),
       words: parsed.data.wordCount,
     });
     return c.json(

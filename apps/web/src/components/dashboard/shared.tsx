@@ -24,19 +24,23 @@ export function AutomaticSuggestionAllowance({ allowance, planName }: { allowanc
       title="Automatic Suggestions"
       usage={usage}
       remaining={finite ? `${formatCount(allowance.remaining ?? 0)} words left` : "Unlimited"}
-      detail={finite ? `Daily limit resets ${formatDate(allowance.resetAt)}` : `No daily limit on ${planName}`}
+      detail={finite ? "Resets daily at local midnight" : `No daily limit on ${planName}`}
       percentage={allowancePercentage(allowance)}
     />
   );
 }
 
-export function DeepCompleteAllowance({ allowance }: { allowance: AllowanceState }) {
+export function DeepCompleteAllowance({ allowance, cancelAtPeriodEnd = false, planEndsAt, trialEndsAt }: { allowance: AllowanceState; cancelAtPeriodEnd?: boolean; planEndsAt?: string; trialEndsAt?: string }) {
   return (
     <AllowanceMeter
       title="Deep Complete"
-      usage={`${formatCount(allowance.used)} of ${formatCount(allowance.limit ?? 0)} used this month`}
+      usage={`${formatCount(allowance.used)} of ${formatCount(allowance.limit ?? 0)} used this billing period`}
       remaining={`${formatCount(allowance.remaining ?? 0)} Deep Completes left`}
-      detail={`Monthly limit resets ${formatDate(allowance.resetAt)}`}
+      detail={trialEndsAt
+        ? `Trial ends ${formatDate(trialEndsAt)}; the paid billing period follows`
+        : cancelAtPeriodEnd
+          ? `Available until your plan ends ${formatDate(planEndsAt ?? allowance.periodEndsAt)}`
+          : `Resets with your billing cycle on ${formatDate(allowance.periodEndsAt)}`}
       percentage={allowancePercentage(allowance)}
     />
   );

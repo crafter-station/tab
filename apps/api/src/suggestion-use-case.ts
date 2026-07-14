@@ -23,7 +23,6 @@ import type {
 import type {
   BillingService,
   DeepCompleteCheckResult,
-  UsageMeterService,
 } from "./billing.ts";
 import type { Device } from "./device-tokens.ts";
 import type { PersonalMemoryService } from "./personal-memory.ts";
@@ -51,7 +50,6 @@ export type SuggestionGenerator = (
 
 export type SuggestionUseCaseDependencies = {
   readonly billingService: BillingService;
-  readonly usageMeterService: UsageMeterService;
   readonly personalMemoryService: PersonalMemoryService;
   readonly telemetryService: TelemetryService;
   readonly generateSuggestion: SuggestionGenerator;
@@ -237,19 +235,10 @@ export class SuggestionUseCase {
       }
 
       if (shouldConsume) {
-        const usageMeterPromise = this.deps.usageMeterService
-          .recordUsage({
-            userId: device.userId,
-            requestId: request.requestId,
-            timestamp: new Date(),
-            creditsSpent: 1,
-          })
-          .catch(() => {
-            // Ingestion failures are retried by the meter service; do not fail
-            // the hot suggestion response when Polar ingestion is unavailable.
-          });
-
-        options.waitUntil?.(usageMeterPromise);
+        await this.deps.billingService.finalizeDeepComplete(
+          device.userId,
+          request.requestId,
+        );
       }
 
       return { ok: true, suggestions };

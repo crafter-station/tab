@@ -115,6 +115,11 @@ export async function handleSignup(request: Request, api: ApiClient): Promise<Re
   }
   const parsed = SignupFormSchema.safeParse(values);
   if (!parsed.success) return redirectResponse(authFailureLocation("/signup", values, "invalid_form"));
+  const continuation = new URL("/signup", request.url);
+  if (parsed.data.device_id) continuation.searchParams.set("device_id", parsed.data.device_id);
+  if (parsed.data.callback) continuation.searchParams.set("callback", parsed.data.callback);
+  const next = safeNextPath(parsed.data.next);
+  if (next) continuation.searchParams.set("next", next);
   const response = await api.request("/api/auth/sign-up/email", request, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -122,7 +127,7 @@ export async function handleSignup(request: Request, api: ApiClient): Promise<Re
       name: parsed.data.name,
       email: parsed.data.email,
       password: parsed.data.password,
-      callbackURL: new URL("/dashboard", request.url).toString(),
+      callbackURL: continuation.toString(),
     }),
   });
   if (!response.ok) return redirectResponse(authFailureLocation("/signup", values, "signup_failed"), responseHeaders(response));

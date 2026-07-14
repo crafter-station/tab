@@ -58,7 +58,13 @@ function formatAuth(auth: DesktopStatus["auth"]) {
 }
 
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  }).format(new Date(value));
 }
 
 function formatThemeMode(mode: ThemeMode) {
@@ -299,7 +305,7 @@ export function SettingsSurface() {
                 <div className="settings-summary">
                   <SummaryMetric label="Automatic Suggestions accepted" value={(status.localSuggestionActivity?.acceptedSuggestions ?? 0).toLocaleString()} detail="This month" />
                   <SummaryMetric label="Words inserted" value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()} detail="From Automatic Suggestions this month" />
-                  <SummaryMetric label="Deep Completes used" value={status.entitlement.deepCompletes.used.toLocaleString()} detail="Successful results this month" />
+                  <SummaryMetric label="Deep Completes used" value={status.entitlement.deepCompletes.used.toLocaleString()} detail="Successful results this billing period" />
                 </div>
                 <div className="mt-4 grid gap-3">
                   <AllowanceMeter
@@ -312,14 +318,18 @@ export function SettingsSurface() {
                       : `${(status.entitlement.localAcceptedWords.remaining ?? 0).toLocaleString()} words left`}
                     detail={status.entitlement.localAcceptedWords.limit === null
                       ? `No daily limit on ${formatPlanName(status.entitlement.planId)}`
-                      : `Daily limit resets ${formatDate(status.entitlement.localAcceptedWords.resetAt)}`}
+                      : "Resets daily at local midnight"}
                     percentage={allowancePercentage(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit)}
                   />
                   <AllowanceMeter
                     title="Deep Complete"
-                    usage={`${status.entitlement.deepCompletes.used.toLocaleString()} of ${(status.entitlement.deepCompletes.limit ?? 0).toLocaleString()} used this month`}
+                    usage={`${status.entitlement.deepCompletes.used.toLocaleString()} of ${(status.entitlement.deepCompletes.limit ?? 0).toLocaleString()} used this billing period`}
                     remaining={`${(status.entitlement.deepCompletes.remaining ?? 0).toLocaleString()} Deep Completes left`}
-                    detail={`Monthly limit resets ${formatDate(status.entitlement.deepCompletes.resetAt)}`}
+                    detail={status.entitlement.trial.active
+                      ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}; the paid billing period follows`
+                      : status.entitlement.cancelAtPeriodEnd
+                        ? `Available until your plan ends ${formatDate(status.entitlement.accessEndsAt ?? status.entitlement.deepCompletes.periodEndsAt)}`
+                        : `Resets with your billing cycle on ${formatDate(status.entitlement.deepCompletes.periodEndsAt)}`}
                     percentage={allowancePercentage(status.entitlement.deepCompletes.used, status.entitlement.deepCompletes.limit)}
                   />
                 </div>

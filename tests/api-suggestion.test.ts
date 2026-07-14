@@ -22,7 +22,7 @@ async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerato
   await migrateAuth(auth);
   const deviceTokenStorage = new InMemoryDeviceTokenStorage();
   const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
-  const billingStorage = new InMemoryBillingStorage();
+    const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
   const app = createApp({ generateSuggestion, auth, deviceTokenService, billingService, telemetryStorage: new InMemoryTelemetryStorage(), personalMemoryStorage: new InMemoryPersonalMemoryStorage() });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
@@ -322,14 +322,14 @@ describe("Hono suggestion API", () => {
 
 describe("SuggestionUseCase", () => {
   function createUseCase(generateSuggestion: SuggestionGenerator) {
-    const billingService = new BillingService({ storage: new InMemoryBillingStorage() });
+    const billingStorage = new InMemoryBillingStorage();
+    const billingService = new BillingService({ storage: billingStorage });
     const usageMeterClient = new InMemoryUsageMeterClient();
     const usageMeterService = new UsageMeterService({ client: usageMeterClient, retryDelayMs: 0 });
     const personalMemoryService = new PersonalMemoryService({ storage: new InMemoryPersonalMemoryStorage() });
     const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
     const useCase = new SuggestionUseCase({
       billingService,
-      usageMeterService,
       personalMemoryService,
       telemetryService,
       generateSuggestion,
@@ -337,9 +337,11 @@ describe("SuggestionUseCase", () => {
 
     return {
       billingService,
+      billingStorage,
       personalMemoryService,
       telemetryService,
       usageMeterClient,
+      usageMeterService,
       useCase,
     };
   }
@@ -525,6 +527,8 @@ describe("SuggestionUseCase", () => {
       billingService,
       telemetryService,
       usageMeterClient,
+      usageMeterService,
+      billingStorage,
       useCase,
     } = createUseCase(async () => {
       generationCount += 1;
@@ -559,8 +563,9 @@ describe("SuggestionUseCase", () => {
     });
     expect(generationCount).toBe(1);
     expect((await billingService.checkDeepComplete("user-1")).usage).toBe(10);
+    await usageMeterService.drainOutbox(billingStorage);
     expect(usageMeterClient.getEvents()).toEqual([
-      expect.objectContaining({ requestId: winningRequestId }),
+      expect.objectContaining({ eventId: winningRequestId }),
     ]);
     const shownEvents = (await telemetryService.listEvents()).filter(
       (event) => event.eventType === "suggestion_shown",
@@ -584,6 +589,8 @@ describe("SuggestionUseCase", () => {
       billingService,
       telemetryService,
       usageMeterClient,
+      usageMeterService,
+      billingStorage,
       useCase,
     } = createUseCase(async () => {
       generationCount += 1;
@@ -612,8 +619,9 @@ describe("SuggestionUseCase", () => {
       suggestions: [{ id: "sg-req-1", text: " world" }],
     });
     expect((await billingService.checkDeepComplete("user-1")).usage).toBe(1);
+    await usageMeterService.drainOutbox(billingStorage);
     expect(usageMeterClient.getEvents()).toEqual([
-      expect.objectContaining({ requestId: "req-1" }),
+      expect.objectContaining({ eventId: "req-1" }),
     ]);
     expect(
       (await telemetryService.listEvents()).filter(

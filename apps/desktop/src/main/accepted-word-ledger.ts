@@ -1,6 +1,7 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 
 export type AcceptedWordLedgerEvent = {
+  readonly userId: string;
   readonly acceptanceId: string;
   readonly localDay: string;
   readonly acceptedAt: string;
@@ -10,9 +11,9 @@ export type AcceptedWordLedgerEvent = {
 };
 
 type AcceptedWordLedgerState = {
-  readonly version: 1;
+  readonly version: 2;
   readonly lastObservedDay: string;
-  readonly reconciledUsageByDay: Readonly<Record<string, number>>;
+  readonly reconciledUsageByUserAndDay: Readonly<Record<string, number>>;
   readonly events: readonly AcceptedWordLedgerEvent[];
 };
 
@@ -34,6 +35,7 @@ function isLedgerEvent(value: unknown): value is AcceptedWordLedgerEvent {
   const event = value as Record<string, unknown>;
   return (
     typeof event.acceptanceId === "string" &&
+    typeof event.userId === "string" &&
     typeof event.localDay === "string" &&
     /^\d{4}-\d{2}-\d{2}$/.test(event.localDay) &&
     typeof event.acceptedAt === "string" &&
@@ -48,26 +50,25 @@ function isLedgerEvent(value: unknown): value is AcceptedWordLedgerEvent {
 function normalizeState(value: unknown, day: string): AcceptedWordLedgerState {
   if (!value || typeof value !== "object") {
     return {
-      version: 1,
+      version: 2,
       lastObservedDay: day,
-      reconciledUsageByDay: {},
+      reconciledUsageByUserAndDay: {},
       events: [],
     };
   }
   const state = value as Record<string, unknown>;
-  const reconciledUsageByDay = state.reconciledUsageByDay;
+  const reconciledUsageByUserAndDay = state.reconciledUsageByUserAndDay;
   const hasValidReconciledUsage =
-    reconciledUsageByDay === undefined ||
-    (reconciledUsageByDay !== null &&
-      typeof reconciledUsageByDay === "object" &&
-      Object.entries(reconciledUsageByDay).every(
-        ([key, usage]) =>
-          /^\d{4}-\d{2}-\d{2}$/.test(key) &&
+    reconciledUsageByUserAndDay === undefined ||
+    (reconciledUsageByUserAndDay !== null &&
+      typeof reconciledUsageByUserAndDay === "object" &&
+      Object.values(reconciledUsageByUserAndDay).every(
+        (usage) =>
           Number.isInteger(usage) &&
           Number(usage) >= 0,
       ));
   if (
-    state.version !== 1 ||
+    state.version !== 2 ||
     typeof state.lastObservedDay !== "string" ||
     !/^\d{4}-\d{2}-\d{2}$/.test(state.lastObservedDay) ||
     !hasValidReconciledUsage ||
@@ -75,17 +76,17 @@ function normalizeState(value: unknown, day: string): AcceptedWordLedgerState {
     !state.events.every(isLedgerEvent)
   ) {
     return {
-      version: 1,
+      version: 2,
       lastObservedDay: day,
-      reconciledUsageByDay: {},
+      reconciledUsageByUserAndDay: {},
       events: [],
     };
   }
   return {
-    version: 1,
+    version: 2,
     lastObservedDay: state.lastObservedDay,
-    reconciledUsageByDay:
-      (reconciledUsageByDay as Record<string, number> | undefined) ?? {},
+    reconciledUsageByUserAndDay:
+      (reconciledUsageByUserAndDay as Record<string, number> | undefined) ?? {},
     events: state.events,
   };
 }
@@ -124,9 +125,18 @@ export function createFileAcceptedWordLedgerStorage(
 export function createAcceptedWordLedger(deps: {
   storage: AcceptedWordLedgerStorage;
   now?: () => Date;
+  getUserId?: () => string | undefined;
 }) {
   const now = deps.now ?? (() => new Date());
   let state = normalizeState(deps.storage.load(), localDay(now()));
+
+  function currentUserId(): string | undefined {
+    return deps.getUserId ? deps.getUserId() : "local";
+  }
+
+  function usageKey(userId: string, day: string): string {
+    return `${userId}:${day}`;
+  }
 
   function observeDay(): string {
     const observed = localDay(now());
@@ -134,7 +144,11 @@ export function createAcceptedWordLedger(deps: {
       state = {
         ...state,
         lastObservedDay: observed,
-        reconciledUsageByDay: {},
+        reconciledUsageByUserAndDay: Object.fromEntries(
+          Object.entries(state.reconciledUsageByUserAndDay).filter(([key]) =>
+            key.endsWith(`:${observed}`)
+          ),
+        ),
         events: state.events.filter(
           (event) => !event.synced || event.localDay === observed,
         ),
@@ -146,10 +160,13 @@ export function createAcceptedWordLedger(deps: {
 
   function getCurrentUsage(): number {
     const day = observeDay();
-    const reconciledUsage = state.reconciledUsageByDay[day];
+    const userId = currentUserId();
+    if (!userId) return 0;
+    const reconciledUsage = state.reconciledUsageByUserAndDay[usageKey(userId, day)];
     return state.events.reduce(
       (total, event) =>
         event.localDay === day &&
+        event.userId === userId &&
         (reconciledUsage === undefined || !event.synced)
           ? total + event.wordCount
           : total,
@@ -168,13 +185,16 @@ export function createAcceptedWordLedger(deps: {
       ) {
         return;
       }
-      const current = state.reconciledUsageByDay[day] ?? 0;
+      const userId = currentUserId();
+      if (!userId) return;
+      const key = usageKey(userId, day);
+      const current = state.reconciledUsageByUserAndDay[key] ?? 0;
       if (usage <= current) return;
       state = {
         ...state,
-        reconciledUsageByDay: {
-          ...state.reconciledUsageByDay,
-          [day]: usage,
+        reconciledUsageByUserAndDay: {
+          ...state.reconciledUsageByUserAndDay,
+          [key]: usage,
         },
       };
       deps.storage.save(state);
@@ -183,7 +203,7 @@ export function createAcceptedWordLedger(deps: {
       return limit === null || getCurrentUsage() < limit;
     },
     record(
-      event: Omit<AcceptedWordLedgerEvent, "localDay" | "synced">,
+      event: Omit<AcceptedWordLedgerEvent, "userId" | "localDay" | "synced">,
     ): AcceptedWordLedgerEvent {
       const existing = state.events.find(
         (candidate) => candidate.acceptanceId === event.acceptanceId,
@@ -191,6 +211,7 @@ export function createAcceptedWordLedger(deps: {
       if (existing) return existing;
       const recorded: AcceptedWordLedgerEvent = {
         ...event,
+        userId: currentUserId() ?? "unassigned",
         localDay: observeDay(),
         synced: false,
       };
@@ -199,12 +220,18 @@ export function createAcceptedWordLedger(deps: {
       return recorded;
     },
     getPending(): readonly AcceptedWordLedgerEvent[] {
-      return state.events.filter((event) => !event.synced);
+      const userId = currentUserId();
+      if (!userId) return [];
+      return state.events.filter((event) => !event.synced && event.userId === userId);
     },
     markSynced(acceptanceId: string): void {
       let changed = false;
       const events = state.events.map((event) => {
-        if (event.acceptanceId !== acceptanceId || event.synced) return event;
+        if (
+          event.acceptanceId !== acceptanceId ||
+          event.userId !== currentUserId() ||
+          event.synced
+        ) return event;
         changed = true;
         return { ...event, synced: true };
       });

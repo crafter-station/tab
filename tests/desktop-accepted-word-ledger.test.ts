@@ -131,4 +131,39 @@ describe("Accepted Word ledger", () => {
     expect(ledger.getCurrentUsage()).toBe(0);
     expect(ledger.canAccept(100)).toBe(true);
   });
+
+  it("keeps pending Acceptances scoped to the active account", () => {
+    let userId: string | undefined = "user-a";
+    const storage = createMemoryAcceptedWordLedgerStorage();
+    const ledger = createAcceptedWordLedger({
+      storage,
+      getUserId: () => userId,
+      now: () => new Date(2026, 6, 12, 12),
+    });
+    ledger.record({
+      acceptanceId: "accept-a",
+      acceptedAt: "2026-07-12T12:00:00.000Z",
+      wordCount: 8,
+      characterCount: 40,
+    });
+
+    userId = "user-b";
+    expect(ledger.getCurrentUsage()).toBe(0);
+    expect(ledger.getPending()).toEqual([]);
+    ledger.record({
+      acceptanceId: "accept-b",
+      acceptedAt: "2026-07-12T12:01:00.000Z",
+      wordCount: 3,
+      characterCount: 15,
+    });
+    expect(ledger.getPending().map((event) => event.acceptanceId)).toEqual([
+      "accept-b",
+    ]);
+
+    userId = "user-a";
+    expect(ledger.getCurrentUsage()).toBe(8);
+    expect(ledger.getPending().map((event) => event.acceptanceId)).toEqual([
+      "accept-a",
+    ]);
+  });
 });

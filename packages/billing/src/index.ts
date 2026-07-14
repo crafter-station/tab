@@ -44,12 +44,17 @@ export type EntitlementFacts = {
   readonly effectiveEnd?: string;
   readonly trialStartedAt?: string;
   readonly billingInterval?: BillingInterval;
+  readonly subscriptionId?: string;
+  readonly currentPeriodStart?: string;
+  readonly currentPeriodEnd?: string;
+  readonly cancelAtPeriodEnd?: boolean;
 };
 
 export type UsageFacts = {
   readonly period: string;
   readonly used: number;
-  readonly resetAt?: string;
+  readonly periodStartsAt?: string;
+  readonly periodEndsAt?: string;
 };
 
 export type BillingProjectionInput = {
@@ -60,6 +65,12 @@ export type BillingProjectionInput = {
   readonly localAcceptedWords: UsageFacts;
   readonly deepCompletes: UsageFacts;
   readonly activeDevices: number;
+};
+
+export type AllowancePeriod = {
+  readonly period: string;
+  readonly periodStartsAt: string;
+  readonly periodEndsAt: string;
 };
 
 export function isPlanId(value: string | undefined): value is PlanId {
@@ -94,39 +105,35 @@ function nextLocalDay(date: Date): Date {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
 }
 
-function utcMonth(date: Date): string {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function nextUtcMonth(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
-}
-
 export function getAllowancePeriods(input: {
   readonly now: Date;
   readonly localDay?: string;
   readonly localResetAt?: Date;
+  readonly deepCompletePeriod: AllowancePeriod;
 }) {
+  const localPeriod = input.localDay ?? localDay(input.now);
   return {
     localAcceptedWords: {
-      period: input.localDay ?? localDay(input.now),
-      resetAt: (input.localResetAt ?? nextLocalDay(input.now)).toISOString(),
+      period: localPeriod,
+      periodStartsAt: `${localPeriod}T00:00:00`,
+      periodEndsAt: (input.localResetAt ?? nextLocalDay(input.now)).toISOString(),
     },
-    deepCompletes: {
-      period: utcMonth(input.now),
-      resetAt: nextUtcMonth(input.now).toISOString(),
-    },
+    deepCompletes: input.deepCompletePeriod,
   };
 }
 
 function allowanceState(
   facts: UsageFacts,
-  period: { period: string; resetAt: string },
+  period: AllowancePeriod,
   limit: number | null,
 ) {
   const effectivePeriod =
     facts.period > period.period
-      ? { period: facts.period, resetAt: facts.resetAt ?? period.resetAt }
+      ? {
+          period: facts.period,
+          periodStartsAt: facts.periodStartsAt ?? period.periodStartsAt,
+          periodEndsAt: facts.periodEndsAt ?? period.periodEndsAt,
+        }
       : period;
   const used = facts.period === effectivePeriod.period ? facts.used : 0;
   return {
@@ -134,7 +141,8 @@ function allowanceState(
     used,
     limit,
     remaining: limit === null ? null : Math.max(0, limit - used),
-    resetAt: effectivePeriod.resetAt,
+    periodStartsAt: effectivePeriod.periodStartsAt,
+    periodEndsAt: effectivePeriod.periodEndsAt,
     exhausted: limit !== null && used >= limit,
   };
 }
@@ -158,7 +166,21 @@ export function projectBillingStatus(input: BillingProjectionInput) {
   const planId = entitlement.planId;
   const entitlementSource = entitlement.source;
   const capabilities = getPlanCapabilities(planId);
-  const periods = getAllowancePeriods(input);
+  if (
+    !input.entitlement.subscriptionId ||
+    !input.entitlement.currentPeriodStart ||
+    !input.entitlement.currentPeriodEnd
+  ) {
+    throw new Error("Billing status requires a cached Polar subscription period");
+  }
+  const periods = getAllowancePeriods({
+    ...input,
+    deepCompletePeriod: {
+      period: `${input.entitlement.subscriptionId}:${input.entitlement.currentPeriodStart}`,
+      periodStartsAt: input.entitlement.currentPeriodStart,
+      periodEndsAt: input.entitlement.currentPeriodEnd,
+    },
+  });
   const trial =
     entitlementSource === "trial" &&
     input.entitlement.trialStartedAt &&
@@ -179,6 +201,7 @@ export function projectBillingStatus(input: BillingProjectionInput) {
     ...(entitlementSource === "paid" && input.entitlement.effectiveEnd
       ? { accessEndsAt: input.entitlement.effectiveEnd }
       : {}),
+    cancelAtPeriodEnd: input.entitlement.cancelAtPeriodEnd ?? false,
     capabilities,
     trial,
     localAcceptedWords: allowanceState(

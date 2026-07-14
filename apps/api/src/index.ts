@@ -10,8 +10,7 @@ import {
   D1BillingStorage,
   type BillingCheckoutClient,
   createBillingCheckoutClient,
-  createUsageMeterClient,
-  UsageMeterService,
+  createBillingProvisioningClient,
 } from "./billing.ts";
 import {
   CloudflareVectorizePersonalMemoryIndex,
@@ -75,7 +74,6 @@ export type ApiDependencies = {
   readonly auth?: AuthInstance;
   readonly deviceTokenService?: DeviceTokenService;
   readonly billingService?: BillingService;
-  readonly usageMeterService?: UsageMeterService;
   readonly billingCheckoutClient?: BillingCheckoutClient;
   readonly personalMemoryStorage?: PersonalMemoryStorage;
   readonly embeddingService?: PersonalMemoryEmbeddingService;
@@ -93,7 +91,6 @@ export function createApp(deps: ApiDependencies = {}) {
       | "auth"
       | "deviceTokenService"
       | "billingService"
-      | "usageMeterService"
       | "personalMemoryStorage"
       | "memoryExtractionStorage"
       | "telemetryStorage"
@@ -104,10 +101,6 @@ export function createApp(deps: ApiDependencies = {}) {
   const auth = deps.auth ?? d1Deps.auth ?? createAuthInstance();
   const deviceTokenService = deps.deviceTokenService ?? d1Deps.deviceTokenService;
   const billingService = deps.billingService ?? d1Deps.billingService;
-  const usageMeterService =
-    deps.usageMeterService ??
-    d1Deps.usageMeterService ??
-    new UsageMeterService({ client: createUsageMeterClient() });
   const billingCheckoutClient = deps.billingCheckoutClient ?? createBillingCheckoutClient();
   const personalMemoryStorage = deps.personalMemoryStorage ?? d1Deps.personalMemoryStorage;
   const telemetryStorage = deps.telemetryStorage ?? d1Deps.telemetryStorage;
@@ -145,7 +138,6 @@ export function createApp(deps: ApiDependencies = {}) {
     deps.telemetryService ?? new TelemetryService({ storage: telemetryStorage! });
   const suggestionUseCase = new SuggestionUseCase({
     billingService,
-    usageMeterService,
     personalMemoryService,
     telemetryService,
     generateSuggestion,
@@ -155,7 +147,18 @@ export function createApp(deps: ApiDependencies = {}) {
   const authenticateDevice = createDeviceAuthenticator(deviceTokenService);
 
   registerDeviceAuthRoutes(app, { auth, billingService, deviceTokenService });
-  app.on(["POST", "GET"], "/api/auth/*", (c) => auth.handler(c.req.raw));
+  app.on(["POST", "GET"], "/api/auth/*", async (c) => {
+    const response = await auth.handler(c.req.raw);
+    if (c.req.path.endsWith("/sign-up/email") && response.ok) {
+      try {
+        const payload = await response.clone().json() as { user?: { id?: string } };
+        if (payload.user?.id) await billingService.initializeAccount(payload.user.id);
+      } catch {
+        // Better Auth owns the response; lazy initialization repairs any parse failure.
+      }
+    }
+    return response;
+  });
 
   app.use("/api/status", authenticateDevice);
   app.use("/api/memory/*", authenticateDevice);
@@ -194,7 +197,6 @@ function createD1Dependencies(db: D1Database): Required<
     | "auth"
     | "deviceTokenService"
     | "billingService"
-    | "usageMeterService"
     | "personalMemoryStorage"
     | "memoryExtractionStorage"
     | "telemetryStorage"
@@ -213,8 +215,10 @@ function createD1Dependencies(db: D1Database): Required<
       requireEmailVerification: true,
     }),
     deviceTokenService: new DeviceTokenService({ storage: deviceTokenStorage }),
-    billingService: new BillingService({ storage: billingStorage }),
-    usageMeterService: new UsageMeterService({ client: createUsageMeterClient() }),
+    billingService: new BillingService({
+      storage: billingStorage,
+      provisioningClient: createBillingProvisioningClient(),
+    }),
     personalMemoryStorage,
     memoryExtractionStorage,
     telemetryStorage,
