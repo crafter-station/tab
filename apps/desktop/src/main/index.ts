@@ -40,10 +40,9 @@ import {
   DEFAULT_DESKTOP_AUTH_CALLBACK_URL,
 } from "./auth.ts";
 import {
+  createLoopbackAuthCallback,
   findAuthCallbackUrl,
   isAuthCallbackUrl,
-  startLoopbackAuthCallbackServer,
-  type LoopbackAuthCallbackServer,
 } from "./auth-callback.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -113,7 +112,7 @@ let debugOverlayWindow: BrowserWindow | null = null;
 let overlayRendererReady = false;
 let tray: TabTray | null = null;
 let relaunchAfterPermissionQuit = false;
-let developmentAuthCallbackServer: Promise<LoopbackAuthCallbackServer> | null = null;
+const authCallback = createLoopbackAuthCallback({ onCallback: completeBrowserHandoff });
 type InputTapProcess = {
   stdout: { on(event: "data", callback: (chunk: Buffer) => void): void };
   stderr: { on(event: "data", callback: (chunk: Buffer) => void): void };
@@ -580,16 +579,7 @@ async function signOut(): Promise<void> {
 
 async function signIn(): Promise<void> {
   console.log("Opening browser sign-in for device:", DEVICE_ID);
-  let callbackUrl = DEFAULT_DESKTOP_AUTH_CALLBACK_URL;
-  if (!app.isPackaged) {
-    developmentAuthCallbackServer ??= startLoopbackAuthCallbackServer({
-      onCallback: completeBrowserHandoff,
-    }).catch((error) => {
-      developmentAuthCallbackServer = null;
-      throw error;
-    });
-    callbackUrl = (await developmentAuthCallbackServer).callbackUrl;
-  }
+  const callbackUrl = await authCallback.getCallbackUrl();
   await authClient.openBrowserLogin({ callbackUrl });
 }
 
@@ -1343,9 +1333,7 @@ app.on("will-quit", () => {
   localInference.stop();
   memoryExtractionDispatcher.stop();
   typingContextBuffer.clear();
-  if (developmentAuthCallbackServer) {
-    void developmentAuthCallbackServer.then((server) => server.close()).catch(() => {});
-  }
+  void authCallback.close().catch(() => {});
 });
 
 app.on("window-all-closed", () => {

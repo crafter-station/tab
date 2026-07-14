@@ -6,9 +6,35 @@ export type LoopbackAuthCallbackServer = {
   close(): Promise<void>;
 };
 
+export type LoopbackAuthCallback = {
+  getCallbackUrl(): Promise<string>;
+  close(): Promise<void>;
+};
+
 type LoopbackAuthCallbackServerDependencies = {
   onCallback(url: string): Promise<void>;
 };
+
+export function createLoopbackAuthCallback(
+  deps: LoopbackAuthCallbackServerDependencies,
+): LoopbackAuthCallback {
+  let server: Promise<LoopbackAuthCallbackServer> | null = null;
+
+  return {
+    async getCallbackUrl() {
+      server ??= startLoopbackAuthCallbackServer(deps).catch((error) => {
+        server = null;
+        throw error;
+      });
+      return (await server).callbackUrl;
+    },
+    async close() {
+      const activeServer = server;
+      server = null;
+      if (activeServer) await (await activeServer).close();
+    },
+  };
+}
 
 function sendHtml(serverResponse: ServerResponse, status: number, title: string, message: string): void {
   const light = PLATFORM_COLORS.theme.light;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  createLoopbackAuthCallback,
   findAuthCallbackUrl,
   isAuthCallbackUrl,
   startLoopbackAuthCallbackServer,
@@ -17,7 +18,7 @@ describe("desktop auth callback delivery", () => {
     expect(findAuthCallbackUrl(["electron", "--flag", callback], expected)).toBe(callback);
   });
 
-  it("receives development callbacks only on the loopback callback path", async () => {
+  it("receives callbacks only on the loopback callback path", async () => {
     const received: string[] = [];
     const server = await startLoopbackAuthCallbackServer({
       onCallback: async (url) => {
@@ -36,6 +37,27 @@ describe("desktop auth callback delivery", () => {
       expect(received).toEqual([`${server.callbackUrl}?code=one-time`]);
     } finally {
       await server.close();
+    }
+  });
+
+  it("provides one reusable loopback callback for desktop sign-in", async () => {
+    const received: string[] = [];
+    const callback = createLoopbackAuthCallback({
+      onCallback: async (url) => {
+        received.push(url);
+      },
+    });
+
+    try {
+      const callbackUrl = await callback.getCallbackUrl();
+      expect(callbackUrl).toStartWith("http://127.0.0.1:");
+      expect(await callback.getCallbackUrl()).toBe(callbackUrl);
+
+      const response = await fetch(`${callbackUrl}?code=packaged-sign-in`);
+      expect(response.status).toBe(200);
+      expect(received).toEqual([`${callbackUrl}?code=packaged-sign-in`]);
+    } finally {
+      await callback.close();
     }
   });
 });
