@@ -27,6 +27,21 @@ class FakeUpdater extends EventEmitter {
 }
 
 describe("Desktop release packaging", () => {
+  it("loads electron-updater from its CommonJS named exports", async () => {
+    const result = await Bun.build({
+      entrypoints: ["apps/desktop/src/main/index.ts"],
+      target: "node",
+      format: "cjs",
+      external: ["electron", "electron-updater"],
+      write: false,
+    });
+
+    expect(result.success).toBe(true);
+    const bundle = await result.outputs[0].text();
+    expect(bundle).toInclude('require("electron-updater")');
+    expect(bundle).not.toMatch(/import_electron_updater\.default/);
+  });
+
   it("has an electron-builder config that targets macOS direct distribution", async () => {
     const config = await Bun.file("apps/desktop/electron-builder.yml").text();
     expect(config).toInclude("target: dmg");

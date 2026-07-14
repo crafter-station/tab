@@ -62,9 +62,8 @@ import type { Suggestion, PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
 import { boundsEqual } from "./window-position.ts";
-import electronUpdater from "electron-updater";
+import { autoUpdater } from "electron-updater";
 
-const { autoUpdater } = electronUpdater;
 if (app.isPackaged) autoUpdater.logger = null;
 
 let authCallbackHandlingReady = false;
