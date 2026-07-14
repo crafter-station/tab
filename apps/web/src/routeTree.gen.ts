@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
@@ -26,6 +27,7 @@ import { Route as AccountRouteImport } from './routes/account'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
+import { Route as VerifyEmailConfirmRouteImport } from './routes/verify-email.confirm'
 import { Route as DownloadTabDotdmgRouteImport } from './routes/download.tab[.]dmg'
 import { Route as DownloadLatestDotjsonRouteImport } from './routes/download.latest[.]json'
 import { Route as DashboardUsageRouteImport } from './routes/dashboard.usage'
@@ -42,6 +44,11 @@ import { Route as DashboardMemoriesMemoryIdEditRouteImport } from './routes/dash
 import { Route as DashboardMemoriesMemoryIdDeleteRouteImport } from './routes/dashboard.memories.$memoryId.delete'
 import { Route as DashboardDevicesDeviceIdRevokeRouteImport } from './routes/dashboard.devices.$deviceId.revoke'
 
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
   path: '/terms',
@@ -126,6 +133,11 @@ const DashboardIndexRoute = DashboardIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => DashboardRoute,
+} as any)
+const VerifyEmailConfirmRoute = VerifyEmailConfirmRouteImport.update({
+  id: '/confirm',
+  path: '/confirm',
+  getParentRoute: () => VerifyEmailRoute,
 } as any)
 const DownloadTabDotdmgRoute = DownloadTabDotdmgRouteImport.update({
   id: '/tab.dmg',
@@ -224,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRouteWithChildren
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/error': typeof BillingErrorRoute
   '/billing/portal': typeof BillingPortalRoute
@@ -233,6 +246,7 @@ export interface FileRoutesByFullPath {
   '/dashboard/usage': typeof DashboardUsageRoute
   '/download/latest.json': typeof DownloadLatestDotjsonRoute
   '/download/tab.dmg': typeof DownloadTabDotdmgRoute
+  '/verify-email/confirm': typeof VerifyEmailConfirmRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/memories/create': typeof DashboardMemoriesCreateRoute
   '/dashboard/memories/delete-selected': typeof DashboardMemoriesDeleteSelectedRoute
@@ -257,6 +271,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRouteWithChildren
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/error': typeof BillingErrorRoute
   '/billing/portal': typeof BillingPortalRoute
@@ -266,6 +281,7 @@ export interface FileRoutesByTo {
   '/dashboard/usage': typeof DashboardUsageRoute
   '/download/latest.json': typeof DownloadLatestDotjsonRoute
   '/download/tab.dmg': typeof DownloadTabDotdmgRoute
+  '/verify-email/confirm': typeof VerifyEmailConfirmRoute
   '/dashboard': typeof DashboardIndexRoute
   '/dashboard/memories/create': typeof DashboardMemoriesCreateRoute
   '/dashboard/memories/delete-selected': typeof DashboardMemoriesDeleteSelectedRoute
@@ -292,6 +308,7 @@ export interface FileRoutesById {
   '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
+  '/verify-email': typeof VerifyEmailRouteWithChildren
   '/billing/checkout': typeof BillingCheckoutRoute
   '/billing/error': typeof BillingErrorRoute
   '/billing/portal': typeof BillingPortalRoute
@@ -301,6 +318,7 @@ export interface FileRoutesById {
   '/dashboard/usage': typeof DashboardUsageRoute
   '/download/latest.json': typeof DownloadLatestDotjsonRoute
   '/download/tab.dmg': typeof DownloadTabDotdmgRoute
+  '/verify-email/confirm': typeof VerifyEmailConfirmRoute
   '/dashboard/': typeof DashboardIndexRoute
   '/dashboard/memories/create': typeof DashboardMemoriesCreateRoute
   '/dashboard/memories/delete-selected': typeof DashboardMemoriesDeleteSelectedRoute
@@ -328,6 +346,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/terms'
+    | '/verify-email'
     | '/billing/checkout'
     | '/billing/error'
     | '/billing/portal'
@@ -337,6 +356,7 @@ export interface FileRouteTypes {
     | '/dashboard/usage'
     | '/download/latest.json'
     | '/download/tab.dmg'
+    | '/verify-email/confirm'
     | '/dashboard/'
     | '/dashboard/memories/create'
     | '/dashboard/memories/delete-selected'
@@ -361,6 +381,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/terms'
+    | '/verify-email'
     | '/billing/checkout'
     | '/billing/error'
     | '/billing/portal'
@@ -370,6 +391,7 @@ export interface FileRouteTypes {
     | '/dashboard/usage'
     | '/download/latest.json'
     | '/download/tab.dmg'
+    | '/verify-email/confirm'
     | '/dashboard'
     | '/dashboard/memories/create'
     | '/dashboard/memories/delete-selected'
@@ -395,6 +417,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/signup'
     | '/terms'
+    | '/verify-email'
     | '/billing/checkout'
     | '/billing/error'
     | '/billing/portal'
@@ -404,6 +427,7 @@ export interface FileRouteTypes {
     | '/dashboard/usage'
     | '/download/latest.json'
     | '/download/tab.dmg'
+    | '/verify-email/confirm'
     | '/dashboard/'
     | '/dashboard/memories/create'
     | '/dashboard/memories/delete-selected'
@@ -430,6 +454,7 @@ export interface RootRouteChildren {
   ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
+  VerifyEmailRoute: typeof VerifyEmailRouteWithChildren
   BillingCheckoutRoute: typeof BillingCheckoutRoute
   BillingErrorRoute: typeof BillingErrorRoute
   BillingPortalRoute: typeof BillingPortalRoute
@@ -437,6 +462,13 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/terms': {
       id: '/terms'
       path: '/terms'
@@ -555,6 +587,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/dashboard/'
       preLoaderRoute: typeof DashboardIndexRouteImport
       parentRoute: typeof DashboardRoute
+    }
+    '/verify-email/confirm': {
+      id: '/verify-email/confirm'
+      path: '/confirm'
+      fullPath: '/verify-email/confirm'
+      preLoaderRoute: typeof VerifyEmailConfirmRouteImport
+      parentRoute: typeof VerifyEmailRoute
     }
     '/download/tab.dmg': {
       id: '/download/tab.dmg'
@@ -728,6 +767,18 @@ const DownloadRouteWithChildren = DownloadRoute._addFileChildren(
   DownloadRouteChildren,
 )
 
+interface VerifyEmailRouteChildren {
+  VerifyEmailConfirmRoute: typeof VerifyEmailConfirmRoute
+}
+
+const VerifyEmailRouteChildren: VerifyEmailRouteChildren = {
+  VerifyEmailConfirmRoute: VerifyEmailConfirmRoute,
+}
+
+const VerifyEmailRouteWithChildren = VerifyEmailRoute._addFileChildren(
+  VerifyEmailRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
@@ -745,6 +796,7 @@ const rootRouteChildren: RootRouteChildren = {
   ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
+  VerifyEmailRoute: VerifyEmailRouteWithChildren,
   BillingCheckoutRoute: BillingCheckoutRoute,
   BillingErrorRoute: BillingErrorRoute,
   BillingPortalRoute: BillingPortalRoute,

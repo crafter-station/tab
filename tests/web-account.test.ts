@@ -10,7 +10,9 @@ import {
   handleMemoryCreate,
   handleMemoryExport,
   handleResetPassword,
+  handleResendVerification,
   handleSignup,
+  handleVerifyEmail,
 } from "../apps/web/src/lib/actions.server.ts";
 import { loadDashboardData } from "../apps/web/src/lib/dashboard.server.ts";
 
@@ -29,6 +31,14 @@ function createFakeApi(overrides: Record<string, (request: Request) => Response 
     "POST /api/auth/sign-in/email": () => json(session, { headers: { "set-cookie": "tab.session=abc; Path=/; HttpOnly" } }),
     "POST /api/auth/sign-out": () => json({ ok: true }, { headers: { "set-cookie": "tab.session=; Path=/; Max-Age=0" } }),
     "POST /api/auth/device/authorize": () => json({ code: "device-code" }),
+    "GET /api/auth/verify-email": (request) => {
+      const callbackURL = new URL(request.url).searchParams.get("callbackURL")!;
+      return new Response(null, {
+        status: 302,
+        headers: { location: callbackURL, "set-cookie": "tab.session=verified; Path=/; HttpOnly" },
+      });
+    },
+    "POST /api/auth/send-verification-email": () => json({ status: true }),
     "GET /api/billing/checkout?plan=pro&interval=monthly": () => json({ status: "ok", data: { url: "https://checkout.example/pro" } }),
     "POST /api/auth/device/revoke": () => json({ status: "ok" }),
     "POST /api/account/memory": () => json({ status: "ok" }),
@@ -56,7 +66,7 @@ function createFakeApi(overrides: Record<string, (request: Request) => Response 
       const request = new Request(input, init);
       requests.push(request);
       const url = new URL(request.url);
-      const route = routes[`${request.method} ${url.pathname}${url.search}`];
+      const route = routes[`${request.method} ${url.pathname}${url.search}`] ?? routes[`${request.method} ${url.pathname}`];
       return route ? route(request) : new Response("missing fake route", { status: 500 });
     },
   });
@@ -65,7 +75,7 @@ function createFakeApi(overrides: Record<string, (request: Request) => Response 
 
 function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  headers.set("cookie", "tab.session=abc");
+  if (!headers.has("cookie")) headers.set("cookie", "tab.session=abc");
   return new Request(`${WEB_ORIGIN}${path}`, { ...init, headers });
 }
 
@@ -81,6 +91,119 @@ describe("TanStack Start web BFF module contracts", () => {
     expect(response.headers.get("location")).toBe("/dashboard/usage");
     expect(response.headers.get("set-cookie")).toContain("tab.session=abc");
     expect(requests.at(-1)?.headers.get("origin")).toBe(WEB_ORIGIN);
+  });
+
+  it("preserves the intended destination when sign-in resends verification", async () => {
+    const { api, requests } = createFakeApi({
+      "POST /api/auth/sign-in/email": () => json(
+        { code: "EMAIL_NOT_VERIFIED", message: "Email not verified" },
+        { status: 403 },
+      ),
+    });
+    const response = await handleLogin(request("/login", {
+      method: "POST",
+      body: new URLSearchParams({
+        email: "test@example.com",
+        password: "password123",
+        next: "/dashboard/usage",
+      }),
+    }), api);
+
+    const callbackURL = new URL(String((await requests.at(-1)?.json() as { callbackURL: string }).callbackURL));
+    expect(callbackURL.origin).toBe(WEB_ORIGIN);
+    expect(callbackURL.pathname).toBe("/login");
+    expect(callbackURL.searchParams.get("next")).toBe("/dashboard/usage");
+    expect(callbackURL.searchParams.get("verification_state")).toBeTruthy();
+    expect(response.headers.get("location")).toContain("/verify-email?status=sent");
+  });
+
+  it("relays automatic sign-in cookies from email verification", async () => {
+    const { api } = createFakeApi();
+    const callbackURL = `${WEB_ORIGIN}/signup?next=%2Fdashboard%2Fusage&verification_state=test-state`;
+    const response = await handleVerifyEmail(request(`/verify-email/confirm?${new URLSearchParams({
+      token: "verification-token",
+      callbackURL,
+    })}`, { headers: { cookie: "tab.verification_state=test-state" } }), api);
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/signup?next=%2Fdashboard%2Fusage");
+    expect(response.headers.get("set-cookie")).toContain("tab.session=verified");
+    expect(response.headers.get("set-cookie")).toContain("tab.verification_state=");
+  });
+
+  it("does not auto-sign in a different browser that opens the verification link", async () => {
+    const { api } = createFakeApi();
+    const callbackURL = `${WEB_ORIGIN}/signup?verification_state=originating-browser`;
+    const response = await handleVerifyEmail(request(`/verify-email/confirm?${new URLSearchParams({
+      token: "forwarded-token",
+      callbackURL,
+    })}`), api);
+
+    expect(response.headers.get("location")).toBe("/login?status=email_verified");
+    expect(response.headers.get("set-cookie") ?? "").not.toContain("tab.session=verified");
+  });
+
+  it("turns expired verification links into a recoverable resend flow", async () => {
+    const callbackURL = `${WEB_ORIGIN}/login?device_id=mac-1&callback=${encodeURIComponent("tab://auth/callback")}&verification_state=expired-state`;
+    const { api } = createFakeApi({
+      "GET /api/auth/verify-email": (upstreamRequest) => {
+        const callback = new URL(upstreamRequest.url).searchParams.get("callbackURL")!;
+        return new Response(null, { status: 302, headers: { location: `${callback}&error=token_expired` } });
+      },
+    });
+    const response = await handleVerifyEmail(request(`/verify-email/confirm?${new URLSearchParams({
+      token: "expired-token",
+      callbackURL,
+    })}`), api);
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toContain("/verify-email?error=expired");
+    expect(response.headers.get("location")).toContain("callbackURL=");
+  });
+
+  it("falls back to the canonical sign-in when verification cannot create a session", async () => {
+    const callbackURL = `${WEB_ORIGIN}/signup?device_id=mac-1&callback=${encodeURIComponent("tab://auth/callback")}&verification_state=used-state`;
+    const { api } = createFakeApi({
+      "GET /api/auth/verify-email": () => new Response(null, { status: 302, headers: { location: callbackURL } }),
+    });
+    const response = await handleVerifyEmail(request(`/verify-email/confirm?${new URLSearchParams({
+      token: "already-used-token",
+      callbackURL,
+    })}`), api);
+
+    expect(response.headers.get("location")).toBe("/login?device_id=mac-1&callback=tab%3A%2F%2Fauth%2Fcallback&status=email_verified");
+  });
+
+  it("keeps desktop handoff context when authorization fails after verification", async () => {
+    const callbackURL = `${WEB_ORIGIN}/signup?device_id=mac-1&callback=${encodeURIComponent("tab://auth/callback")}&verification_state=desktop-state`;
+    const { api } = createFakeApi({
+      "POST /api/auth/device/authorize": () => json({ error: "unavailable" }, { status: 503 }),
+    });
+    const response = await handleVerifyEmail(request(`/verify-email/confirm?${new URLSearchParams({
+      token: "verification-token",
+      callbackURL,
+    })}`, { headers: { cookie: "tab.verification_state=desktop-state" } }), api);
+
+    expect(response.headers.get("location")).toContain("/verify-email?error=device_failed");
+    expect(response.headers.get("location")).toContain("callbackURL=");
+  });
+
+  it("resends verification through Better Auth without losing continuation state", async () => {
+    const callbackURL = `${WEB_ORIGIN}/login?next=%2Fdashboard%2Fusage`;
+    const { api, requests } = createFakeApi();
+    const response = await handleResendVerification(request("/verify-email", {
+      method: "POST",
+      body: new URLSearchParams({ email: "test@example.com", callbackURL }),
+    }), api);
+
+    const body = await requests.at(-1)?.json() as { email: string; callbackURL: string };
+    const statefulCallback = new URL(body.callbackURL);
+    expect(body.email).toBe("test@example.com");
+    expect(statefulCallback.pathname).toBe("/login");
+    expect(statefulCallback.searchParams.get("next")).toBe("/dashboard/usage");
+    expect(statefulCallback.searchParams.get("verification_state")).toBeTruthy();
+    expect(response.headers.get("location")).toContain("/verify-email?status=sent");
+    expect(response.headers.get("set-cookie")).toContain("tab.verification_state=");
   });
 
   it("rejects unsafe next paths without putting passwords in redirect URLs", async () => {

@@ -22,7 +22,12 @@ const LoginFormSchema = z.object({
 const SignupFormSchema = LoginFormSchema.extend({ name: z.string().trim().min(1).max(200) });
 const ForgotFormSchema = z.object({ email: EmailSchema });
 const ResetFormSchema = z.object({ token: z.string().min(1).max(2_000), password: z.string().min(8).max(1_000) });
+const VerifyEmailFormSchema = z.object({
+  email: EmailSchema,
+  callbackURL: z.string().max(4_000).optional(),
+});
 const IdSchema = z.string().min(1).max(500);
+const VerificationStateCookie = "tab.verification_state";
 
 function redirectResponse(location: string, headers = new Headers()): Response {
   headers.set("location", location);
@@ -57,21 +62,95 @@ function authFailureLocation(path: "/login" | "/signup", values: Record<string, 
   return `${path}?${query}`;
 }
 
+function authContinuation(path: "/login" | "/signup", request: Request, values: {
+  device_id?: string;
+  callback?: string;
+  next?: string;
+}): URL {
+  const continuation = new URL(path, request.url);
+  if (values.device_id) continuation.searchParams.set("device_id", values.device_id);
+  if (values.callback) continuation.searchParams.set("callback", values.callback);
+  const next = safeNextPath(values.next);
+  if (next) continuation.searchParams.set("next", next);
+  return continuation;
+}
+
+function safeAuthContinuation(value: string | null | undefined, request: Request): URL {
+  const fallback = new URL("/login", request.url);
+  if (!value) return fallback;
+  try {
+    const continuation = new URL(value);
+    if (continuation.origin !== fallback.origin || !["/login", "/signup"].includes(continuation.pathname)) return fallback;
+    return continuation;
+  } catch {
+    return fallback;
+  }
+}
+
+function verificationLocation(params: { status?: "sent"; error?: "expired" | "invalid" | "request_failed" | "device_failed" }, callbackURL: URL): string {
+  const location = new URL("/verify-email", callbackURL.origin);
+  if (params.status) location.searchParams.set("status", params.status);
+  if (params.error) location.searchParams.set("error", params.error);
+  location.searchParams.set("callbackURL", callbackURL.toString());
+  return `${location.pathname}${location.search}`;
+}
+
+function verificationStateCookie(request: Request, value: string, maxAge = 60 * 60): string {
+  const secure = new URL(request.url).protocol === "https:" ? "; Secure" : "";
+  return `${VerificationStateCookie}=${encodeURIComponent(value)}; Path=/verify-email; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
+}
+
+function requestCookie(request: Request, name: string): string | undefined {
+  for (const part of request.headers.get("cookie")?.split(";") ?? []) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name) {
+      try {
+        return decodeURIComponent(value.join("="));
+      } catch {
+        return undefined;
+      }
+    }
+  }
+  return undefined;
+}
+
+function withVerificationState(callbackURL: URL): { callbackURL: URL; state: string } {
+  const state = crypto.randomUUID();
+  callbackURL.searchParams.set("verification_state", state);
+  return { callbackURL, state };
+}
+
+function loginAfterVerification(callbackURL: URL): string {
+  const location = new URL("/login", callbackURL.origin);
+  for (const key of ["device_id", "callback", "next"] as const) {
+    const value = callbackURL.searchParams.get(key);
+    if (value) location.searchParams.set(key, value);
+  }
+  location.searchParams.set("status", "email_verified");
+  return `${location.pathname}${location.search}`;
+}
+
 function requestWithCookie(request: Request, cookie: string): Request {
   const headers = new Headers(request.headers);
   headers.set("cookie", cookie);
   return new Request(request.url, { headers });
 }
 
-async function authorizeDevice(request: Request, api: ApiClient, callback: string, sources: Response[]): Promise<Response> {
+async function authorizeDevice(
+  request: Request,
+  api: ApiClient,
+  callback: string,
+  sources: Response[],
+  failureLocation = "/login?error=device_failed",
+): Promise<Response> {
   const callbackUrl = parseDesktopAuthCallback(callback);
   if (!callbackUrl) {
-    return redirectResponse("/login?error=device_failed", responseHeaders(...sources));
+    return redirectResponse(failureLocation, responseHeaders(...sources));
   }
   const cookie = cookieHeaderFromSetCookie(sources[0]!);
-  if (!cookie) return redirectResponse("/login?error=device_failed", responseHeaders(...sources));
+  if (!cookie) return redirectResponse(failureLocation, responseHeaders(...sources));
   const response = await api.request("/api/auth/device/authorize", requestWithCookie(request, cookie), { method: "POST" });
-  if (!response.ok) return redirectResponse("/login?error=device_failed", responseHeaders(...sources, response));
+  if (!response.ok) return redirectResponse(failureLocation, responseHeaders(...sources, response));
   const body = apiSchemas.deviceAuthorize.parse(await response.json());
   callbackUrl.searchParams.set("code", body.code);
   const headers = new Headers();
@@ -89,14 +168,25 @@ export async function handleLogin(request: Request, api: ApiClient): Promise<Res
   }
   const parsed = LoginFormSchema.safeParse(values);
   if (!parsed.success) return redirectResponse(authFailureLocation("/login", values, "invalid_form"));
+  const { callbackURL: continuation, state: verificationState } = withVerificationState(authContinuation("/login", request, parsed.data));
   const response = await api.request("/api/auth/sign-in/email", request, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password, rememberMe: true }),
+    body: JSON.stringify({
+      email: parsed.data.email,
+      password: parsed.data.password,
+      rememberMe: true,
+      callbackURL: continuation.toString(),
+    }),
   });
   if (!response.ok) {
+    if (response.status === 403) {
+      const headers = responseHeaders(response);
+      headers.append("set-cookie", verificationStateCookie(request, verificationState));
+      return redirectResponse(verificationLocation({ status: "sent" }, continuation), headers);
+    }
     return redirectResponse(
-      authFailureLocation("/login", values, response.status === 403 ? "email_unverified" : "invalid_credentials"),
+      authFailureLocation("/login", values, "invalid_credentials"),
       responseHeaders(response),
     );
   }
@@ -115,11 +205,7 @@ export async function handleSignup(request: Request, api: ApiClient): Promise<Re
   }
   const parsed = SignupFormSchema.safeParse(values);
   if (!parsed.success) return redirectResponse(authFailureLocation("/signup", values, "invalid_form"));
-  const continuation = new URL("/signup", request.url);
-  if (parsed.data.device_id) continuation.searchParams.set("device_id", parsed.data.device_id);
-  if (parsed.data.callback) continuation.searchParams.set("callback", parsed.data.callback);
-  const next = safeNextPath(parsed.data.next);
-  if (next) continuation.searchParams.set("next", next);
+  const { callbackURL: continuation, state: verificationState } = withVerificationState(authContinuation("/signup", request, parsed.data));
   const response = await api.request("/api/auth/sign-up/email", request, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -134,13 +220,91 @@ export async function handleSignup(request: Request, api: ApiClient): Promise<Re
   const headers = new Headers();
   appendSetCookies(headers, response);
   const cookie = cookieHeaderFromSetCookie(response);
-  if (!cookie) return redirectResponse("/signup?status=verify_email", headers);
+  if (!cookie) {
+    headers.append("set-cookie", verificationStateCookie(request, verificationState));
+    return redirectResponse(verificationLocation({ status: "sent" }, continuation), headers);
+  }
   const signedInRequest = requestWithCookie(request, cookie);
   const session = await optionalSession(signedInRequest, api);
   appendSetCookies(headers, session.response);
-  if (session.user?.emailVerified === false) return redirectResponse("/signup?status=verify_email", headers);
+  if (session.user?.emailVerified === false) {
+    headers.append("set-cookie", verificationStateCookie(request, verificationState));
+    return redirectResponse(verificationLocation({ status: "sent" }, continuation), headers);
+  }
   if (parsed.data.device_id && parsed.data.callback) return authorizeDevice(request, api, parsed.data.callback, [response, session.response]);
   return redirectResponse(safeNextPath(parsed.data.next) ?? "/dashboard", headers);
+}
+
+export async function handleVerifyEmail(request: Request, api: ApiClient): Promise<Response> {
+  const requestUrl = new URL(request.url);
+  const callbackURL = safeAuthContinuation(requestUrl.searchParams.get("callbackURL"), request);
+  const cleanCallbackURL = new URL(callbackURL);
+  cleanCallbackURL.searchParams.delete("verification_state");
+  const verificationState = callbackURL.searchParams.get("verification_state");
+  const stateMatches = Boolean(verificationState && requestCookie(request, VerificationStateCookie) === verificationState);
+  const token = requestUrl.searchParams.get("token");
+  if (!token || token.length > 4_000) {
+    return redirectResponse(verificationLocation({ error: "invalid" }, cleanCallbackURL));
+  }
+  const query = new URLSearchParams({ token, callbackURL: callbackURL.toString() });
+  const response = await api.request(`/api/auth/verify-email?${query}`, request, { redirect: "manual" });
+  const headers = stateMatches ? responseHeaders(response) : new Headers();
+  if (stateMatches) headers.append("set-cookie", verificationStateCookie(request, "", 0));
+  const upstreamLocation = response.headers.get("location");
+  if (upstreamLocation) {
+    const error = new URL(upstreamLocation, callbackURL).searchParams.get("error")?.toLowerCase().replaceAll(" ", "_");
+    if (error) {
+      return redirectResponse(
+        verificationLocation({ error: error.includes("expired") ? "expired" : "invalid" }, cleanCallbackURL),
+        headers,
+      );
+    }
+  }
+  if (!response.ok && !upstreamLocation) {
+    return redirectResponse(verificationLocation({ error: "invalid" }, cleanCallbackURL), headers);
+  }
+  if (!stateMatches || !cookieHeaderFromSetCookie(response)) {
+    return redirectResponse(loginAfterVerification(cleanCallbackURL), headers);
+  }
+  const deviceId = cleanCallbackURL.searchParams.get("device_id");
+  const desktopCallback = cleanCallbackURL.searchParams.get("callback");
+  if (deviceId && desktopCallback) {
+    const handoff = await authorizeDevice(
+      request,
+      api,
+      desktopCallback,
+      [response],
+      verificationLocation({ error: "device_failed" }, cleanCallbackURL),
+    );
+    handoff.headers.append("set-cookie", verificationStateCookie(request, "", 0));
+    return handoff;
+  }
+  return redirectResponse(`${cleanCallbackURL.pathname}${cleanCallbackURL.search}${cleanCallbackURL.hash}`, headers);
+}
+
+export async function handleResendVerification(request: Request, api: ApiClient): Promise<Response> {
+  let values: Record<string, string>;
+  try {
+    values = await formObject(request);
+  } catch {
+    return redirectResponse("/verify-email?error=request_failed");
+  }
+  const parsed = VerifyEmailFormSchema.safeParse(values);
+  const callbackURL = safeAuthContinuation(parsed.success ? parsed.data.callbackURL : undefined, request);
+  callbackURL.searchParams.delete("verification_state");
+  if (!parsed.success) return redirectResponse(verificationLocation({ error: "request_failed" }, callbackURL));
+  const { callbackURL: statefulCallbackURL, state: verificationState } = withVerificationState(callbackURL);
+  const response = await api.request("/api/auth/send-verification-email", request, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ email: parsed.data.email, callbackURL: statefulCallbackURL.toString() }),
+  });
+  const headers = responseHeaders(response);
+  if (response.ok) headers.append("set-cookie", verificationStateCookie(request, verificationState));
+  return redirectResponse(
+    verificationLocation(response.ok ? { status: "sent" } : { error: "request_failed" }, statefulCallbackURL),
+    headers,
+  );
 }
 
 export async function handleForgotPassword(request: Request, api: ApiClient): Promise<Response> {

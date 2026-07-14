@@ -11,8 +11,10 @@ import {
   handleMemoryEdit,
   handleMemoryExport,
   handlePortal,
+  handleResendVerification,
   handleResetPassword,
   handleSignup,
+  handleVerifyEmail,
 } from "./actions.server.ts";
 import { getRuntimeConfig } from "./runtime.server.ts";
 
@@ -36,6 +38,8 @@ export const routeHandlers = {
   signup: unsafeHandler((request: Request) => handleSignup(request, api())),
   forgotPassword: unsafeHandler((request: Request) => handleForgotPassword(request, api())),
   resetPassword: unsafeHandler((request: Request) => handleResetPassword(request, api())),
+  resendVerification: unsafeHandler((request: Request) => handleResendVerification(request, api())),
+  verifyEmail: (request: Request) => handleVerifyEmail(request, api()),
   logout: unsafeHandler((request: Request) => handleLogout(request, api())),
   checkout: (request: Request) => handleCheckout(request, api()),
   portal: (request: Request) => handlePortal(request, api()),

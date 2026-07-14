@@ -1,4 +1,6 @@
 import {
+  Alert,
+  AlertDescription,
   Button,
   Field,
   FieldGroup,
@@ -14,14 +16,15 @@ import {
   preserveAuthSearchParams,
 } from "./shared.tsx";
 
-export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?: string }) {
+export function LoginPage({ search = {}, error, verified }: { search?: AuthSearch; error?: string; verified?: boolean }) {
   const signupHref = `/signup${preserveAuthSearchParams(search)}`;
   const handoff = hasDesktopHandoff(search);
 
   return (
-    <AuthShell eyebrow={handoff ? "Mac sign-in" : "Account"} title={handoff ? "Connect this Mac" : "Sign in to Tab"} description={handoff ? "Sign in to connect Tab on this Mac. You will return to the app automatically." : "Manage your plan, connected Macs, and Personal Memory."} handoff={handoff}>
+    <AuthShell eyebrow="Account" title="Sign in to Tab" description={handoff ? "Sign in here to connect Tab on this Mac. You will return to the app automatically." : "Manage your plan, connected Macs, and Personal Memory."} handoff={handoff}>
       <form className="flex flex-col gap-4" method="post" action="/login">
         <ErrorMessage message={error} />
+        {verified ? <Alert><AlertDescription>Your email is verified. Sign in to continue.</AlertDescription></Alert> : null}
         <HandoffFields search={search} />
         <FieldGroup className="gap-4">
           <Field>
@@ -37,6 +40,51 @@ export function LoginPage({ search = {}, error }: { search?: AuthSearch; error?:
       </form>
       <p className="text-sm text-muted-foreground"><a className="font-semibold text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/forgot-password">Forgot your password?</a></p>
       <p className="text-sm text-muted-foreground">Need an account? <a className="font-semibold text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href={signupHref}>Create one</a>.</p>
+    </AuthShell>
+  );
+}
+
+export function VerifyEmailPage({
+  callbackURL,
+  error,
+}: {
+  callbackURL?: string;
+  error?: "expired" | "invalid" | "request_failed" | "device_failed";
+}) {
+  const retryHref = (() => {
+    if (error !== "device_failed" || !callbackURL) return undefined;
+    try {
+      const url = new URL(callbackURL);
+      url.pathname = "/login";
+      url.searchParams.delete("verification_state");
+      return `${url.pathname}${url.search}`;
+    } catch {
+      return undefined;
+    }
+  })();
+  const message = error === "expired"
+    ? "That verification link has expired. Enter your email to receive a new one."
+    : error === "invalid"
+      ? "That verification link is invalid or has already been used. Enter your email to receive a new one."
+      : error === "request_failed"
+        ? "We could not send another verification link. Check the email and try again."
+        : error === "device_failed"
+          ? "Your email is verified, but we could not connect this Mac. Try the handoff again."
+        : "We sent a verification link to your email. Open it to finish creating your account and sign in automatically.";
+  return (
+    <AuthShell eyebrow="Account security" title="Verify your email" description={message}>
+      {retryHref ? <p><Button asChild className="w-full"><a href={retryHref}>Try connecting this Mac again</a></Button></p> : null}
+      <form className="flex flex-col gap-4" method="post" action="/verify-email">
+        {callbackURL ? <input type="hidden" name="callbackURL" value={callbackURL} /> : null}
+        <FieldGroup className="gap-4">
+          <Field>
+            <FieldLabel htmlFor="verification-email">Email</FieldLabel>
+            <Input id="verification-email" type="email" name="email" required autoComplete="email" />
+          </Field>
+        </FieldGroup>
+        <p><Button className="w-full" type="submit">Send another verification link</Button></p>
+      </form>
+      <p className="text-sm text-muted-foreground">Already verified? <a className="font-semibold text-foreground underline decoration-border underline-offset-4 hover:decoration-foreground" href="/login">Sign in</a>.</p>
     </AuthShell>
   );
 }

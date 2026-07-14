@@ -23,6 +23,7 @@ export type CreateAuthInstanceOptions = {
   database?: AuthDatabase;
   drizzleDatabase?: unknown;
   baseURL?: string;
+  webBaseURL?: string;
   secret?: string;
   requireEmailVerification?: boolean;
   sendVerificationEmail?: (input: { email: string; url: string }) => Promise<void>;
@@ -32,6 +33,7 @@ export function createAuthInstance(
   options: CreateAuthInstanceOptions = {},
 ): AuthInstance {
   const baseURL = options.baseURL ?? env.BETTER_AUTH_URL;
+  const webBaseURL = options.webBaseURL ?? env.TAB_WEB_BASE_URL;
   const secret = options.secret ?? env.BETTER_AUTH_SECRET;
   const requireEmailVerification = options.requireEmailVerification ?? false;
 
@@ -39,7 +41,7 @@ export function createAuthInstance(
     secret,
     baseURL,
     basePath: "/api/auth",
-    trustedOrigins: [env.TAB_WEB_BASE_URL],
+    trustedOrigins: [webBaseURL],
     emailAndPassword: {
       enabled: true,
       requireEmailVerification,
@@ -62,24 +64,27 @@ export function createAuthInstance(
       sendOnSignIn: true,
       autoSignInAfterVerification: true,
       sendVerificationEmail: async ({ user, url }) => {
+        const verificationUrl = new URL("/verify-email/confirm", webBaseURL);
+        verificationUrl.search = new URL(url).search;
         if (options.sendVerificationEmail) {
-          await options.sendVerificationEmail({ email: user.email, url });
+          await options.sendVerificationEmail({ email: user.email, url: verificationUrl.toString() });
           return;
         }
         await deliverAuthEmail({
           to: user.email,
           subject: "Verify your Tab email",
-          text: `Verify your Tab email address: ${url}`,
+          text: `Verify your Tab email address: ${verificationUrl}`,
           html: await renderLinkEmail({
             message: "Use this link to verify your Tab email address.",
             preview: "Verify your Tab email address",
-            url,
+            url: verificationUrl.toString(),
           }),
         });
       },
     },
     rateLimit: {
-      enabled: false,
+      enabled: true,
+      storage: "database",
     },
     logger: {
       disabled: true,

@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { LoginPage } from "../components/pages/auth.tsx";
 import { authorizeExistingDevice } from "../lib/auth.functions.ts";
 import { getViewer } from "../lib/viewer.functions.ts";
-import { AuthSearchSchema } from "../lib/search.ts";
+import { AuthSearchSchema, safeNextPath } from "../lib/search.ts";
 import { routeHandlers } from "../lib/route-handlers.server.ts";
 
 const errors = {
@@ -15,7 +15,7 @@ const errors = {
 
 function LoginRouteComponent() {
   const search = Route.useSearch();
-  return <LoginPage search={search} error={search.error ? errors[search.error] : undefined} />;
+  return <LoginPage search={search} error={search.error ? errors[search.error] : undefined} verified={search.status === "email_verified"} />;
 }
 
 export const Route = createFileRoute("/login")({
@@ -23,8 +23,8 @@ export const Route = createFileRoute("/login")({
   beforeLoad: async ({ search }) => {
     const viewer = await getViewer();
     if (!viewer) return;
-    if (search.device_id && search.callback) await authorizeExistingDevice({ data: { callback: search.callback } });
-    throw redirect({ href: "/dashboard" });
+    if (search.device_id && search.callback) await authorizeExistingDevice({ data: { callback: search.callback, deviceId: search.device_id } });
+    throw redirect({ href: safeNextPath(search.next) ?? "/dashboard" });
   },
   component: LoginRouteComponent,
   head: () => ({ meta: [{ title: "Sign in - Tab" }] }),

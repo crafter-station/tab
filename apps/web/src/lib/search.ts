@@ -17,7 +17,13 @@ export const AuthSearchSchema = z.object({
   callback: optionalText,
   next: optionalText.transform(safeNextPath),
   error: z.enum(["invalid_form", "invalid_credentials", "email_unverified", "signup_failed", "device_failed"]).optional().catch(undefined),
-  status: z.enum(["verify_email", "reset_sent"]).optional().catch(undefined),
+  status: z.enum(["verify_email", "reset_sent", "email_verified"]).optional().catch(undefined),
+});
+
+export const VerifyEmailSearchSchema = z.object({
+  callbackURL: z.string().trim().max(4_000).optional().catch(undefined),
+  error: z.enum(["expired", "invalid", "request_failed", "device_failed"]).optional().catch(undefined),
+  status: z.enum(["sent"]).optional().catch(undefined),
 });
 
 export const ResetSearchSchema = z.object({

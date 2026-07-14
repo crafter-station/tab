@@ -30,6 +30,7 @@ let personalMemoryStorage: InMemoryPersonalMemoryStorage;
 let vite: ViteDevServer;
 let userId = "";
 let sessionCookie = "";
+const verificationEmails: string[] = [];
 let webFetch: (request: Request) => Promise<Response>;
 const nativeFetch = globalThis.fetch;
 
@@ -42,7 +43,11 @@ beforeAll(async () => {
 	const auth = createAuthInstance({
 		database,
 		baseURL: API_ORIGIN,
-		requireEmailVerification: false,
+		webBaseURL: WEB_ORIGIN,
+		requireEmailVerification: true,
+		sendVerificationEmail: async ({ url }) => {
+			verificationEmails.push(url);
+		},
 	});
 	await migrateAuth(auth);
 	personalMemoryStorage = new InMemoryPersonalMemoryStorage();
@@ -80,8 +85,13 @@ beforeAll(async () => {
 	expect(signup.status).toBe(200);
 	const signupBody = (await signup.json()) as { user: { id: string } };
 	userId = signupBody.user.id;
-	sessionCookie = signup.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
 	database.query("UPDATE user SET emailVerified = 1 WHERE id = ?").run(userId);
+	const signIn = await app.request("/api/auth/sign-in/email", {
+		method: "POST",
+		headers: { "content-type": "application/json", origin: WEB_ORIGIN },
+		body: JSON.stringify({ email, password }),
+	});
+	sessionCookie = signIn.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
 
 	vite = await createServer({
 		root: new URL("../apps/web", import.meta.url).pathname,
@@ -122,6 +132,7 @@ afterAll(async () => {
 
 describe("TanStack Start request routing", () => {
 	it("routes auth through the API-owned session interface", async () => {
+		const next = "/dashboard/usage";
 		const response = await webRequest("/signup", {
 			method: "POST",
 			headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -129,15 +140,73 @@ describe("TanStack Start request routing", () => {
 				name: "Route Signup User",
 				email: `route-signup-${crypto.randomUUID()}@example.com`,
 				password,
+				next,
 			}),
 		});
 		expect(response.status).toBe(303);
-		expect(response.headers.get("location")).toBe(
-			"/signup?status=verify_email",
-		);
-		expect(response.headers.get("set-cookie")).toContain(
-			"better-auth.session_token=",
-		);
+		expect(response.headers.get("location")).toContain("/verify-email?status=sent");
+		expect(response.headers.get("set-cookie")).not.toContain("better-auth.session_token=");
+		const verificationStateCookie = response.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+
+		const verificationUrl = new URL(verificationEmails.at(-1)!);
+		expect(verificationUrl.origin).toBe(WEB_ORIGIN);
+		expect(verificationUrl.pathname).toBe("/verify-email/confirm");
+		const verified = await webRequest(`${verificationUrl.pathname}${verificationUrl.search}`, {
+			headers: { cookie: verificationStateCookie },
+		});
+		expect(verified.status).toBe(303);
+		expect(verified.headers.get("location")).toBe(`/signup?next=${encodeURIComponent(next)}`);
+		expect(verified.headers.get("set-cookie")).toContain("better-auth.session_token=");
+
+		const verifiedCookie = verified.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+		const continued = await webRequest(verified.headers.get("location")!, {
+			headers: { cookie: verifiedCookie },
+		});
+		expect(continued.status).toBeGreaterThanOrEqual(300);
+		expect(continued.status).toBeLessThan(400);
+		expect(continued.headers.get("location")).toBe(next);
+
+		const reused = await webRequest(`${verificationUrl.pathname}${verificationUrl.search}`);
+		expect(reused.status).toBe(303);
+		expect(reused.headers.get("location")).toBe(`/login?next=${encodeURIComponent(next)}&status=email_verified`);
+		expect(reused.headers.get("set-cookie") ?? "").not.toContain("better-auth.session_token=");
+	});
+
+	it("makes malformed verification links recoverable", async () => {
+		const callbackURL = `${WEB_ORIGIN}/login?next=%2Fdashboard`;
+		const response = await webRequest(`/verify-email/confirm?${new URLSearchParams({
+			token: "not-a-jwt",
+			callbackURL,
+		})}`);
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location")).toContain("/verify-email?error=invalid");
+	});
+
+	it("uses the same verification flow for desktop browser handoff", async () => {
+		const callback = "tab://auth/callback";
+		const signup = await webRequest("/signup", {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: new URLSearchParams({
+				name: "Desktop Route User",
+				email: `desktop-route-${crypto.randomUUID()}@example.com`,
+				password,
+				device_id: "desktop-route-mac",
+				callback,
+			}),
+		});
+		expect(signup.headers.get("location")).toContain("/verify-email?status=sent");
+		const verificationStateCookie = signup.headers.get("set-cookie")?.split(";", 1)[0] ?? "";
+
+		const verificationUrl = new URL(verificationEmails.at(-1)!);
+		const verified = await webRequest(`${verificationUrl.pathname}${verificationUrl.search}`, {
+			headers: { cookie: verificationStateCookie },
+		});
+		expect(verified.status).toBeGreaterThanOrEqual(300);
+		expect(verified.status).toBeLessThan(400);
+		const handoff = new URL(verified.headers.get("location")!);
+		expect(`${handoff.protocol}//${handoff.host}${handoff.pathname}`).toBe(callback);
+		expect(handoff.searchParams.get("code")).toBeTruthy();
 	});
 
 	it("routes Personal Memory mutations to the in-memory API", async () => {

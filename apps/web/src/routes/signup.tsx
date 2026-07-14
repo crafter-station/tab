@@ -20,7 +20,7 @@ export const Route = createFileRoute("/signup")({
     if (search.status === "verify_email") return;
     const viewer = await getViewer();
     if (!viewer) return;
-    if (search.device_id && search.callback) await authorizeExistingDevice({ data: { callback: search.callback } });
+    if (search.device_id && search.callback) await authorizeExistingDevice({ data: { callback: search.callback, deviceId: search.device_id } });
     throw redirect({ href: safeNextPath(search.next) ?? "/dashboard" });
   },
   component: SignupRouteComponent,
