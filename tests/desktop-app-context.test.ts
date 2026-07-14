@@ -649,4 +649,55 @@ describe("App Context extraction module", () => {
     expect(snapshot.fragments[0]?.memoryEligible).toBe(false);
     expect(openCodeCandidateCalls).toBe(0);
   });
+
+  it("falls through candidates that privacy normalization empties", () => {
+    let openCodeCandidateCalls = 0;
+    const extractor = createAppContextExtractor({
+      zedCandidateProvider: () => ({
+        fragments: [{
+          id: "zed:blank",
+          provider: "zed-focused-editor",
+          kind: "focused_editor",
+          text: "   ",
+          confidence: 0.82,
+        }],
+        metadata: { provider: "zed-focused-editor", status: "available", confidence: 0.82 },
+      }),
+      openCodeConversation: {
+        observe: async () => {},
+        getCandidate: () => {
+          openCodeCandidateCalls += 1;
+          return {
+            fragments: [{
+              id: "opencode:conversation",
+              provider: "opencode-local-session",
+              kind: "conversation",
+              text: "Useful nearby conversation context.",
+              confidence: 0.95,
+            }],
+            metadata: { provider: "opencode-local-session", status: "available", confidence: 0.95 },
+          };
+        },
+        getState: () => ({
+          candidate: { fragments: [], metadata: { status: "empty" } },
+          pending: false,
+          revision: 0,
+        }),
+        subscribe: () => () => {},
+        clear: () => {},
+      },
+    });
+
+    const snapshot = extractor.getSnapshot(makeSnapshot({
+      activeApplication: { bundleId: "dev.zed.Zed" },
+      textSession: undefined,
+    }));
+
+    expect(snapshot.metadata).toMatchObject({
+      provider: "opencode-local-session",
+      status: "available",
+    });
+    expect(snapshot.fragments[0]?.text).toBe("Useful nearby conversation context.");
+    expect(openCodeCandidateCalls).toBe(1);
+  });
 });

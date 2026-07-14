@@ -75,6 +75,21 @@ function isAvailable(snapshot: AppContextCandidate): boolean {
   return snapshot.metadata.status === "available" && snapshot.fragments.length > 0;
 }
 
+function selectCandidate<T>(
+  providers: readonly T[],
+  getCandidate: (provider: T) => AppContextCandidate,
+  fallback: AppContextCandidate,
+): { readonly snapshot: AppContextSnapshot; readonly decisive: boolean } {
+  let snapshot = normalizeAppContext(fallback);
+  for (const provider of providers) {
+    snapshot = normalizeAppContext(getCandidate(provider));
+    if (isAvailable(snapshot) || snapshot.metadata.status === "suppressed") {
+      return { snapshot, decisive: true };
+    }
+  }
+  return { snapshot, decisive: false };
+}
+
 function getAppContextCandidateFromTextSession(snapshot: SafeTypingContextSnapshot): AppContextCandidate {
   const surroundingContext = snapshot.textSession?.surroundingContext;
   if (!surroundingContext) return { fragments: [], metadata: { status: "empty" } };
@@ -163,13 +178,12 @@ export function createAppContextExtractor(options: {
       };
     }
 
-    let candidate: AppContextCandidate = { fragments: [], metadata: { status: "empty" } };
-    for (const provider of snapshotProviders) {
-      candidate = provider.getCandidate(snapshot);
-      if (isAvailable(candidate) || candidate.metadata.status === "suppressed") break;
-    }
     return {
-      snapshot: normalizeAppContext(candidate),
+      snapshot: selectCandidate(
+        snapshotProviders,
+        (provider) => provider.getCandidate(snapshot),
+        { fragments: [], metadata: { status: "empty" } },
+      ).snapshot,
       pending: openCodeState?.pending ?? false,
       revision: openCodeState?.revision ?? 0,
     };
@@ -177,14 +191,14 @@ export function createAppContextExtractor(options: {
 
   return {
     ingestAccessibilityTree(input) {
-      for (const provider of accessibilityProviders) {
-        const candidate = provider.getCandidate(input);
-        if (isAvailable(candidate) || candidate.metadata.status === "suppressed") {
-          managedContext.setCandidate(candidate);
-          return;
-        }
-      }
-      managedContext.setCandidate({ fragments: [], metadata: { status: "unsupported" } });
+      const selection = selectCandidate(
+        accessibilityProviders,
+        (provider) => provider.getCandidate(input),
+        { fragments: [], metadata: { status: "unsupported" } },
+      );
+      managedContext.setCandidate(selection.decisive
+        ? selection.snapshot
+        : { fragments: [], metadata: { status: "unsupported" } });
     },
     getSnapshot(snapshot) {
       return getSnapshotState(snapshot).snapshot;
