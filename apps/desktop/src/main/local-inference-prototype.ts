@@ -13,7 +13,7 @@ import {
   MAX_SUGGESTION_TOKENS,
   normalizeGeneratedSuggestion,
 } from "@tab/suggestion-policy";
-import type { SuggestionSource } from "./suggestion-loop.ts";
+import type { SuggestionSource } from "./suggestion-source.ts";
 
 export type LocalModelConfiguration = {
   readonly id: string;
@@ -360,7 +360,6 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
           id: suggestionId,
           text,
         };
-        requestOptions?.onPartialSuggestion?.(lastValidPartial.current);
       });
       const rawText = streamed.text;
       lastTiming = streamed.timing;

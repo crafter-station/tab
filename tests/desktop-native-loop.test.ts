@@ -9,7 +9,8 @@ import {
   type TextSessionSnapshot,
 } from "../apps/desktop/src/main/typing-context.ts";
 import { generateFakeSuggestion } from "../apps/desktop/src/main/suggestion-engine.ts";
-import { createSuggestionLoop, type SuggestionSource } from "../apps/desktop/src/main/suggestion-loop.ts";
+import { createAutomaticSuggestion } from "../apps/desktop/src/main/automatic-suggestion.ts";
+import type { SuggestionSource } from "../apps/desktop/src/main/suggestion-source.ts";
 import { createPoliteTriggerPolicy } from "../apps/desktop/src/main/trigger-policy.ts";
 import { acceptAndInsertSuggestion } from "../apps/desktop/src/main/acceptance.ts";
 import {
@@ -321,640 +322,6 @@ describe("desktop native suggestion loop", () => {
     });
   });
 
-  describe("suggestion loop", () => {
-    const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-    function makeDeps(overrides: {
-      requestSuggestion?: SuggestionSource;
-      getLocalSuggestion?: SuggestionSource;
-      getContext?: () => SafeTypingContextSnapshot;
-      maxVisibleMs?: number;
-    } = {}) {
-      const events: Array<{ type: string; payload?: unknown }> = [];
-      return {
-        events,
-        deps: {
-          getContext: overrides.getContext ?? (() => makeSnapshot()),
-          getLocalSuggestion: overrides.getLocalSuggestion,
-          requestSuggestion: overrides.requestSuggestion ?? (async () => ({ id: "s-1", text: " world" })),
-          onShowSuggestion: (suggestion: Suggestion) => events.push({ type: "show", payload: suggestion }),
-          onHideSuggestion: () => events.push({ type: "hide" }),
-          onRequestStarted: (context: string) => events.push({ type: "requestStarted", payload: context }),
-          onRequestFinished: (suggestion: Suggestion | null) => events.push({ type: "requestFinished", payload: suggestion }),
-          debounceMs: 5,
-          maxVisibleMs: overrides.maxVisibleMs,
-        },
-      };
-    }
-
-    it("does not show a suggestion before debounce", async () => {
-      const { events, deps } = makeDeps();
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      expect(events).toHaveLength(0);
-      await wait(10);
-      expect(events.some((event) => event.type === "show")).toBe(true);
-    });
-
-    it("reports request lifecycle events around suggestion requests", async () => {
-      const { events, deps } = makeDeps();
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show"]);
-      expect(events[0].payload).toBe("hello");
-      expect(events[1].payload).toEqual({ id: "s-1", text: " world" });
-    });
-
-    it("reports empty request results without showing a suggestion", async () => {
-      const { events, deps } = makeDeps({ requestSuggestion: async () => null });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished"]);
-      expect(events[1].payload).toBeNull();
-    });
-
-    it("requests a cloud suggestion immediately for explicit triggers", async () => {
-      const localCalls: string[] = [];
-      const cloudCalls: string[] = [];
-      const { events, deps } = makeDeps({
-        getContext: () => makeSnapshot({ context: "thank" }),
-        getLocalSuggestion: (snapshot) => {
-          localCalls.push(snapshot.sanitizedContext);
-          return { id: "local-thank", text: " you" };
-        },
-        requestSuggestion: async (snapshot) => {
-          cloudCalls.push(snapshot.sanitizedContext);
-          return { id: "cloud-thank", text: " you very much" };
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      await loop.requestCloudSuggestionNow();
-
-      expect(localCalls).toHaveLength(0);
-      expect(cloudCalls).toEqual(["thank"]);
-      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show"]);
-      expect(events[2].payload).toEqual({ id: "cloud-thank", text: " you very much" });
-    });
-
-    it("shares active work between duplicate explicit requests for unchanged context", async () => {
-      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
-      let calls = 0;
-      const { deps } = makeDeps({
-        requestSuggestion: () => {
-          calls += 1;
-          return new Promise((resolve) => {
-            resolves.push(resolve);
-          });
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      const firstRequest = loop.requestCloudSuggestionNow();
-      const secondRequest = loop.requestCloudSuggestionNow();
-
-      expect(calls).toBe(1);
-      resolves[0]?.(null);
-      expect(await Promise.all([firstRequest, secondRequest])).toEqual([undefined, undefined]);
-    });
-
-    it("cancels stale debounced requests when context changes", async () => {
-      const { events, deps } = makeDeps();
-      let context = "hello";
-      deps.getContext = () => makeSnapshot({ context });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(3);
-      context = "world";
-      loop.onContextChanged();
-      await wait(10);
-      expect(events.filter((e) => e.type === "show")).toHaveLength(1);
-    });
-
-    it("hides a suggestion when context changes after it is shown", async () => {
-      const { events, deps } = makeDeps();
-      let context = "hello";
-      deps.getContext = () => makeSnapshot({ context });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(10);
-      context = "changed";
-      loop.onContextChanged();
-      await wait(10);
-      expect(events.some((e) => e.type === "hide")).toBe(true);
-    });
-
-    it("does not show a suggestion for empty context", async () => {
-      const { events, deps } = makeDeps();
-      deps.getContext = () => makeSnapshot({ context: "" });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(10);
-      expect(events).toHaveLength(0);
-    });
-
-    it("does not show a suggestion while secure input is active", async () => {
-      const { events, deps } = makeDeps();
-      deps.getContext = () => makeSnapshot({ secureInput: true });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(10);
-      expect(events).toHaveLength(0);
-    });
-
-    it("hides an existing suggestion when secure input activates", async () => {
-      const { events, deps } = makeDeps();
-      let secureInput = false;
-      deps.getContext = () => makeSnapshot({ secureInput });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(10);
-      secureInput = true;
-      loop.onContextChanged();
-      await wait(10);
-      expect(events.some((e) => e.type === "hide")).toBe(true);
-    });
-
-    it("does not show a stale response if the active application switched during debounce", async () => {
-      const { events, deps } = makeDeps();
-      let app: ActiveApplication | null = { bundleId: "com.apple.TextEdit" };
-      deps.getContext = () => makeSnapshot({ activeApplication: app });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(3);
-      app = { bundleId: "com.apple.Notes" };
-      loop.onContextChanged();
-      await wait(10);
-      expect(events.filter((e) => e.type === "show")).toHaveLength(1);
-    });
-
-    it("hides a shown suggestion after the visible timeout", async () => {
-      const { events, deps } = makeDeps({ maxVisibleMs: 5 });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(15);
-      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show", "hide"]);
-      expect(loop.getState().status).toBe("idle");
-    });
-
-    it("hides a suggestion when the active window changes within the same application", async () => {
-      const { events, deps } = makeDeps();
-      let app: ActiveApplication | null = { bundleId: "com.apple.TextEdit", windowId: "window:1" };
-      deps.getContext = () => makeSnapshot({ activeApplication: app });
-      const loop = createSuggestionLoop(deps);
-      loop.onContextChanged();
-      await wait(10);
-      app = { bundleId: "com.apple.TextEdit", windowId: "window:2" };
-      loop.onContextChanged();
-      await wait(10);
-      expect(events.some((e) => e.type === "hide")).toBe(true);
-    });
-
-    it("requests a suggestion for the latest prose after a rapid typing burst stops", async () => {
-      let context = "Hello";
-      const policy = createPoliteTriggerPolicy();
-      const requestSuggestionCalls: string[] = [];
-      const { deps } = makeDeps({
-        getContext: () => makeSnapshot({ context }),
-        requestSuggestion: async (snapshot) => {
-          requestSuggestionCalls.push(snapshot.sanitizedContext);
-          return { id: "s-1", text: " world" };
-        },
-      });
-      const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy });
-
-      loop.onContextChanged();
-      context = "Hello t";
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(requestSuggestionCalls).toEqual(["Hello t"]);
-    });
-
-    it("hides candidates that the trigger policy decides are too interruptive to show", async () => {
-      const policy = createPoliteTriggerPolicy({ maxSuggestionCharacters: 8 });
-      const { events, deps } = makeDeps({
-        requestSuggestion: async () => ({ id: "s-long", text: " this candidate is too long" }),
-      });
-      const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy });
-
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished"]);
-    });
-
-    it("requests local-first suggestions in terminal and prose contexts", async () => {
-      const policy = createPoliteTriggerPolicy();
-      const terminalRequestSuggestionCalls: string[] = [];
-      const proseRequestSuggestionCalls: string[] = [];
-      const terminal = makeDeps({
-        getContext: () => makeSnapshot({
-          context: "git status",
-          activeApplication: { bundleId: "com.apple.Terminal" },
-          contextSource: "terminal_input",
-        }),
-        requestSuggestion: async (snapshot) => {
-          terminalRequestSuggestionCalls.push(snapshot.sanitizedContext);
-          return { id: "s-terminal", text: " --short" };
-        },
-      });
-      const prose = makeDeps({
-        getContext: () => makeSnapshot({ context: "git status" }),
-        requestSuggestion: async (snapshot) => {
-          proseRequestSuggestionCalls.push(snapshot.sanitizedContext);
-          return { id: "s-prose", text: " update" };
-        },
-      });
-
-      createSuggestionLoop({ ...terminal.deps, triggerPolicy: policy }).onContextChanged();
-      createSuggestionLoop({
-        ...prose.deps,
-        triggerPolicy: createPoliteTriggerPolicy(),
-      }).onContextChanged();
-      await wait(10);
-
-      expect(terminalRequestSuggestionCalls).toEqual(["git status"]);
-      expect(proseRequestSuggestionCalls).toEqual(["git status"]);
-    });
-
-    it("requests suggestions when Accessibility marks a safe Text Session as unreliable", async () => {
-      const requestSuggestionCalls: string[] = [];
-      const textSession: TextSessionSnapshot = {
-        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
-        focusedElementId: "focus:1",
-        textElementId: "text:1",
-        selectedRange: { location: 5, length: 0 },
-        caretIdentity: "caret:5",
-        secureLike: false,
-        accessibilityReliability: "unreliable",
-        surroundingContext: { beforeCaret: "hello", afterCaret: "" },
-      };
-      const { deps } = makeDeps({
-        getContext: () => createSafeTextSessionSnapshot(textSession),
-        requestSuggestion: async (snapshot) => {
-          requestSuggestionCalls.push(snapshot.sanitizedContext);
-          return { id: "s-unreliable", text: " world" };
-        },
-      });
-
-      createSuggestionLoop({ ...deps, triggerPolicy: createPoliteTriggerPolicy() }).onContextChanged();
-      await wait(10);
-
-      expect(requestSuggestionCalls).toEqual(["hello"]);
-    });
-
-    it("continues requesting after stale suggestions", async () => {
-      let context = "Hello ";
-      const policy = createPoliteTriggerPolicy();
-      const requestSuggestionCalls: string[] = [];
-      const { deps } = makeDeps({
-        getContext: () => makeSnapshot({ context }),
-        requestSuggestion: async (snapshot) => {
-          requestSuggestionCalls.push(snapshot.sanitizedContext);
-          return { id: `s-${requestSuggestionCalls.length}`, text: " world" };
-        },
-      });
-      const loop = createSuggestionLoop({ ...deps, triggerPolicy: policy, maxVisibleMs: 5 });
-
-      loop.onContextChanged();
-      await wait(25);
-      context = "Hello again ";
-      loop.onContextChanged();
-      await wait(15);
-
-      expect(requestSuggestionCalls).toHaveLength(2);
-
-      context = "Hello again friend ";
-      loop.onContextChanged();
-      await wait(15);
-
-      expect(requestSuggestionCalls).toHaveLength(3);
-    });
-
-    it("shows a confident local suggestion without making a cloud request", async () => {
-      const localCalls: string[] = [];
-      const cloudCalls: string[] = [];
-      const { events, deps } = makeDeps({
-        getContext: () => makeSnapshot({ context: "thank" }),
-        getLocalSuggestion: (snapshot) => {
-          localCalls.push(snapshot.sanitizedContext);
-          return { id: "local-thank", text: " you" };
-        },
-        requestSuggestion: async (snapshot) => {
-          cloudCalls.push(snapshot.sanitizedContext);
-          return { id: "cloud-thank", text: " you very much" };
-        },
-      });
-
-      createSuggestionLoop(deps).onContextChanged();
-      await wait(10);
-
-      expect(localCalls).toEqual(["thank"]);
-      expect(cloudCalls).toHaveLength(0);
-      expect(events.map((event) => event.type)).toEqual(["show"]);
-      expect(events[0].payload).toEqual({ id: "local-thank", text: " you" });
-    });
-
-    it("falls back to the cloud suggestion path when local has no confident candidate", async () => {
-      const localCalls: string[] = [];
-      const cloudCalls: string[] = [];
-      const { events, deps } = makeDeps({
-        getLocalSuggestion: (snapshot) => {
-          localCalls.push(snapshot.sanitizedContext);
-          return null;
-        },
-        requestSuggestion: async (snapshot) => {
-          cloudCalls.push(snapshot.sanitizedContext);
-          return { id: "cloud-hello", text: " world" };
-        },
-      });
-
-      createSuggestionLoop(deps).onContextChanged();
-      await wait(10);
-
-      expect(localCalls).toEqual(["hello"]);
-      expect(cloudCalls).toEqual(["hello"]);
-      expect(events.map((event) => event.type)).toEqual(["requestStarted", "requestFinished", "show"]);
-      expect(events[2].payload).toEqual({ id: "cloud-hello", text: " world" });
-    });
-
-    it("does not fall through to cloud when automatic suggestions are local-only", async () => {
-      const cloudCalls: string[] = [];
-      const { events, deps } = makeDeps({
-        getLocalSuggestion: () => null,
-        requestSuggestion: async (snapshot) => {
-          cloudCalls.push(snapshot.sanitizedContext);
-          return { id: "cloud-hello", text: " world" };
-        },
-      });
-
-      createSuggestionLoop({ ...deps, fallbackToCloudOnLocalMiss: false }).onContextChanged();
-      await wait(10);
-
-      expect(cloudCalls).toHaveLength(0);
-      expect(events).toHaveLength(0);
-    });
-
-    it("does not call local or cloud suggestion sources for unsafe contexts", async () => {
-      const localCalls: string[] = [];
-      const cloudCalls: string[] = [];
-      const { events, deps } = makeDeps({
-        getContext: () => makeSnapshot({ context: "sk-live-secret", privateContext: true }),
-        getLocalSuggestion: (snapshot) => {
-          localCalls.push(snapshot.sanitizedContext);
-          return { id: "local-secret", text: " value" };
-        },
-        requestSuggestion: async (snapshot) => {
-          cloudCalls.push(snapshot.sanitizedContext);
-          return { id: "cloud-secret", text: " value" };
-        },
-      });
-
-      createSuggestionLoop(deps).onContextChanged();
-      await wait(10);
-
-      expect(localCalls).toHaveLength(0);
-      expect(cloudCalls).toHaveLength(0);
-      expect(events).toHaveLength(0);
-    });
-
-    it("does not show a stale local suggestion if context changes while local resolves", async () => {
-      let context = "thank";
-      const localResolves: Array<(suggestion: Suggestion | null) => void> = [];
-      const cloudCalls: string[] = [];
-      const { events, deps } = makeDeps({
-        getContext: () => makeSnapshot({ context }),
-        getLocalSuggestion: () => new Promise((resolve) => {
-          localResolves.push(resolve);
-        }),
-        requestSuggestion: async (snapshot) => {
-          cloudCalls.push(snapshot.sanitizedContext);
-          return { id: "cloud-next", text: " step" };
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      loop.onContextChanged();
-      await wait(10);
-      context = "please";
-      loop.onContextChanged();
-      localResolves[0]?.({ id: "local-thank", text: " you" });
-      await wait(10);
-
-      expect(events.filter((event) => event.type === "show" && (event.payload as Suggestion).id === "local-thank")).toHaveLength(0);
-      expect(cloudCalls).not.toContain("thank");
-    });
-
-    it("aborts local inference when Typing Context becomes stale", async () => {
-      let context = "thank";
-      let localSignal: AbortSignal | undefined;
-      const { deps } = makeDeps({
-        getContext: () => makeSnapshot({ context }),
-        getLocalSuggestion: (_snapshot, options) => {
-          localSignal = options?.signal;
-          return new Promise(() => {});
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      loop.onContextChanged();
-      await wait(10);
-      context = "please";
-      loop.onContextChanged();
-
-      expect(localSignal?.aborted).toBe(true);
-      loop.invalidate();
-    });
-
-    it("does not start duplicate requests for unchanged context while a request is in flight", async () => {
-      const calls: string[] = [];
-      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
-      const { events, deps } = makeDeps({
-        requestSuggestion: (snapshot) => {
-          calls.push(snapshot.sanitizedContext);
-          return new Promise((resolve) => {
-            resolves.push(resolve);
-          });
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      loop.onContextChanged();
-      await wait(10);
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(calls).toEqual(["hello"]);
-      resolves[0]?.({ id: "s-1", text: " world" });
-      await wait(1);
-      expect(events.filter((event) => event.type === "show")).toHaveLength(1);
-      expect(events.find((event) => event.type === "show")?.payload).toEqual({ id: "s-1", text: " world" });
-    });
-
-    it("withholds stale debounced cloud responses even when the source ignores abort", async () => {
-      let context = "hello";
-      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
-      const { events, deps } = makeDeps({
-        getContext: () => makeSnapshot({ context }),
-        requestSuggestion: () => new Promise((resolve) => {
-          resolves.push(resolve);
-        }),
-      });
-      const loop = createSuggestionLoop(deps);
-
-      loop.onContextChanged();
-      await wait(10);
-      context = "hello again";
-      loop.onContextChanged();
-      resolves[0]?.({ id: "stale", text: " world" });
-      await wait(1);
-
-      expect(events.filter((event) => event.type === "show")).toHaveLength(0);
-      loop.invalidate();
-    });
-
-    it("withholds stale explicit cloud responses for every Typing Context identity change", async () => {
-      const textSession = (caretIdentity: string): TextSessionSnapshot => ({
-        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
-        focusedElementId: "focus:1",
-        textElementId: "text:1",
-        selectedRange: { location: 5, length: 0 },
-        caretIdentity,
-        secureLike: false,
-        accessibilityReliability: "reliable",
-        supportsSemanticInsertion: true,
-        surroundingContext: { beforeCaret: "hello", afterCaret: "" },
-      });
-      const cases: Array<[string, SafeTypingContextSnapshot, SafeTypingContextSnapshot]> = [
-        ["text", makeSnapshot({ context: "hello" }), makeSnapshot({ context: "hello again" })],
-        [
-          "active application",
-          makeSnapshot({ activeApplication: { bundleId: "com.apple.TextEdit" } }),
-          makeSnapshot({ activeApplication: { bundleId: "com.apple.Notes" } }),
-        ],
-        [
-          "active window",
-          makeSnapshot({ activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" } }),
-          makeSnapshot({ activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:2" } }),
-        ],
-        [
-          "Text Session",
-          createSafeTextSessionSnapshot(textSession("caret:1")),
-          createSafeTextSessionSnapshot(textSession("caret:2")),
-        ],
-      ];
-
-      for (const [identity, initial, changed] of cases) {
-        let snapshot = initial;
-        let resolveRequest: ((suggestion: Suggestion | null) => void) | undefined;
-        const { events, deps } = makeDeps({
-          getContext: () => snapshot,
-          requestSuggestion: () => new Promise((resolve) => {
-            resolveRequest = resolve;
-          }),
-        });
-        const loop = createSuggestionLoop(deps);
-
-        const request = loop.requestCloudSuggestionNow();
-        snapshot = changed;
-        loop.onContextChanged();
-        resolveRequest?.({ id: `stale-${identity}`, text: " world" });
-        await request;
-
-        expect(events.filter((event) => event.type === "show"), identity).toHaveLength(0);
-        loop.invalidate();
-      }
-    });
-
-    it("suppresses an automatic request while explicit work owns unchanged context", async () => {
-      const resolves: Array<(suggestion: Suggestion | null) => void> = [];
-      let calls = 0;
-      const { deps } = makeDeps({
-        requestSuggestion: () => {
-          calls += 1;
-          return new Promise((resolve) => {
-            resolves.push(resolve);
-          });
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      const request = loop.requestCloudSuggestionNow();
-      loop.onContextChanged();
-
-      expect(calls).toBe(1);
-      resolves[0]?.(null);
-      await request;
-    });
-
-    it("releases explicit request ownership when the source rejects", async () => {
-      let calls = 0;
-      const { deps } = makeDeps({
-        requestSuggestion: async () => {
-          calls += 1;
-          if (calls === 1) throw new Error("source failed");
-          return null;
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      await expect(loop.requestCloudSuggestionNow()).rejects.toThrow("source failed");
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(calls).toBe(2);
-    });
-
-    it("retries unchanged debounced context after a source rejection", async () => {
-      let calls = 0;
-      const { deps } = makeDeps({
-        requestSuggestion: async () => {
-          calls += 1;
-          if (calls === 1) throw new Error("source failed");
-          return null;
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(calls).toBe(1);
-      expect(loop.getState().status).toBe("idle");
-
-      loop.onContextChanged();
-      await wait(10);
-
-      expect(calls).toBe(2);
-    });
-
-    it("aborts stale cloud requests when context changes", async () => {
-      let context = "hello";
-      const signals: AbortSignal[] = [];
-      const { deps } = makeDeps({
-        getContext: () => makeSnapshot({ context }),
-        requestSuggestion: (_snapshot, options) => {
-          if (options?.signal) signals.push(options.signal);
-          return new Promise(() => {});
-        },
-      });
-      const loop = createSuggestionLoop(deps);
-
-      loop.onContextChanged();
-      await wait(10);
-      context = "hello again";
-      loop.onContextChanged();
-
-      expect(signals).toHaveLength(1);
-      expect(signals[0].aborted).toBe(true);
-    });
-  });
-
   describe("acceptance and insertion", () => {
     const semanticTarget: TextSessionSnapshot = {
       activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
@@ -1186,7 +553,7 @@ describe("desktop native suggestion loop", () => {
           flush: async () => {},
           stop: () => {},
         },
-        requestSuggestion: () => null,
+        requestDeepComplete: () => null,
         outputs: {
           showSuggestion: () => {},
           clearSuggestion: () => {},
@@ -1249,11 +616,11 @@ describe("desktop native suggestion loop", () => {
           flush: async () => {},
           stop: () => {},
         },
-        getLocalSuggestion: async (snapshot) => {
+        getAutomaticSuggestion: async (snapshot) => {
           localSnapshots.push(snapshot);
           return null;
         },
-        requestSuggestion: () => null,
+        requestDeepComplete: () => null,
         outputs: {
           showSuggestion: () => {},
           clearSuggestion: () => {},
@@ -1327,12 +694,11 @@ describe("desktop native suggestion loop", () => {
           flush: async () => {},
           stop: () => {},
         },
-        getLocalSuggestion: async (snapshot) => {
+        getAutomaticSuggestion: async (snapshot) => {
           localSnapshots.push(snapshot);
           return null;
         },
-        fallbackToCloudOnLocalMiss: false,
-        requestSuggestion: () => null,
+        requestDeepComplete: () => null,
         outputs: {
           showSuggestion: () => {},
           clearSuggestion: () => {},
@@ -1424,8 +790,7 @@ describe("desktop native suggestion loop", () => {
           flush: async () => {},
           stop: () => {},
         },
-        getLocalSuggestion: overrides.getLocalSuggestion,
-        requestSuggestion: async (snapshot, options) => {
+        getAutomaticSuggestion: overrides.getLocalSuggestion ?? (async (snapshot, options) => {
           calls.push({
             type: "requestSuggestion",
             value: snapshot.appContext
@@ -1437,6 +802,10 @@ describe("desktop native suggestion loop", () => {
               }
               : snapshot.sanitizedContext,
           });
+          return { id: "s-1", text: " world" };
+        }),
+        requestDeepComplete: async (snapshot, options) => {
+          calls.push({ type: "requestDeepComplete", value: snapshot.sanitizedContext });
           return overrides.requestSuggestion?.(snapshot, options) ?? { id: "s-1", text: " world" };
         },
         getContextSource: () => "typed_text",
@@ -1500,16 +869,34 @@ describe("desktop native suggestion loop", () => {
       expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
     });
 
-    it("uses the built-in local suggestion cascade before the API path", async () => {
+    it("uses the Automatic Suggestion source without invoking Deep Complete", async () => {
       const { calls, session } = makeSession();
 
       session.setActiveApplication("com.apple.TextEdit", "window:1");
       session.appendText("thank");
       await wait(10);
 
-      expect(calls.filter((call) => call.type === "requestSuggestion")).toHaveLength(0);
-      expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "local-thank", text: " you" } });
-      expect(session.getCurrentSuggestion()).toEqual({ id: "local-thank", text: " you" });
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
+      expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "s-1", text: " world" } });
+      expect(session.getCurrentSuggestion()).toEqual({ id: "s-1", text: " world" });
+    });
+
+    it("never invokes Deep Complete when Automatic Suggestion returns empty or fails", async () => {
+      for (const getLocalSuggestion of [
+        async () => null,
+        async () => {
+          throw new Error("local unavailable");
+        },
+      ]) {
+        const { calls, session } = makeSession({ getLocalSuggestion });
+
+        session.setActiveApplication("com.apple.TextEdit", "window:1");
+        session.appendText("hello");
+        await wait(10);
+
+        expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
+        expect(session.getCurrentSuggestion()).toBeNull();
+      }
     });
 
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
@@ -1559,7 +946,7 @@ describe("desktop native suggestion loop", () => {
       expect(calls).toContainEqual({ type: "setSuggestionRefreshing", value: false });
       expect(calls.map((call) => call.type)).not.toContain("hideOverlay");
       expect(calls.map((call) => call.type)).not.toContain("clearSuggestion");
-      expect(calls).toContainEqual({ type: "requestSuggestion", value: "thank" });
+      expect(calls).toContainEqual({ type: "requestDeepComplete", value: "thank" });
       expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "cloud-thank", text: " you very much" } });
       expect(session.getCurrentSuggestion()).toEqual({ id: "cloud-thank", text: " you very much" });
     });
@@ -1579,6 +966,127 @@ describe("desktop native suggestion loop", () => {
 
       expect(calls).toContainEqual({ type: "showSuggestion", value: { id: "sg-local-thank", text: " you" } });
       expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-thank", text: " you" });
+    });
+
+    it("restores an Automatic Suggestion for only its remaining lifetime", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "automatic", text: " retained" }),
+        requestSuggestion: async () => {
+          await wait(40);
+          return null;
+        },
+        maxVisibleMs: 200,
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("hello");
+      await wait(10);
+      await session.requestSuggestionNow();
+      expect(session.getCurrentSuggestion()).toEqual({ id: "automatic", text: " retained" });
+
+      await wait(175);
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
+    });
+
+    it("does not restore or accept a prior Deep Complete after its absolute deadline", async () => {
+      let deepCalls = 0;
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "automatic", text: " initial" }),
+        requestSuggestion: async () => {
+          deepCalls += 1;
+          if (deepCalls === 1) return { id: "deep", text: " prior deep" };
+          await wait(60);
+          return null;
+        },
+        maxVisibleMs: 40,
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("hello");
+      await wait(10);
+      await session.requestSuggestionNow();
+      expect(session.getCurrentSuggestion()).toEqual({ id: "deep", text: " prior deep" });
+      calls.length = 0;
+
+      await session.requestSuggestionNow();
+      await session.acceptCurrentSuggestion();
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
+      expect(calls.map((call) => call.type)).not.toContain("setClipboard");
+    });
+
+    it("cancels an in-flight Automatic Suggestion when Deep Complete takes overlay ownership", async () => {
+      let automaticCalls = 0;
+      let automaticSignal: AbortSignal | undefined;
+      let resolveAutomatic: ((suggestion: Suggestion | null) => void) | undefined;
+      const { session } = makeSession({
+        getLocalSuggestion: async (_snapshot, options) => {
+          automaticCalls += 1;
+          if (automaticCalls === 1) return { id: "initial", text: " first" };
+          automaticSignal = options?.signal;
+          return new Promise((resolve) => {
+            resolveAutomatic = resolve;
+          });
+        },
+        requestSuggestion: async () => ({ id: "deep", text: " definitive" }),
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("hello");
+      await wait(10);
+      session.appendText(" again");
+      await wait(10);
+
+      await session.requestSuggestionNow();
+      resolveAutomatic?.({ id: "late-automatic", text: " stale" });
+      await wait(1);
+
+      expect(automaticSignal?.aborted).toBe(true);
+      expect(session.getCurrentSuggestion()).toEqual({ id: "deep", text: " definitive" });
+    });
+
+    it("restores the previous Suggestion when Deep Complete inference fails", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "previous", text: " retained" }),
+        requestSuggestion: async () => {
+          throw new Error("cloud unavailable");
+        },
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("hello");
+      await wait(10);
+      calls.length = 0;
+
+      await session.requestSuggestionNow();
+
+      expect(session.getCurrentSuggestion()).toEqual({ id: "previous", text: " retained" });
+      expect(calls).toContainEqual({
+        type: "showSuggestion",
+        value: { id: "previous", text: " retained" },
+      });
+    });
+
+    it("uses Deep Complete provenance instead of an ID prefix for Accepted Word enforcement", async () => {
+      const usage: unknown[] = [];
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => ({ id: "automatic", text: " initial" }),
+        requestSuggestion: async () => ({ id: "sg-local-misleading", text: " deep words" }),
+        canAcceptLocalSuggestion: () => false,
+        recordAcceptedUsage: (event) => usage.push(event),
+      });
+
+      session.setActiveApplication("com.apple.TextEdit", "window:1");
+      session.appendText("hello");
+      await wait(10);
+      await session.requestSuggestionNow();
+      await session.acceptCurrentSuggestion();
+
+      expect(calls).toContainEqual({ type: "setClipboard", value: " deep words" });
+      expect(usage).toEqual([]);
     });
 
     it("accepts the visible suggestion into the previously active application", async () => {
@@ -1968,7 +1476,7 @@ describe("desktop native suggestion loop", () => {
       let requestedSnapshot: RequestableTypingContextSnapshot | null = null;
       const { session } = makeSession({
         getAppContext: (snapshot) => appContext.getSnapshot(snapshot),
-        requestSuggestion: async (snapshot) => {
+        getLocalSuggestion: async (snapshot) => {
           requestedSnapshot = snapshot;
           return null;
         },
@@ -2337,7 +1845,7 @@ describe("desktop native suggestion loop", () => {
 
       const createSession = (maxVisibleMs = 1_000) => makeSession({
         maxVisibleMs,
-        requestSuggestion: async () => ({ id: `sg-req-${telemetry.length + 1}`, text: rawSuggestionText }),
+        getLocalSuggestion: async () => ({ id: "sg-req-1", text: rawSuggestionText }),
         recordInteractionTelemetry: async (event) => {
           telemetry.push(event);
         },
@@ -2360,15 +1868,18 @@ describe("desktop native suggestion loop", () => {
       stale.session.appendText(rawTypingContext);
       await wait(20);
 
-      expect(telemetry.map((event) => event.eventType)).toEqual([
+      const interactions = telemetry.filter((event) =>
+        ["suggestion_accepted", "suggestion_dismissed", "suggestion_stale"].includes(event.eventType)
+      );
+      expect(interactions.map((event) => event.eventType)).toEqual([
         "suggestion_accepted",
         "suggestion_dismissed",
         "suggestion_stale",
       ]);
-      expect(telemetry[0]).toMatchObject({
+      expect(interactions[0]).toMatchObject({
         requestId: "req-1",
-        inferenceSource: "deep_complete",
-        trigger: "explicit",
+        inferenceSource: "local",
+        trigger: "automatic",
         applicationCategory: "productivity",
         acceptedWordCount: 3,
         acceptedCharacterCount: rawSuggestionText.length,
@@ -2561,17 +2072,9 @@ describe("desktop native suggestion loop", () => {
 
   describe("local privacy suppression and redaction", () => {
     const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-    type PrivacyContext = {
-      context: string;
-      activeApplication: ActiveApplication | null;
-      secureInput: boolean;
-      paused?: boolean;
-      privateContext?: boolean;
-    };
-
     function makePrivacyDeps(overrides: {
-      getContext?: () => PrivacyContext;
-      requestSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
+      getContext?: () => SafeTypingContextSnapshot;
+      getLocalSuggestion?: (snapshot: RequestableTypingContextSnapshot) => Promise<Suggestion | null>;
     } = {}) {
       const events: Array<{ type: string; payload?: unknown }> = [];
       const requestSuggestionCalls: string[] = [];
@@ -2582,9 +2085,9 @@ describe("desktop native suggestion loop", () => {
           getContext:
             overrides.getContext ??
             (() => makeSnapshot()),
-          requestSuggestion: async (snapshot: RequestableTypingContextSnapshot) => {
+          getLocalSuggestion: async (snapshot: RequestableTypingContextSnapshot) => {
             requestSuggestionCalls.push(snapshot.sanitizedContext);
-            return overrides.requestSuggestion?.(snapshot) ?? { id: "s-1", text: " world" };
+            return overrides.getLocalSuggestion?.(snapshot) ?? { id: "s-1", text: " world" };
           },
           onShowSuggestion: (suggestion: Suggestion) => events.push({ type: "show", payload: suggestion }),
           onHideSuggestion: () => events.push({ type: "hide" }),
@@ -2641,7 +2144,7 @@ describe("desktop native suggestion loop", () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "api_key=sk-abc1234567890";
         deps.getContext = () => makeSnapshot({ context });
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
@@ -2674,7 +2177,7 @@ describe("desktop native suggestion loop", () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9";
         deps.getContext = () => makeSnapshot({ context });
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
@@ -2685,7 +2188,7 @@ describe("desktop native suggestion loop", () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "-----BEGIN OPENSSH PRIVATE KEY-----\nabc123\n-----END OPENSSH PRIVATE KEY-----";
         deps.getContext = () => makeSnapshot({ context });
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
@@ -2696,7 +2199,7 @@ describe("desktop native suggestion loop", () => {
         const { events, requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "DATABASE_URL=postgres://user:pass@localhost:5432/db";
         deps.getContext = () => makeSnapshot({ context });
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
@@ -2707,7 +2210,7 @@ describe("desktop native suggestion loop", () => {
         const { requestSuggestionCalls, deps } = makePrivacyDeps();
         const context = "hello world";
         deps.getContext = () => makeSnapshot({ context });
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(1);
@@ -2724,7 +2227,7 @@ describe("desktop native suggestion loop", () => {
         };
         buffer.setActiveApplication({ bundleId: "com.apple.TextEdit" });
         buffer.appendText("api_key=sk-abc1234567890");
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
@@ -2750,7 +2253,7 @@ describe("desktop native suggestion loop", () => {
           activeApplication: { bundleId: "com.1password.1password" },
           privateContext: true,
         });
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);
@@ -2772,7 +2275,7 @@ describe("desktop native suggestion loop", () => {
       it("suppresses suggestion requests while paused", async () => {
         const { requestSuggestionCalls, deps } = makePrivacyDeps();
         deps.getContext = () => makeSnapshot({ paused: true });
-        const loop = createSuggestionLoop(deps);
+        const loop = createAutomaticSuggestion(deps);
         loop.onContextChanged();
         await wait(10);
         expect(requestSuggestionCalls).toHaveLength(0);

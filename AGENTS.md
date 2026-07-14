@@ -9,7 +9,7 @@
 
 - The root `index.ts` is a placeholder, not an application entrypoint.
 - The API is a Cloudflare Worker configured by root `wrangler.jsonc`: `apps/api/src/worker.ts` is the Worker entrypoint and `apps/api/src/index.ts` composes the Hono app. D1 is local-capable, but the AI and Vectorize bindings are configured as remote.
-- The web app's routes live in `apps/web/src/routes/`; `apps/web/src/dev.ts` is its Bun development server. Do not edit `apps/web/src/routeTree.gen.ts`.
+- The web app's file routes live in `apps/web/src/routes/`; Vite/TanStack Start and the Cloudflare Vite plugin own its development and Worker request paths. Do not edit `apps/web/src/routeTree.gen.ts`.
 - The desktop runtime is split across `apps/desktop/src/main/`, `preload/`, and `renderer/`. Its macOS input helper is `apps/desktop/native/macos-input-tap.swift` and is compiled during desktop dev/build.
 - Put cross-runtime API schemas in `@tab/contracts` and shared UI in `packages/ui`; `components.json` points shadcn aliases and global CSS there, not into either app.
 
@@ -25,7 +25,7 @@
 
 ## Generated Files And Migrations
 
-- Web dev/build generates ignored `apps/web/src/generated/styles.css`; use `bun run --cwd apps/web styles:build` when only CSS generation is needed.
+- Vite processes `apps/web/src/styles.css`, shared font imports, and `apps/web/public/` assets for web development and builds.
 - `worker-configuration.d.ts` is generated from `wrangler.jsonc` and `.dev.vars.example`. After binding or env changes, regenerate with `bunx wrangler types --env-file=.dev.vars.example --include-runtime=false`, then run `bun run worker:types:check`.
 - Treat `apps/api/src/db/schema.ts` as the database source of truth. Run `bun run db:generate`; do not handwrite files under `apps/api/drizzle/`.
 - Validate generated migrations with `bun run db:migrate:local`. `bun run db:migrate` uses Drizzle's D1 HTTP driver and needs `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DATABASE_ID`, and `CLOUDFLARE_D1_TOKEN`; `bun run db:migrate:remote` applies the generated files through Wrangler.

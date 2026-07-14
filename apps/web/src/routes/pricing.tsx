@@ -1,10 +1,14 @@
-import { createRoute } from "@tanstack/react-router";
+import { createFileRoute, getRouteApi } from "@tanstack/react-router";
 import { PricingPage } from "../components/pages/marketing.tsx";
-import { rootRoute } from "./__root.tsx";
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "pricing",
-  component: PricingPage,
+const rootApi = getRouteApi("__root__");
+
+function PricingRoute() {
+  const { viewer } = rootApi.useLoaderData();
+  return <PricingPage authenticated={Boolean(viewer)} />;
+}
+
+export const Route = createFileRoute("/pricing")({
+  component: PricingRoute,
   head: () => ({ meta: [{ title: "Pricing - Tab" }, { name: "description", content: "Compare Tab Free, Pro, and Max, including one month free on paid plans, monthly pricing, Local Suggestion and Deep Complete allowances, and cancellation." }] }),
 });

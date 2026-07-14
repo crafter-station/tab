@@ -1,20 +1,21 @@
 import {
-  ArrowClockwise,
   ArrowRight,
   ArrowUpRight,
   Brain,
-  Check,
   CheckCircle,
   Command,
   DownloadSimple,
-  Pause,
-  Play,
   Plus,
   ShieldCheck,
 } from "@phosphor-icons/react";
 import { planCapabilities } from "@tab/billing";
-import { SuggestionCommand, buttonVariants, cn } from "@tab/ui";
+import { Badge, Button, SuggestionCommand, cn } from "@tab/ui";
 import type { CSSProperties } from "react";
+import { AutocompleteDemo } from "../marketing/autocomplete-demo.tsx";
+import { MotionToggle, ReplayButton } from "../marketing/controls.tsx";
+import { MarketingInteractionProvider } from "../marketing/interaction-provider.tsx";
+import { WorkflowInteraction } from "../marketing/workflow-interaction.tsx";
+import { PricingPlanGrid } from "../pricing/pricing-plan-card.tsx";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
 const appLogos = [
@@ -119,116 +120,6 @@ const faqs = [
   },
 ] as const;
 
-function DemoScene({
-  name,
-  children,
-}: {
-  name: "mail" | "slack" | "notes";
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="min-h-[19rem] content-between gap-8 p-5 sm:min-h-[22rem] sm:p-7" data-demo-scene={name} id={`demo-panel-${name}`} role="tabpanel" aria-labelledby={`demo-tab-${name}`}>
-      {children}
-      <SuggestionCommand
-        aria-label="Accept this suggestion with Option plus Tab"
-        className="tab-demo-overlay"
-        data-demo-accept
-        suggestion={(
-          <>
-            <span className="tab-demo-ready-label">Suggestion ready</span>
-            <span className="tab-demo-accepted-label hidden">Suggestion added</span>
-          </>
-        )}
-      />
-    </div>
-  );
-}
-
-function AutocompleteDemo() {
-  return (
-    <div className="tab-demo overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card text-card-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background" data-tab-demo data-active="mail" data-accepted="false" aria-label="Interactive Tab autocomplete example" role="region" tabIndex={0}>
-      <div className="flex items-center justify-between gap-3 border-b border-border bg-muted/30 px-3 py-2.5 sm:px-4">
-        <div className="flex items-center gap-1.5" aria-hidden="true">
-          <span className="size-2.5 rounded-full bg-foreground/20" />
-          <span className="size-2.5 rounded-full bg-foreground/[0.12]" />
-          <span className="size-2.5 rounded-full bg-foreground/[0.08]" />
-        </div>
-        <p className="text-xs font-semibold text-muted-foreground">Interactive example</p>
-        <button className="inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-demo-replay aria-label="Replay interactive example" title="Replay">
-          <ArrowClockwise className="size-4" data-replay-icon aria-hidden="true" />
-        </button>
-      </div>
-      <div className="flex gap-2 border-b border-border p-3" role="tablist" aria-label="Choose an app example">
-        {(["mail", "slack", "notes"] as const).map((app, index) => (
-          <button className="flex cursor-pointer items-center gap-2 rounded-[var(--radius-control)] border border-border bg-background px-3 py-1.5 text-xs font-semibold capitalize transition-[background-color,border-color,color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-demo-target={app} id={`demo-tab-${app}`} key={app} tabIndex={index === 0 ? 0 : -1} type="button" role="tab" aria-controls={`demo-panel-${app}`} aria-selected={index === 0}>
-            <AppIcon className="size-5 rounded-sm" glyphClassName="size-3" src={app === "slack" ? "/logos/slack.svg" : "/logos/apple.svg"} />
-            {app}
-          </button>
-        ))}
-      </div>
-      <div className="bg-card" aria-live="polite">
-        <DemoScene name="mail">
-          <div>
-            <div className="grid gap-2 border-b border-border pb-4 text-sm">
-              <p className="flex gap-5"><span className="w-12 text-muted-foreground">To</span><span>Maya Chen</span></p>
-              <p className="flex gap-5"><span className="w-12 text-muted-foreground">Subject</span><span>Tuesday review</span></p>
-            </div>
-            <div className="pt-6 text-[1.025rem] leading-8 sm:text-lg">
-              <p>Hi Maya,</p>
-              <p className="mt-4">I finished the launch notes. Would Tuesday afternoon <span className="tab-demo-suggestion text-muted-foreground">work for a quick review?</span></p>
-            </div>
-          </div>
-        </DemoScene>
-        <DemoScene name="slack">
-          <div>
-            <div className="flex items-center gap-3 border-b border-border pb-4">
-              <span className="grid size-9 place-items-center rounded-[var(--radius-media)] bg-accent text-sm font-bold text-accent-foreground">P</span>
-              <div><p className="text-sm font-semibold"># product</p><p className="text-xs text-muted-foreground">8 teammates</p></div>
-            </div>
-            <div className="pt-6 text-[1.025rem] leading-8 sm:text-lg">
-              <p className="font-semibold">Anthony <span className="ml-1 text-xs font-normal text-muted-foreground">10:42 AM</span></p>
-              <p className="mt-1">Quick update: the new onboarding flow is ready <span className="tab-demo-suggestion text-muted-foreground">for a final pass before we ship.</span></p>
-            </div>
-          </div>
-        </DemoScene>
-        <DemoScene name="notes">
-          <div>
-            <div className="border-b border-border pb-4">
-              <p className="text-xl font-bold">Launch checklist</p>
-              <p className="mt-1 text-xs text-muted-foreground">Edited just now</p>
-            </div>
-            <div className="pt-6 text-[1.025rem] leading-8 sm:text-lg">
-              <p>Before launch, remember to <span className="tab-demo-suggestion text-muted-foreground">update the release checklist and notify the support team.</span></p>
-            </div>
-          </div>
-        </DemoScene>
-      </div>
-      <p className="sr-only" aria-live="polite" data-demo-announcement>Suggestion ready. Press Option plus Tab to accept.</p>
-    </div>
-  );
-}
-
-function MotionToggle({ controls, className }: { controls: string; className?: string }) {
-  return (
-    <button
-      className={cn(
-        "tab-motion-toggle inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-        className,
-      )}
-      type="button"
-      data-motion-toggle
-      aria-controls={controls}
-      aria-pressed="false"
-      aria-label="Pause animation"
-      title="Pause animation"
-    >
-      <Pause className="tab-motion-pause-icon size-4 [grid-area:1/1]" aria-hidden="true" />
-      <Play className="tab-motion-play-icon size-4 [grid-area:1/1]" aria-hidden="true" />
-      <span className="sr-only" data-motion-toggle-label>Pause animation</span>
-    </button>
-  );
-}
-
 function AppMarquee() {
   return (
     <div id="app-marquee-animation" className="tab-app-marquee" aria-labelledby="app-marquee-title" role="region">
@@ -261,7 +152,7 @@ function WorkflowMap() {
   const paths = [incomingLeft, incomingRight, outgoingLeft, outgoingRight];
 
   return (
-    <div id="workflow-animation" className="tab-workflow overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card" data-tab-workflow data-accepted="false" data-motion-region data-motion-paused="false">
+    <WorkflowInteraction id="workflow-animation" className="tab-workflow overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card">
       <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
         <div><p className="text-sm font-bold">Suggestion path</p><p className="text-xs text-muted-foreground">From your draft to a deliberate insertion</p></div>
         <MotionToggle controls="workflow-animation" />
@@ -315,8 +206,7 @@ function WorkflowMap() {
           </li>
         ))}
       </ol>
-      <p className="sr-only" aria-live="polite" data-workflow-announcement>Suggestion ready. Press Option plus Tab or click to accept.</p>
-    </div>
+    </WorkflowInteraction>
   );
 }
 
@@ -334,9 +224,7 @@ function MemoryShowcase() {
           <div><p className="text-sm font-bold">Memory in context</p><p className="text-xs text-muted-foreground">A matching detail shapes the suggestion</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="memory-showcase-animation" />
-            <button className="tab-showcase-replay inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay aria-label="Replay animation" title="Replay animation">
-              <ArrowClockwise className="size-4" data-replay-icon aria-hidden="true" />
-            </button>
+            <ReplayButton showcase />
           </div>
         </div>
 
@@ -344,7 +232,7 @@ function MemoryShowcase() {
           <div className="rounded-[var(--radius-card)] border border-border bg-background shadow-[var(--tab-shadow-card)]">
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <div><p className="text-sm font-bold">Personal Memory</p><p className="text-xs text-muted-foreground">Saved details</p></div>
-              <span className="rounded-full border border-border bg-secondary px-2 py-1 font-[var(--font-code)] text-[0.625rem] font-semibold text-muted-foreground">3 active</span>
+              <Badge variant="secondary" className="font-[var(--font-code)] text-[0.625rem] text-muted-foreground">3 active</Badge>
             </div>
             <div className="grid gap-1 p-2">
               {memoryExamples.map((example, index) => (
@@ -398,9 +286,7 @@ function PrivacyPipeline() {
           <div><p className="text-sm font-bold">Deep Complete boundary</p><p className="text-xs text-muted-foreground">What moves after your explicit action</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="privacy-showcase-animation" />
-            <button className="tab-showcase-replay inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay aria-label="Replay animation" title="Replay animation">
-              <ArrowClockwise className="size-4" data-replay-icon aria-hidden="true" />
-            </button>
+            <ReplayButton showcase />
           </div>
         </div>
 
@@ -462,10 +348,52 @@ function PrivacyPipeline() {
 export function HomePage() {
   const free = planCapabilities.free;
   const pro = planCapabilities.pro;
-  const max = { ...pro, monthlyPriceUsd: 20, deepCompletesPerMonth: 1_000 };
+  const max = planCapabilities.max;
+  const pricingPlans = [
+    {
+      name: "Free" as const,
+      price: "$0",
+      billing: "No subscription required.",
+      badge: "No subscription",
+      features: [
+        `${formatCount(free.localAcceptedWordsPerDay)} Accepted Words each day`,
+        `${free.deepCompletesPerMonth} Deep Completes each month`,
+        `${free.personalDeviceLimit} Mac`,
+        "Manage existing Personal Memory",
+      ],
+      action: { kind: "link" as const, href: "/signup", label: "Create a Free account" },
+    },
+    {
+      name: "Pro" as const,
+      price: formatMonthlyPrice(pro.monthlyPriceUsd),
+      billing: "Billed monthly",
+      badge: "Best for daily use",
+      features: [
+        "Unlimited Accepted Words",
+        `${pro.deepCompletesPerMonth} Deep Completes each month`,
+        `Up to ${pro.personalDeviceLimit} Macs`,
+        "Continuous Memory Extraction",
+      ],
+      action: { kind: "link" as const, href: "/pricing", label: "Start Pro with one month free" },
+      featured: true,
+    },
+    {
+      name: "Max" as const,
+      price: formatMonthlyPrice(max.monthlyPriceUsd),
+      billing: "Billed monthly",
+      badge: "Most Deep Completes",
+      features: [
+        "Unlimited Accepted Words",
+        `${formatCount(max.deepCompletesPerMonth)} Deep Completes each month`,
+        `Up to ${max.personalDeviceLimit} Macs`,
+        "Continuous Memory Extraction",
+      ],
+      action: { kind: "link" as const, href: "/pricing", label: "Start Max with one month free" },
+    },
+  ];
 
   return (
-    <>
+    <MarketingInteractionProvider>
       <section className="grid gap-12 py-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(31rem,1.12fr)] lg:items-center lg:gap-16 lg:py-20">
         <div className="marketing-intro grid content-center gap-6">
           <PageKicker>Autocomplete across your Mac</PageKicker>
@@ -473,14 +401,8 @@ export function HomePage() {
           <p className="max-w-[38rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next words in supported Mac text fields. Press Option+Tab to insert them, or keep typing to ignore them.</p>
           <p className="max-w-[38rem] text-pretty text-sm leading-relaxed text-muted-foreground">Automatic Suggestions run on your Mac. Double-tap Option when you want Deep Complete.</p>
           <div className="flex flex-col gap-3 min-[420px]:flex-row">
-            <a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg">
-              <DownloadSimple data-icon="inline-start" aria-hidden="true" />
-              Download for Mac
-            </a>
-            <a className={buttonVariants({ variant: "secondary", size: "lg" })} href="#how-it-works">
-              See how it works
-              <ArrowRight data-icon="inline-end" aria-hidden="true" />
-            </a>
+            <Button asChild size="lg"><a href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" />Download for Mac</a></Button>
+            <Button asChild variant="secondary" size="lg"><a href="#how-it-works">See how it works<ArrowRight data-icon="inline-end" aria-hidden="true" /></a></Button>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm text-muted-foreground">
             <span className="inline-flex items-center gap-1.5"><CheckCircle aria-hidden="true" /> First month free on paid plans</span>
@@ -521,55 +443,7 @@ export function HomePage() {
           <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">Start either paid plan through secure Polar checkout. Your subscription begins after the free month unless you cancel first.</p>
         </div>
 
-        <div className="mt-12 grid items-stretch gap-4 lg:grid-cols-3" data-pricing-grid>
-          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="free">
-            <div className="flex min-h-7 items-center justify-between gap-3">
-              <h3 className="text-xl font-bold">Free</h3>
-              <span className="text-xs font-semibold text-muted-foreground">No subscription</span>
-            </div>
-            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">$0</p>
-            <p className="mt-2 min-h-10 text-sm leading-relaxed text-muted-foreground">No subscription required.</p>
-            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-muted-foreground">
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {formatCount(free.localAcceptedWordsPerDay)} Accepted Words each day</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {free.deepCompletesPerMonth} Deep Completes each month</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {free.personalDeviceLimit} Mac</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Manage existing Personal Memory</li>
-            </ul>
-            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/signup">Create a Free account</a>
-          </article>
-
-          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-foreground bg-foreground p-6 text-background sm:p-8" data-pricing-plan="pro">
-            <div className="flex min-h-7 items-center justify-between gap-3">
-              <h3 className="text-xl font-bold">Pro</h3>
-              <span className="rounded-full border border-background/20 px-2.5 py-1 text-[0.6875rem] font-semibold text-background/75">Best for daily use</span>
-            </div>
-            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(pro.monthlyPriceUsd)}</p>
-            <p className="mt-2 min-h-10 text-sm leading-relaxed text-background/65">Billed monthly</p>
-            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-background/80">
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Unlimited Accepted Words</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> {pro.deepCompletesPerMonth} Deep Completes each month</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Up to {pro.personalDeviceLimit} Macs</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-background" aria-hidden="true" /> Continuous Memory Extraction</li>
-            </ul>
-            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/pricing">Start Pro with one month free</a>
-          </article>
-
-          <article className="flex h-full flex-col rounded-[var(--radius-card)] border border-border bg-card p-6 sm:p-8" data-pricing-plan="max">
-            <div className="flex min-h-7 items-center justify-between gap-3">
-              <h3 className="text-xl font-bold">Max</h3>
-              <span className="text-xs font-semibold text-muted-foreground">Most Deep Completes</span>
-            </div>
-            <p className="mt-7 font-[var(--font-display)] text-5xl font-bold tracking-[-0.02em] tabular-nums">{formatMonthlyPrice(max.monthlyPriceUsd)}</p>
-            <p className="mt-2 min-h-10 text-sm leading-relaxed text-muted-foreground">Billed monthly</p>
-            <ul className="mt-7 grid flex-1 gap-3 text-sm leading-relaxed text-muted-foreground">
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Unlimited Accepted Words</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> {formatCount(max.deepCompletesPerMonth)} Deep Completes each month</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Up to {max.personalDeviceLimit} Macs</li>
-              <li className="flex gap-2"><Check className="mt-1 shrink-0 text-foreground" aria-hidden="true" /> Continuous Memory Extraction</li>
-            </ul>
-            <a className={buttonVariants({ variant: "secondary", size: "lg", className: "mt-8 w-full" })} href="/pricing">Start Max with one month free</a>
-          </article>
-        </div>
+        <PricingPlanGrid className="mt-12" plans={pricingPlans} />
         <div className="mt-8 flex flex-col justify-between gap-4 text-sm leading-relaxed text-muted-foreground sm:flex-row sm:items-center">
           <p>Free counts only words you insert. There are no automatic overage charges.</p>
           <a className="shrink-0 font-semibold text-foreground underline decoration-border underline-offset-4" href="/pricing">Compare full plan details</a>
@@ -604,10 +478,9 @@ export function HomePage() {
             <p className="font-[var(--font-code)] text-xs font-semibold uppercase text-muted-foreground">Ready to try it?</p>
             <h2 className="mt-4 max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.92] tracking-[-0.035em]">Try Tab in your next sentence.</h2>
           </div>
-          <a className={buttonVariants({ size: "lg" })} href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" /> Download for Mac</a>
+          <Button asChild size="lg"><a href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" /> Download for Mac</a></Button>
         </div>
       </section>
-      <script src="/marketing-demo.js?v=option-tab" defer />
-    </>
+    </MarketingInteractionProvider>
   );
 }

@@ -1,9 +1,6 @@
-import { createRoute } from "@tanstack/react-router";
-import { MessagePage } from "../components/pages/shared.tsx";
-import { rootRoute } from "./__root.tsx";
+import { createFileRoute } from "@tanstack/react-router";
+import { routeHandlers } from "../lib/route-handlers.server.ts";
 
-function PortalPage() {
-  return <MessagePage title="Opening billing settings" message="Taking you to your billing settings..." />;
-}
-
-export const Route = createRoute({ getParentRoute: () => rootRoute, path: "billing/portal", component: PortalPage });
+export const Route = createFileRoute("/billing/portal")({
+  server: { handlers: { GET: ({ request }) => routeHandlers.portal(request) } },
+});

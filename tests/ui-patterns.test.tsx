@@ -1,8 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
+  AlertDialog,
+  AlertDialogDescription,
+  AlertDialogHeader,
+  AlertDialogTitle,
   CommandBlock,
   ComponentReviewSurface,
+  Dialog,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
   EmptyState,
   Eyebrow,
   FloatingSuggestionBar,
@@ -17,6 +25,30 @@ import {
 import { DebugContextCard } from "../apps/desktop/src/renderer/src/components/DebugContextCard.tsx";
 
 describe("shared app patterns", () => {
+  it("renders accessible dialog titles and descriptions", () => {
+    const markup = renderToStaticMarkup(
+      <div>
+        <Dialog>
+          <DialogHeader>
+            <DialogTitle>Edit memory</DialogTitle>
+            <DialogDescription>Update what Tab remembers.</DialogDescription>
+          </DialogHeader>
+        </Dialog>
+        <AlertDialog>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete memory?</AlertDialogTitle>
+            <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+          </AlertDialogHeader>
+        </AlertDialog>
+      </div>,
+    );
+
+    expect(markup).toInclude("Edit memory");
+    expect(markup).toInclude("Update what Tab remembers.");
+    expect(markup).toInclude("Delete memory?");
+    expect(markup).toInclude("This action cannot be undone.");
+  });
+
   it("renders reviewable Tab patterns in light and dark modes", () => {
     const markup = renderToStaticMarkup(<ComponentReviewSurface />);
 

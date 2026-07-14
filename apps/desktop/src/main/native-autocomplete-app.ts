@@ -25,7 +25,9 @@ import {
   type ApplicationCompatibilityStore,
 } from "./application-compatibility.ts";
 import { generateLocalSuggestion } from "./suggestion-engine.ts";
-import { createSuggestionLoop, type SuggestionSource } from "./suggestion-loop.ts";
+import { createAutomaticSuggestion } from "./automatic-suggestion.ts";
+import { createDeepComplete } from "./deep-complete.ts";
+import type { SuggestionSource } from "./suggestion-source.ts";
 import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
 import {
   createSafeTextSessionSnapshot,
@@ -39,7 +41,7 @@ import {
 } from "./typing-context.ts";
 
 export type NativeSuggestionSessionOutputs = {
-  readonly showSuggestion: (suggestion: Suggestion) => void;
+  readonly showSuggestion: (suggestion: Suggestion, provenance: SuggestionProvenance) => void;
   readonly clearSuggestion: () => void;
   readonly hideOverlay: () => void;
   readonly showDebugContext: () => void;
@@ -54,9 +56,8 @@ type RecordInteractionTelemetry = (event: RecordTelemetryEventRequest) => void |
 
 type NativeSuggestionSessionDependencies = {
   readonly typingContext: TypingContextBuffer;
-  readonly getLocalSuggestion?: SuggestionSource;
-  readonly fallbackToCloudOnLocalMiss?: boolean;
-  readonly requestSuggestion: SuggestionSource;
+  readonly getAutomaticSuggestion?: SuggestionSource;
+  readonly requestDeepComplete: SuggestionSource;
   readonly getContextSource: () => SuggestionContextSource;
   readonly outputs: NativeSuggestionSessionOutputs;
   readonly createAcceptanceDependencies: (
@@ -105,6 +106,14 @@ type VisibleSuggestionTelemetry = {
   readonly applicationCategory: ApplicationCategory;
 };
 
+export type SuggestionProvenance = "automatic" | "deep_complete";
+
+type VisibleSuggestion = {
+  readonly suggestion: Suggestion;
+  readonly provenance: SuggestionProvenance;
+  readonly expiresAtMs: number;
+};
+
 type InteractionTelemetryEventType = RecordTelemetryEventRequest["eventType"];
 
 function activeApplicationKey(app: ActiveApplication | null): string | null {
@@ -143,7 +152,7 @@ function applicationCategory(bundleId: string | undefined): ApplicationCategory 
 }
 
 function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies) {
-  let currentSuggestion: Suggestion | null = null;
+  let visibleSuggestion: VisibleSuggestion | null = null;
   let visibleSuggestionTelemetry: VisibleSuggestionTelemetry | null = null;
   let replacingSuggestion = false;
   let previouslyActiveApplication: ActiveApplication | null = null;
@@ -169,9 +178,9 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     return suggestion.id;
   }
 
-  function buildTelemetry(suggestion: Suggestion): VisibleSuggestionTelemetry {
+  function buildTelemetry(suggestion: Suggestion, provenance: SuggestionProvenance): VisibleSuggestionTelemetry {
     const activeApplication = deps.typingContext.getState().activeApplication;
-    const local = suggestion.id.startsWith("sg-local-");
+    const local = provenance === "automatic";
     return {
       requestId: requestIdFromSuggestion(suggestion),
       activeApplicationBundleId: activeApplication?.bundleId,
@@ -191,7 +200,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   }
 
   function clearVisibleSuggestion(): void {
-    currentSuggestion = null;
+    visibleSuggestion = null;
     visibleTextSessionTarget = null;
     visibleSuggestionTelemetry = null;
   }
@@ -245,7 +254,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
 
   function recordLocalGenerated(suggestion: Suggestion): void {
     if (!deps.recordInteractionTelemetry) return;
-    const telemetry = buildTelemetry(suggestion);
+    const telemetry = buildTelemetry(suggestion, "automatic");
     if (telemetry.inferenceSource !== "local") return;
     if (lastGeneratedLocalRequestId === telemetry.requestId) return;
     lastGeneratedLocalRequestId = telemetry.requestId;
@@ -294,11 +303,15 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     outputs.setSuggestionRefreshing?.(false);
   }
 
-  function presentSuggestion(suggestion: Suggestion): void {
+  function presentSuggestion(
+    suggestion: Suggestion,
+    provenance: SuggestionProvenance,
+    expiresAtMs: number,
+  ): void {
     const previousTelemetry = visibleSuggestionTelemetry;
-    currentSuggestion = suggestion;
+    visibleSuggestion = { suggestion, provenance, expiresAtMs };
     visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
-    const nextTelemetry = buildTelemetry(suggestion);
+    const nextTelemetry = buildTelemetry(suggestion, provenance);
     const sameRequest =
       previousTelemetry?.requestId === nextTelemetry.requestId &&
       previousTelemetry.inferenceSource === nextTelemetry.inferenceSource;
@@ -311,12 +324,12 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     ) {
       recordInteractionTelemetry("suggestion_shown");
     }
-    outputs.showSuggestion(suggestion);
+    outputs.showSuggestion(suggestion, provenance);
     finishReplacement();
   }
 
   function canRefreshVisibleSuggestionInPlace(snapshot: SafeTypingContextSnapshot): boolean {
-    if (!currentSuggestion || !snapshot.requestable) return false;
+    if (!visibleSuggestion || !snapshot.requestable) return false;
     if (!visibleTextSessionTarget && !snapshot.textSession) {
       return visibleSuggestionTelemetry?.activeApplicationBundleId === snapshot.activeApplication?.bundleId;
     }
@@ -329,21 +342,16 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     );
   }
 
-  const suggestionLoop = createSuggestionLoop({
+  const automaticSuggestion = createAutomaticSuggestion({
     getContext: () => currentSafeSnapshot(),
-    getLocalSuggestion: deps.getLocalSuggestion ?? ((snapshot) => generateLocalSuggestion(snapshot.sanitizedContext)),
-    fallbackToCloudOnLocalMiss: deps.fallbackToCloudOnLocalMiss,
-    requestSuggestion: deps.requestSuggestion,
-    onShowSuggestion: presentSuggestion,
-    onShowPartialSuggestion: presentSuggestion,
+    getLocalSuggestion: deps.getAutomaticSuggestion ?? ((snapshot) => generateLocalSuggestion(snapshot.sanitizedContext)),
+    onShowSuggestion: (suggestion, expiresAtMs) => presentSuggestion(suggestion, "automatic", expiresAtMs),
     onHideSuggestion: () => {
       if (replacingSuggestion) return;
       clearVisibleSuggestion();
       outputs.hideOverlay();
     },
-    onRequestStarted: outputs.onRequestStarted,
-    onRequestFinished: outputs.onRequestFinished,
-    onAutomaticRequestFinished: (suggestion) => {
+    onRequestFinished: (suggestion) => {
       if (suggestion || !replacingSuggestion) return;
       finishReplacement();
       clearVisibleSuggestion();
@@ -355,7 +363,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       clearVisibleSuggestion();
     },
     onSuggestionGenerated: recordLocalGenerated,
-    onLocalSuggestionFailed: recordLocalFailure,
+    onSuggestionFailed: recordLocalFailure,
     onSecretLikeContextDetected: () => {
       deps.clearAppContext?.();
       deps.typingContext.clear();
@@ -365,6 +373,30 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     maxVisibleMs: deps.maxVisibleMs,
     triggerPolicy,
     onDiagnostic: deps.onSuggestionDiagnostic,
+  });
+
+  const deepComplete = createDeepComplete({
+    getContext: () => currentSafeSnapshot(),
+    requestCloudSuggestion: deps.requestDeepComplete,
+    onShowSuggestion: (suggestion, expiresAtMs) => presentSuggestion(suggestion, "deep_complete", expiresAtMs),
+    onHideSuggestion: () => {
+      if (visibleSuggestion?.provenance === "deep_complete") clearVisibleSuggestion();
+      outputs.hideOverlay();
+    },
+    onSuggestionStale: () => {
+      compatibilityStore.recordStale(currentSafeSnapshot());
+      recordInteractionTelemetry("suggestion_stale");
+      clearVisibleSuggestion();
+    },
+    onRequestStarted: outputs.onRequestStarted,
+    onRequestFinished: outputs.onRequestFinished,
+    onSecretLikeContextDetected: () => {
+      deps.clearAppContext?.();
+      deps.typingContext.clear();
+      outputs.onSecretLikeContextDetected?.();
+    },
+    triggerPolicy,
+    maxVisibleMs: deps.maxVisibleMs,
   });
 
   function clearAppContextGraceTimer(): void {
@@ -382,11 +414,12 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     if (options.suppressUnchangedTextSession && snapshot.contextHash === lastContextHash) {
       return;
     }
+    deepComplete.invalidate();
     lastContextHash = snapshot.contextHash;
 
     const preserveVisibleSuggestion = !options.forceClearVisibleSuggestion
       && canRefreshVisibleSuggestionInPlace(snapshot);
-    if (currentSuggestion && !replacingSuggestion) {
+    if (visibleSuggestion && !replacingSuggestion) {
       recordDismissal(snapshot);
     }
     outputs.resetDebugApiState();
@@ -400,7 +433,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     }
     clearAppContextGraceTimer();
     if (resolved.pending) {
-      suggestionLoop.invalidate();
+      automaticSuggestion.invalidate();
       const heldHash = snapshot.contextHash;
       appContextGraceTimer = setTimeout(() => {
         appContextGraceTimer = null;
@@ -409,10 +442,10 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
           contextChanged();
           return;
         }
-        suggestionLoop.onContextChanged();
+        automaticSuggestion.onContextChanged();
       }, deps.appContextGraceMs ?? 175);
     } else {
-      suggestionLoop.onContextChanged();
+      automaticSuggestion.onContextChanged();
     }
     outputs.showDebugContext();
   }
@@ -435,13 +468,13 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   }
 
   function holdVisibleSuggestionUntilTextSessionRefresh(): void {
-    if (!currentSuggestion) return;
+    if (!visibleSuggestion) return;
 
     recordDismissal(currentSafeSnapshot());
     outputs.resetDebugApiState();
     replacingSuggestion = true;
     outputs.setSuggestionRefreshing?.(true);
-    suggestionLoop.invalidate();
+    automaticSuggestion.invalidate();
   }
 
   function appContextInput(snapshot: SafeTypingContextSnapshot): SafeTypingContextSnapshot {
@@ -495,7 +528,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   }
 
   function clearContext(recordDismissed = true): void {
-    if (recordDismissed && currentSuggestion) {
+    if (recordDismissed && visibleSuggestion) {
       recordDismissal(currentSafeSnapshot());
     }
     lastContextHash = null;
@@ -505,7 +538,8 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     deps.typingContext.clear();
     outputs.resetDebugApiState();
     clearVisibleSuggestion();
-    suggestionLoop.invalidate();
+    automaticSuggestion.invalidate();
+    deepComplete.invalidate();
   }
 
   return {
@@ -542,7 +576,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       if (explicitRequestInFlight) {
         appContextChangedDuringExplicitRequest = true;
         clearAppContextGraceTimer();
-        suggestionLoop.invalidate();
+        deepComplete.invalidate();
         clearVisibleSuggestion();
         outputs.clearSuggestion();
         return;
@@ -606,9 +640,10 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     },
     async acceptCurrentSuggestion(): Promise<void> {
       if (replacingSuggestion || acceptanceInFlight) return;
-      const acceptedSuggestion = currentSuggestion;
+      const acceptedVisibleSuggestion = visibleSuggestion;
+      const acceptedSuggestion = acceptedVisibleSuggestion?.suggestion ?? null;
       if (
-        acceptedSuggestion?.id.startsWith("sg-local-") &&
+        acceptedVisibleSuggestion?.provenance === "automatic" &&
         deps.canAcceptLocalSuggestion &&
         !deps.canAcceptLocalSuggestion()
       ) {
@@ -620,7 +655,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       acceptanceInFlight = true;
       const acceptedFromTextSession = textSessionSnapshot !== null;
       const insertionDeps = deps.createAcceptanceDependencies(
-        () => currentSuggestion,
+        () => visibleSuggestion?.suggestion ?? null,
         () => previouslyActiveApplication,
       );
       let result: InsertionResult;
@@ -646,7 +681,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
           eventId: acceptanceId,
           acceptedText: acceptedSuggestion?.text,
         });
-        if (acceptedSuggestion?.id.startsWith("sg-local-")) {
+        if (acceptedVisibleSuggestion?.provenance === "automatic" && acceptedSuggestion) {
           Promise.resolve(
             deps.recordAcceptedUsage?.({
               acceptanceId,
@@ -660,7 +695,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
         }
         outputs.hideOverlay();
         if (acceptedSuggestion && !acceptedFromTextSession) {
-          suggestionLoop.invalidate();
+          automaticSuggestion.invalidate();
           clearVisibleSuggestion();
           deps.typingContext.appendText(acceptedSuggestion.text, deps.getContextSource());
           lastContextHash = null;
@@ -674,44 +709,60 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       if (observationPaused) {
         return;
       }
-      const previousSuggestion = currentSuggestion;
-      const previousTextSessionTarget = visibleTextSessionTarget;
-      const previousTelemetry = visibleSuggestionTelemetry;
+      const previousVisibleSuggestion = visibleSuggestion;
+      const previousContextHash = currentSafeSnapshot().contextHash;
       replacingSuggestion = true;
+      automaticSuggestion.suspend();
       outputs.setSuggestionRefreshing?.(true);
-      if (currentSuggestion) {
+      if (visibleSuggestion) {
         recordDismissal(currentSafeSnapshot());
       }
       outputs.resetDebugApiState();
-      clearVisibleSuggestion();
       explicitRequestInFlight = true;
       try {
         let contextRetryCount = 0;
+        let deepCompleteSuggestion: Suggestion | null = null;
         do {
           appContextChangedDuringExplicitRequest = false;
-          await suggestionLoop.requestCloudSuggestionNow();
+          deepCompleteSuggestion = await deepComplete.requestNow();
           contextRetryCount += 1;
         } while (appContextChangedDuringExplicitRequest && !observationPaused && contextRetryCount < 3);
-        if (!currentSuggestion && previousSuggestion) {
-          currentSuggestion = previousSuggestion;
-          visibleTextSessionTarget = previousTextSessionTarget;
-          visibleSuggestionTelemetry = previousTelemetry;
-          outputs.showSuggestion(previousSuggestion);
+        if (
+          !deepCompleteSuggestion &&
+          previousVisibleSuggestion
+        ) {
+          const restored = previousVisibleSuggestion.provenance === "automatic"
+            ? automaticSuggestion.restore(
+              previousVisibleSuggestion.suggestion,
+              previousContextHash,
+              previousVisibleSuggestion.expiresAtMs,
+            )
+            : deepComplete.restore(
+              previousVisibleSuggestion.suggestion,
+              previousContextHash,
+              previousVisibleSuggestion.expiresAtMs,
+            );
+          if (!restored) {
+            clearVisibleSuggestion();
+            outputs.hideOverlay();
+          }
         }
       } finally {
         explicitRequestInFlight = false;
         appContextChangedDuringExplicitRequest = false;
         replacingSuggestion = false;
+        automaticSuggestion.resume();
         outputs.setSuggestionRefreshing?.(false);
       }
       outputs.showDebugContext();
     },
     clearContext,
-    getCurrentSuggestion: () => currentSuggestion,
+    getCurrentSuggestion: () => visibleSuggestion?.suggestion ?? null,
+    getVisibleSuggestion: () => visibleSuggestion,
     getCurrentSnapshot: () => currentSafeSnapshot(),
     getPreviouslyActiveApplication: () => previouslyActiveApplication,
     isPaused: () => observationPaused,
-    getLoopState: () => suggestionLoop.getState(),
+    getLoopState: () => automaticSuggestion.getState(),
   };
 }
 
@@ -794,6 +845,7 @@ export function createNativeAutocompleteApp(
     requestSuggestionNow: () => session.requestSuggestionNow(),
     clearContext: () => session.clearContext(),
     getCurrentSuggestion: () => session.getCurrentSuggestion(),
+    getVisibleSuggestion: () => session.getVisibleSuggestion(),
     getCurrentSnapshot: () => session.getCurrentSnapshot(),
     getPreviouslyActiveApplication: () =>
       session.getPreviouslyActiveApplication(),

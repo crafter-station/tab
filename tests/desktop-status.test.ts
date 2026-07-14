@@ -340,6 +340,43 @@ describe("desktop status service", () => {
     );
   });
 
+  it("resets cached Deep Complete usage when a new UTC month starts offline", async () => {
+    const cached = BillingStatusDataSchema.parse({
+      ...statusPayload(0).entitlement,
+      deepCompletes: {
+        period: "2026-06",
+        used: 10,
+        limit: 10,
+        remaining: 0,
+        resetAt: "2026-07-01T00:00:00.000Z",
+        exhausted: true,
+      },
+    });
+    const service = createDesktopStatusService({
+      apiBaseUrl: "http://localhost:8787",
+      now: () => new Date("2026-07-01T00:30:00.000Z"),
+      getCachedEntitlement: () => ({ userId: "user-1", entitlement: cached }),
+      getAuthorizationObservation: async () =>
+        authorizationObservation("Bearer token"),
+      isCredentialGenerationCurrent: acceptCredentialGeneration,
+      publishIfCredentialGenerationCurrent: publishCredentialGeneration,
+      fetch: async () => {
+        throw new Error("offline");
+      },
+    });
+
+    const status = await service.refresh();
+
+    expect(status.entitlement?.deepCompletes).toEqual({
+      period: "2026-07",
+      used: 0,
+      limit: 10,
+      remaining: 10,
+      resetAt: "2026-08-01T00:00:00.000Z",
+      exhausted: false,
+    });
+  });
+
   it("expires a cached Pro trial while offline", async () => {
     const cached = BillingStatusDataSchema.parse({
       ...statusPayload(0).entitlement,

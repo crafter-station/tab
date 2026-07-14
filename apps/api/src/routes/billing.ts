@@ -1,4 +1,4 @@
-import { isPlanId, type PaidPlanId } from "@tab/billing";
+import { isPaidPlanId } from "@tab/billing";
 import {
   BillingCheckoutResponseSchema,
   BillingPortalResponseSchema,
@@ -15,10 +15,6 @@ import {
 import type { DeviceTokenService } from "../device-tokens.ts";
 import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
-
-function isPaidPlanId(value: string | undefined): value is PaidPlanId {
-  return isPlanId(value) && value !== "free";
-}
 
 export function registerBillingRoutes(
   app: ApiApp,
@@ -76,7 +72,7 @@ export function registerBillingRoutes(
 
     const userId = sessionCheck.session.user.id;
     const entitlement = await deps.billingService.getEntitlement(userId);
-    if (hasActivePolarEntitlement(entitlement)) {
+    if (hasActivePolarEntitlement(entitlement, new Date())) {
       if (entitlement.planId === planId) {
         return c.json(
           BillingCheckoutResponseSchema.parse({

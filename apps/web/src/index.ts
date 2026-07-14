@@ -1,9 +1,6 @@
 import { createAuthClient } from "better-auth/client";
 
 export { planCapabilities as pricingPlans } from "@tab/billing";
-export { createWebApp, type WebAppConfig, type WebApp } from "./server.ts";
-export { apiRequest, getApiBaseUrl, defaultApiBaseUrl } from "./lib/api.ts";
-export { createAppRouter } from "./router.tsx";
 
 export const webAppBoundary = {
   runtime: "tanstack-start-react",

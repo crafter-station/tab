@@ -53,6 +53,7 @@ bun run desktop:dev         # Electron desktop app
 bun run desktop:permissions # Local macOS build for permission testing
 bun run worker:types:check  # Worker binding type validation
 bun run lint                # TypeScript baseline until a dedicated linter exists
+bun run --cwd apps/web build # Vite/Cloudflare production web build
 ```
 
 Most tests and type checks do not need real provider credentials. Provider-backed development paths use `.dev.vars`; do not commit that file. The combined `bun run dev` script validates non-empty Polar values, so use safe local placeholders for `POLAR_ACCESS_TOKEN` and `POLAR_ORGANIZATION_ID` when you are not testing billing.

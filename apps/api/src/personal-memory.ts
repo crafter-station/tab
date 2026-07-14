@@ -59,29 +59,6 @@ export type AtomicExtractionOperationInput = {
   readonly now: string;
 };
 
-export type PersonalMemoryExtractionCommitResult =
-  | { readonly status: "claim_lost" }
-  | { readonly status: "applied"; readonly outcome: ExtractionOperationOutcome };
-
-export type PersonalMemoryExtractionCommitInput = {
-  readonly userId: string;
-  readonly batchIdHash: string;
-  readonly claimId: string;
-  readonly now: Date;
-  readonly operationIndex: number;
-  readonly operation: PlannedMemoryOperation;
-  readonly maxMemoriesPerUser: number;
-  readonly commitCanonicalOperation?: (
-    input: AtomicExtractionOperationInput,
-  ) => ExtractionOperationOutcome;
-};
-
-export interface PersonalMemoryExtractionCommitter {
-  commitExtractionOperation(
-    input: PersonalMemoryExtractionCommitInput,
-  ): Promise<PersonalMemoryExtractionCommitResult>;
-}
-
 export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
@@ -948,7 +925,6 @@ export class PersonalMemoryService {
   private embeddingService?: PersonalMemoryEmbeddingService;
   private vectorIndex?: PersonalMemoryVectorIndex;
   private maxRelevantMemories: number;
-  private extractionCommitter?: PersonalMemoryExtractionCommitter;
 
   constructor(deps: PersonalMemoryServiceDependencies = {}) {
     if (!deps.storage) {
@@ -960,24 +936,16 @@ export class PersonalMemoryService {
     this.maxRelevantMemories = deps.maxRelevantMemories ?? DEFAULT_MAX_RELEVANT_MEMORIES;
   }
 
-  setExtractionCommitter(committer: PersonalMemoryExtractionCommitter): void {
-    this.extractionCommitter = committer;
-  }
-
-  async commitExtractionOperation(
-    input: Omit<PersonalMemoryExtractionCommitInput, "commitCanonicalOperation">,
-  ): Promise<PersonalMemoryExtractionCommitResult> {
-    if (!this.extractionCommitter) {
-      throw new Error("Personal Memory extraction committer is not configured");
-    }
+  commitExtractionOperationAtomically(
+    input: AtomicExtractionOperationInput,
+  ): ExtractionOperationOutcome {
     const commitCanonicalOperation = this.storage.applyExtractionOperationAtomically;
-    return this.extractionCommitter.commitExtractionOperation({
-      ...input,
-      ...(commitCanonicalOperation && {
-        commitCanonicalOperation: (operation: AtomicExtractionOperationInput) =>
-          commitCanonicalOperation.call(this.storage, operation),
-      }),
-    });
+    if (!commitCanonicalOperation) {
+      throw new Error(
+        "Personal Memory storage does not support atomic extraction operations",
+      );
+    }
+    return commitCanonicalOperation.call(this.storage, input);
   }
 
   async createMemory(

@@ -2,7 +2,10 @@ import {
   ApiErrorResponseSchema,
   DesktopStatusResponseSchema,
 } from "@tab/contracts";
-import { planCapabilities } from "@tab/billing";
+import {
+  projectBillingStatus,
+  type EntitlementFacts,
+} from "@tab/billing";
 import type {
   BillingStatusData,
   LocalSuggestionActivity,
@@ -71,89 +74,42 @@ function createInitialStatus(cached?: {
   };
 }
 
-function withAllowanceLimit(
-  allowance: BillingStatusData["localAcceptedWords"],
-  limit: number | null,
-): BillingStatusData["localAcceptedWords"] {
-  return {
-    ...allowance,
-    limit,
-    remaining: limit === null ? null : Math.max(0, limit - allowance.used),
-    exhausted: limit !== null && allowance.used >= limit,
-  };
-}
-
-function expireCachedEntitlement(
+function projectCachedEntitlement(
   entitlement: BillingStatusData,
   now: Date,
 ): BillingStatusData {
-  const trialExpired =
-    entitlement.entitlementSource === "trial" &&
-    entitlement.trial.active &&
-    new Date(entitlement.trial.endsAt) <= now;
-  const paidAccessExpired =
-    entitlement.entitlementSource === "paid" &&
-    entitlement.accessEndsAt !== undefined &&
-    new Date(entitlement.accessEndsAt) <= now;
-  let resolved = entitlement;
-  if (trialExpired || paidAccessExpired) {
-    const capabilities = planCapabilities.free;
-    resolved = {
-      ...entitlement,
-      planId: "free",
-      entitlementSource: "free",
-      billingInterval: undefined,
-      accessEndsAt: undefined,
-      capabilities: {
-        localAcceptedWordsPerDay: capabilities.localAcceptedWordsPerDay,
-        deepCompletesPerMonth: capabilities.deepCompletesPerMonth,
-        personalDeviceLimit: capabilities.personalDeviceLimit,
-        continuousMemoryExtraction: capabilities.continuousMemoryExtraction,
-        customWritingInstructions: capabilities.customWritingInstructions,
-        modelCatalogAccess: capabilities.modelCatalogAccess,
-      },
-      trial: { ...entitlement.trial, active: false },
-      localAcceptedWords: withAllowanceLimit(
-        entitlement.localAcceptedWords,
-        capabilities.localAcceptedWordsPerDay,
-      ),
-      deepCompletes: withAllowanceLimit(
-        entitlement.deepCompletes,
-        capabilities.deepCompletesPerMonth,
-      ),
-      devices: {
-        active: entitlement.devices.active,
-        limit: capabilities.personalDeviceLimit,
-        canLink: entitlement.devices.active < capabilities.personalDeviceLimit,
-      },
-      upgradeUrl: "/pricing",
+  let facts: EntitlementFacts = { planId: "free", source: "free" };
+  if (entitlement.entitlementSource === "trial" && entitlement.trial.active) {
+    facts = {
+      planId: entitlement.planId,
+      source: "trial",
+      effectiveEnd: entitlement.trial.endsAt,
+      trialStartedAt: entitlement.trial.startedAt,
+    };
+  } else if (entitlement.entitlementSource === "paid") {
+    facts = {
+      planId: entitlement.planId,
+      source: "paid",
+      effectiveEnd: entitlement.accessEndsAt,
+      billingInterval: entitlement.billingInterval,
     };
   }
 
-  const currentLocalDay = [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-");
-  if (resolved.localAcceptedWords.period !== currentLocalDay) {
-    const resetAt = new Date(
-      now.getFullYear(),
-      now.getMonth(),
-      now.getDate() + 1,
-    ).toISOString();
-    resolved = {
-      ...resolved,
-      localAcceptedWords: {
-        period: currentLocalDay,
-        used: 0,
-        limit: resolved.capabilities.localAcceptedWordsPerDay,
-        remaining: resolved.capabilities.localAcceptedWordsPerDay,
-        resetAt,
-        exhausted: false,
-      },
-    };
-  }
-  return resolved;
+  return projectBillingStatus({
+    entitlement: facts,
+    now,
+    localAcceptedWords: {
+      period: entitlement.localAcceptedWords.period ?? "",
+      used: entitlement.localAcceptedWords.used,
+      resetAt: entitlement.localAcceptedWords.resetAt,
+    },
+    deepCompletes: {
+      period: entitlement.deepCompletes.period ?? "",
+      used: entitlement.deepCompletes.used,
+      resetAt: entitlement.deepCompletes.resetAt,
+    },
+    activeDevices: entitlement.devices.active,
+  });
 }
 
 function isRevokedDeviceError(body: unknown): boolean {
@@ -180,7 +136,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
   const cached = stored
     ? {
         ...stored,
-        entitlement: expireCachedEntitlement(stored.entitlement, now()),
+        entitlement: projectCachedEntitlement(stored.entitlement, now()),
       }
     : null;
   let currentStatus: DesktopStatus = createInitialStatus(cached);
@@ -250,7 +206,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
     }
 
     try {
-      const localNow = new Date();
+      const localNow = now();
       const localDay = [
         localNow.getFullYear(),
         String(localNow.getMonth() + 1).padStart(2, "0"),
@@ -351,7 +307,7 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
       auth: currentStatus.auth === "sign_in_required" ? "signed_in" : currentStatus.auth,
       connectivity: "offline",
       entitlement: currentStatus.entitlement
-        ? expireCachedEntitlement(currentStatus.entitlement, now())
+        ? projectCachedEntitlement(currentStatus.entitlement, now())
         : null,
       overlay: "hidden",
     });

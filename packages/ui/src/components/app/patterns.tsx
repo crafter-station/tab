@@ -226,7 +226,7 @@ export function SummaryMetric({ label, value, detail, className }: SummaryMetric
     <div className={cn("grid min-w-0 gap-1 px-1 py-2", className)}>
       <p className="text-xs font-medium text-muted-foreground">{label}</p>
       <p className="truncate text-xl font-semibold text-foreground tabular-nums">{value}</p>
-      {detail ? <p className="truncate text-xs text-muted-foreground">{detail}</p> : null}
+      {detail ? <p className="text-pretty text-xs leading-relaxed text-muted-foreground">{detail}</p> : null}
     </div>
   );
 }

@@ -1,6 +1,6 @@
-import { createRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { Button, Card, CardContent } from "@tab/ui";
-import { rootRoute } from "./__root.tsx";
+import { routeHandlers } from "../lib/route-handlers.server.ts";
 
 function LogoutPage() {
   return (
@@ -14,4 +14,7 @@ function LogoutPage() {
   );
 }
 
-export const Route = createRoute({ getParentRoute: () => rootRoute, path: "logout", component: LogoutPage });
+export const Route = createFileRoute("/logout")({
+  component: LogoutPage,
+  server: { handlers: { POST: ({ request }) => routeHandlers.logout(request) } },
+});

@@ -28,7 +28,7 @@ import {
   createFileAcceptedWordLedgerStorage,
 } from "./accepted-word-ledger.ts";
 import { createLocalAcceptanceUsageClient } from "./usage-client.ts";
-import { createNativeAutocompleteApp } from "./native-autocomplete-app.ts";
+import { createNativeAutocompleteApp, type SuggestionProvenance } from "./native-autocomplete-app.ts";
 import {
   type AppContextSnapshot,
 } from "./app-context.ts";
@@ -218,7 +218,7 @@ const requestCloudSuggestion = createApiSuggestionClient({
 const completionHistory = createCompletionHistory((entries) => {
   settingsWindowManager.sendCompletionHistory(entries);
 });
-const requestSuggestion: ReturnType<typeof createApiSuggestionClient> = async (snapshot, options) => {
+const requestDeepComplete: ReturnType<typeof createApiSuggestionClient> = async (snapshot, options) => {
   const startedAt = performance.now();
   const suggestion = await requestCloudSuggestion(snapshot, options);
   if (suggestion && !options?.signal?.aborted) {
@@ -390,7 +390,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
   typingContext: typingContextBuffer,
   appContext: appContextExtractor,
   memoryExtraction: memoryExtractionDispatcher,
-  getLocalSuggestion: async (snapshot, options) => {
+  getAutomaticSuggestion: async (snapshot, options) => {
     updateDebugApiState({ status: "loading" });
     const startedAt = performance.now();
     try {
@@ -417,11 +417,10 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
       throw error;
     }
   },
-  fallbackToCloudOnLocalMiss: false,
   onSuggestionDiagnostic: DEVELOPMENT_LOGGING
     ? (event, details) => logLocalSuggestion(`loop.${event}`, details)
     : undefined,
-  requestSuggestion,
+  requestDeepComplete,
   outputs: {
     showSuggestion: showOverlay,
     clearSuggestion: clearSuggestionOverlay,
@@ -907,7 +906,7 @@ function registerObsidianTabAcceptance(): void {
   }
 }
 
-function showOverlay(suggestion: Suggestion): void {
+function showOverlay(suggestion: Suggestion, provenance: SuggestionProvenance): void {
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   const snapshot = nativeAutocompleteApp.getCurrentSnapshot();
   const inline = isObsidianInlineTarget(snapshot);
@@ -920,7 +919,7 @@ function showOverlay(suggestion: Suggestion): void {
   }
   overlayWindow.webContents.send("suggestion", {
     ...suggestion,
-    source: suggestion.id.startsWith("sg-local-") ? "local" : "cloud",
+    source: provenance === "automatic" ? "local" : "cloud",
     presentation: inline ? "inline" : "floating",
     ...(inline ? {
       inlineMetrics: {
@@ -1131,9 +1130,9 @@ async function bootstrap(): Promise<void> {
     if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
 
     overlayRendererReady = true;
-    const currentSuggestion = nativeAutocompleteApp.getCurrentSuggestion();
-    if (currentSuggestion) {
-      showOverlay(currentSuggestion);
+    const visibleSuggestion = nativeAutocompleteApp.getVisibleSuggestion();
+    if (visibleSuggestion) {
+      showOverlay(visibleSuggestion.suggestion, visibleSuggestion.provenance);
     }
   });
 

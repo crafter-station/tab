@@ -1,12 +1,12 @@
 import { createDatabase, type AppDatabase } from "./db/index.ts";
 import handler from "./index.ts";
-import { D1MemoryExtractionIdempotencyStorage } from "./personal-memory-extraction.ts";
+import { D1MemoryExtractionStorage } from "./personal-memory-extraction.ts";
 
 export async function cleanupExpiredMemoryExtractionRecords(
   db: AppDatabase,
   now = new Date(),
 ): Promise<void> {
-  await new D1MemoryExtractionIdempotencyStorage(db).pruneExpiredRecords(now);
+  await new D1MemoryExtractionStorage(db).pruneExpiredRecords(now);
 }
 
 export default {

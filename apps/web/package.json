@@ -4,9 +4,9 @@
   "private": true,
   "main": "src/index.ts",
   "scripts": {
-    "dev": "bun run styles:build && bun --hot src/dev.ts",
-    "styles:build": "tailwindcss -i src/styles.css -o src/generated/styles.css --minify",
-    "build": "bun run styles:build && vite build && mkdir -p dist/client/files && cp src/generated/styles.css dist/client/styles.css && cp ../../node_modules/@fontsource-variable/geist/files/*.woff2 ../../node_modules/@fontsource-variable/space-grotesk/files/*.woff2 dist/client/files/",
+    "dev": "vite dev",
+    "build": "vite build",
+    "preview": "vite preview",
     "start": "vite preview",
     "deploy": "bun run build && bunx wrangler deploy --config wrangler.jsonc"
   },
@@ -22,11 +22,13 @@
     "react-dom": "latest"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.44.0",
     "@types/node": "latest",
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "@vitejs/plugin-react": "^4.7.0",
     "typescript": "^5",
-    "vite": "^7.3.6"
+    "vite": "^7.3.6",
+    "wrangler": "^4.110.0"
   }
 }

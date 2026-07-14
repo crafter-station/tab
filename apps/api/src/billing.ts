@@ -2,14 +2,16 @@ import { Polar } from "@polar-sh/sdk";
 import { validateEvent } from "@polar-sh/sdk/webhooks";
 import { and, eq, sql } from "drizzle-orm";
 import {
+  getAllowancePeriods,
   isPlanId,
-  planCapabilities,
+  projectBillingStatus,
+  projectEntitlement,
   type BillingInterval,
+  type EntitlementFacts,
   type PaidPlanId,
   type PlanId,
 } from "@tab/billing";
 import type {
-  AllowanceState,
   BillingStatusData,
   EntitlementSource,
 } from "@tab/contracts";
@@ -387,41 +389,35 @@ export function createBillingCheckoutClient(
   return new StubBillingCheckoutClient();
 }
 
-function utcMonth(date: Date): string {
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function utcDay(date: Date): string {
-  return date.toISOString().slice(0, 10);
-}
-
-function nextUtcMonth(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + 1, 1));
-}
-
-function nextUtcDay(date: Date): Date {
-  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1));
-}
-
-function allowanceState(
-  period: string,
-  used: number,
-  limit: number | null,
-  resetAt: Date,
-): AllowanceState {
-  return {
-    period,
-    used,
-    limit,
-    remaining: limit === null ? null : Math.max(0, limit - used),
-    resetAt: resetAt.toISOString(),
-    exhausted: limit !== null && used >= limit,
-  };
+function entitlementFacts(entitlement: UserEntitlement): EntitlementFacts {
+  if (entitlement.planId === "free") {
+    return { planId: "free", source: "free" };
+  }
+  if (entitlement.status === "trialing" && entitlement.trialEndsAt) {
+    return {
+      planId: entitlement.planId,
+      source: "trial",
+      effectiveEnd: entitlement.trialEndsAt.toISOString(),
+      trialStartedAt: entitlement.trialStartedAt?.toISOString(),
+    };
+  }
+  if (
+    entitlement.status === "active" ||
+    (entitlement.status === "canceled" && entitlement.currentPeriodEnd)
+  ) {
+    return {
+      planId: entitlement.planId,
+      source: "paid",
+      effectiveEnd: entitlement.currentPeriodEnd?.toISOString(),
+      billingInterval: entitlement.billingInterval,
+    };
+  }
+  return { planId: "free", source: "free" };
 }
 
 export function hasActivePolarEntitlement(
   entitlement: UserEntitlement,
-  now = new Date(),
+  now: Date,
 ): boolean {
   if (
     entitlement.planId === "free" ||
@@ -430,15 +426,7 @@ export function hasActivePolarEntitlement(
   ) {
     return false;
   }
-  if (entitlement.status === "active") return true;
-  if (entitlement.status === "trialing") {
-    return Boolean(entitlement.trialEndsAt && entitlement.trialEndsAt > now);
-  }
-  return Boolean(
-    entitlement.status === "canceled" &&
-      entitlement.currentPeriodEnd &&
-      entitlement.currentPeriodEnd > now,
-  );
+  return projectEntitlement(entitlementFacts(entitlement), now).source !== "free";
 }
 
 export type BillingServiceDependencies = {
@@ -483,11 +471,15 @@ export class BillingService {
   async resolveEntitlement(userId: string): Promise<ResolvedEntitlement> {
     const stored = await this.getEntitlement(userId);
     const now = this.now();
-    if (hasActivePolarEntitlement(stored, now)) {
+    if (stored.polarCustomerId && stored.polarSubscriptionId) {
+      const projected = projectEntitlement(entitlementFacts(stored), now);
+      if (projected.source === "free") {
+        return { stored, planId: "free", source: "free" };
+      }
       return {
         stored,
-        planId: stored.planId,
-        source: stored.trialEndsAt && stored.trialEndsAt > now ? "trial" : "paid",
+        planId: projected.planId,
+        source: projected.source,
       };
     }
     return { stored, planId: "free", source: "free" };
@@ -503,67 +495,39 @@ export class BillingService {
   ): Promise<BillingStatusData> {
     const now = this.now();
     const entitlement = await this.resolveEntitlement(userId);
-    const capabilities = planCapabilities[entitlement.planId];
-    const localPeriod = options.localDay ?? utcDay(now);
-    const deepPeriod = utcMonth(now);
+    const periods = getAllowancePeriods({
+      now,
+      localDay: options.localDay,
+      localResetAt: options.localResetAt,
+    });
     const [localUsage, deepUsage] = await Promise.all([
       this.storage.getAllowanceUsage(
         userId,
         "local_accepted_words",
-        localPeriod,
+        periods.localAcceptedWords.period,
       ),
-      this.storage.getAllowanceUsage(userId, "deep_completes", deepPeriod),
+      this.storage.getAllowanceUsage(
+        userId,
+        "deep_completes",
+        periods.deepCompletes.period,
+      ),
     ]);
-    const activeDevices = options.activeDevices ?? 0;
 
-    return {
-      planId: entitlement.planId,
-      entitlementSource: entitlement.source,
-      billingInterval:
-        entitlement.source === "paid"
-          ? entitlement.stored.billingInterval
-          : undefined,
-      accessEndsAt:
-        entitlement.source === "paid"
-          ? entitlement.stored.currentPeriodEnd?.toISOString()
-          : undefined,
-      capabilities: {
-        localAcceptedWordsPerDay: capabilities.localAcceptedWordsPerDay,
-        deepCompletesPerMonth: capabilities.deepCompletesPerMonth,
-        personalDeviceLimit: capabilities.personalDeviceLimit,
-        continuousMemoryExtraction: capabilities.continuousMemoryExtraction,
-        customWritingInstructions: capabilities.customWritingInstructions,
-        modelCatalogAccess: capabilities.modelCatalogAccess,
+    return projectBillingStatus({
+      entitlement:
+        entitlement.source === "free"
+          ? { planId: "free", source: "free" }
+          : entitlementFacts(entitlement.stored),
+      now,
+      localDay: periods.localAcceptedWords.period,
+      localResetAt: new Date(periods.localAcceptedWords.resetAt),
+      localAcceptedWords: {
+        period: periods.localAcceptedWords.period,
+        used: localUsage,
       },
-      trial:
-        entitlement.source === "trial" &&
-        entitlement.stored.trialStartedAt &&
-        entitlement.stored.trialEndsAt
-          ? {
-              active: true,
-              startedAt: entitlement.stored.trialStartedAt.toISOString(),
-              endsAt: entitlement.stored.trialEndsAt.toISOString(),
-            }
-          : { active: false },
-      localAcceptedWords: allowanceState(
-        localPeriod,
-        localUsage,
-        capabilities.localAcceptedWordsPerDay,
-        options.localResetAt ?? nextUtcDay(now),
-      ),
-      deepCompletes: allowanceState(
-        deepPeriod,
-        deepUsage,
-        capabilities.deepCompletesPerMonth,
-        nextUtcMonth(now),
-      ),
-      devices: {
-        active: activeDevices,
-        limit: capabilities.personalDeviceLimit,
-        canLink: activeDevices < capabilities.personalDeviceLimit,
-      },
-      upgradeUrl: entitlement.planId === "free" ? "/pricing" : undefined,
-    };
+      deepCompletes: { period: periods.deepCompletes.period, used: deepUsage },
+      activeDevices: options.activeDevices ?? 0,
+    });
   }
 
   async checkDeepComplete(userId: string): Promise<DeepCompleteCheckResult> {
@@ -586,7 +550,7 @@ export class BillingService {
     requestId: string,
   ): Promise<DeepCompleteCheckResult> {
     const check = await this.checkDeepComplete(userId);
-    const period = utcMonth(this.now());
+    const period = getAllowancePeriods({ now: this.now() }).deepCompletes.period;
     const existing = await this.storage.getAllowanceEvent(
       userId,
       "deep_completes",

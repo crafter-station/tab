@@ -4,72 +4,21 @@
   background: var(--background);
 }
 
-.dashboard-static-sidebar {
-  transition: width 160ms var(--tab-ease-out);
-}
-
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar {
-  width: 4rem;
-}
-
 .dashboard-sidebar-label {
   opacity: 1;
   transition: opacity 140ms var(--tab-ease-out) 25ms;
 }
 
-.group[data-collapsible="icon"] .dashboard-sidebar-label,
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-label {
+.group[data-collapsible="icon"] .dashboard-sidebar-label {
   pointer-events: none;
   opacity: 0;
   transition: opacity 60ms linear;
 }
 
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-nav a {
-  width: 2.5rem;
-}
-
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-brand {
-  width: 100%;
-  padding-inline: 0.75rem;
-}
-
-.dashboard-static-sidebar-brand .dashboard-brand-menu {
-  width: 100%;
-}
-
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-brand .dashboard-brand-menu {
-  width: 2.5rem;
-}
-
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-brand summary {
-  justify-content: center;
-  padding-inline: 0;
-}
-
-[data-dashboard-sidebar-state="collapsed"] .dashboard-static-sidebar-nav {
-  padding-inline: 0.75rem;
-}
-
-[data-dashboard-sidebar-motion="none"] .dashboard-static-sidebar {
-  transition-duration: 0ms;
-}
-
-[data-dashboard-sidebar-motion="none"] .dashboard-sidebar-label {
-  transition: none;
-}
-
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-static-sidebar {
-    transition-duration: 0ms;
-  }
-
   .dashboard-sidebar-label {
     transition: none;
   }
-}
-
-.dashboard-brand-menu-panel {
-  transform-origin: top left;
 }
 
 .marketing-intro > * {

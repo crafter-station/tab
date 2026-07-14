@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowRight, ArrowUpRight, EnvelopeSimple, GithubLogo, ShieldCheck } from "@phosphor-icons/react";
-import { buttonVariants } from "@tab/ui";
+import { Button } from "@tab/ui";
 import { PageKicker } from "./shared.tsx";
 
 const lastUpdated = "July 13, 2026";
@@ -68,8 +68,8 @@ export function AboutPage() {
           <h2 className="mt-4 max-w-[16ch] text-balance font-[var(--font-display)] text-4xl font-bold tracking-[-0.015em]">Follow the work or try Tab on your Mac.</h2>
         </div>
         <div className="flex flex-wrap gap-3">
-          <a className={buttonVariants({ variant: "secondary", size: "lg" })} href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">View GitHub <ArrowUpRight data-icon="inline-end" aria-hidden="true" /></a>
-          <a className={buttonVariants({ size: "lg" })} href="/download">Download Tab <ArrowRight data-icon="inline-end" aria-hidden="true" /></a>
+          <Button asChild variant="secondary" size="lg"><a href="https://github.com/crafter-station/tab" target="_blank" rel="noreferrer">View GitHub <ArrowUpRight data-icon="inline-end" aria-hidden="true" /></a></Button>
+          <Button asChild size="lg"><a href="/download">Download Tab <ArrowRight data-icon="inline-end" aria-hidden="true" /></a></Button>
         </div>
       </section>
     </>

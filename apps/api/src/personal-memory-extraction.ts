@@ -11,10 +11,8 @@ import {
 } from "@tab/memory-policy";
 import { generateText, Output } from "ai";
 import type {
+  AtomicExtractionOperationInput,
   ExtractionOperationOutcome,
-  PersonalMemoryExtractionCommitInput,
-  PersonalMemoryExtractionCommitResult,
-  PersonalMemoryExtractionCommitter,
   PersonalMemoryService,
 } from "./personal-memory.ts";
 import {
@@ -176,7 +174,21 @@ const systemMemoryExtractionClock: MemoryExtractionClock = {
   },
 };
 
-export interface MemoryExtractionIdempotencyStorage {
+export type MemoryExtractionOperationCommitInput = {
+  readonly userId: string;
+  readonly batchIdHash: string;
+  readonly claimId: string;
+  readonly now: Date;
+  readonly operationIndex: number;
+  readonly operation: PlannedMemoryOperation;
+  readonly maxMemoriesPerUser: number;
+};
+
+export type MemoryExtractionOperationCommitResult =
+  | { readonly status: "claim_lost" }
+  | { readonly status: "applied"; readonly outcome: ExtractionOperationOutcome };
+
+export interface MemoryExtractionStorage {
   claim(input: {
     readonly userId: string;
     readonly batchIdHash: string;
@@ -215,6 +227,9 @@ export interface MemoryExtractionIdempotencyStorage {
   readProgress(
     input: MemoryExtractionClaimInput,
   ): Promise<MemoryExtractionCounts | null>;
+  commitExtractionOperation(
+    input: MemoryExtractionOperationCommitInput,
+  ): Promise<MemoryExtractionOperationCommitResult>;
 }
 
 type MemoryExtractionClaimInput = {
@@ -295,15 +310,16 @@ function extractionCountsFromRow(row: {
   };
 }
 
-export class InMemoryMemoryExtractionIdempotencyStorage
-  implements MemoryExtractionIdempotencyStorage, PersonalMemoryExtractionCommitter
-{
+export class InMemoryMemoryExtractionStorage implements MemoryExtractionStorage {
   private readonly records = new Map<
     string,
     InMemoryExtractionIdempotencyRecord
   >();
 
   constructor(
+    private readonly commitCanonicalOperation: (
+      input: AtomicExtractionOperationInput,
+    ) => ExtractionOperationOutcome,
     private readonly clock: MemoryExtractionClock = systemMemoryExtractionClock,
     private readonly resultPollMs = MEMORY_EXTRACTION_RESULT_POLL_MS,
   ) {}
@@ -468,8 +484,8 @@ export class InMemoryMemoryExtractionIdempotencyStorage
   }
 
   async commitExtractionOperation(
-    input: PersonalMemoryExtractionCommitInput,
-  ): Promise<PersonalMemoryExtractionCommitResult> {
+    input: MemoryExtractionOperationCommitInput,
+  ): Promise<MemoryExtractionOperationCommitResult> {
     const record = this.getOwnedRecord(input);
     if (!record) return { status: "claim_lost" };
     const existing = record.operations.get(input.operationIndex);
@@ -480,12 +496,7 @@ export class InMemoryMemoryExtractionIdempotencyStorage
       throw new Error("Extraction operation does not match its durable plan");
     }
     if (existing) return { status: "applied", outcome: existing };
-    if (!input.commitCanonicalOperation) {
-      throw new Error(
-        "In-memory extraction requires an atomic Personal Memory storage adapter",
-      );
-    }
-    const outcome = input.commitCanonicalOperation({
+    const outcome = this.commitCanonicalOperation({
       userId: input.userId,
       operation: input.operation,
       maxMemoriesPerUser: input.maxMemoriesPerUser,
@@ -539,9 +550,7 @@ function incrementExtractionCount(
   else counts.rejected += 1;
 }
 
-export class D1MemoryExtractionIdempotencyStorage
-  implements MemoryExtractionIdempotencyStorage, PersonalMemoryExtractionCommitter
-{
+export class D1MemoryExtractionStorage implements MemoryExtractionStorage {
   constructor(
     private readonly db: AppDatabase,
     private readonly clock: MemoryExtractionClock = systemMemoryExtractionClock,
@@ -820,8 +829,8 @@ export class D1MemoryExtractionIdempotencyStorage
   }
 
   async commitExtractionOperation(
-    input: PersonalMemoryExtractionCommitInput,
-  ): Promise<PersonalMemoryExtractionCommitResult> {
+    input: MemoryExtractionOperationCommitInput,
+  ): Promise<MemoryExtractionOperationCommitResult> {
     const operation = PlannedMemoryOperationSchema.parse(input.operation);
     if (!Number.isSafeInteger(input.operationIndex) || input.operationIndex < 0) {
       throw new Error("Extraction operation does not match its durable plan");
@@ -1318,8 +1327,7 @@ export class D1MemoryExtractionIdempotencyStorage
 
 export type MemoryExtractionServiceDependencies = {
   readonly personalMemoryService: PersonalMemoryService;
-  readonly idempotencyStorage: MemoryExtractionIdempotencyStorage &
-    PersonalMemoryExtractionCommitter;
+  readonly storage: MemoryExtractionStorage;
   readonly model?: MemoryAgentModel;
   readonly personalMemoryPolicy?: PersonalMemoryPolicy;
   readonly clock?: MemoryExtractionClock;
@@ -1345,7 +1353,7 @@ class MemoryExtractionClaimLease {
   private lost = false;
 
   constructor(
-    private readonly storage: MemoryExtractionIdempotencyStorage,
+    private readonly storage: MemoryExtractionStorage,
     private readonly clock: MemoryExtractionClock,
     private readonly claim: {
       readonly userId: string;
@@ -1430,7 +1438,7 @@ function isNoOpExtractionResult(counts: MemoryExtractionCounts): boolean {
 
 export class MemoryExtractionService {
   private readonly personalMemoryService: PersonalMemoryService;
-  private readonly idempotencyStorage: MemoryExtractionIdempotencyStorage;
+  private readonly storage: MemoryExtractionStorage;
   private readonly model: MemoryAgentModel;
   private readonly personalMemoryPolicy: PersonalMemoryPolicy;
   private readonly clock: MemoryExtractionClock;
@@ -1441,10 +1449,9 @@ export class MemoryExtractionService {
 
   constructor(deps: MemoryExtractionServiceDependencies) {
     this.personalMemoryService = deps.personalMemoryService;
-    this.personalMemoryService.setExtractionCommitter(deps.idempotencyStorage);
-    this.idempotencyStorage = deps.idempotencyStorage;
+    this.storage = deps.storage;
     this.model = deps.model ?? new NoOpMemoryAgentModel();
-    this.personalMemoryPolicy = deps.personalMemoryPolicy ?? new PersonalMemoryPolicy(deps.personalMemoryService);
+    this.personalMemoryPolicy = deps.personalMemoryPolicy ?? new PersonalMemoryPolicy();
     this.clock = deps.clock ?? systemMemoryExtractionClock;
     this.claimLeaseMs = deps.claimLeaseMs ?? MEMORY_EXTRACTION_CLAIM_LEASE_MS;
     this.claimHeartbeatMs =
@@ -1479,7 +1486,7 @@ export class MemoryExtractionService {
     }
 
     const lease = new MemoryExtractionClaimLease(
-      this.idempotencyStorage,
+      this.storage,
       this.clock,
       { userId, batchIdHash, claimId: claim.claimId },
       this.claimLeaseMs,
@@ -1496,7 +1503,7 @@ export class MemoryExtractionService {
         claimId: claim.claimId,
         now: this.clock.now(),
       });
-      let planRead = await this.idempotencyStorage.readPlan(claimInput());
+      let planRead = await this.storage.readPlan(claimInput());
       if (planRead.status === "claim_lost") {
         throw new MemoryExtractionClaimLostError();
       }
@@ -1530,7 +1537,7 @@ export class MemoryExtractionService {
             this.personalMemoryPolicy.planExtractionOperations(operations),
         };
         if (
-          !(await this.idempotencyStorage.savePlan({
+          !(await this.storage.savePlan({
             ...claimInput(),
             plan,
           }))
@@ -1550,7 +1557,7 @@ export class MemoryExtractionService {
           operationIndex,
           claimId: claim.claimId,
         });
-        const applied = await this.personalMemoryService.commitExtractionOperation({
+        const applied = await this.storage.commitExtractionOperation({
           ...claimInput(),
           operationIndex,
           operation: planRead.plan.operations[operationIndex]!,
@@ -1563,7 +1570,7 @@ export class MemoryExtractionService {
 
       await this.personalMemoryService.reconcilePendingVectorMutations(userId);
       await lease.ensureOwned();
-      counts = await this.idempotencyStorage.readProgress(claimInput()) ?? undefined;
+      counts = await this.storage.readProgress(claimInput()) ?? undefined;
       if (!counts) throw new MemoryExtractionClaimLostError();
       const completedAt = this.clock.now();
       // A no-op row coordinates in-flight waiters only; it is not a 24-hour
@@ -1571,7 +1578,7 @@ export class MemoryExtractionService {
       const resultTtlMs = isNoOpExtractionResult(counts)
         ? this.noOpResultTtlMs
         : MEMORY_EXTRACTION_WINDOW_POLICY.failedBatchTtlMs;
-      const completed = await this.idempotencyStorage.complete({
+      const completed = await this.storage.complete({
         userId,
         batchIdHash,
         claimId: claim.claimId,
@@ -1591,7 +1598,7 @@ export class MemoryExtractionService {
 
     if (!failed && counts) return counts;
     if (failure instanceof MemoryExtractionClaimLostError) {
-      const winner = await this.idempotencyStorage.waitForResult({
+      const winner = await this.storage.waitForResult({
         userId,
         batchIdHash,
         waitUntil: new Date(this.clock.now().getTime() + this.claimLeaseMs),
@@ -1601,7 +1608,7 @@ export class MemoryExtractionService {
     }
 
     try {
-      await this.idempotencyStorage.release({
+      await this.storage.release({
         userId,
         batchIdHash,
         claimId: claim.claimId,
@@ -1619,7 +1626,7 @@ export class MemoryExtractionService {
   ): Promise<Exclude<MemoryExtractionClaim, { status: "pending" }>> {
     while (true) {
       const now = this.clock.now();
-      const claim = await this.idempotencyStorage.claim({
+      const claim = await this.storage.claim({
         userId,
         batchIdHash,
         now,
@@ -1627,7 +1634,7 @@ export class MemoryExtractionService {
       });
       if (claim.status !== "pending") return claim;
 
-      const result = await this.idempotencyStorage.waitForResult({
+      const result = await this.storage.waitForResult({
         userId,
         batchIdHash,
         waitUntil: claim.leaseExpiresAt,

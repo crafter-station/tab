@@ -4,9 +4,13 @@ import { Button, PLATFORM_COLORS } from "@tab/ui";
 import { BrandMenu } from "../components/brand-menu.tsx";
 import { SiteFooter, SiteHeader } from "../components/site-shell.tsx";
 import { ThemeProvider } from "../components/theme-provider.tsx";
+import { UserMenu } from "../components/user-menu.tsx";
+import { MessagePage } from "../components/pages/shared.tsx";
+import { getViewer } from "../lib/viewer.functions.ts";
 
 function RootComponent() {
   const isDashboard = useRouterState({ select: (state) => state.location.pathname.startsWith("/dashboard") });
+  const { viewer } = Route.useLoaderData();
 
   return (
     <html lang="en" suppressHydrationWarning>
@@ -23,14 +27,15 @@ function RootComponent() {
             <div className="flex min-h-dvh flex-col">
               <SiteHeader
                 brandControl={<BrandMenu destinationHref="/dashboard" destinationLabel="Dashboard" />}
-                accountControl={<Button asChild variant="secondary"><a href="/login">Sign in</a></Button>}
+                 accountControl={viewer ? <UserMenu user={viewer} /> : <Button asChild variant="secondary"><a href="/login">Sign in</a></Button>}
+                 authenticated={Boolean(viewer)}
               />
               <div className="mx-auto flex w-full max-w-7xl flex-1 flex-col px-5 sm:px-8">
                 <main id="main-content" className="flex-1 py-8 sm:py-12">
                   <Outlet />
                 </main>
               </div>
-              <SiteFooter />
+               <SiteFooter authenticated={Boolean(viewer)} />
             </div>
           )}
         </ThemeProvider>
@@ -41,6 +46,7 @@ function RootComponent() {
 }
 
 export const rootRoute = createRootRoute({
+  loader: async () => ({ viewer: await getViewer() }),
   head: () => ({
     meta: [
       { charSet: "utf-8" },
@@ -50,6 +56,8 @@ export const rootRoute = createRootRoute({
     ],
   }),
   component: RootComponent,
+  notFoundComponent: () => <MessagePage title="Not found" message="The page you requested does not exist." />,
+  errorComponent: () => <MessagePage title="Something went wrong" message="Tab could not load this page. Please try again." />,
 });
 
 export const Route = rootRoute;

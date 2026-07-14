@@ -1,6 +1,21 @@
 import type { ReactNode } from "react";
-import { ArrowUpRight, CaretDown, List, X } from "@phosphor-icons/react";
-import { TabMark, buttonVariants } from "@tab/ui";
+import { ArrowUpRight, CaretDown, List } from "@phosphor-icons/react";
+import {
+  Button,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+  TabMark,
+} from "@tab/ui";
 
 const primaryLinks = [
   { href: "/#how-it-works", label: "How it works" },
@@ -69,7 +84,7 @@ export function SiteHeader({
   accountControl: ReactNode;
   authenticated?: boolean;
 }) {
-  const downloadControl = <a className={buttonVariants({ size: "sm", className: "max-lg:hidden" })} href="/download/tab.dmg">Download for Mac</a>;
+  const downloadControl = <Button asChild size="sm" className="max-lg:hidden"><a href="/download/tab.dmg">Download for Mac</a></Button>;
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-md">
@@ -80,31 +95,46 @@ export function SiteHeader({
             {primaryLinks.map((link) => (
               <a className="rounded-[var(--radius-control)] px-2.5 py-2 text-muted-foreground no-underline transition-colors duration-150 ease-[var(--tab-ease-out)] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={link.href} key={link.href}>{link.label}</a>
             ))}
-            <details className="group relative" name="site-navigation">
-              <summary className="flex cursor-pointer list-none items-center gap-1 rounded-[var(--radius-control)] px-2.5 py-2 text-muted-foreground transition-colors duration-150 ease-[var(--tab-ease-out)] marker:hidden hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
-                More
-                <CaretDown className="tab-disclosure-chevron size-3.5" aria-hidden="true" />
-              </summary>
-              <div className="tab-disclosure-panel absolute right-0 mt-1.5 grid min-w-44 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-popover-foreground shadow-[var(--tab-shadow-card)]">
-                {secondaryLinks.map((link) => (
-                  <a className="rounded-[var(--radius-control)] px-2.5 py-2 no-underline transition-colors duration-150 ease-[var(--tab-ease-out)] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={link.href} key={link.href}>{link.label}</a>
-                ))}
-              </div>
-            </details>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="text-muted-foreground">
+                  More
+                  <CaretDown data-icon="inline-end" aria-hidden="true" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="min-w-44">
+                <DropdownMenuGroup>
+                  {secondaryLinks.map((link) => (
+                    <DropdownMenuItem asChild key={link.href}>
+                      <a href={link.href}>{link.label}</a>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuGroup>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </nav>
           {authenticated ? downloadControl : accountControl}
           {authenticated ? accountControl : downloadControl}
-          <details className="group relative lg:hidden" name="site-navigation">
-            <summary className="grid size-9 cursor-pointer list-none place-items-center rounded-[var(--radius-control)] border border-border bg-secondary text-secondary-foreground transition-[background-color,transform] duration-150 ease-[var(--tab-ease-out)] marker:hidden active:scale-[0.97] [&::-webkit-details-marker]:hidden" aria-label="Open navigation">
-              <List className="group-open:hidden" aria-hidden="true" />
-              <X className="hidden group-open:block" aria-hidden="true" />
-            </summary>
-            <nav className="tab-disclosure-panel absolute right-0 mt-1.5 grid min-w-52 rounded-[var(--radius-card)] border border-border bg-popover p-1 text-sm font-semibold text-popover-foreground shadow-[var(--tab-shadow-card)]" aria-label="Mobile navigation">
-              {mobileLinks.map((link) => (
-                <a className="rounded-[var(--radius-control)] px-3 py-2.5 no-underline transition-colors duration-150 ease-[var(--tab-ease-out)] hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={link.href} key={link.href}>{link.label}</a>
-              ))}
-            </nav>
-          </details>
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button className="lg:hidden" variant="secondary" size="icon" aria-label="Open navigation">
+                <List aria-hidden="true" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="flex flex-col">
+              <SheetHeader>
+                <SheetTitle>Navigation</SheetTitle>
+                <SheetDescription>Browse Tab product and company pages.</SheetDescription>
+              </SheetHeader>
+              <nav className="grid gap-1 text-sm font-semibold" aria-label="Mobile navigation">
+                {mobileLinks.map((link) => (
+                  <SheetClose asChild key={link.href}>
+                    <a className="rounded-[var(--radius-control)] px-3 py-2.5 no-underline hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={link.href}>{link.label}</a>
+                  </SheetClose>
+                ))}
+              </nav>
+            </SheetContent>
+          </Sheet>
         </div>
       </div>
     </header>

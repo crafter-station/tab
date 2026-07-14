@@ -1,9 +1,6 @@
-import { createRoute, redirect } from "@tanstack/react-router";
-import { rootRoute } from "./__root.tsx";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
-export const Route = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "account",
+export const Route = createFileRoute("/account")({
   beforeLoad: () => {
     throw redirect({ href: "/dashboard/account" });
   },

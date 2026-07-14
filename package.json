@@ -8,6 +8,7 @@
     "worker:types:check": "bunx wrangler types --check --include-runtime false --env-file .dev.vars.example",
     "lint": "tsc -p tsconfig.json --noEmit",
     "test": "node --test tests/*.test.mjs && bun test",
+    "test:web:e2e": "playwright test e2e/web-interactions.e2e.ts",
     "db:generate": "bunx drizzle-kit generate --config=apps/api/drizzle.config.ts",
     "db:migrate": "bunx drizzle-kit migrate --config=apps/api/drizzle.config.ts",
     "db:migrate:local": "bunx wrangler d1 migrations apply tab-db --local --config wrangler.jsonc",
@@ -29,6 +30,7 @@
     "sandcastle:verify-gh": "bun --env-file=.sandcastle/.env .sandcastle/verify-gh.ts"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tailwindcss/cli": "^4.3.2",
     "@tailwindcss/vite": "latest",
     "@types/bun": "latest",

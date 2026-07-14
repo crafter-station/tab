@@ -59,6 +59,7 @@ bun run desktop:dev        # Run only the Electron app
 bun run desktop:permissions # Build a local macOS app for permission testing
 bun run lint               # Current strict TypeScript baseline
 bun run worker:types:check # Verify Worker binding types
+bun run --cwd apps/web build   # Build the Start web Worker with Vite
 ```
 
 Some provider-backed paths require local secrets in `.dev.vars`. Leave optional values blank when you are working on tests, docs, UI, policies, or code paths that do not call that provider. The combined `bun run dev` script validates non-empty Polar values, so use safe local placeholders for `POLAR_ACCESS_TOKEN` and `POLAR_ORGANIZATION_ID` if you are not testing billing.

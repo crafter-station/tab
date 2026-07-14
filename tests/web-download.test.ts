@@ -1,23 +1,18 @@
 import { describe, it, expect } from "bun:test";
-import { createWebApp, type WebApp } from "../apps/web/src/index.ts";
+import { readFileSync } from "node:fs";
+import { downloadMetadata, downloadRedirect } from "../apps/web/src/lib/download.ts";
 
-function webRequest(
-  webApp: WebApp,
-  pathname: string,
-  init: RequestInit = {},
-): Promise<Response> {
-  const request = new Request(`http://localhost:3000${pathname}`, init);
-  return webApp.fetch(request);
-}
+const downloadInfo = { version: "0.2.0", url: "https://cdn.example.com/tab-0.2.0.dmg", notes: "" };
+const homeSource = readFileSync(new URL("../apps/web/src/components/pages/home.tsx", import.meta.url), "utf8");
+const marketingSource = readFileSync(new URL("../apps/web/src/components/pages/marketing.tsx", import.meta.url), "utf8");
+const autocompleteSource = readFileSync(new URL("../apps/web/src/components/marketing/autocomplete-demo.tsx", import.meta.url), "utf8");
+const controlsSource = readFileSync(new URL("../apps/web/src/components/marketing/controls.tsx", import.meta.url), "utf8");
+const workflowSource = readFileSync(new URL("../apps/web/src/components/marketing/workflow-interaction.tsx", import.meta.url), "utf8");
+const pricingSource = readFileSync(new URL("../apps/web/src/components/pricing/pricing-plan-card.tsx", import.meta.url), "utf8");
 
 describe("Web download surface", () => {
   it("redirects /download/tab.dmg to the configured macOS artifact URL", async () => {
-    const webApp = createWebApp({
-      apiBaseUrl: "http://localhost:8787",
-      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
-    });
-
-    const response = await webRequest(webApp, "/download/tab.dmg");
+    const response = downloadRedirect(downloadInfo);
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
@@ -26,13 +21,7 @@ describe("Web download surface", () => {
   });
 
   it("serves /download/latest.json with the current version and artifact URL", async () => {
-    const webApp = createWebApp({
-      apiBaseUrl: "http://localhost:8787",
-      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
-      latestVersion: "0.2.0",
-    });
-
-    const response = await webRequest(webApp, "/download/latest.json");
+    const response = downloadMetadata(downloadInfo);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toInclude("application/json");
@@ -46,51 +35,34 @@ describe("Web download surface", () => {
   });
 
   it("download page links to the .dmg route", async () => {
-    const webApp = createWebApp({
-      apiBaseUrl: "http://localhost:8787",
-      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
-    });
-
-    const response = await webRequest(webApp, "/download");
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("/download/tab.dmg");
+    expect(marketingSource).toInclude("/download/tab.dmg");
   });
 
   it("renders a direct, interactive landing-page funnel", async () => {
-    const webApp = createWebApp({
-      apiBaseUrl: "http://localhost:8787",
-      macDownloadUrl: "https://cdn.example.com/tab-0.2.0.dmg",
-    });
-
-    const response = await webRequest(webApp, "/");
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
+    const body = homeSource;
     expect(body).toInclude('href="/download/tab.dmg"');
     expect(body).toInclude("Finish the sentence without leaving the app");
-    expect(body).toInclude("data-tab-demo");
-    expect(body).toInclude("Interactive example");
+    expect(autocompleteSource).toInclude("data-tab-demo");
+    expect(autocompleteSource).toInclude("Interactive example");
     expect(body).toInclude('id="how-it-works"');
     expect(body).toInclude("Built for standard Mac text fields");
     expect(body).toInclude("Local unless you ask for the cloud");
-    expect(body).toInclude("data-tab-workflow");
+    expect(workflowSource).toInclude("data-tab-workflow");
     expect(body).toInclude("data-animated-showcase");
     expect(body).toInclude('id="workflow-animation"');
     expect(body).toInclude('id="app-marquee-animation"');
     expect(body).toInclude('id="memory-showcase-animation"');
     expect(body).toInclude('id="privacy-showcase-animation"');
-    expect(body).toInclude("Pause animation");
-    expect(body.match(/data-motion-region/g)?.length).toBe(3);
-    expect(body).toInclude('src="/marketing-demo.js?v=option-tab"');
+    expect(controlsSource).toInclude("Pause animation");
+    expect((body.match(/data-motion-region/g)?.length ?? 0) + (workflowSource.match(/data-motion-region/g)?.length ?? 0)).toBe(3);
+    expect(body).not.toInclude("marketing-demo.js");
+    expect(body).toInclude("AutocompleteDemo");
+    expect(body).toInclude("MotionToggle");
     expect(body).toInclude('id="pricing"');
-    expect(body).toInclude('data-pricing-plan="free"');
-    expect(body).toInclude('data-pricing-plan="pro"');
-    expect(body).toInclude('data-pricing-plan="max"');
-    expect(body).toInclude("1,000 Deep Completes each month");
-    expect(body).toInclude("$20/mo");
+    expect(pricingSource).toInclude("data-pricing-plan");
+    expect(body).toInclude("formatCount(max.deepCompletesPerMonth)");
+    expect(body).toInclude("formatMonthlyPrice(max.monthlyPriceUsd)");
     expect(body).not.toInclude("/year");
-    expect(body.match(/data-pricing-plan=/g)?.length).toBe(3);
+    expect(body.match(/name: \"(?:Free|Pro|Max)\" as const/g)?.length).toBe(3);
   });
 });

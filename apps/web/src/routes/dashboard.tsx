@@ -1,18 +1,17 @@
-import { createRoute, useRouterState } from "@tanstack/react-router";
-import { DashboardLayout, type DashboardSection } from "../components/pages/dashboard.tsx";
-import { rootRoute } from "./__root.tsx";
-
-function sectionFromPathname(pathname: string): DashboardSection {
-  if (pathname.endsWith("/account")) return "account";
-  if (pathname.endsWith("/usage")) return "usage";
-  if (pathname.endsWith("/devices")) return "devices";
-  if (pathname.endsWith("/memories")) return "memories";
-  return "overview";
-}
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { DashboardLayout } from "../components/dashboard/layout.tsx";
+import { getDashboardData } from "../lib/dashboard.functions.ts";
+import { getViewer } from "../lib/viewer.functions.ts";
 
 function DashboardRouteComponent() {
-  const pathname = useRouterState({ select: (state) => state.location.pathname });
-  return <DashboardLayout section={sectionFromPathname(pathname)} />;
+  const data = Route.useLoaderData();
+  return <DashboardLayout data={data} />;
 }
 
-export const Route = createRoute({ getParentRoute: () => rootRoute, path: "dashboard", component: DashboardRouteComponent });
+export const Route = createFileRoute("/dashboard")({
+  beforeLoad: async () => {
+    if (!await getViewer()) throw redirect({ href: "/login" });
+  },
+  loader: () => getDashboardData(),
+  component: DashboardRouteComponent,
+});

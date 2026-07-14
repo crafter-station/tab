@@ -1,5 +1,5 @@
 import { DownloadSimple } from "@phosphor-icons/react";
-import { PLATFORM_COLORS, TabMark, buttonVariants, cn } from "@tab/ui";
+import { Button, PLATFORM_COLORS, TabMark, cn } from "@tab/ui";
 import { PageKicker } from "./shared.tsx";
 
 const brandColors = [
@@ -126,10 +126,7 @@ export function BrandPage() {
             The Tab mark is a single line continuing across the deliberate seam between a Suggestion and Acceptance.
           </p>
         </div>
-        <a className={buttonVariants({ size: "lg" })} download="tab-brand-assets.zip" href="/brand/tab-brand-assets.zip">
-          Download all
-          <DownloadSimple data-icon="inline-end" aria-hidden="true" />
-        </a>
+        <Button asChild size="lg"><a download="tab-brand-assets.zip" href="/brand/tab-brand-assets.zip">Download all<DownloadSimple data-icon="inline-end" aria-hidden="true" /></a></Button>
       </header>
 
       <section className="py-16 sm:py-24" aria-labelledby="master-mark-title">
@@ -185,17 +182,9 @@ export function BrandPage() {
                         loading="lazy"
                         src={download.href}
                       />
-                      <a
-                        className={cn(
-                          buttonVariants({ size: "sm" }),
-                          "brand-asset-action absolute bottom-3 right-3 transition-[opacity,transform] duration-150 ease-[var(--tab-ease-out)]",
-                        )}
-                        download={download.filename}
-                        href={download.href}
-                      >
-                        Download
-                        <DownloadSimple data-icon="inline-end" aria-hidden="true" />
-                      </a>
+                      <Button asChild size="sm" className="brand-asset-action absolute bottom-3 right-3 transition-[opacity,transform] duration-150 ease-[var(--tab-ease-out)]">
+                        <a download={download.filename} href={download.href}>Download<DownloadSimple data-icon="inline-end" aria-hidden="true" /></a>
+                      </Button>
                     </div>
                     <div className="flex items-start justify-between gap-3">
                       <h4 className="text-sm font-bold">{download.label}</h4>

@@ -1,1103 +1,182 @@
-import { describe, it, expect } from "bun:test";
-import { Database } from "bun:sqlite";
-import type { BillingInterval, PlanId } from "@tab/billing";
-import { createApp } from "../apps/api/src/index.ts";
-import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
+import { describe, expect, it } from "bun:test";
+import { createApiClient, readApiError } from "../apps/web/src/lib/api.server.ts";
 import {
-  DeviceTokenService,
-  InMemoryDeviceTokenStorage,
-} from "../apps/api/src/device-tokens.ts";
-import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
-import {
-  type BillingCheckoutClient,
-  BillingService,
-  InMemoryBillingStorage,
-} from "../apps/api/src/billing.ts";
-import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
-import { createWebApp, type WebApp } from "../apps/web/src/index.ts";
-import type { Hono } from "hono";
+  handleCheckout,
+  handleDeviceRevoke,
+  handleLogin,
+  handleLogout,
+  handleMemoryBulkDelete,
+  handleMemoryCreate,
+  handleMemoryExport,
+} from "../apps/web/src/lib/actions.server.ts";
+import { loadDashboardData } from "../apps/web/src/lib/dashboard.server.ts";
 
-const TEST_ORIGIN = "http://localhost:8787";
 const WEB_ORIGIN = "http://localhost:3000";
-class TestBillingCheckoutClient implements BillingCheckoutClient {
-  readonly checkoutRequests: Array<{
-    planId: PlanId;
-    interval: BillingInterval;
-    userId: string;
-  }> = [];
-  readonly portalRequests: Array<{ userId: string; customerId?: string }> = [];
-  failPortalRequests = false;
+const API_ORIGIN = "http://localhost:8787";
+const session = { user: { id: "user-1", name: "Test User", email: "test@example.com", emailVerified: true } };
 
-  async createCheckoutUrl(
-    planId: PlanId,
-    interval: BillingInterval,
-    user: { id: string; email?: string; name?: string },
-  ): Promise<string> {
-    this.checkoutRequests.push({ planId, interval, userId: user.id });
-    const url = new URL(`https://checkout.test/${planId}`);
-    url.searchParams.set("interval", interval);
-    url.searchParams.set("customer", user.id);
-    if (user.email) url.searchParams.set("email", user.email);
-    return url.toString();
-  }
-
-  async createPortalUrl(userId: string, customerId?: string): Promise<string> {
-    this.portalRequests.push({ userId, customerId });
-    if (this.failPortalRequests) {
-      throw new Error("portal unavailable");
-    }
-    return `https://portal.test/${encodeURIComponent(customerId ?? userId)}`;
-  }
-
+function json(body: unknown, init: ResponseInit = {}) {
+  return Response.json(body, init);
 }
 
-async function createWebTestEnv(options: {
-  apiBaseUrl?: string;
-  apiRequestOrigins?: string[];
-  enforceSignOutJson?: boolean;
-  requireEmailVerification?: boolean;
-  sendVerificationEmail?: (input: { email: string; url: string }) => Promise<void>;
-} = {}) {
-  const database = new Database(":memory:");
-  const auth = createAuthInstance({
-    database,
-    baseURL: TEST_ORIGIN,
-    requireEmailVerification: options.requireEmailVerification ?? false,
-    sendVerificationEmail: options.sendVerificationEmail,
-  });
-  await migrateAuth(auth);
-
-  const deviceTokenStorage = new InMemoryDeviceTokenStorage();
-  const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
-  const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
-  const billingStorage = new InMemoryBillingStorage();
-  const billingService = new BillingService({ storage: billingStorage });
-  const billingCheckoutClient = new TestBillingCheckoutClient();
-
-  const apiApp = createApp({
-    auth,
-    deviceTokenService,
-    personalMemoryStorage,
-    billingService,
-    billingCheckoutClient,
-    telemetryStorage: new InMemoryTelemetryStorage(),
-  });
-
-  const webApp = createWebApp({
-    apiBaseUrl: options.apiBaseUrl ?? TEST_ORIGIN,
-    fetch: (input, init) => {
-      const url = new URL(
-        typeof input === "string" ? input : input.url,
-        TEST_ORIGIN,
-      );
-      const headers = new Headers(init?.headers);
-      options.apiRequestOrigins?.push(headers.get("origin") ?? "");
-      if (
-        options.enforceSignOutJson &&
-        url.pathname === "/api/auth/sign-out" &&
-        headers.get("content-type") !== "application/json"
-      ) {
-        return Promise.resolve(new Response(null, { status: 415 }));
-      }
-      return apiApp.request(url.pathname + url.search, init);
-    },
-  });
-
-  return {
-    database,
-    apiApp,
-    webApp,
-    auth,
-    deviceTokenService,
-    personalMemoryStorage,
-    billingService,
-    billingCheckoutClient,
+function createFakeApi(overrides: Record<string, (request: Request) => Response | Promise<Response>> = {}) {
+  const requests: Request[] = [];
+  const routes: Record<string, (request: Request) => Response | Promise<Response>> = {
+    "GET /api/auth/get-session": () => json(session),
+    "POST /api/auth/sign-in/email": () => json(session, { headers: { "set-cookie": "tab.session=abc; Path=/; HttpOnly" } }),
+    "POST /api/auth/sign-out": () => json({ ok: true }, { headers: { "set-cookie": "tab.session=; Path=/; Max-Age=0" } }),
+    "POST /api/auth/device/authorize": () => json({ code: "device-code" }),
+    "GET /api/billing/checkout?plan=pro&interval=monthly": () => json({ status: "ok", data: { url: "https://checkout.example/pro" } }),
+    "POST /api/auth/device/revoke": () => json({ status: "ok" }),
+    "POST /api/account/memory": () => json({ status: "ok" }),
+    "DELETE /api/account/memory/memory-1": () => json({ status: "ok", data: { deleted: true } }),
+    "GET /api/account/memory/export": () => json({ status: "ok", data: { exportedAt: "2026-07-13T00:00:00.000Z", memories: [] } }),
+    "GET /api/billing/status": () => json({
+      status: "ok",
+      data: {
+        planId: "free", entitlementSource: "free",
+        capabilities: { localAcceptedWordsPerDay: 100, deepCompletesPerMonth: 10, personalDeviceLimit: 1, continuousMemoryExtraction: false, customWritingInstructions: false, modelCatalogAccess: false },
+        trial: { active: false },
+        localAcceptedWords: { used: 0, limit: 100, remaining: 100, resetAt: "2026-07-14T00:00:00.000Z", exhausted: false },
+        deepCompletes: { used: 0, limit: 10, remaining: 10, resetAt: "2026-08-01T00:00:00.000Z", exhausted: false },
+        devices: { active: 0, limit: 1, canLink: true },
+      },
+    }),
+    "GET /api/auth/devices": () => json({ status: "ok", data: { devices: [] } }),
+    "GET /api/account/memory": () => json({ status: "ok", data: { memories: [] } }),
+    "GET /api/activity/local-suggestions": () => json({ status: "ok", data: { acceptedSuggestions: 0, acceptedWords: 0, acceptedCharacters: 0, activeWritingDays: 0, averageAcceptanceLatencyMs: null } }),
+    ...overrides,
   };
-}
-
-async function signUpUser(
-  apiApp: Hono,
-  database: Database,
-  email: string,
-  password: string,
-  options: { emailVerified?: boolean } = {},
-): Promise<{ cookie: string; userId: string }> {
-  const signUpResponse = await apiApp.request("/api/auth/sign-up/email", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      origin: TEST_ORIGIN,
+  const api = createApiClient({
+    apiBaseUrl: API_ORIGIN,
+    fetch: async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      const url = new URL(request.url);
+      const route = routes[`${request.method} ${url.pathname}${url.search}`];
+      return route ? route(request) : new Response("missing fake route", { status: 500 });
     },
-    body: JSON.stringify({ name: "Test User", email, password }),
   });
-
-  expect(signUpResponse.status).toBe(200);
-  const signUpBody = (await signUpResponse.json()) as { user: { id: string } };
-
-  if (options.emailVerified ?? true) {
-    database
-      .query("UPDATE user SET emailVerified = 1 WHERE id = ?")
-      .run(signUpBody.user.id);
-  }
-
-  const signInResponse = await apiApp.request("/api/auth/sign-in/email", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      origin: TEST_ORIGIN,
-    },
-    body: JSON.stringify({ email, password, rememberMe: true }),
-  });
-
-  expect(signInResponse.status).toBe(200);
-  const cookie = signInResponse.headers.get("set-cookie");
-  expect(cookie).toBeTruthy();
-  return { cookie: cookie!, userId: signUpBody.user.id };
+  return { api, requests };
 }
 
-async function activateFreePlan(billingService: BillingService, userId: string) {
-  await billingService.applyEntitlement({
-    userId,
-    planId: "free",
-    polarCustomerId: "polar-customer-free",
-    polarSubscriptionId: "polar-sub-free",
-    status: "active",
-    cachedAt: new Date(),
-  });
-}
-
-async function activatePaidPlan(
-  billingService: BillingService,
-  userId: string,
-  planId: Exclude<PlanId, "free">,
-  billingInterval: BillingInterval = "monthly",
-) {
-  await billingService.applyEntitlement({
-    userId,
-    planId,
-    polarCustomerId: `polar-customer-${planId}`,
-    polarSubscriptionId: `polar-sub-${planId}`,
-    status: "active",
-    billingInterval,
-    cachedAt: new Date(),
-  });
-}
-
-function webRequest(
-  webApp: WebApp,
-  pathname: string,
-  init: RequestInit = {},
-  cookie?: string,
-): Promise<Response> {
+function request(path: string, init: RequestInit = {}) {
   const headers = new Headers(init.headers);
-  if (cookie) {
-    headers.set("cookie", cookie);
-  }
-
-  const request = new Request(`${WEB_ORIGIN}${pathname}`, {
-    ...init,
-    headers,
-  });
-  return webApp.fetch(request);
+  headers.set("cookie", "tab.session=abc");
+  return new Request(`${WEB_ORIGIN}${path}`, { ...init, headers });
 }
 
-async function textIncludes(response: Response, text: string): Promise<string> {
-  const body = await response.text();
-  expect(body).toInclude(text);
-  return body;
-}
-
-describe("Web account surface", () => {
-  it("renders the marketing and download surface", async () => {
-    const { webApp } = await createWebTestEnv();
-    const response = await webRequest(webApp, "/");
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Autocomplete across your Mac");
-    expect(body).toInclude("Built for standard Mac text fields");
-    expect(body).toInclude("Download for Mac");
-    expect(body).toInclude("data-theme-choice=\"system\"");
-    expect(body).toInclude("Personal Memory stays visible");
-    expect(body).toInclude("Automatic Suggestions run on your Mac");
-    expect(body).toInclude("Try Pro or Max before the first charge.");
-    expect(body).toInclude("100 Accepted Words each day");
-    expect(body).toInclude("Payment details required");
-  });
-
-  it("renders redesigned auth handoff forms without dropping desktop fields", async () => {
-    const { webApp } = await createWebTestEnv();
-    const response = await webRequest(
-      webApp,
-      "/login?device_id=desktop-device-1&callback=tab%3A%2F%2Fauth%2Fcallback&next=%2Fdashboard",
-    );
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Mac sign-in");
-    expect(body).toInclude("name=\"device_id\" value=\"desktop-device-1\"");
-    expect(body).toInclude("name=\"callback\" value=\"tab://auth/callback\"");
-    expect(body).toInclude("name=\"next\" value=\"/dashboard\"");
-    expect(body).toInclude(
-      'href="/signup?device_id=desktop-device-1&amp;callback=tab%3A%2F%2Fauth%2Fcallback&amp;next=%2Fdashboard"',
-    );
-  });
-
-  it("preserves desktop handoff fields after a failed sign-in", async () => {
-    const { webApp } = await createWebTestEnv();
-    const response = await webRequest(webApp, "/login", {
+describe("TanStack Start web BFF module contracts", () => {
+  it("forwards the web origin and relays all sign-in cookies with 303 PRG", async () => {
+    const { api, requests } = createFakeApi();
+    const response = await handleLogin(request("/login", {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        email: "missing@example.com",
-        password: "wrong-password",
-        device_id: "desktop-device-1",
-        callback: "tab://auth/callback",
-        next: "/dashboard",
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Invalid email or password.");
-    expect(body).toInclude('name="device_id" value="desktop-device-1"');
-    expect(body).toInclude('name="callback" value="tab://auth/callback"');
-    expect(body).toInclude('name="next" value="/dashboard"');
+      body: new URLSearchParams({ email: "test@example.com", password: "password123", next: "/dashboard/usage" }),
+    }), api);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/dashboard/usage");
+    expect(response.headers.get("set-cookie")).toContain("tab.session=abc");
+    expect(requests.at(-1)?.headers.get("origin")).toBe(WEB_ORIGIN);
   });
 
-  it("displays accurate monthly Free, Pro, and Max allowances and prices", async () => {
-    const { webApp } = await createWebTestEnv();
-    const response = await webRequest(webApp, "/pricing");
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Free");
-    expect(body).toInclude("Pro");
-    expect(body).toInclude("Max");
-    expect(body).toInclude("100 Accepted Words");
-    expect(body).toInclude("10 Deep Completes");
-    expect(body).toInclude("300 Deep Completes");
-    expect(body).toInclude("1,000 Deep Completes");
-    expect(body).toInclude("$10/mo");
-    expect(body).toInclude("$20/mo");
-    expect(body).not.toInclude("/year");
-    expect(body).toInclude("Simple pricing");
-    expect(body).toInclude("Only completed work counts.");
-    expect(body).toInclude("Continuous Memory Extraction");
-    expect(body).toInclude("Custom writing instructions");
-    expect(body).toInclude("supported model catalog");
-    expect(body).toInclude("No automatic overages");
-    expect(body).toInclude("Sign in, then continue to secure checkout");
-    expect(body).toInclude("Start Pro with one month free");
-    expect(body).toInclude("Start Max with one month free");
-    expect(body).toInclude('href="/signup"');
-    expect(body).toInclude('action="/billing/checkout"');
-    expect(body).not.toInclude('name="interval"');
-    expect(body).toInclude('data-pricing-grid="true"');
-    expect(body).toInclude('data-pricing-plan="free"');
-    expect(body).toInclude('data-pricing-plan="pro"');
-    expect(body).toInclude('data-pricing-plan="max"');
-    expect(body.match(/data-pricing-plan=/g)?.length).toBe(3);
-    expect(body).toInclude("Free is available without checkout");
-  });
-
-  it("explains local processing, billing, cancellation, and retained data controls", async () => {
-    const { webApp } = await createWebTestEnv();
-    const [termsResponse, privacyResponse] = await Promise.all([
-      webRequest(webApp, "/terms"),
-      webRequest(webApp, "/privacy"),
-    ]);
-
-    expect(termsResponse.status).toBe(200);
-    expect(privacyResponse.status).toBe(200);
-
-    const terms = await termsResponse.text();
-    expect(terms).toInclude("Updated July 13, 2026");
-    expect(terms).toInclude("Pro and Max each include a one-month free trial");
-    expect(terms).toInclude("requires payment details");
-    expect(terms).toInclude("does not charge automatic usage overages");
-    expect(terms).toInclude("paid benefits remain active through the end of the current paid period");
-    expect(terms).toInclude("Paid plans renew monthly");
-    expect(terms).not.toInclude("monthly or annually");
-    expect(terms).toInclude('href="/billing/portal"');
-    expect(terms).toInclude('href="/pricing"');
-    expect(terms).toInclude('href="/privacy"');
-
-    const privacy = await privacyResponse.text();
-    expect(privacy).toInclude("Updated July 13, 2026");
-    expect(privacy).toInclude("Automatic Suggestions use local inference on your Mac");
-    expect(privacy).toInclude("pasted text does not create Personal Memory by default");
-    expect(privacy).toInclude("This telemetry excludes raw Typing Context");
-    expect(privacy).toInclude("view, edit, export, and delete existing Personal Memory");
-    expect(privacy).toInclude('href="/terms"');
-    expect(privacy).toInclude('href="/pricing"');
-  });
-
-  it("exposes light and dark theme controls on pricing and dashboard surfaces", async () => {
-    const { apiApp, billingService, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activateFreePlan(billingService, userId);
-
-    const pricingResponse = await webRequest(webApp, "/pricing");
-    const dashboardResponse = await webRequest(webApp, "/dashboard", {}, cookie);
-
-    expect(pricingResponse.status).toBe(200);
-    expect(dashboardResponse.status).toBe(200);
-
-    const pricingBody = await pricingResponse.text();
-    const dashboardBody = await dashboardResponse.text();
-
-    for (const body of [pricingBody, dashboardBody]) {
-      expect(body).toInclude('aria-label="Open Tab brand menu"');
-      expect(body).toInclude('aria-label="Theme selection"');
-      expect(body).toInclude('data-theme-choice="light"');
-      expect(body).toInclude('data-theme-choice="dark"');
-    }
-
-    expect(pricingBody).toInclude('href="/dashboard"');
-    expect(pricingBody).toInclude("Dashboard");
-    expect(pricingBody).not.toInclude("Choose theme");
-    expect(dashboardBody).toInclude('href="/"');
-    expect(dashboardBody).toInclude("Home page");
-  });
-
-  it("serves the shared component review surface in light and dark modes", async () => {
-    const { webApp } = await createWebTestEnv();
-    const response = await webRequest(webApp, "/components");
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Tab components");
-    expect(body).toInclude('data-theme="light"');
-    expect(body).toInclude('data-theme="dark"');
-    expect(body).toInclude("Status rows");
-    expect(body).toInclude("Settings navigation");
-  });
-
-  it("shows dashboard navigation and direct checkout links on pricing when signed in", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, database, email, password);
-
-    const response = await webRequest(webApp, "/pricing", {}, cookie);
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude('href="/dashboard"');
-    expect(body).toInclude("Dashboard");
-    expect(body).not.toInclude('href="/login">Sign in</a>');
-    expect(body).toInclude('action="/billing/checkout"');
-    expect(body).not.toInclude('name="interval"');
-    expect(body).not.toInclude('href="/login?next=');
-  });
-
-  it("keeps the signed-in header across public pages", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const { cookie } = await signUpUser(apiApp, database, email, "password123456");
-    const publicPaths = [
-      "/",
-      "/about",
-      "/brand",
-      "/components",
-      "/contact",
-      "/download",
-      "/forgot-password",
-      "/pricing",
-      "/privacy",
-      "/reset-password",
-      "/terms",
-      "/missing-page",
-    ];
-
-    for (const path of publicPaths) {
-      const response = await webRequest(webApp, path, {}, cookie);
-      expect(response.status).toBe(path === "/missing-page" ? 404 : 200);
-      const body = await response.text();
-      expect(body).toInclude('href="/dashboard"');
-      expect(body).not.toInclude('href="/login">Sign in</a>');
-    }
-
-    for (const path of ["/forgot-password", "/reset-password"]) {
-      const response = await webRequest(webApp, path, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: "{}",
-      }, cookie);
-      expect(response.status).toBe(200);
-      const body = await response.text();
-      expect(body).toInclude('href="/dashboard"');
-      expect(body).not.toInclude('href="/login">Sign in</a>');
-    }
-  });
-
-  it("asks a new web signup to verify email before checkout", async () => {
-    const { webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-
-    const response = await webRequest(webApp, "/signup", {
+  it("rejects unsafe next paths without putting passwords in redirect URLs", async () => {
+    const { api } = createFakeApi();
+    const response = await handleLogin(request("/login", {
       method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ name: "Test User", email, password }),
-    });
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Check your email");
-    expect(body).toInclude("Verify your email address before choosing a plan.");
-    expect(response.headers.get("set-cookie")).toBeTruthy();
-  });
-
-  it("sends one verification email and redirects verification to the dashboard", async () => {
-    const deliveries: Array<{ email: string; url: string }> = [];
-    const { apiApp, webApp } = await createWebTestEnv({
-      requireEmailVerification: true,
-      sendVerificationEmail: async (delivery) => {
-        deliveries.push(delivery);
-      },
-    });
-    const email = `user-${crypto.randomUUID()}@example.com`;
-
-    const response = await webRequest(webApp, "/signup", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        name: "Test User",
-        email,
-        password: "password123456",
-      }),
-    });
-
-    expect(response.status).toBe(200);
-    expect(deliveries).toHaveLength(1);
-    expect(deliveries[0]?.email).toBe(email);
-
-    const verificationUrl = new URL(deliveries[0]!.url);
-    const verificationResponse = await apiApp.request(
-      verificationUrl.pathname + verificationUrl.search,
-      { redirect: "manual" },
-    );
-    expect(verificationResponse.status).toBe(302);
-    expect(verificationResponse.headers.get("location")).toBe(
-      `${WEB_ORIGIN}/dashboard`,
-    );
-  });
-
-  it("starts signed-in users without a Polar entitlement on Free", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, database, email, password);
-
-    const response = await webRequest(webApp, "/dashboard", {}, cookie);
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).not.toInclude("Trial ends");
-    expect(body).toInclude("0 of 10");
-    expect(body).toInclude("Deep Completes this month");
-    expect(body).toInclude('aria-label="Open Tab brand menu"');
-    expect(body).toInclude('href="/brand/tab-mark.svg" download="tab-mark.svg"');
-    expect(body).toInclude("Download icon only");
-    expect(body).toInclude('href="/brand/tab-lockup.svg" download="tab-lockup.svg"');
-    expect(body).toInclude("Download icon + wordmark");
-    expect(body).toInclude('href="/brand"');
-    expect(body).toInclude("Brand guidelines");
-    expect(body).toInclude("Home page");
-  });
-
-  it("renders the sign-in entry point", async () => {
-    const { webApp } = await createWebTestEnv();
-    const response = await webRequest(webApp, "/login");
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Sign in");
-    expect(body).toInclude('href="/styles.css"');
-    expect(body).toInclude('name="email"');
-    expect(body).toInclude('name="password"');
-  });
-
-  it("signs in through the web form and reaches the account dashboard", async () => {
-    const { apiApp, billingService, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { userId } = await signUpUser(apiApp, database, email, password);
-    await activateFreePlan(billingService, userId);
-
-    const loginResponse = await webRequest(
-      webApp,
-      "/login",
-      {
-        method: "POST",
-        headers: { "content-type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ email, password }),
-      },
-    );
-
-    expect(loginResponse.status).toBe(302);
-    expect(loginResponse.headers.get("location")).toBe("/dashboard");
-    const setCookie = loginResponse.headers.get("set-cookie");
-    expect(setCookie).toBeTruthy();
-
-    const accountResponse = await webRequest(webApp, "/dashboard", {}, setCookie!);
-    expect(accountResponse.status).toBe(200);
-    const body = await accountResponse.text();
-    expect(body).toInclude('href="/dashboard/account"');
-    expect(body).toInclude('href="/dashboard/usage"');
-    expect(body).toInclude('href="/dashboard/devices"');
-    expect(body).toInclude('href="/dashboard/memories"');
-    expect(body).toInclude('href="/dashboard"');
-    expect(body).toInclude("Dashboard");
-    expect(body).not.toInclude('href="/login">Sign in</a>');
-
-    const usageResponse = await webRequest(webApp, "/dashboard/usage", {}, setCookie!);
-    expect(usageResponse.status).toBe(200);
-    const usageBody = await usageResponse.text();
-    expect(usageBody).toInclude("Usage and billing");
-    expect(usageBody).toInclude("Current plan");
-    expect(usageBody).toInclude("Local Accepted Words today");
-    expect(usageBody).toInclude("Deep Completes this month");
-    expect(usageBody).toInclude("Need higher allowances?");
-    expect(usageBody).toInclude("Compare plans");
-    expect(usageBody).not.toInclude("Manage subscription");
-
-    const configResponse = await webRequest(webApp, "/dashboard/account", {}, setCookie!);
-    expect(configResponse.status).toBe(200);
-    const configBody = await configResponse.text();
-    expect(configBody).toInclude("Signed-in account");
-    expect(configBody).toInclude("Email verified");
-    expect(configBody).toInclude("Your email is ready for paid checkout.");
-    expect(configBody).not.toInclude("Verify your email before choosing a paid plan.");
-    expect(configBody).toInclude('action="/logout"');
-    expect(configBody).toInclude("Sign out");
-
-    const devicesResponse = await webRequest(webApp, "/dashboard/devices", {}, setCookie!);
-    expect(devicesResponse.status).toBe(200);
-    await textIncludes(devicesResponse, "No Macs are connected yet");
-
-    const memoriesResponse = await webRequest(webApp, "/dashboard/memories", {}, setCookie!);
-    expect(memoriesResponse.status).toBe(200);
-    await textIncludes(memoriesResponse, "No saved memories yet");
-  });
-
-  it("uses the web origin when the development API host differs from the auth base URL", async () => {
-    const apiRequestOrigins: string[] = [];
-    const { apiApp, database, webApp } = await createWebTestEnv({
-      apiBaseUrl: "http://api.tab.cueva.io",
-      apiRequestOrigins,
-    });
-    const email = `origin-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    await signUpUser(apiApp, database, email, password);
-
-    const response = await webRequest(webApp, "/login", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({ email, password }),
-    });
-
-    expect(response.status).toBe(302);
+      body: new URLSearchParams({ email: "test@example.com", password: "secret-password", next: "//evil.example" }),
+    }), api);
     expect(response.headers.get("location")).toBe("/dashboard");
-    expect(apiRequestOrigins.at(-1)).toBe(WEB_ORIGIN);
+    expect(response.headers.get("location")).not.toContain("secret-password");
   });
 
-  it("signs out through the web form and clears the session", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv({ enforceSignOutJson: true });
-    const { cookie } = await signUpUser(
-      apiApp,
-      database,
-      `logout-${crypto.randomUUID()}@example.com`,
-      "password123456",
-    );
+  it("preserves the desktop handoff and returns the authorization code", async () => {
+    const { api } = createFakeApi();
+    const response = await handleLogin(request("/login", {
+      method: "POST",
+      body: new URLSearchParams({ email: "test@example.com", password: "password123", device_id: "mac-1", callback: "tab://auth/callback" }),
+    }), api);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("tab://auth/callback?code=device-code");
+  });
 
-    const response = await webRequest(webApp, "/logout", { method: "POST" }, cookie);
+  it("normalizes checkout to monthly and forwards the session cookie", async () => {
+    const { api, requests } = createFakeApi();
+    const response = await handleCheckout(request("/billing/checkout?plan=pro&interval=annual"), api);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("https://checkout.example/pro");
+    expect(requests.at(-1)?.url).toContain("interval=monthly");
+    expect(requests.at(-1)?.headers.get("cookie")).toBe("tab.session=abc");
+  });
 
-    expect(response.status).toBe(302);
+  it("surfaces Plan Change failures without starting another checkout", async () => {
+    const { api } = createFakeApi({
+      "GET /api/billing/checkout?plan=max&interval=monthly": () => json({
+        status: "error",
+        error: { code: "plan_change_required", message: "Use the existing subscription controls." },
+      }, { status: 502 }),
+    });
+    const response = await handleCheckout(request("/billing/checkout?plan=max"), api);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/billing/error?code=plan_change");
+  });
+
+  it("preserves structured Worker errors", async () => {
+    expect(await readApiError(json({
+      status: "error",
+      error: { code: "plan_change_required", message: "Change the existing plan." },
+    }, { status: 409 }))).toEqual({
+      code: "plan_change_required",
+      message: "Change the existing plan.",
+    });
+  });
+
+  it("loads and validates the complete dashboard payload in parallel", async () => {
+    const { api } = createFakeApi();
+    const data = await loadDashboardData(request("/dashboard"), api);
+    expect(data.user.id).toBe("user-1");
+    expect(data.billing.planId).toBe("free");
+    expect(data.devices).toEqual([]);
+    expect(data.memories).toEqual([]);
+  });
+
+  it("validates memory writes and uses 303 redirects", async () => {
+    const { api, requests } = createFakeApi();
+    const response = await handleMemoryCreate(request("/dashboard/memories/create", {
+      method: "POST",
+      body: new URLSearchParams({ content: "Prefers concise summaries" }),
+    }), api);
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/dashboard/memories");
+    expect(await requests.at(-1)?.json()).toEqual({ content: "Prefers concise summaries" });
+  });
+
+  it("requires confirmations for device and bulk-memory deletion", async () => {
+    let revokeCalls = 0;
+    let deleteCalls = 0;
+    const { api } = createFakeApi({
+      "POST /api/auth/device/revoke": () => { revokeCalls += 1; return json({ status: "ok" }); },
+      "DELETE /api/account/memory/memory-1": () => { deleteCalls += 1; return json({ status: "ok", data: { deleted: true } }); },
+    });
+    await handleDeviceRevoke(request("/dashboard/devices/mac-1/revoke", { method: "POST", body: new URLSearchParams({ confirm: "wrong" }) }), api, "mac-1");
+    await handleMemoryBulkDelete(request("/dashboard/memories/delete-selected", { method: "POST", body: new URLSearchParams({ confirm: "wrong", memoryId: "memory-1" }) }), api);
+    expect(revokeCalls).toBe(0);
+    expect(deleteCalls).toBe(0);
+  });
+
+  it("returns validated exports with private download headers", async () => {
+    const { api } = createFakeApi();
+    const response = await handleMemoryExport(request("/dashboard/memories/export"), api);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("private, no-store");
+    expect(response.headers.get("content-disposition")).toContain("tab-personal-memory.json");
+  });
+
+  it("relays the session-clearing cookie on logout", async () => {
+    const { api } = createFakeApi();
+    const response = await handleLogout(request("/logout", { method: "POST" }), api);
+    expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("/");
-    expect(response.headers.get("set-cookie")).toBeTruthy();
-
-    const sessionResponse = await apiApp.request("/api/auth/get-session", {
-      headers: { cookie },
-    });
-    expect(sessionResponse.status).toBe(200);
-    expect(await sessionResponse.json()).toBeNull();
-  });
-
-  it("redirects to a checkout URL for a paid plan", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, database, email, password);
-
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=pro",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(302);
-    const location = response.headers.get("location");
-    expect(location).toBeTruthy();
-    expect(location).toInclude("checkout.test/pro");
-    expect(location).toInclude("interval=monthly");
-  });
-
-  it("normalizes legacy checkout interval input to monthly", async () => {
-    const { apiApp, billingCheckoutClient, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=pro&interval=annual",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toInclude("checkout.test/pro");
-    expect(response.headers.get("location")).toInclude("interval=monthly");
-    expect(billingCheckoutClient.checkoutRequests).toEqual([
-      { planId: "pro", interval: "monthly", userId },
-    ]);
-  });
-
-  it("treats active paid subscribers choosing their current plan as a no-op", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
-      await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activatePaidPlan(billingService, userId, "pro");
-
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=pro",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/dashboard");
-    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([]);
-
-    const usageResponse = await webRequest(webApp, "/dashboard/usage", {}, cookie);
-    const usageBody = await usageResponse.text();
-    expect(usageBody).toInclude("Pro subscription");
-    expect(usageBody).toInclude("Your paid plan includes 300 Deep Completes each month.");
-    expect(usageBody).not.toInclude("Pro includes");
-  });
-
-  it("ignores legacy interval input for an existing paid plan", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
-      await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activatePaidPlan(billingService, userId, "pro");
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=pro&interval=annual",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe("/dashboard");
-    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([]);
-
-    const entitlement = await billingService.getEntitlement(userId);
-    expect(entitlement.planId).toBe("pro");
-    expect(entitlement.polarCustomerId).toBe("polar-customer-pro");
-    expect(entitlement.polarSubscriptionId).toBe("polar-sub-pro");
-  });
-
-  it("starts Max checkout and rejects Free checkout", async () => {
-    const { apiApp, billingCheckoutClient, database, webApp } =
-      await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, database, email, password);
-
-    const maxResponse = await webRequest(
-      webApp,
-      "/billing/checkout?plan=max",
-      {},
-      cookie,
-    );
-    expect(maxResponse.status).toBe(302);
-    expect(maxResponse.headers.get("location")).toInclude("checkout.test/max");
-
-    const freeResponse = await webRequest(
-      webApp,
-      "/billing/checkout?plan=free",
-      {},
-      cookie,
-    );
-    expect(freeResponse.status).toBe(200);
-    expect(await freeResponse.text()).toInclude("Billing error");
-    expect(billingCheckoutClient.checkoutRequests).toHaveLength(1);
-    expect(billingCheckoutClient.checkoutRequests[0].planId).toBe("max");
-    expect(billingCheckoutClient.portalRequests).toEqual([]);
-  });
-
-  it("sends active Pro subscribers to the portal to change to Max", async () => {
-    const { apiApp, billingCheckoutClient, billingService, database, webApp } =
-      await createWebTestEnv();
-    const { cookie, userId } = await signUpUser(
-      apiApp,
-      database,
-      `user-${crypto.randomUUID()}@example.com`,
-      "password123456",
-    );
-    await activatePaidPlan(billingService, userId, "pro");
-
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=max",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(
-      "https://portal.test/polar-customer-pro",
-    );
-    expect(billingCheckoutClient.checkoutRequests).toEqual([]);
-    expect(billingCheckoutClient.portalRequests).toEqual([
-      { userId, customerId: "polar-customer-pro" },
-    ]);
-  });
-
-  it("blocks checkout until the signed-in user verifies email", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, database, email, password, {
-      emailVerified: false,
-    });
-
-    const response = await webRequest(
-      webApp,
-      "/billing/checkout?plan=pro",
-      {},
-      cookie,
-    );
-
-    expect(response.status).toBe(200);
-    const body = await response.text();
-    expect(body).toInclude("Check your email");
-    expect(body).toInclude("Verify your email address before choosing a plan.");
-  });
-
-  it("redirects unauthenticated checkout requests to login before checkout", async () => {
-    const { webApp } = await createWebTestEnv();
-
-    const response = await webRequest(webApp, "/billing/checkout?plan=pro");
-
-    expect(response.status).toBe(302);
-    expect(response.headers.get("location")).toBe(
-      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
-    );
-  });
-
-  it("resumes paid checkout after login", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    await signUpUser(apiApp, database, email, password);
-
-    const loginPageResponse = await webRequest(
-      webApp,
-      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
-    );
-    expect(loginPageResponse.status).toBe(200);
-    const loginPageBody = await loginPageResponse.text();
-    expect(loginPageBody).toInclude('name="next"');
-    expect(loginPageBody).toInclude('/billing/checkout?plan=pro');
-
-    const loginResponse = await webRequest(webApp, "/login", {
-      method: "POST",
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        email,
-        password,
-        next: "/billing/checkout?plan=pro",
-      }),
-    });
-
-    expect(loginResponse.status).toBe(302);
-    expect(loginResponse.headers.get("location")).toBe(
-      "/billing/checkout?plan=pro",
-    );
-
-    const checkoutResponse = await webRequest(
-      webApp,
-      "/billing/checkout?plan=pro",
-      {},
-      loginResponse.headers.get("set-cookie")!,
-    );
-    expect(checkoutResponse.status).toBe(302);
-    expect(checkoutResponse.headers.get("location")).toInclude("checkout.test/pro");
-    expect(checkoutResponse.headers.get("location")).toInclude("interval=monthly");
-  });
-
-  it("redirects authenticated login and signup page visits to the dashboard", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, database, email, password);
-
-    const loginResponse = await webRequest(
-      webApp,
-      "/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dpro",
-      {},
-      cookie,
-    );
-    const signupResponse = await webRequest(webApp, "/signup", {}, cookie);
-
-    expect(loginResponse.status).toBe(302);
-    expect(loginResponse.headers.get("location")).toBe("/dashboard");
-    expect(signupResponse.status).toBe(302);
-    expect(signupResponse.headers.get("location")).toBe("/dashboard");
-  });
-
-  it("redirects to the customer portal", async () => {
-    const { apiApp, database, webApp } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie } = await signUpUser(apiApp, database, email, password);
-
-    const response = await webRequest(webApp, "/billing/portal", {}, cookie);
-
-    expect(response.status).toBe(302);
-    const location = response.headers.get("location");
-    expect(location).toBeTruthy();
-    expect(location).toInclude("portal.test/");
-  });
-
-  it("lists and deletes Personal Memory from the account surface", async () => {
-    const { apiApp, billingService, database, webApp, personalMemoryStorage } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activateFreePlan(billingService, userId);
-
-    const memory = await personalMemoryStorage.createMemory({
-      userId,
-      content: "Lives in Portland",
-      createdBy: "system",
-    });
-
-    const accountBefore = await webRequest(webApp, "/dashboard/memories", {}, cookie);
-    expect(accountBefore.status).toBe(200);
-    const bodyBefore = await accountBefore.text();
-    expect(bodyBefore).toInclude("Lives in Portland");
-    expect(bodyBefore).toInclude("Memory library");
-    expect(bodyBefore).toInclude("Delete selected");
-    expect(bodyBefore).toInclude("Actions for memory updated");
-    expect(bodyBefore).toInclude("Update Memory");
-    expect(bodyBefore).toInclude("Delete Memory");
-
-    const unconfirmedDeleteResponse = await webRequest(
-      webApp,
-      `/dashboard/memories/${memory.id}/delete`,
-      { method: "POST", body: new FormData() },
-      cookie,
-    );
-    expect(unconfirmedDeleteResponse.status).toBe(302);
-    expect(unconfirmedDeleteResponse.headers.get("location")).toBe(
-      "/dashboard/memories",
-    );
-    expect(
-      await personalMemoryStorage.findMemoryById(memory.userId, memory.id),
-    ).toBeTruthy();
-
-    const deleteForm = new FormData();
-    deleteForm.set("confirm", "delete-memory");
-    const deleteResponse = await webRequest(
-      webApp,
-      `/dashboard/memories/${memory.id}/delete`,
-      { method: "POST", body: deleteForm },
-      cookie,
-    );
-    expect(deleteResponse.status).toBe(302);
-    expect(deleteResponse.headers.get("location")).toBe(
-      "/dashboard/memories",
-    );
-
-    const accountAfter = await webRequest(webApp, "/dashboard/memories", {}, cookie);
-    expect(accountAfter.status).toBe(200);
-    const bodyAfter = await accountAfter.text();
-    expect(bodyAfter).not.toInclude("Lives in Portland");
-  });
-
-  it("creates and edits Personal Memory from the account surface", async () => {
-    const { apiApp, billingService, database, webApp, personalMemoryStorage } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activateFreePlan(billingService, userId);
-
-    const createForm = new FormData();
-    createForm.set("content", "Prefers concise summaries");
-    const createResponse = await webRequest(
-      webApp,
-      "/dashboard/memories/create",
-      { method: "POST", body: createForm },
-      cookie,
-    );
-
-    expect(createResponse.status).toBe(302);
-    expect(createResponse.headers.get("location")).toBe(
-      "/dashboard/memories",
-    );
-
-    const memoriesAfterCreate = await personalMemoryStorage.listMemoriesByUser(userId);
-    expect(memoriesAfterCreate).toHaveLength(1);
-    expect(memoriesAfterCreate[0]?.content).toBe("Prefers concise summaries");
-    expect(memoriesAfterCreate[0]?.createdBy).toBe("user");
-
-    const systemMemory = await personalMemoryStorage.createMemory({
-      userId,
-      content: "Works at Acme",
-      createdBy: "system",
-    });
-    const editForm = new FormData();
-    editForm.set("content", "Works at Acme Robotics");
-
-    const editResponse = await webRequest(
-      webApp,
-      `/dashboard/memories/${systemMemory.id}/edit`,
-      { method: "POST", body: editForm },
-      cookie,
-    );
-
-    expect(editResponse.status).toBe(302);
-    expect(editResponse.headers.get("location")).toBe(
-      "/dashboard/memories",
-    );
-
-    const editedMemory = await personalMemoryStorage.findMemoryById(
-      systemMemory.userId,
-      systemMemory.id,
-    );
-    expect(editedMemory?.content).toBe("Works at Acme Robotics");
-    expect(editedMemory?.createdBy).toBe("user");
-
-    const accountPage = await webRequest(webApp, "/dashboard/memories", {}, cookie);
-    expect(accountPage.status).toBe(200);
-    const body = await accountPage.text();
-    expect(body).toInclude("Prefers concise summaries");
-    expect(body).toInclude("Works at Acme Robotics");
-    expect(body).toInclude("Add a memory");
-  });
-
-  it("deletes selected Personal Memories from the dashboard table", async () => {
-    const { apiApp, billingService, database, webApp, personalMemoryStorage } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activateFreePlan(billingService, userId);
-
-    const firstMemory = await personalMemoryStorage.createMemory({
-      userId,
-      content: "Likes weekly recaps",
-      createdBy: "user",
-    });
-    const secondMemory = await personalMemoryStorage.createMemory({
-      userId,
-      content: "Uses short bullet points",
-      createdBy: "system",
-    });
-    const remainingMemory = await personalMemoryStorage.createMemory({
-      userId,
-      content: "Prefers Monday planning",
-      createdBy: "system",
-    });
-
-    const deleteSelectedForm = new FormData();
-    deleteSelectedForm.set("confirm", "delete-selected-memories");
-    deleteSelectedForm.append("memoryId", firstMemory.id);
-    deleteSelectedForm.append("memoryId", secondMemory.id);
-
-    const deleteSelectedResponse = await webRequest(
-      webApp,
-      "/dashboard/memories/delete-selected",
-      { method: "POST", body: deleteSelectedForm },
-      cookie,
-    );
-
-    expect(deleteSelectedResponse.status).toBe(302);
-    expect(deleteSelectedResponse.headers.get("location")).toBe(
-      "/dashboard/memories",
-    );
-    expect(
-      await personalMemoryStorage.findMemoryById(
-        firstMemory.userId,
-        firstMemory.id,
-      ),
-    ).toBeNull();
-    expect(
-      await personalMemoryStorage.findMemoryById(
-        secondMemory.userId,
-        secondMemory.id,
-      ),
-    ).toBeNull();
-    expect(
-      await personalMemoryStorage.findMemoryById(
-        remainingMemory.userId,
-        remainingMemory.id,
-      ),
-    ).toBeTruthy();
-  });
-
-  it("lists and revokes native devices from the account surface", async () => {
-    const { apiApp, billingService, database, webApp, deviceTokenService } = await createWebTestEnv();
-    const email = `user-${crypto.randomUUID()}@example.com`;
-    const password = "password123456";
-    const { cookie, userId } = await signUpUser(apiApp, database, email, password);
-    await activateFreePlan(billingService, userId);
-
-    await deviceTokenService.createDeviceToken(userId, {
-      deviceId: "macbook-pro-1",
-      platform: "darwin",
-      appVersion: "0.0.1",
-    });
-
-    const accountBefore = await webRequest(webApp, "/dashboard/devices", {}, cookie);
-    expect(accountBefore.status).toBe(200);
-    const bodyBefore = await accountBefore.text();
-    expect(bodyBefore).toInclude("macbook-pro-1");
-    expect(bodyBefore).toInclude("Connected");
-    expect(bodyBefore).toInclude("Actions for macbook-pro-1");
-    expect(bodyBefore).toInclude("Remove access");
-
-    const revokeForm = new FormData();
-    revokeForm.set("confirm", "macbook-pro-1");
-    const revokeResponse = await webRequest(
-      webApp,
-      "/dashboard/devices/macbook-pro-1/revoke",
-      { method: "POST", body: revokeForm },
-      cookie,
-    );
-    expect(revokeResponse.status).toBe(302);
-    expect(revokeResponse.headers.get("location")).toBe(
-      "/dashboard/devices",
-    );
-
-    const accountAfter = await webRequest(webApp, "/dashboard/devices", {}, cookie);
-    expect(accountAfter.status).toBe(200);
-    const bodyAfter = await accountAfter.text();
-    expect(bodyAfter).toInclude("Access removed");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 });

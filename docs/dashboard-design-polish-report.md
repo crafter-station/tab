@@ -108,4 +108,4 @@ The polish direction should preserve the existing Private Utility Grid design sy
 
 No runtime screenshot was captured because the real dashboard is served with authenticated API data. The report is based on implementation review plus the current Web Interface Guidelines and the repository design-system document.
 
-Before merging implementation work, run `bun run --cwd apps/web styles:build`, `bun run typecheck`, and a manual authenticated visual pass across `/dashboard`, `/dashboard/usage`, `/dashboard/devices`, and `/dashboard/memories`.
+Before merging implementation work, run `bun run --cwd apps/web build`, `bun run typecheck`, and a manual authenticated visual pass across `/dashboard`, `/dashboard/usage`, `/dashboard/devices`, and `/dashboard/memories`.

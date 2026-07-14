@@ -74,6 +74,26 @@ export const DeviceAuthorizeResponseSchema = z.object({
   code: z.string().min(1),
 });
 
+export const SessionUserSchema = z
+  .object({
+    id: z.string().min(1),
+    name: z.string().nullable().optional(),
+    email: z.email().nullable().optional(),
+    emailVerified: z.boolean().optional(),
+  })
+  .transform((user) => ({
+    ...user,
+    name: user.name ?? undefined,
+    email: user.email ?? undefined,
+  }));
+
+export const AuthSessionResponseSchema = z
+  .object({
+    user: SessionUserSchema,
+  })
+  .passthrough()
+  .nullable();
+
 export const DeviceMetadataSchema = z.object({
   platform: z.string().min(1),
   appVersion: z.string().min(1),
@@ -497,6 +517,8 @@ export type DeviceTokenExchangeRequest = z.infer<
 export type DeviceTokenExchangeResponse = z.infer<
   typeof DeviceTokenExchangeResponseSchema
 >;
+export type SessionUser = z.infer<typeof SessionUserSchema>;
+export type AuthSessionResponse = z.infer<typeof AuthSessionResponseSchema>;
 export type DeviceAuthorizeResponse = z.infer<
   typeof DeviceAuthorizeResponseSchema
 >;

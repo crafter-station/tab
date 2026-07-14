@@ -20,18 +20,27 @@ import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as DownloadRouteImport } from './routes/download'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as ContactRouteImport } from './routes/contact'
+import { Route as ComponentsRouteImport } from './routes/components'
 import { Route as BrandRouteImport } from './routes/brand'
 import { Route as AccountRouteImport } from './routes/account'
 import { Route as AboutRouteImport } from './routes/about'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as DashboardIndexRouteImport } from './routes/dashboard.index'
+import { Route as DownloadTabDotdmgRouteImport } from './routes/download.tab[.]dmg'
+import { Route as DownloadLatestDotjsonRouteImport } from './routes/download.latest[.]json'
 import { Route as DashboardUsageRouteImport } from './routes/dashboard.usage'
 import { Route as DashboardMemoriesRouteImport } from './routes/dashboard.memories'
 import { Route as DashboardDevicesRouteImport } from './routes/dashboard.devices'
 import { Route as DashboardAccountRouteImport } from './routes/dashboard.account'
 import { Route as BillingPortalRouteImport } from './routes/billing.portal'
+import { Route as BillingErrorRouteImport } from './routes/billing.error'
 import { Route as BillingCheckoutRouteImport } from './routes/billing.checkout'
-import { Route as DownloadTabDmgRouteImport } from './routes/download.tab.dmg'
-import { Route as DownloadLatestJsonRouteImport } from './routes/download.latest.json'
+import { Route as DashboardMemoriesExportRouteImport } from './routes/dashboard.memories.export'
+import { Route as DashboardMemoriesDeleteSelectedRouteImport } from './routes/dashboard.memories.delete-selected'
+import { Route as DashboardMemoriesCreateRouteImport } from './routes/dashboard.memories.create'
+import { Route as DashboardMemoriesMemoryIdEditRouteImport } from './routes/dashboard.memories.$memoryId.edit'
+import { Route as DashboardMemoriesMemoryIdDeleteRouteImport } from './routes/dashboard.memories.$memoryId.delete'
+import { Route as DashboardDevicesDeviceIdRevokeRouteImport } from './routes/dashboard.devices.$deviceId.revoke'
 
 const TermsRoute = TermsRouteImport.update({
   id: '/terms',
@@ -88,6 +97,11 @@ const ContactRoute = ContactRouteImport.update({
   path: '/contact',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ComponentsRoute = ComponentsRouteImport.update({
+  id: '/components',
+  path: '/components',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BrandRoute = BrandRouteImport.update({
   id: '/brand',
   path: '/brand',
@@ -107,6 +121,21 @@ const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const DashboardIndexRoute = DashboardIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => DashboardRoute,
+} as any)
+const DownloadTabDotdmgRoute = DownloadTabDotdmgRouteImport.update({
+  id: '/tab.dmg',
+  path: '/tab.dmg',
+  getParentRoute: () => DownloadRoute,
+} as any)
+const DownloadLatestDotjsonRoute = DownloadLatestDotjsonRouteImport.update({
+  id: '/latest.json',
+  path: '/latest.json',
+  getParentRoute: () => DownloadRoute,
 } as any)
 const DashboardUsageRoute = DashboardUsageRouteImport.update({
   id: '/usage',
@@ -133,27 +162,57 @@ const BillingPortalRoute = BillingPortalRouteImport.update({
   path: '/billing/portal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BillingErrorRoute = BillingErrorRouteImport.update({
+  id: '/billing/error',
+  path: '/billing/error',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const BillingCheckoutRoute = BillingCheckoutRouteImport.update({
   id: '/billing/checkout',
   path: '/billing/checkout',
   getParentRoute: () => rootRouteImport,
 } as any)
-const DownloadTabDmgRoute = DownloadTabDmgRouteImport.update({
-  id: '/tab/dmg',
-  path: '/tab/dmg',
-  getParentRoute: () => DownloadRoute,
+const DashboardMemoriesExportRoute = DashboardMemoriesExportRouteImport.update({
+  id: '/export',
+  path: '/export',
+  getParentRoute: () => DashboardMemoriesRoute,
 } as any)
-const DownloadLatestJsonRoute = DownloadLatestJsonRouteImport.update({
-  id: '/latest/json',
-  path: '/latest/json',
-  getParentRoute: () => DownloadRoute,
+const DashboardMemoriesDeleteSelectedRoute =
+  DashboardMemoriesDeleteSelectedRouteImport.update({
+    id: '/delete-selected',
+    path: '/delete-selected',
+    getParentRoute: () => DashboardMemoriesRoute,
+  } as any)
+const DashboardMemoriesCreateRoute = DashboardMemoriesCreateRouteImport.update({
+  id: '/create',
+  path: '/create',
+  getParentRoute: () => DashboardMemoriesRoute,
 } as any)
+const DashboardMemoriesMemoryIdEditRoute =
+  DashboardMemoriesMemoryIdEditRouteImport.update({
+    id: '/$memoryId/edit',
+    path: '/$memoryId/edit',
+    getParentRoute: () => DashboardMemoriesRoute,
+  } as any)
+const DashboardMemoriesMemoryIdDeleteRoute =
+  DashboardMemoriesMemoryIdDeleteRouteImport.update({
+    id: '/$memoryId/delete',
+    path: '/$memoryId/delete',
+    getParentRoute: () => DashboardMemoriesRoute,
+  } as any)
+const DashboardDevicesDeviceIdRevokeRoute =
+  DashboardDevicesDeviceIdRevokeRouteImport.update({
+    id: '/$deviceId/revoke',
+    path: '/$deviceId/revoke',
+    getParentRoute: () => DashboardDevicesRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/brand': typeof BrandRoute
+  '/components': typeof ComponentsRoute
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRouteWithChildren
@@ -166,21 +225,29 @@ export interface FileRoutesByFullPath {
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/billing/checkout': typeof BillingCheckoutRoute
+  '/billing/error': typeof BillingErrorRoute
   '/billing/portal': typeof BillingPortalRoute
   '/dashboard/account': typeof DashboardAccountRoute
-  '/dashboard/devices': typeof DashboardDevicesRoute
-  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/devices': typeof DashboardDevicesRouteWithChildren
+  '/dashboard/memories': typeof DashboardMemoriesRouteWithChildren
   '/dashboard/usage': typeof DashboardUsageRoute
-  '/download/latest/json': typeof DownloadLatestJsonRoute
-  '/download/tab/dmg': typeof DownloadTabDmgRoute
+  '/download/latest.json': typeof DownloadLatestDotjsonRoute
+  '/download/tab.dmg': typeof DownloadTabDotdmgRoute
+  '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/memories/create': typeof DashboardMemoriesCreateRoute
+  '/dashboard/memories/delete-selected': typeof DashboardMemoriesDeleteSelectedRoute
+  '/dashboard/memories/export': typeof DashboardMemoriesExportRoute
+  '/dashboard/devices/$deviceId/revoke': typeof DashboardDevicesDeviceIdRevokeRoute
+  '/dashboard/memories/$memoryId/delete': typeof DashboardMemoriesMemoryIdDeleteRoute
+  '/dashboard/memories/$memoryId/edit': typeof DashboardMemoriesMemoryIdEditRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/brand': typeof BrandRoute
+  '/components': typeof ComponentsRoute
   '/contact': typeof ContactRoute
-  '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRouteWithChildren
   '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
@@ -191,13 +258,21 @@ export interface FileRoutesByTo {
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/billing/checkout': typeof BillingCheckoutRoute
+  '/billing/error': typeof BillingErrorRoute
   '/billing/portal': typeof BillingPortalRoute
   '/dashboard/account': typeof DashboardAccountRoute
-  '/dashboard/devices': typeof DashboardDevicesRoute
-  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/devices': typeof DashboardDevicesRouteWithChildren
+  '/dashboard/memories': typeof DashboardMemoriesRouteWithChildren
   '/dashboard/usage': typeof DashboardUsageRoute
-  '/download/latest/json': typeof DownloadLatestJsonRoute
-  '/download/tab/dmg': typeof DownloadTabDmgRoute
+  '/download/latest.json': typeof DownloadLatestDotjsonRoute
+  '/download/tab.dmg': typeof DownloadTabDotdmgRoute
+  '/dashboard': typeof DashboardIndexRoute
+  '/dashboard/memories/create': typeof DashboardMemoriesCreateRoute
+  '/dashboard/memories/delete-selected': typeof DashboardMemoriesDeleteSelectedRoute
+  '/dashboard/memories/export': typeof DashboardMemoriesExportRoute
+  '/dashboard/devices/$deviceId/revoke': typeof DashboardDevicesDeviceIdRevokeRoute
+  '/dashboard/memories/$memoryId/delete': typeof DashboardMemoriesMemoryIdDeleteRoute
+  '/dashboard/memories/$memoryId/edit': typeof DashboardMemoriesMemoryIdEditRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -205,6 +280,7 @@ export interface FileRoutesById {
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
   '/brand': typeof BrandRoute
+  '/components': typeof ComponentsRoute
   '/contact': typeof ContactRoute
   '/dashboard': typeof DashboardRouteWithChildren
   '/download': typeof DownloadRouteWithChildren
@@ -217,13 +293,21 @@ export interface FileRoutesById {
   '/signup': typeof SignupRoute
   '/terms': typeof TermsRoute
   '/billing/checkout': typeof BillingCheckoutRoute
+  '/billing/error': typeof BillingErrorRoute
   '/billing/portal': typeof BillingPortalRoute
   '/dashboard/account': typeof DashboardAccountRoute
-  '/dashboard/devices': typeof DashboardDevicesRoute
-  '/dashboard/memories': typeof DashboardMemoriesRoute
+  '/dashboard/devices': typeof DashboardDevicesRouteWithChildren
+  '/dashboard/memories': typeof DashboardMemoriesRouteWithChildren
   '/dashboard/usage': typeof DashboardUsageRoute
-  '/download/latest/json': typeof DownloadLatestJsonRoute
-  '/download/tab/dmg': typeof DownloadTabDmgRoute
+  '/download/latest.json': typeof DownloadLatestDotjsonRoute
+  '/download/tab.dmg': typeof DownloadTabDotdmgRoute
+  '/dashboard/': typeof DashboardIndexRoute
+  '/dashboard/memories/create': typeof DashboardMemoriesCreateRoute
+  '/dashboard/memories/delete-selected': typeof DashboardMemoriesDeleteSelectedRoute
+  '/dashboard/memories/export': typeof DashboardMemoriesExportRoute
+  '/dashboard/devices/$deviceId/revoke': typeof DashboardDevicesDeviceIdRevokeRoute
+  '/dashboard/memories/$memoryId/delete': typeof DashboardMemoriesMemoryIdDeleteRoute
+  '/dashboard/memories/$memoryId/edit': typeof DashboardMemoriesMemoryIdEditRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -232,6 +316,7 @@ export interface FileRouteTypes {
     | '/about'
     | '/account'
     | '/brand'
+    | '/components'
     | '/contact'
     | '/dashboard'
     | '/download'
@@ -244,21 +329,29 @@ export interface FileRouteTypes {
     | '/signup'
     | '/terms'
     | '/billing/checkout'
+    | '/billing/error'
     | '/billing/portal'
     | '/dashboard/account'
     | '/dashboard/devices'
     | '/dashboard/memories'
     | '/dashboard/usage'
-    | '/download/latest/json'
-    | '/download/tab/dmg'
+    | '/download/latest.json'
+    | '/download/tab.dmg'
+    | '/dashboard/'
+    | '/dashboard/memories/create'
+    | '/dashboard/memories/delete-selected'
+    | '/dashboard/memories/export'
+    | '/dashboard/devices/$deviceId/revoke'
+    | '/dashboard/memories/$memoryId/delete'
+    | '/dashboard/memories/$memoryId/edit'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/about'
     | '/account'
     | '/brand'
+    | '/components'
     | '/contact'
-    | '/dashboard'
     | '/download'
     | '/forgot-password'
     | '/login'
@@ -269,19 +362,28 @@ export interface FileRouteTypes {
     | '/signup'
     | '/terms'
     | '/billing/checkout'
+    | '/billing/error'
     | '/billing/portal'
     | '/dashboard/account'
     | '/dashboard/devices'
     | '/dashboard/memories'
     | '/dashboard/usage'
-    | '/download/latest/json'
-    | '/download/tab/dmg'
+    | '/download/latest.json'
+    | '/download/tab.dmg'
+    | '/dashboard'
+    | '/dashboard/memories/create'
+    | '/dashboard/memories/delete-selected'
+    | '/dashboard/memories/export'
+    | '/dashboard/devices/$deviceId/revoke'
+    | '/dashboard/memories/$memoryId/delete'
+    | '/dashboard/memories/$memoryId/edit'
   id:
     | '__root__'
     | '/'
     | '/about'
     | '/account'
     | '/brand'
+    | '/components'
     | '/contact'
     | '/dashboard'
     | '/download'
@@ -294,13 +396,21 @@ export interface FileRouteTypes {
     | '/signup'
     | '/terms'
     | '/billing/checkout'
+    | '/billing/error'
     | '/billing/portal'
     | '/dashboard/account'
     | '/dashboard/devices'
     | '/dashboard/memories'
     | '/dashboard/usage'
-    | '/download/latest/json'
-    | '/download/tab/dmg'
+    | '/download/latest.json'
+    | '/download/tab.dmg'
+    | '/dashboard/'
+    | '/dashboard/memories/create'
+    | '/dashboard/memories/delete-selected'
+    | '/dashboard/memories/export'
+    | '/dashboard/devices/$deviceId/revoke'
+    | '/dashboard/memories/$memoryId/delete'
+    | '/dashboard/memories/$memoryId/edit'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -308,6 +418,7 @@ export interface RootRouteChildren {
   AboutRoute: typeof AboutRoute
   AccountRoute: typeof AccountRoute
   BrandRoute: typeof BrandRoute
+  ComponentsRoute: typeof ComponentsRoute
   ContactRoute: typeof ContactRoute
   DashboardRoute: typeof DashboardRouteWithChildren
   DownloadRoute: typeof DownloadRouteWithChildren
@@ -320,6 +431,7 @@ export interface RootRouteChildren {
   SignupRoute: typeof SignupRoute
   TermsRoute: typeof TermsRoute
   BillingCheckoutRoute: typeof BillingCheckoutRoute
+  BillingErrorRoute: typeof BillingErrorRoute
   BillingPortalRoute: typeof BillingPortalRoute
 }
 
@@ -402,6 +514,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ContactRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/components': {
+      id: '/components'
+      path: '/components'
+      fullPath: '/components'
+      preLoaderRoute: typeof ComponentsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/brand': {
       id: '/brand'
       path: '/brand'
@@ -429,6 +548,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/dashboard/': {
+      id: '/dashboard/'
+      path: '/'
+      fullPath: '/dashboard/'
+      preLoaderRoute: typeof DashboardIndexRouteImport
+      parentRoute: typeof DashboardRoute
+    }
+    '/download/tab.dmg': {
+      id: '/download/tab.dmg'
+      path: '/tab.dmg'
+      fullPath: '/download/tab.dmg'
+      preLoaderRoute: typeof DownloadTabDotdmgRouteImport
+      parentRoute: typeof DownloadRoute
+    }
+    '/download/latest.json': {
+      id: '/download/latest.json'
+      path: '/latest.json'
+      fullPath: '/download/latest.json'
+      preLoaderRoute: typeof DownloadLatestDotjsonRouteImport
+      parentRoute: typeof DownloadRoute
     }
     '/dashboard/usage': {
       id: '/dashboard/usage'
@@ -465,6 +605,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BillingPortalRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/billing/error': {
+      id: '/billing/error'
+      path: '/billing/error'
+      fullPath: '/billing/error'
+      preLoaderRoute: typeof BillingErrorRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/billing/checkout': {
       id: '/billing/checkout'
       path: '/billing/checkout'
@@ -472,35 +619,95 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof BillingCheckoutRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/download/tab/dmg': {
-      id: '/download/tab/dmg'
-      path: '/tab/dmg'
-      fullPath: '/download/tab/dmg'
-      preLoaderRoute: typeof DownloadTabDmgRouteImport
-      parentRoute: typeof DownloadRoute
+    '/dashboard/memories/export': {
+      id: '/dashboard/memories/export'
+      path: '/export'
+      fullPath: '/dashboard/memories/export'
+      preLoaderRoute: typeof DashboardMemoriesExportRouteImport
+      parentRoute: typeof DashboardMemoriesRoute
     }
-    '/download/latest/json': {
-      id: '/download/latest/json'
-      path: '/latest/json'
-      fullPath: '/download/latest/json'
-      preLoaderRoute: typeof DownloadLatestJsonRouteImport
-      parentRoute: typeof DownloadRoute
+    '/dashboard/memories/delete-selected': {
+      id: '/dashboard/memories/delete-selected'
+      path: '/delete-selected'
+      fullPath: '/dashboard/memories/delete-selected'
+      preLoaderRoute: typeof DashboardMemoriesDeleteSelectedRouteImport
+      parentRoute: typeof DashboardMemoriesRoute
+    }
+    '/dashboard/memories/create': {
+      id: '/dashboard/memories/create'
+      path: '/create'
+      fullPath: '/dashboard/memories/create'
+      preLoaderRoute: typeof DashboardMemoriesCreateRouteImport
+      parentRoute: typeof DashboardMemoriesRoute
+    }
+    '/dashboard/memories/$memoryId/edit': {
+      id: '/dashboard/memories/$memoryId/edit'
+      path: '/$memoryId/edit'
+      fullPath: '/dashboard/memories/$memoryId/edit'
+      preLoaderRoute: typeof DashboardMemoriesMemoryIdEditRouteImport
+      parentRoute: typeof DashboardMemoriesRoute
+    }
+    '/dashboard/memories/$memoryId/delete': {
+      id: '/dashboard/memories/$memoryId/delete'
+      path: '/$memoryId/delete'
+      fullPath: '/dashboard/memories/$memoryId/delete'
+      preLoaderRoute: typeof DashboardMemoriesMemoryIdDeleteRouteImport
+      parentRoute: typeof DashboardMemoriesRoute
+    }
+    '/dashboard/devices/$deviceId/revoke': {
+      id: '/dashboard/devices/$deviceId/revoke'
+      path: '/$deviceId/revoke'
+      fullPath: '/dashboard/devices/$deviceId/revoke'
+      preLoaderRoute: typeof DashboardDevicesDeviceIdRevokeRouteImport
+      parentRoute: typeof DashboardDevicesRoute
     }
   }
 }
 
+interface DashboardDevicesRouteChildren {
+  DashboardDevicesDeviceIdRevokeRoute: typeof DashboardDevicesDeviceIdRevokeRoute
+}
+
+const DashboardDevicesRouteChildren: DashboardDevicesRouteChildren = {
+  DashboardDevicesDeviceIdRevokeRoute: DashboardDevicesDeviceIdRevokeRoute,
+}
+
+const DashboardDevicesRouteWithChildren =
+  DashboardDevicesRoute._addFileChildren(DashboardDevicesRouteChildren)
+
+interface DashboardMemoriesRouteChildren {
+  DashboardMemoriesCreateRoute: typeof DashboardMemoriesCreateRoute
+  DashboardMemoriesDeleteSelectedRoute: typeof DashboardMemoriesDeleteSelectedRoute
+  DashboardMemoriesExportRoute: typeof DashboardMemoriesExportRoute
+  DashboardMemoriesMemoryIdDeleteRoute: typeof DashboardMemoriesMemoryIdDeleteRoute
+  DashboardMemoriesMemoryIdEditRoute: typeof DashboardMemoriesMemoryIdEditRoute
+}
+
+const DashboardMemoriesRouteChildren: DashboardMemoriesRouteChildren = {
+  DashboardMemoriesCreateRoute: DashboardMemoriesCreateRoute,
+  DashboardMemoriesDeleteSelectedRoute: DashboardMemoriesDeleteSelectedRoute,
+  DashboardMemoriesExportRoute: DashboardMemoriesExportRoute,
+  DashboardMemoriesMemoryIdDeleteRoute: DashboardMemoriesMemoryIdDeleteRoute,
+  DashboardMemoriesMemoryIdEditRoute: DashboardMemoriesMemoryIdEditRoute,
+}
+
+const DashboardMemoriesRouteWithChildren =
+  DashboardMemoriesRoute._addFileChildren(DashboardMemoriesRouteChildren)
+
 interface DashboardRouteChildren {
   DashboardAccountRoute: typeof DashboardAccountRoute
-  DashboardDevicesRoute: typeof DashboardDevicesRoute
-  DashboardMemoriesRoute: typeof DashboardMemoriesRoute
+  DashboardDevicesRoute: typeof DashboardDevicesRouteWithChildren
+  DashboardMemoriesRoute: typeof DashboardMemoriesRouteWithChildren
   DashboardUsageRoute: typeof DashboardUsageRoute
+  DashboardIndexRoute: typeof DashboardIndexRoute
 }
 
 const DashboardRouteChildren: DashboardRouteChildren = {
   DashboardAccountRoute: DashboardAccountRoute,
-  DashboardDevicesRoute: DashboardDevicesRoute,
-  DashboardMemoriesRoute: DashboardMemoriesRoute,
+  DashboardDevicesRoute: DashboardDevicesRouteWithChildren,
+  DashboardMemoriesRoute: DashboardMemoriesRouteWithChildren,
   DashboardUsageRoute: DashboardUsageRoute,
+  DashboardIndexRoute: DashboardIndexRoute,
 }
 
 const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
@@ -508,13 +715,13 @@ const DashboardRouteWithChildren = DashboardRoute._addFileChildren(
 )
 
 interface DownloadRouteChildren {
-  DownloadLatestJsonRoute: typeof DownloadLatestJsonRoute
-  DownloadTabDmgRoute: typeof DownloadTabDmgRoute
+  DownloadLatestDotjsonRoute: typeof DownloadLatestDotjsonRoute
+  DownloadTabDotdmgRoute: typeof DownloadTabDotdmgRoute
 }
 
 const DownloadRouteChildren: DownloadRouteChildren = {
-  DownloadLatestJsonRoute: DownloadLatestJsonRoute,
-  DownloadTabDmgRoute: DownloadTabDmgRoute,
+  DownloadLatestDotjsonRoute: DownloadLatestDotjsonRoute,
+  DownloadTabDotdmgRoute: DownloadTabDotdmgRoute,
 }
 
 const DownloadRouteWithChildren = DownloadRoute._addFileChildren(
@@ -526,6 +733,7 @@ const rootRouteChildren: RootRouteChildren = {
   AboutRoute: AboutRoute,
   AccountRoute: AccountRoute,
   BrandRoute: BrandRoute,
+  ComponentsRoute: ComponentsRoute,
   ContactRoute: ContactRoute,
   DashboardRoute: DashboardRouteWithChildren,
   DownloadRoute: DownloadRouteWithChildren,
@@ -538,6 +746,7 @@ const rootRouteChildren: RootRouteChildren = {
   SignupRoute: SignupRoute,
   TermsRoute: TermsRoute,
   BillingCheckoutRoute: BillingCheckoutRoute,
+  BillingErrorRoute: BillingErrorRoute,
   BillingPortalRoute: BillingPortalRoute,
 }
 export const routeTree = rootRouteImport

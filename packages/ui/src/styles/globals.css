@@ -483,6 +483,53 @@ a:not([class]) {
   }
 }
 
+@keyframes tab-dialog-close-lifecycle {
+  from {
+    --tab-dialog-close-progress: 0;
+  }
+
+  to {
+    --tab-dialog-close-progress: 1;
+  }
+}
+
+.tab-dialog-overlay {
+  opacity: 1;
+  transition: opacity 180ms var(--tab-ease-out);
+}
+
+.tab-dialog-overlay[data-state="closed"] {
+  opacity: 0;
+  transition-duration: 140ms;
+  animation: tab-dialog-close-lifecycle 140ms;
+}
+
+.tab-dialog-content {
+  opacity: 1;
+  transform: translate3d(-50%, -50%, 0) scale(1);
+  transition-property: opacity, transform;
+  transition-duration: 180ms;
+  transition-timing-function: var(--tab-ease-out);
+}
+
+.tab-dialog-content[data-state="closed"] {
+  opacity: 0;
+  transform: translate3d(-50%, calc(-50% + 4px), 0) scale(0.98);
+  transition-duration: 140ms;
+  animation: tab-dialog-close-lifecycle 140ms;
+}
+
+@starting-style {
+  .tab-dialog-overlay[data-state="open"] {
+    opacity: 0;
+  }
+
+  .tab-dialog-content[data-state="open"] {
+    opacity: 0;
+    transform: translate3d(-50%, calc(-50% + 4px), 0) scale(0.98);
+  }
+}
+
 .tab-sheet-overlay {
   opacity: 1;
   transition: opacity 200ms var(--tab-ease-out);
@@ -568,6 +615,23 @@ a:not([class]) {
     transition-property: opacity;
     transition-duration: 160ms;
     transition-timing-function: var(--tab-ease-out);
+  }
+
+  .tab-dialog-content {
+    transform: translate3d(-50%, -50%, 0) !important;
+    transition-property: opacity;
+    transition-duration: 140ms;
+  }
+
+  .tab-dialog-content[data-state="closed"] {
+    opacity: 0;
+    animation-duration: 140ms;
+  }
+
+  @starting-style {
+    .tab-dialog-content[data-state="open"] {
+      opacity: 0;
+    }
   }
 
   .tab-sheet-content[data-state="closed"][data-side] {

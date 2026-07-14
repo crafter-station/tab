@@ -19,17 +19,16 @@ import {
   PersonalMemoryService,
   WorkersAiPersonalMemoryEmbeddingService,
   type PersonalMemoryEmbeddingService,
-  type PersonalMemoryExtractionCommitter,
   type PersonalMemoryStorage,
   type PersonalMemoryVectorIndex,
 } from "./personal-memory.ts";
 import {
-  D1MemoryExtractionIdempotencyStorage,
-  InMemoryMemoryExtractionIdempotencyStorage,
+  D1MemoryExtractionStorage,
+  InMemoryMemoryExtractionStorage,
   MemoryExtractionService,
   createAiGatewayMemoryAgentModel,
   type MemoryAgentModel,
-  type MemoryExtractionIdempotencyStorage,
+  type MemoryExtractionStorage,
 } from "./personal-memory-extraction.ts";
 import {
   D1TelemetryStorage,
@@ -82,8 +81,7 @@ export type ApiDependencies = {
   readonly embeddingService?: PersonalMemoryEmbeddingService;
   readonly vectorIndex?: PersonalMemoryVectorIndex;
   readonly memoryExtractionModel?: MemoryAgentModel;
-  readonly memoryExtractionIdempotencyStorage?: MemoryExtractionIdempotencyStorage &
-    PersonalMemoryExtractionCommitter;
+  readonly memoryExtractionStorage?: MemoryExtractionStorage;
   readonly telemetryService?: TelemetryService;
   readonly telemetryStorage?: TelemetryStorage;
 };
@@ -97,7 +95,7 @@ export function createApp(deps: ApiDependencies = {}) {
       | "billingService"
       | "usageMeterService"
       | "personalMemoryStorage"
-      | "memoryExtractionIdempotencyStorage"
+      | "memoryExtractionStorage"
       | "telemetryStorage"
     >
   > = deps.db ? createD1Dependencies(deps.db) : {};
@@ -132,13 +130,15 @@ export function createApp(deps: ApiDependencies = {}) {
     embeddingService: deps.embeddingService,
     vectorIndex: deps.vectorIndex,
   });
-  const memoryExtractionIdempotencyStorage =
-    deps.memoryExtractionIdempotencyStorage ??
-    d1Deps.memoryExtractionIdempotencyStorage ??
-    new InMemoryMemoryExtractionIdempotencyStorage();
+  const memoryExtractionStorage =
+    deps.memoryExtractionStorage ??
+    d1Deps.memoryExtractionStorage ??
+    new InMemoryMemoryExtractionStorage((input) =>
+      personalMemoryService.commitExtractionOperationAtomically(input),
+    );
   const memoryExtractionService = new MemoryExtractionService({
     personalMemoryService,
-    idempotencyStorage: memoryExtractionIdempotencyStorage,
+    storage: memoryExtractionStorage,
     model: deps.memoryExtractionModel,
   });
   const telemetryService =
@@ -196,7 +196,7 @@ function createD1Dependencies(db: D1Database): Required<
     | "billingService"
     | "usageMeterService"
     | "personalMemoryStorage"
-    | "memoryExtractionIdempotencyStorage"
+    | "memoryExtractionStorage"
     | "telemetryStorage"
   >
 > {
@@ -204,8 +204,7 @@ function createD1Dependencies(db: D1Database): Required<
   const deviceTokenStorage = new D1DeviceTokenStorage(database);
   const billingStorage = new D1BillingStorage(database);
   const personalMemoryStorage = new D1PersonalMemoryStorage(database);
-  const memoryExtractionIdempotencyStorage =
-    new D1MemoryExtractionIdempotencyStorage(database);
+  const memoryExtractionStorage = new D1MemoryExtractionStorage(database);
   const telemetryStorage = new D1TelemetryStorage(database);
 
   return {
@@ -217,7 +216,7 @@ function createD1Dependencies(db: D1Database): Required<
     billingService: new BillingService({ storage: billingStorage }),
     usageMeterService: new UsageMeterService({ client: createUsageMeterClient() }),
     personalMemoryStorage,
-    memoryExtractionIdempotencyStorage,
+    memoryExtractionStorage,
     telemetryStorage,
   };
 }

@@ -1,14 +1,10 @@
-import { createRoute } from "@tanstack/react-router";
-import { DashboardUsagePage, useDashboardData } from "../components/pages/dashboard.tsx";
-import { Route as DashboardRoute } from "./dashboard.tsx";
+import { createFileRoute } from "@tanstack/react-router";
+import { useDashboardData } from "../components/dashboard/layout.tsx";
+import { DashboardUsagePage } from "../components/dashboard/usage.tsx";
 
 function DashboardUsageRouteComponent() {
   const data = useDashboardData();
   return <DashboardUsagePage data={data} />;
 }
 
-export const Route = createRoute({
-  getParentRoute: () => DashboardRoute,
-  path: "usage",
-  component: DashboardUsageRouteComponent,
-});
+export const Route = createFileRoute("/dashboard/usage")({ component: DashboardUsageRouteComponent });

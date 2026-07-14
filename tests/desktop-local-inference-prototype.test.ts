@@ -81,7 +81,6 @@ describe("local inference prototype", () => {
   it("starts the pinned llama.cpp configuration and returns a normalized Suggestion", async () => {
     const spawnCalls: Array<{ executable: string; args: string[] }> = [];
     const requestBodies: unknown[] = [];
-    const partialSuggestions: string[] = [];
     const runtime = createLocalInferencePrototype({
       executablePath: "/opt/llama-server",
       modelPath: "/tmp/model.gguf",
@@ -111,9 +110,7 @@ describe("local inference prototype", () => {
     });
 
     await runtime.start();
-    const suggestion = await runtime.getSuggestion(requestableSnapshot(), {
-      onPartialSuggestion: (partial) => partialSuggestions.push(partial.text),
-    });
+    const suggestion = await runtime.getSuggestion(requestableSnapshot());
 
     expect(runtime.getStatus()).toEqual({ status: "ready", modelId: "qwen2.5-3b-instruct-q4_k_m" });
     expect(spawnCalls).toHaveLength(1);
@@ -143,7 +140,6 @@ describe("local inference prototype", () => {
     expect(JSON.stringify(requestBodies[0])).toContain(
       "Keep the tone concise and direct.",
     );
-    expect(partialSuggestions).toEqual([" world"]);
     expect(suggestion?.text).toBe(" world peace");
     expect(suggestion?.id).toStartWith("sg-local-");
     expect(runtime.getLastTiming()).toMatchObject({
@@ -299,8 +295,7 @@ describe("local inference prototype", () => {
     runtime.stop();
   });
 
-  it("keeps the last contract-valid streamed partial when later tokens invalidate the output", async () => {
-    const partialSuggestions: string[] = [];
+  it("returns the last contract-valid final Suggestion when later streamed tokens invalidate the output", async () => {
     const runtime = createLocalInferencePrototype({
       executablePath: "llama-server",
       modelPath: "/tmp/model.gguf",
@@ -314,11 +309,8 @@ describe("local inference prototype", () => {
     });
     await runtime.start();
 
-    const suggestion = await runtime.getSuggestion(requestableSnapshot(), {
-      onPartialSuggestion: (partial) => partialSuggestions.push(partial.text),
-    });
+    const suggestion = await runtime.getSuggestion(requestableSnapshot());
 
-    expect(partialSuggestions).toEqual([" world"]);
     expect(suggestion?.text).toBe(" world");
     runtime.stop();
   });
