@@ -12,10 +12,12 @@ test("marketing interactions are hydrated components using shared controls", () 
   assert.match(controls, /<Button/);
 });
 
-test("Option+Tab keeps a primary surface and the last active surface", () => {
-  assert.match(provider, /activeSurface\.current \?\? primarySurface\.current/);
+test("Option+Tab keeps a primary fallback while double Option targets the active surface", () => {
+  assert.match(provider, /active\?\.accept \? active : primarySurface\.current/);
   assert.match(provider, /event\.altKey/);
   assert.match(provider, /event\.key !== "Tab" && event\.code !== "Tab"/);
+  assert.match(provider, /now - lastOptionTap\.current < 400/);
+  assert.match(provider, /surface\.deepComplete\(\)/);
   assert.match(provider, /event\.preventDefault\(\)/);
 });
 

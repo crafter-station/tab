@@ -3,7 +3,8 @@ import type { FocusEventHandler, PointerEventHandler, ReactNode, RefObject } fro
 
 type AcceptanceSurface = {
   element: HTMLElement;
-  accept: () => void;
+  accept?: () => void;
+  deepComplete?: () => void;
 };
 
 type AcceptanceContextValue = {
@@ -16,18 +17,43 @@ const AcceptanceContext = createContext<AcceptanceContextValue | null>(null);
 export function MarketingInteractionProvider({ children }: { children: ReactNode }) {
   const activeSurface = useRef<AcceptanceSurface | null>(null);
   const primarySurface = useRef<AcceptanceSurface | null>(null);
+  const lastOptionTap = useRef(0);
+  const optionChorded = useRef(false);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.altKey && event.key !== "Alt") optionChorded.current = true;
       if (!event.altKey || (event.key !== "Tab" && event.code !== "Tab")) return;
-      const surface = activeSurface.current ?? primarySurface.current;
-      if (!surface) return;
+      const active = activeSurface.current;
+      const surface = active?.accept ? active : primarySurface.current;
+      if (!surface?.accept) return;
       event.preventDefault();
       activeSurface.current = surface;
       surface.accept();
     };
+    const handleKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== "Alt") return;
+      if (optionChorded.current) {
+        optionChorded.current = false;
+        lastOptionTap.current = 0;
+        return;
+      }
+      const now = performance.now();
+      const surface = activeSurface.current;
+      if (surface?.deepComplete && lastOptionTap.current > 0 && now - lastOptionTap.current < 400) {
+        event.preventDefault();
+        lastOptionTap.current = 0;
+        surface.deepComplete();
+        return;
+      }
+      lastOptionTap.current = now;
+    };
     document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener("keyup", handleKeyUp);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("keyup", handleKeyUp);
+    };
   }, []);
 
   const value: AcceptanceContextValue = {
@@ -46,7 +72,7 @@ export function MarketingInteractionProvider({ children }: { children: ReactNode
   return <AcceptanceContext.Provider value={value}>{children}</AcceptanceContext.Provider>;
 }
 
-export function useAcceptanceSurface<T extends HTMLElement>(accept: () => void, primary = false): {
+export function useAcceptanceSurface<T extends HTMLElement>(accept: () => void, primary = false, deepComplete?: () => void): {
   ref: RefObject<T | null>;
   onFocusCapture: FocusEventHandler<T>;
   onPointerOver: PointerEventHandler<T>;
@@ -56,12 +82,14 @@ export function useAcceptanceSurface<T extends HTMLElement>(accept: () => void, 
   const ref = useRef<T>(null);
   const acceptRef = useRef(accept);
   acceptRef.current = accept;
+  const deepCompleteRef = useRef(deepComplete);
+  deepCompleteRef.current = deepComplete;
   const surfaceRef = useRef<AcceptanceSurface | null>(null);
 
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const surface = { element, accept: () => acceptRef.current() };
+    const surface = { element, accept: () => acceptRef.current(), deepComplete: () => deepCompleteRef.current?.() };
     surfaceRef.current = surface;
     return context.register(surface, primary);
   }, [context, primary]);

@@ -407,6 +407,72 @@
   visibility: hidden;
 }
 
+.tab-deep-canvas {
+  background-image:
+    radial-gradient(circle at 24% 46%, var(--tab-overlay-deep-wash) 0, transparent 38%),
+    linear-gradient(var(--tab-illustration-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--tab-illustration-grid-line) 1px, transparent 1px);
+  background-size: auto, 3rem 3rem, 3rem 3rem;
+}
+
+.tab-deep-key {
+  display: grid;
+  width: 3.25rem;
+  height: 3.25rem;
+  place-items: center;
+  color: var(--tab-overlay-deep-text);
+  background: var(--tab-overlay-deep-bg);
+  border: 1px solid var(--tab-overlay-deep-border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--tab-overlay-deep-shadow);
+  transform: translate3d(0, 0, 0);
+  animation: tab-deep-key-press 2.4s var(--tab-ease-in-out) infinite;
+}
+
+.tab-deep-key-second {
+  animation-delay: 180ms;
+}
+
+.tab-deep-key > svg {
+  width: 1.125rem;
+  height: 1.125rem;
+}
+
+.tab-deep-trigger {
+  transition: transform 120ms var(--tab-ease-out);
+}
+
+.tab-deep-trigger:active {
+  transform: scale(0.97);
+}
+
+.tab-deep-signal {
+  animation: tab-deep-signal 2.4s var(--tab-ease-in-out) infinite;
+}
+
+.tab-deep-overlay,
+.tab-deep-draft-suggestion {
+  transition:
+    opacity 180ms var(--tab-ease-out),
+    transform 180ms var(--tab-ease-out),
+    filter 140ms var(--tab-ease-out),
+    color 160ms var(--tab-ease-out);
+}
+
+.tab-deep-demo[data-phase="requesting"] .tab-deep-draft-suggestion {
+  opacity: 0.24;
+  filter: blur(2px);
+}
+
+.tab-deep-demo[data-phase="accepted"] .tab-deep-draft-suggestion {
+  color: var(--foreground);
+}
+
+.tab-deep-demo[data-phase="accepted"] .tab-deep-overlay {
+  opacity: 0;
+  transform: scale(0.985);
+}
+
 .marketing-detail > summary::-webkit-details-marker {
   display: none;
 }
@@ -582,6 +648,34 @@
   }
 }
 
+@keyframes tab-deep-key-press {
+  0%,
+  9%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  4% {
+    transform: translate3d(0, 0.125rem, 0) scale(0.96);
+  }
+}
+
+@keyframes tab-deep-signal {
+  0%,
+  18% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0);
+  }
+  30%,
+  70% {
+    opacity: 1;
+  }
+  82%,
+  100% {
+    opacity: 0;
+    transform: translate3d(0, 2rem, 0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .tab-action-link,
   .tab-action-link::after,
@@ -645,6 +739,21 @@
     display: grid;
     opacity: 1;
     transform: none;
+  }
+
+  .tab-deep-key,
+  .tab-deep-signal {
+    animation: none;
+  }
+
+  .tab-deep-signal {
+    display: none;
+  }
+
+  .tab-deep-overlay,
+  .tab-deep-draft-suggestion,
+  .tab-deep-trigger {
+    transition: none;
   }
 
   .marketing-intro > *,

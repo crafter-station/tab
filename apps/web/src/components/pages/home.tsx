@@ -13,6 +13,7 @@ import { Badge, Button, SuggestionCommand, cn } from "@tab/ui";
 import type { CSSProperties } from "react";
 import { AutocompleteDemo } from "../marketing/autocomplete-demo.tsx";
 import { MotionToggle, ReplayButton } from "../marketing/controls.tsx";
+import { DeepCompleteDemo } from "../marketing/deep-complete-demo.tsx";
 import { MarketingInteractionProvider } from "../marketing/interaction-provider.tsx";
 import { WorkflowInteraction } from "../marketing/workflow-interaction.tsx";
 import { PricingPlanGrid } from "../pricing/pricing-plan-card.tsx";
@@ -422,6 +423,20 @@ export function HomePage() {
           <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Three steps. No new writing workflow.</h2>
         </div>
         <div className="mt-12"><WorkflowMap /></div>
+      </section>
+
+      <section id="deep-complete" className="scroll-mt-24 py-20 sm:py-28">
+        <div className="max-w-3xl">
+          <PageKicker>When the next words are not enough</PageKicker>
+          <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Keep tapping. Go deeper when you need to.</h2>
+          <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">Use Option+Tab repeatedly for the next phrase. Double-tap Option when the thought needs more context, then accept the Deep Complete Suggestion with Option+Tab.</p>
+        </div>
+        <div className="mt-12"><DeepCompleteDemo /></div>
+        <div className="mt-8 grid gap-6 border-y border-border py-6 sm:grid-cols-3">
+          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Automatic</p><p className="mt-2 text-sm font-semibold">A Local Suggestion appears after a short pause.</p></div>
+          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Explicit</p><p className="mt-2 text-sm font-semibold">Double-tap Option to request Deep Complete.</p></div>
+          <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">One acceptance key</p><p className="mt-2 text-sm font-semibold">Option+Tab inserts either kind of Suggestion.</p></div>
+        </div>
       </section>
 
       <section id="compatibility" className="scroll-mt-24 rounded-[var(--radius-surface)] bg-muted/35 px-5 py-10 sm:px-8 sm:py-12 lg:px-12">

@@ -95,6 +95,23 @@ test("Option+Tab advances through consecutive Suggestions", async ({ page }) => 
   await expect(demo.locator("[data-demo-announcement]")).toHaveText("Thought complete. The suggestion sequence will restart.");
 });
 
+test("double Option requests Deep Complete before Option+Tab accepts it", async ({ page }) => {
+  await page.goto("/");
+
+  const demo = page.getByRole("region", { name: "Interactive Deep Complete example" });
+  await waitForHydration(demo);
+  await demo.focus();
+  await page.keyboard.press("Alt");
+  await page.keyboard.press("Alt");
+
+  await expect(demo).toHaveAttribute("data-phase", "requesting");
+  await expect(demo.locator("[data-deep-announcement]")).toHaveText("Deep Complete requested with a double-tap of Option.");
+  await expect(demo).toHaveAttribute("data-phase", "ready");
+  await page.keyboard.press("Alt+Tab");
+  await expect(demo).toHaveAttribute("data-phase", "accepted");
+  await expect(demo.locator("[data-deep-announcement]")).toHaveText("Deep Complete suggestion accepted.");
+});
+
 test("links and account forms remain usable without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
