@@ -164,6 +164,28 @@ describe("Desktop updater", () => {
     });
   });
 
+  it("publishes download progress only when the displayed percentage changes", async () => {
+    const nativeUpdater = new FakeUpdater();
+    const percents: number[] = [];
+    const updater = createDesktopUpdater({
+      currentVersion: "0.1.0",
+      nativeUpdater,
+      onChange: (state) => {
+        if (state.status === "downloading") percents.push(Math.round(state.percent));
+      },
+    });
+    nativeUpdater.emit("update-available", { version: "0.2.0" });
+    await updater.downloadUpdate();
+
+    nativeUpdater.emit("download-progress", { percent: 0.1 });
+    nativeUpdater.emit("download-progress", { percent: 0.49 });
+    nativeUpdater.emit("download-progress", { percent: 0.5 });
+    nativeUpdater.emit("download-progress", { percent: 0.9 });
+    nativeUpdater.emit("download-progress", { percent: 1.1 });
+
+    expect(percents).toEqual([0, 1]);
+  });
+
   it("publishes a retryable user-facing error", async () => {
     const nativeUpdater = new FakeUpdater();
     const updater = createDesktopUpdater({ currentVersion: "0.1.0", nativeUpdater });

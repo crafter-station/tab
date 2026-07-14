@@ -84,11 +84,17 @@ export function createDesktopUpdater(deps: DesktopUpdaterDependencies) {
   });
   nativeUpdater.on("download-progress", (progress) => {
     if (!availableVersion) return;
+    const percent = Math.min(100, Math.max(0, progress.percent));
+    if (
+      state.status === "downloading"
+      && state.version === availableVersion
+      && Math.round(state.percent) === Math.round(percent)
+    ) return;
     publish({
       status: "downloading",
       currentVersion: deps.currentVersion,
       version: availableVersion,
-      percent: Math.min(100, Math.max(0, progress.percent)),
+      percent,
     });
   });
   nativeUpdater.on("update-downloaded", (info) => {
