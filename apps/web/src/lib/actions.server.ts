@@ -9,6 +9,7 @@ import {
 } from "./api.server.ts";
 import { safeNextPath } from "./search.ts";
 import { optionalSession, requireSession } from "./session-api.server.ts";
+import { parseDesktopAuthCallback } from "./desktop-auth-callback.ts";
 
 const EmailSchema = z.email();
 const LoginFormSchema = z.object({
@@ -63,11 +64,8 @@ function requestWithCookie(request: Request, cookie: string): Request {
 }
 
 async function authorizeDevice(request: Request, api: ApiClient, callback: string, sources: Response[]): Promise<Response> {
-  let callbackUrl: URL;
-  try {
-    callbackUrl = new URL(callback);
-    if (callbackUrl.protocol !== "tab:") throw new Error("Unsupported callback protocol");
-  } catch {
+  const callbackUrl = parseDesktopAuthCallback(callback);
+  if (!callbackUrl) {
     return redirectResponse("/login?error=device_failed", responseHeaders(...sources));
   }
   const cookie = cookieHeaderFromSetCookie(sources[0]!);

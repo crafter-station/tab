@@ -147,6 +147,39 @@ describe("TanStack Start web BFF module contracts", () => {
     expect(response.headers.get("location")).toBe("tab://auth/callback?code=device-code");
   });
 
+  it("returns development desktop handoffs to the loopback callback server", async () => {
+    const { api } = createFakeApi();
+    const callback = "http://127.0.0.1:43123/auth/callback";
+    const response = await handleLogin(request("/login", {
+      method: "POST",
+      body: new URLSearchParams({
+        email: "test@example.com",
+        password: "password123",
+        device_id: "mac-1",
+        callback,
+      }),
+    }), api);
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe(`${callback}?code=device-code`);
+  });
+
+  it("rejects non-loopback HTTP desktop callbacks", async () => {
+    const { api } = createFakeApi();
+    const response = await handleLogin(request("/login", {
+      method: "POST",
+      body: new URLSearchParams({
+        email: "test@example.com",
+        password: "password123",
+        device_id: "mac-1",
+        callback: "http://example.com/auth/callback",
+      }),
+    }), api);
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login?error=device_failed");
+  });
+
   it("relays sign-in and device cookies when device authorization fails", async () => {
     const { api } = createFakeApi({
       "POST /api/auth/device/authorize": () => json(
