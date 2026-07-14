@@ -1,11 +1,13 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
+import type { TelemetryEvent } from "@tab/contracts";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import {
   TelemetryService,
   InMemoryTelemetryStorage,
+  type TelemetryStorage,
 } from "../apps/api/src/telemetry.ts";
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
@@ -139,6 +141,65 @@ function assertNoRawText(events: readonly Record<string, unknown>[], rawContext:
     }
   }
 }
+
+describe("TelemetryService device ingestion", () => {
+  it("attributes device events and continues after an event fails to persist", async () => {
+    const recorded: TelemetryEvent[] = [];
+    const storage: TelemetryStorage = {
+      async recordEvent(event) {
+        if (event.eventType === "suggestion_generated") throw new Error("storage unavailable");
+        recorded.push(event);
+      },
+      async listEvents() {
+        return recorded;
+      },
+      async getLocalSuggestionActivity() {
+        return {
+          acceptedSuggestions: 0,
+          acceptedWords: 0,
+          acceptedCharacters: 0,
+          activeWritingDays: 0,
+          averageAcceptanceLatencyMs: null,
+        };
+      },
+    };
+    const telemetryService = new TelemetryService({ storage });
+    const timestamp = new Date().toISOString();
+
+    await telemetryService.recordDeviceEvents([
+      {
+        eventType: "suggestion_generated",
+        eventId: "event-1",
+        requestId: "request-1",
+        timestamp,
+        inferenceSource: "local",
+        trigger: "automatic",
+      },
+      {
+        eventType: "suggestion_shown",
+        eventId: "event-2",
+        requestId: "request-1",
+        timestamp,
+        inferenceSource: "local",
+        trigger: "automatic",
+        suggestionLength: 12,
+      },
+    ], {
+      userId: "user-1",
+      deviceId: "device-1",
+    });
+
+    expect(recorded).toEqual([
+      expect.objectContaining({
+        id: "event-2",
+        userId: "user-1",
+        deviceId: "device-1",
+        eventType: "suggestion_shown",
+        suggestionLength: 12,
+      }),
+    ]);
+  });
+});
 
 describe("Metadata-only suggestion telemetry", () => {
   it("records shown metadata for a successful suggestion without raw text", async () => {

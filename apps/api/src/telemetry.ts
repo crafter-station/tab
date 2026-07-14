@@ -1,4 +1,5 @@
 import {
+  type RecordTelemetryEventRequest,
   TelemetryEventSchema,
   type TelemetryEvent,
 } from "@tab/contracts";
@@ -24,6 +25,11 @@ export type TelemetryServiceDependencies = {
   readonly storage?: TelemetryStorage;
 };
 
+export type DeviceTelemetryIdentity = {
+  readonly userId: string;
+  readonly deviceId: string;
+};
+
 export class TelemetryService {
   private readonly storage: TelemetryStorage;
 
@@ -43,6 +49,37 @@ export class TelemetryService {
     });
     await this.storage.recordEvent(record);
     return record;
+  }
+
+  async recordDeviceEvents(
+    events: readonly RecordTelemetryEventRequest[],
+    identity: DeviceTelemetryIdentity,
+  ): Promise<void> {
+    for (const event of events) {
+      try {
+        await this.record({
+          id: event.eventId,
+          eventType: event.eventType,
+          requestId: event.requestId,
+          userId: identity.userId,
+          deviceId: identity.deviceId,
+          timestamp: event.timestamp,
+          suggestionLength: event.suggestionLength,
+          latencyMs: event.latencyMs,
+          errorCode: event.errorCode,
+          modelId: event.modelId,
+          inferenceSource: event.inferenceSource,
+          trigger: event.trigger,
+          acceptedWordCount: event.acceptedWordCount,
+          acceptedCharacterCount: event.acceptedCharacterCount,
+          applicationCategory: event.applicationCategory,
+          memoryUsed: event.memoryUsed,
+          memoryCount: event.memoryCount,
+        });
+      } catch {
+        // Device telemetry is best-effort; one failed event must not block the batch.
+      }
+    }
   }
 
   async listEvents(): Promise<readonly TelemetryEvent[]> {

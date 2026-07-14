@@ -30,32 +30,10 @@ export function registerTelemetryRoutes(
     }
 
     const device = c.get("device");
-
-    for (const event of request.data) {
-      try {
-        await deps.telemetryService.record({
-          id: event.eventId,
-          eventType: event.eventType,
-          requestId: event.requestId,
-          userId: device.userId,
-          deviceId: device.deviceId,
-          timestamp: event.timestamp,
-          suggestionLength: event.suggestionLength,
-          latencyMs: event.latencyMs,
-          errorCode: event.errorCode,
-          modelId: event.modelId,
-          inferenceSource: event.inferenceSource,
-          trigger: event.trigger,
-          acceptedWordCount: event.acceptedWordCount,
-          acceptedCharacterCount: event.acceptedCharacterCount,
-          applicationCategory: event.applicationCategory,
-          memoryUsed: event.memoryUsed,
-          memoryCount: event.memoryCount,
-        });
-      } catch {
-        // Telemetry ingestion is best-effort; one failed event must not block the batch.
-      }
-    }
+    await deps.telemetryService.recordDeviceEvents(request.data, {
+      userId: device.userId,
+      deviceId: device.deviceId,
+    });
 
     return c.json(
       TelemetryEventsResponseSchema.parse({ status: "ok", data: { recorded: true } }),
