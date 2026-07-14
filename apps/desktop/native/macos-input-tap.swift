@@ -50,8 +50,8 @@ var deadKeyState: UInt32 = 0
 
 typealias TextSessionPayload = [String: Any]
 
-func emitActiveWindowIfChanged() {
-  guard let snapshot = activeWindowSnapshot() else { return }
+func emitActiveWindowIfChanged(snapshot: ActiveWindowSnapshot? = activeWindowSnapshot()) {
+  guard let snapshot = snapshot else { return }
   if snapshot == lastActiveWindowSnapshot { return }
   lastActiveWindowSnapshot = snapshot
   emit(["type": "active-app", "bundleId": snapshot.bundleId, "windowId": snapshot.windowId])
@@ -279,8 +279,7 @@ func caretIdentity(from range: CFRange?) -> String? {
   return range.map { "range:\($0.location):\($0.length)" }
 }
 
-func textSessionSnapshot() -> TextSessionPayload? {
-  let activeWindow = activeWindowSnapshot()
+func textSessionSnapshot(activeWindow: ActiveWindowSnapshot? = activeWindowSnapshot()) -> TextSessionPayload? {
   guard AXIsProcessTrusted(),
         let app = NSWorkspace.shared.frontmostApplication,
         let bundleId = app.bundleIdentifier else {
@@ -341,8 +340,8 @@ func textSessionSnapshotKey(_ snapshot: [String: Any]) -> String? {
   return String(data: data, encoding: .utf8)
 }
 
-func emitTextSessionSnapshotIfChanged() {
-  guard let snapshot = textSessionSnapshot(), let key = textSessionSnapshotKey(snapshot) else { return }
+func emitTextSessionSnapshotIfChanged(activeWindow: ActiveWindowSnapshot? = activeWindowSnapshot()) {
+  guard let snapshot = textSessionSnapshot(activeWindow: activeWindow), let key = textSessionSnapshotKey(snapshot) else { return }
   if key == lastTextSessionSnapshotKey { return }
   lastTextSessionSnapshotKey = key
   emit(["type": "text-session", "snapshot": snapshot])
@@ -410,11 +409,12 @@ func emitAppContextTreeSnapshotIfChanged() {
 }
 
 func emitPolledContextSnapshots() {
-  emitActiveWindowIfChanged()
+  let activeWindow = activeWindowSnapshot()
+  emitActiveWindowIfChanged(snapshot: activeWindow)
   // Ghostty output can include Tab's own diagnostics. Polling it would turn
   // those output changes into a self-sustaining suggestion refresh loop.
-  if activeWindowSnapshot()?.bundleId != "com.mitchellh.ghostty" {
-    emitTextSessionSnapshotIfChanged()
+  if activeWindow?.bundleId != "com.mitchellh.ghostty" {
+    emitTextSessionSnapshotIfChanged(activeWindow: activeWindow)
   }
   emitAppContextTreeSnapshotIfChanged()
 }

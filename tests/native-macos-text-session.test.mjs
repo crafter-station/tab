@@ -6,6 +6,21 @@ const nativeHelper = readFileSync(new URL("../apps/desktop/native/macos-input-ta
 const typingContext = readFileSync(new URL("../apps/desktop/src/main/typing-context.ts", import.meta.url), "utf8");
 const desktopEventIngress = readFileSync(new URL("../apps/desktop/src/main/desktop-event-ingress.ts", import.meta.url), "utf8");
 
+function functionBody(source, signature) {
+  const start = source.indexOf(signature);
+  assert.notEqual(start, -1, `Missing ${signature}`);
+  const openingBrace = source.indexOf("{", start);
+  let depth = 0;
+
+  for (let index = openingBrace; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    if (source[index] === "}") depth -= 1;
+    if (depth === 0) return source.slice(openingBrace + 1, index);
+  }
+
+  assert.fail(`Unterminated ${signature}`);
+}
+
 test("macOS helper emits Accessibility Text Session snapshots accepted by desktop", () => {
   assert.match(nativeHelper, /AXIsProcessTrusted/);
   assert.match(nativeHelper, /kAXFocusedUIElementAttribute/);
@@ -37,12 +52,19 @@ test("macOS helper captures terminal paste and invalidates uncertain edits", () 
 test("macOS helper does not turn passive Ghostty output into typing activity", () => {
   assert.match(
     nativeHelper,
-    /func emitPolledContextSnapshots\(\)[\s\S]*activeWindowSnapshot\(\)\?\.bundleId != "com\.mitchellh\.ghostty"[\s\S]*emitTextSessionSnapshotIfChanged\(\)/,
+    /func emitPolledContextSnapshots\(\)[\s\S]*activeWindow\?\.bundleId != "com\.mitchellh\.ghostty"[\s\S]*emitTextSessionSnapshotIfChanged\(activeWindow: activeWindow\)/,
   );
   assert.match(
     nativeHelper,
     /Timer\.scheduledTimer[\s\S]*emitPolledContextSnapshots\(\)/,
   );
+});
+
+test("macOS helper discovers the active window only once per polling cycle", () => {
+  const pollingBody = functionBody(nativeHelper, "func emitPolledContextSnapshots()");
+  assert.equal(pollingBody.match(/activeWindowSnapshot\(\)/g)?.length, 1);
+  assert.match(pollingBody, /emitActiveWindowIfChanged\(snapshot:/);
+  assert.match(pollingBody, /emitTextSessionSnapshotIfChanged\(activeWindow:/);
 });
 
 test("macOS helper reserves Option+Tab for suggestion acceptance", () => {
