@@ -28,6 +28,18 @@ describe("desktop renderer setup surfaces", () => {
     expect(settingsSource).not.toInclude("and on Pro.");
   });
 
+  it("uses clear activity and allowance language in account settings", () => {
+    const settingsSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx", "utf8");
+
+    expect(settingsSource).toInclude("Automatic Suggestions accepted");
+    expect(settingsSource).toInclude("Words inserted");
+    expect(settingsSource).toInclude("accepted words used today");
+    expect(settingsSource).toInclude("Deep Completes left");
+    expect(settingsSource).toInclude("No daily limit on");
+    expect(settingsSource).not.toInclude('label="Words completed"');
+    expect(settingsSource).not.toInclude('label="Accepted Words today"');
+  });
+
   it("keeps sign-in and onboarding setup styles on shared visual tokens instead of glass-era tokens", () => {
     const setupCss = [
       readFileSync("apps/desktop/src/renderer/src/styles/sign-in.css", "utf8"),

@@ -2,7 +2,7 @@ import { Link } from "@tanstack/react-router";
 import { Button, CardContent, SectionCard, SummaryMetric } from "@tab/ui";
 import { formatCount, formatDate } from "../pages/shared.tsx";
 import { DashboardSectionContent } from "./layout.tsx";
-import { formatPlanName, QuotaProgressPanel } from "./shared.tsx";
+import { AutomaticSuggestionAllowance, DeepCompleteAllowance, formatPlanName } from "./shared.tsx";
 import type { DashboardData } from "./types.ts";
 
 export function DashboardOverviewPage({ data }: { data: DashboardData }) {
@@ -14,17 +14,21 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
       <div className="grid gap-10">
         <SectionCard>
           <CardContent className="grid gap-x-8 gap-y-2 p-5 sm:grid-cols-2 lg:grid-cols-4">
-            <SummaryMetric label="Words completed" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="From Local Suggestions this month" />
+            <SummaryMetric label="Automatic Suggestions accepted" value={formatCount(data.localSuggestionActivity.acceptedSuggestions)} detail="This month" />
+            <SummaryMetric label="Words inserted" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="From Automatic Suggestions this month" />
             <SummaryMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} detail="This month" />
-            <SummaryMetric label="Deep Completes" value={formatCount(data.billing.deepCompletes.used)} detail="Successful results this month" />
-            <SummaryMetric label="Plan" value={formatPlanName(data.billing.planId)} detail={data.billing.trial.active ? `Trial ends ${formatDate(data.billing.trial.endsAt)}` : undefined} />
+            <SummaryMetric label="Deep Completes used" value={formatCount(data.billing.deepCompletes.used)} detail="Successful results this month" />
           </CardContent>
         </SectionCard>
         <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
           <SectionCard>
             <CardContent className="grid gap-7 p-5 sm:p-6">
-              <QuotaProgressPanel title="Local Accepted Words today" usage={data.billing.localAcceptedWords.used} quota={data.billing.localAcceptedWords.limit} resetAt={data.billing.localAcceptedWords.resetAt} />
-              <QuotaProgressPanel title="Deep Completes this month" usage={data.billing.deepCompletes.used} quota={data.billing.deepCompletes.limit} resetAt={data.billing.deepCompletes.resetAt} />
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-base font-bold">Plan allowances</h2>
+                <p className="text-sm text-muted-foreground">{formatPlanName(data.billing.planId)} plan{data.billing.trial.active ? ` trial ends ${formatDate(data.billing.trial.endsAt)}` : ""}</p>
+              </div>
+              <AutomaticSuggestionAllowance allowance={data.billing.localAcceptedWords} planName={formatPlanName(data.billing.planId)} />
+              <DeepCompleteAllowance allowance={data.billing.deepCompletes} />
             </CardContent>
           </SectionCard>
           <div className="grid gap-3 lg:pt-2">

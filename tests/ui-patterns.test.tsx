@@ -5,6 +5,7 @@ import {
   AlertDialogDescription,
   AlertDialogHeader,
   AlertDialogTitle,
+  AllowanceMeter,
   CommandBlock,
   ComponentReviewSurface,
   Dialog,
@@ -58,6 +59,7 @@ describe("shared app patterns", () => {
     expect(markup).toInclude("Status rows");
     expect(markup).toInclude("Settings navigation");
     expect(markup).toInclude("Primitive controls");
+    expect(markup).toInclude("Plan allowances");
     expect(markup).toInclude("Email input");
     expect(markup).toInclude("Plan table");
     expect(markup).toInclude("Tooltip guidance");
@@ -84,6 +86,33 @@ describe("shared app patterns", () => {
     expect(markup).toInclude("aria-current=\"page\"");
     expect(markup).toInclude("Debug command");
     expect(markup).toInclude("Download for macOS");
+  });
+
+  it("renders finite and unlimited allowances without relying on progress color", () => {
+    const markup = renderToStaticMarkup(
+      <div>
+        <AllowanceMeter
+          title="Automatic Suggestions"
+          usage="3 of 100 accepted words used today"
+          remaining="97 words left"
+          detail="Daily limit resets Jul 15"
+          percentage={3}
+        />
+        <AllowanceMeter
+          title="Automatic Suggestions"
+          usage="3 accepted words today"
+          remaining="Unlimited"
+          detail="No daily limit on Pro"
+          percentage={null}
+        />
+      </div>,
+    );
+
+    expect(markup).toInclude("3 of 100 accepted words used today");
+    expect(markup).toInclude("97 words left");
+    expect(markup).toInclude('aria-label="Automatic Suggestions allowance used"');
+    expect(markup).toInclude("No daily limit on Pro");
+    expect(markup.match(/role="progressbar"/g)?.length).toBe(1);
   });
 
   it("keeps the floating suggestion overlay inert except for acceptance controls", () => {

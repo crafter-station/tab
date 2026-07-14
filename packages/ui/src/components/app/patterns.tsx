@@ -4,6 +4,7 @@ import { Button } from "../ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../ui/card";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import { Progress } from "../ui/progress";
 import { Separator } from "../ui/separator";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { cn } from "../../lib/utils";
@@ -231,6 +232,37 @@ export function SummaryMetric({ label, value, detail, className }: SummaryMetric
   );
 }
 
+type AllowanceMeterProps = {
+  title: string;
+  usage: string;
+  remaining: string;
+  detail: string;
+  percentage: number | null;
+  className?: string;
+};
+
+export function AllowanceMeter({ title, usage, remaining, detail, percentage, className }: AllowanceMeterProps) {
+  return (
+    <div className={cn("grid gap-3 rounded-[var(--radius-card)] border border-border p-4", className)}>
+      <div className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1">
+        <div className="grid gap-1">
+          <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+          <p className="text-sm text-muted-foreground tabular-nums">{usage}</p>
+        </div>
+        <p className="text-sm font-semibold text-foreground tabular-nums">{remaining}</p>
+      </div>
+      {percentage === null ? null : (
+        <Progress
+          aria-label={`${title} allowance used`}
+          className="h-1.5 bg-border"
+          value={Math.max(0, Math.min(percentage, 100))}
+        />
+      )}
+      <p className="text-xs leading-relaxed text-muted-foreground">{detail}</p>
+    </div>
+  );
+}
+
 function ReviewPrimitiveControls({ inputId }: { inputId: string }) {
   return (
     <div className="grid gap-3">
@@ -283,6 +315,24 @@ function ReviewPanel({ mode }: { mode: ThemeMode }) {
           description="Buttons, cards, status rows, settings navigation, command blocks, and empty states for Tab surfaces."
           action={<Button size="sm">Primary action</Button>}
         />
+        <Separator />
+        <div className="grid gap-3">
+          <h3 className="text-sm font-bold">Plan allowances</h3>
+          <AllowanceMeter
+            title="Automatic Suggestions"
+            usage="24 of 100 accepted words used today"
+            remaining="76 words left"
+            detail="Daily limit resets tomorrow"
+            percentage={24}
+          />
+          <AllowanceMeter
+            title="Deep Complete"
+            usage="3 of 10 used this month"
+            remaining="7 Deep Completes left"
+            detail="Monthly limit resets Aug 1"
+            percentage={30}
+          />
+        </div>
         <Separator />
         <div className="grid gap-3">
           <h3 className="text-sm font-bold">Status rows</h3>

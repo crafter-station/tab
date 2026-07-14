@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import {
+  AllowanceMeter,
   Button,
   CommandBlock,
   EmptyState,
@@ -60,16 +61,17 @@ function formatDate(value: string) {
   return new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" }).format(new Date(value));
 }
 
-function formatAllowance(used: number, limit: number | null) {
-  return `${used.toLocaleString()} / ${limit === null ? "Unlimited" : limit.toLocaleString()}`;
-}
-
 function formatThemeMode(mode: ThemeMode) {
   return mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
 function formatPlanName(planId: string) {
   return planId.charAt(0).toUpperCase() + planId.slice(1);
+}
+
+function allowancePercentage(used: number, limit: number | null) {
+  if (limit === null) return null;
+  return Math.round((Math.min(used, limit) / limit) * 100);
 }
 
 function describeLocalInference(status: LocalInferenceStatus, error: string | null): { label: string; description: string } {
@@ -290,12 +292,38 @@ export function SettingsSurface() {
         return (
           <>
             {status.entitlement ? (
-              <div className="settings-summary">
-                <SummaryMetric label="Plan" value={formatPlanName(status.entitlement.planId)} detail={status.entitlement.trial.active ? `Trial ends ${formatDate(status.entitlement.trial.endsAt)}` : "Current tier"} />
-                <SummaryMetric label="Accepted Words today" value={formatAllowance(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit)} detail={`Resets ${formatDate(status.entitlement.localAcceptedWords.resetAt)}`} />
-                <SummaryMetric label="Deep Completes" value={formatAllowance(status.entitlement.deepCompletes.used, status.entitlement.deepCompletes.limit)} detail={`Resets ${formatDate(status.entitlement.deepCompletes.resetAt)}`} />
-                <SummaryMetric label="Words completed" value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()} detail="This month" />
-              </div>
+              <SettingsGroup
+                title="Usage"
+                description={`${formatPlanName(status.entitlement.planId)} plan${status.entitlement.trial.active ? ` trial ends ${formatDate(status.entitlement.trial.endsAt)}` : ""}.`}
+              >
+                <div className="settings-summary">
+                  <SummaryMetric label="Automatic Suggestions accepted" value={(status.localSuggestionActivity?.acceptedSuggestions ?? 0).toLocaleString()} detail="This month" />
+                  <SummaryMetric label="Words inserted" value={(status.localSuggestionActivity?.acceptedWords ?? 0).toLocaleString()} detail="From Automatic Suggestions this month" />
+                  <SummaryMetric label="Deep Completes used" value={status.entitlement.deepCompletes.used.toLocaleString()} detail="Successful results this month" />
+                </div>
+                <div className="mt-4 grid gap-3">
+                  <AllowanceMeter
+                    title="Automatic Suggestions"
+                    usage={status.entitlement.localAcceptedWords.limit === null
+                      ? `${status.entitlement.localAcceptedWords.used.toLocaleString()} accepted words today`
+                      : `${status.entitlement.localAcceptedWords.used.toLocaleString()} of ${status.entitlement.localAcceptedWords.limit.toLocaleString()} accepted words used today`}
+                    remaining={status.entitlement.localAcceptedWords.limit === null
+                      ? "Unlimited"
+                      : `${(status.entitlement.localAcceptedWords.remaining ?? 0).toLocaleString()} words left`}
+                    detail={status.entitlement.localAcceptedWords.limit === null
+                      ? `No daily limit on ${formatPlanName(status.entitlement.planId)}`
+                      : `Daily limit resets ${formatDate(status.entitlement.localAcceptedWords.resetAt)}`}
+                    percentage={allowancePercentage(status.entitlement.localAcceptedWords.used, status.entitlement.localAcceptedWords.limit)}
+                  />
+                  <AllowanceMeter
+                    title="Deep Complete"
+                    usage={`${status.entitlement.deepCompletes.used.toLocaleString()} of ${(status.entitlement.deepCompletes.limit ?? 0).toLocaleString()} used this month`}
+                    remaining={`${(status.entitlement.deepCompletes.remaining ?? 0).toLocaleString()} Deep Completes left`}
+                    detail={`Monthly limit resets ${formatDate(status.entitlement.deepCompletes.resetAt)}`}
+                    percentage={allowancePercentage(status.entitlement.deepCompletes.used, status.entitlement.deepCompletes.limit)}
+                  />
+                </div>
+              </SettingsGroup>
             ) : null}
             <SettingsGroup title="Connection" description="Account access for this Mac.">
               <StatusRow

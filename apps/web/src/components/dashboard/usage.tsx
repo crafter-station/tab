@@ -2,7 +2,7 @@ import { isPaidPlanId } from "@tab/billing";
 import { Alert, AlertDescription, AlertTitle, Button, CardContent, SectionCard, SummaryMetric } from "@tab/ui";
 import { formatCount, formatDate } from "../pages/shared.tsx";
 import { DashboardSectionContent } from "./layout.tsx";
-import { formatPlanName, QuotaProgressPanel } from "./shared.tsx";
+import { AutomaticSuggestionAllowance, DeepCompleteAllowance, formatPlanName } from "./shared.tsx";
 import type { DashboardData } from "./types.ts";
 
 export function DashboardUsagePage({ data }: { data: DashboardData }) {
@@ -15,10 +15,11 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
       <div className="grid gap-10">
         <section className="grid gap-7">
           <SectionCard>
-            <CardContent className="grid gap-x-8 gap-y-2 p-5 sm:grid-cols-3">
-              <SummaryMetric label="Words completed" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="From Local Suggestions this month" />
-              <SummaryMetric label="Active days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} detail="This month" />
-              <SummaryMetric label="Average time to accept" value={data.localSuggestionActivity.averageAcceptanceLatencyMs === null ? "Not available" : `${formatCount(data.localSuggestionActivity.averageAcceptanceLatencyMs)} ms`} detail="From first visible suggestion to insertion" />
+            <CardContent className="grid gap-x-8 gap-y-2 p-5 sm:grid-cols-2 lg:grid-cols-4">
+              <SummaryMetric label="Automatic Suggestions accepted" value={formatCount(data.localSuggestionActivity.acceptedSuggestions)} detail="This month" />
+              <SummaryMetric label="Words inserted" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="From Automatic Suggestions this month" />
+              <SummaryMetric label="Deep Completes used" value={formatCount(billing.deepCompletes.used)} detail="Successful results this month" />
+              <SummaryMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} detail="This month" />
             </CardContent>
           </SectionCard>
           <SectionCard>
@@ -30,8 +31,16 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
               <p className="text-sm text-muted-foreground">{billing.trial.active ? `Ends ${formatDate(billing.trial.endsAt)}` : billing.billingInterval ? `${billing.billingInterval} billing` : "Free account"}</p>
             </CardContent>
           </SectionCard>
-          <QuotaProgressPanel title="Local Accepted Words today" usage={billing.localAcceptedWords.used} quota={billing.localAcceptedWords.limit} resetAt={billing.localAcceptedWords.resetAt} />
-          <QuotaProgressPanel title="Deep Completes this month" usage={billing.deepCompletes.used} quota={billing.deepCompletes.limit} resetAt={billing.deepCompletes.resetAt} />
+          <SectionCard>
+            <CardContent className="grid gap-4 p-5 sm:p-6">
+              <div>
+                <h2 className="text-base font-bold">Plan allowances</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Automatic Suggestions and Deep Complete reset independently.</p>
+              </div>
+              <AutomaticSuggestionAllowance allowance={billing.localAcceptedWords} planName={formatPlanName(billing.planId)} />
+              <DeepCompleteAllowance allowance={billing.deepCompletes} />
+            </CardContent>
+          </SectionCard>
           {billing.localAcceptedWords.exhausted || billing.deepCompletes.exhausted ? (
             <Alert>
               <AlertTitle>Allowance reached</AlertTitle>
