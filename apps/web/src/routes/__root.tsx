@@ -26,7 +26,7 @@ function RootComponent() {
           {isDashboard ? <Outlet /> : (
             <div className="flex min-h-dvh flex-col">
               <SiteHeader
-                brandControl={<BrandMenu destinationHref="/dashboard" destinationLabel="Dashboard" />}
+                brandControl={<BrandMenu />}
                  accountControl={viewer ? <UserMenu user={viewer} /> : <Button asChild variant="secondary"><a href="/login">Sign in</a></Button>}
                  authenticated={Boolean(viewer)}
               />

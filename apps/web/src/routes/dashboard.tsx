@@ -4,7 +4,8 @@ import { getDashboardData } from "../lib/dashboard.functions.ts";
 import { getViewer } from "../lib/viewer.functions.ts";
 
 function DashboardRouteComponent() {
-  return <DashboardLayout />;
+  const { user } = Route.useLoaderData();
+  return <DashboardLayout user={user} />;
 }
 
 export const Route = createFileRoute("/dashboard")({

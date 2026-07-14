@@ -1,5 +1,6 @@
 import { Brain, ChartBar, Desktop, House, UserCircle } from "@phosphor-icons/react";
 import { Link, Outlet, useRouterState } from "@tanstack/react-router";
+import type { SessionUser } from "@tab/contracts";
 import type { ReactNode } from "react";
 import {
   Sidebar,
@@ -18,6 +19,7 @@ import {
   useSidebar,
 } from "@tab/ui";
 import { BrandMenu } from "../brand-menu.tsx";
+import { UserMenu } from "../user-menu.tsx";
 import type { DashboardSection } from "./types.ts";
 
 const dashboardNavigation = [
@@ -46,8 +48,6 @@ function DashboardSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="h-16 shrink-0 border-b border-sidebar-border p-2">
         <BrandMenu
-          destinationHref="/"
-          destinationLabel="Home page"
           triggerClassName="h-12 w-full justify-start overflow-hidden px-1.5 group-data-[collapsible=icon]:!w-8 group-data-[collapsible=icon]:!justify-center group-data-[collapsible=icon]:px-0"
           wordmarkClassName="dashboard-sidebar-label"
         />
@@ -91,16 +91,17 @@ export function DashboardSectionContent({ section, children }: { section: Dashbo
   );
 }
 
-export function DashboardLayout() {
+export function DashboardLayout({ user }: { user: SessionUser }) {
   return (
     <SidebarProvider>
       <DashboardSidebar />
       <SidebarInset className="min-w-0 bg-background">
         <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md sm:px-6">
-          <div className="flex min-w-0 items-center gap-3">
+          <div className="flex min-w-0 flex-1 items-center gap-3">
             <SidebarTrigger className="-ml-1" />
             <p className="truncate text-sm font-semibold">Tab account</p>
           </div>
+          <UserMenu user={user} />
         </header>
         <main id="main-content" className="w-full flex-1 px-5 py-7 sm:px-8 sm:py-10 lg:px-10">
           <div className="mx-auto w-full max-w-6xl"><Outlet /></div>

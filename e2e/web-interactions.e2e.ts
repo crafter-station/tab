@@ -6,22 +6,21 @@ async function waitForHydration(locator: Locator) {
   ))).toBe(true);
 }
 
-test("shared dropdowns dismiss on outside click and Escape", async ({ page }) => {
+test("shared menus dismiss on outside click and Escape", async ({ page }) => {
   await page.goto("/");
 
-  const brandTrigger = page.getByRole("button", { name: "Open Tab brand menu" });
+  const brandTrigger = page.getByRole("link", { name: "Tab home. Right-click for menu" });
+  await expect(brandTrigger).toHaveAttribute("href", "/");
   await waitForHydration(brandTrigger);
-  await brandTrigger.click();
-  await expect(page.getByRole("menuitem", { name: "Brand guidelines" })).toBeVisible();
+  await brandTrigger.click({ button: "right" });
+  await expect(page.getByRole("menuitem", { name: "Brand page" })).toBeVisible();
 
   await page.mouse.click(700, 400);
-  await expect(brandTrigger).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByRole("menuitem", { name: "Brand guidelines" })).toBeHidden();
+  await expect(page.getByRole("menuitem", { name: "Brand page" })).toBeHidden();
 
-  await brandTrigger.click();
+  await brandTrigger.click({ button: "right" });
   await page.keyboard.press("Escape");
-  await expect(brandTrigger).toBeFocused();
-  await expect(brandTrigger).toHaveAttribute("aria-expanded", "false");
+  await expect(page.getByRole("menuitem", { name: "Brand page" })).toBeHidden();
 
   const moreTrigger = page.getByRole("button", { name: "More" });
   await moreTrigger.click();
@@ -61,21 +60,15 @@ test("marketing controls use hydrated Tabs and Toggle state", async ({ page }) =
   await expect(pause).toHaveAttribute("aria-label", "Resume animation");
 });
 
-test("theme radio selection persists across navigation", async ({ page }) => {
+test("stored theme selection persists across navigation", async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem("tab-theme", "dark"));
   await page.goto("/");
 
-  const brandTrigger = page.getByRole("button", { name: "Open Tab brand menu" });
-  await waitForHydration(brandTrigger);
-  await brandTrigger.click();
-  const darkTheme = page.getByRole("menuitemradio", { name: "Dark" });
-  await darkTheme.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("tab-theme"))).toBe("dark");
 
   await page.goto("/pricing");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
-  await page.getByRole("button", { name: "Open Tab brand menu" }).click();
-  await expect(page.getByRole("menuitemradio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
 });
 
 test("Option+Tab advances through consecutive Suggestions", async ({ page }) => {
