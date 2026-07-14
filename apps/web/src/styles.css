@@ -433,11 +433,12 @@
   border-radius: var(--radius-card);
   box-shadow: var(--tab-overlay-deep-shadow);
   transform: translate3d(0, 0, 0);
-  animation: tab-deep-key-press 2.4s var(--tab-ease-in-out) infinite;
 }
 
-.tab-deep-key-second {
-  animation-delay: 180ms;
+.tab-deep-key > span {
+  font-family: var(--font-code);
+  font-size: 0.75rem;
+  font-weight: 700;
 }
 
 .tab-deep-key > svg {
@@ -454,7 +455,23 @@
 }
 
 .tab-deep-signal {
-  animation: tab-deep-signal 2.4s var(--tab-ease-in-out) infinite;
+  opacity: 0;
+}
+
+.tab-deep-demo[data-phase="requesting"] .tab-deep-key {
+  animation: tab-deep-key-press 420ms var(--tab-ease-in-out) both;
+}
+
+.tab-deep-demo[data-phase="requesting"] .tab-deep-key-second {
+  animation-delay: 160ms;
+}
+
+.tab-deep-demo[data-phase="accepted"] .tab-deep-key {
+  animation: tab-deep-key-press 360ms var(--tab-ease-in-out) both;
+}
+
+.tab-deep-demo[data-phase="requesting"] .tab-deep-signal {
+  animation: tab-deep-signal 600ms var(--tab-ease-out) both;
 }
 
 .tab-deep-overlay,
@@ -646,26 +663,23 @@
 
 @keyframes tab-deep-key-press {
   0%,
-  9%,
   100% {
     transform: translate3d(0, 0, 0);
   }
-  4% {
+  40% {
     transform: translate3d(0, 0.125rem, 0) scale(0.96);
   }
 }
 
 @keyframes tab-deep-signal {
-  0%,
-  18% {
+  0% {
     opacity: 0;
     transform: translate3d(0, 0, 0);
   }
-  30%,
-  70% {
+  24%,
+  64% {
     opacity: 1;
   }
-  82%,
   100% {
     opacity: 0;
     transform: translate3d(0, 2rem, 0);

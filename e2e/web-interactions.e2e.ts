@@ -92,10 +92,12 @@ test("Option+Tab advances through consecutive Suggestions", async ({ page }) => 
 });
 
 test("double Option requests Deep Complete before Option+Tab accepts it", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
 
   const demo = page.getByRole("region", { name: "Interactive Deep Complete example" });
   await waitForHydration(demo);
+  await expect(demo.locator("[data-deep-accept]")).toHaveAttribute("data-source", "local");
   await demo.focus();
   await page.keyboard.press("Alt");
   await page.keyboard.press("Alt");
@@ -106,6 +108,19 @@ test("double Option requests Deep Complete before Option+Tab accepts it", async 
   await page.keyboard.press("Alt+Tab");
   await expect(demo).toHaveAttribute("data-phase", "accepted");
   await expect(demo.locator("[data-deep-announcement]")).toHaveText("Deep Complete suggestion accepted.");
+});
+
+test("harder writing moment animates from local to Deep Complete acceptance", async ({ page }) => {
+  await page.goto("/");
+
+  const demo = page.getByRole("region", { name: "Interactive Deep Complete example" });
+  await expect(demo).toHaveAttribute("data-phase", "local");
+  await expect(demo.locator("[data-deep-accept]")).toHaveAttribute("data-source", "local");
+  await expect(demo).toHaveAttribute("data-phase", "requesting");
+  await expect(demo).toHaveAttribute("data-phase", "ready");
+  await expect(demo.locator("[data-deep-accept]")).toHaveAttribute("data-source", "cloud");
+  await expect(demo.getByRole("button", { name: "Accept Deep Complete with Option plus Tab" })).toBeVisible();
+  await expect(demo).toHaveAttribute("data-phase", "accepted");
 });
 
 test("reduced motion keeps both workflows usable without looping movement", async ({ page }) => {

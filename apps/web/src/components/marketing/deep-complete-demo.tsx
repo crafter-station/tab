@@ -8,22 +8,24 @@ const deepSuggestions = [
   "I also mapped the rollout risks and key decisions.",
   "The draft includes owners, open questions, and next steps.",
 ] as const;
+const localSuggestion = "I also added a few notes for the team.";
+
+type Phase = "local" | "requesting" | "ready" | "accepted";
 
 export function DeepCompleteDemo() {
-  const [phase, setPhase] = useState<"ready" | "requesting" | "accepted">("ready");
+  const [phase, setPhase] = useState<Phase>("local");
   const [suggestionIndex, setSuggestionIndex] = useState(0);
-  const [announcement, setAnnouncement] = useState("Deep Complete suggestion ready. Press Option plus Tab to accept.");
+  const [announcement, setAnnouncement] = useState("A Local Suggestion is ready. Double-tap Option to request Deep Complete.");
   const timer = useRef<number | undefined>(undefined);
+  const deepSuggestion = deepSuggestions[suggestionIndex];
+  const showingDeepSuggestion = phase === "ready" || phase === "accepted";
+  const suggestion = showingDeepSuggestion ? deepSuggestion : localSuggestion;
 
   const requestDeepComplete = () => {
+    if (phase === "requesting") return;
     window.clearTimeout(timer.current);
     setPhase("requesting");
     setAnnouncement("Deep Complete requested with a double-tap of Option.");
-    timer.current = window.setTimeout(() => {
-      setSuggestionIndex((current) => (current + 1) % deepSuggestions.length);
-      setPhase("ready");
-      setAnnouncement("A new Deep Complete suggestion is ready. Press Option plus Tab to accept.");
-    }, 420);
   };
 
   const accept = () => {
@@ -31,11 +33,32 @@ export function DeepCompleteDemo() {
     window.clearTimeout(timer.current);
     setPhase("accepted");
     setAnnouncement("Deep Complete suggestion accepted.");
-    timer.current = window.setTimeout(requestDeepComplete, 900);
   };
 
   const surface = useAcceptanceSurface<HTMLDivElement>(accept, false, requestDeepComplete);
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  useEffect(() => {
+    const advance = () => {
+      if (phase === "local") {
+        setPhase("requesting");
+        setAnnouncement("Deep Complete requested with a double-tap of Option.");
+      } else if (phase === "requesting") {
+        setPhase("ready");
+        setAnnouncement("A Deep Complete suggestion is ready. Press Option plus Tab to accept.");
+      } else if (phase === "ready") {
+        setPhase("accepted");
+        setAnnouncement("Deep Complete suggestion accepted.");
+      } else {
+        setSuggestionIndex((current) => (current + 1) % deepSuggestions.length);
+        setPhase("local");
+        setAnnouncement("A Local Suggestion is ready. Double-tap Option to request Deep Complete.");
+      }
+    };
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduceMotion && (phase === "local" || phase === "ready")) return;
+    const delay = phase === "requesting" ? 600 : phase === "accepted" ? 1200 : 2200;
+    timer.current = window.setTimeout(advance, delay);
+    return () => window.clearTimeout(timer.current);
+  }, [phase]);
 
   return (
     <div
@@ -64,31 +87,36 @@ export function DeepCompleteDemo() {
             </div>
             <p className="mt-5 text-lg leading-8">Hi Maya,</p>
             <p className="mt-3 text-lg leading-8">I pulled the launch plan together.</p>
-            <p className="tab-deep-draft-suggestion mt-3 text-lg leading-8 text-muted-foreground">{deepSuggestions[suggestionIndex]}</p>
+            <p className="tab-deep-draft-suggestion mt-3 text-lg leading-8 text-muted-foreground">{suggestion}</p>
           </div>
 
           <SuggestionCommand
-            aria-label="Accept the Deep Complete suggestion with Option plus Tab"
+            aria-label={showingDeepSuggestion ? "Accept the Deep Complete suggestion with Option plus Tab" : "Local Suggestion before Deep Complete"}
             className="tab-deep-overlay"
             data-deep-accept
             disabled={phase !== "ready"}
             onClick={accept}
             refreshing={phase === "requesting"}
-            source="cloud"
-            suggestion={deepSuggestions[suggestionIndex]}
+            source={showingDeepSuggestion ? "cloud" : "local"}
+            suggestion={suggestion}
           />
         </div>
 
         <div className="grid content-center justify-items-center gap-5 text-center">
-          <button className="tab-deep-trigger rounded-[var(--radius-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" onClick={requestDeepComplete} aria-label="Request Deep Complete by double-tapping Option">
+          <button
+            className="tab-deep-trigger rounded-[var(--radius-card)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            type="button"
+            onClick={showingDeepSuggestion ? accept : requestDeepComplete}
+            aria-label={showingDeepSuggestion ? "Accept Deep Complete with Option plus Tab" : "Request Deep Complete by double-tapping Option"}
+          >
             <span className="flex gap-2" aria-hidden="true">
               <kbd className="tab-deep-key"><Option /></kbd>
-              <kbd className="tab-deep-key tab-deep-key-second"><Option /></kbd>
+              <kbd className="tab-deep-key tab-deep-key-second">{showingDeepSuggestion ? <span>Tab</span> : <Option />}</kbd>
             </span>
           </button>
           <div>
-            <p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Double-tap Option</p>
-            <p className="mt-2 text-sm font-semibold">Request, then accept</p>
+            <p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">{showingDeepSuggestion ? "Option+Tab" : "Double-tap Option"}</p>
+            <p className="mt-2 text-sm font-semibold">{showingDeepSuggestion ? "Accept Deep Complete" : "Request Deep Complete"}</p>
           </div>
           <div className="h-10 w-px bg-border" aria-hidden="true"><span className="tab-deep-signal block size-2 -translate-x-[0.21875rem] rounded-full bg-[var(--tab-overlay-deep-accent)]" /></div>
           <span className="inline-flex items-center gap-2 text-xs font-semibold text-muted-foreground"><Cloud aria-hidden="true" /> Explicit cloud path</span>
