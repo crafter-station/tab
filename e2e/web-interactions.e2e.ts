@@ -78,7 +78,7 @@ test("theme radio selection persists across navigation", async ({ page }) => {
   await expect(page.getByRole("menuitemradio", { name: "Dark" })).toHaveAttribute("aria-checked", "true");
 });
 
-test("Option+Tab accepts the primary autocomplete example", async ({ page }) => {
+test("Option+Tab advances through consecutive Suggestions", async ({ page }) => {
   await page.goto("/");
 
   const demo = page.getByRole("region", { name: "Interactive Tab autocomplete example" });
@@ -86,8 +86,13 @@ test("Option+Tab accepts the primary autocomplete example", async ({ page }) => 
   await demo.focus();
   await page.keyboard.press("Alt+Tab");
 
-  await expect(demo).toHaveAttribute("data-accepted", "true");
-  await expect(demo.locator("[data-demo-announcement]")).toHaveText("Suggestion accepted and added to the example.");
+  await expect(demo).toHaveAttribute("data-step", "1");
+  await expect(demo.getByRole("button", { name: "Accept suggestion 2 with Option plus Tab" })).toBeVisible();
+  await page.keyboard.press("Alt+Tab");
+  await expect(demo).toHaveAttribute("data-step", "2");
+  await page.keyboard.press("Alt+Tab");
+  await expect(demo).toHaveAttribute("data-step", "3");
+  await expect(demo.locator("[data-demo-announcement]")).toHaveText("Thought complete. The suggestion sequence will restart.");
 });
 
 test("links and account forms remain usable without JavaScript", async ({ browser }) => {

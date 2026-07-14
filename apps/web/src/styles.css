@@ -368,12 +368,21 @@
 
 .tab-demo-suggestion {
   display: inline;
-  animation: tab-demo-suggestion 300ms var(--tab-ease-out) 280ms both;
+  animation: tab-demo-suggestion 220ms var(--tab-ease-out) 120ms both;
   transition: color 150ms var(--tab-ease-out);
 }
 
+.tab-demo-inserted {
+  color: var(--foreground);
+}
+
 .tab-demo-overlay {
-  animation: tab-demo-overlay 220ms var(--tab-ease-out) 520ms both;
+  animation: tab-demo-overlay 200ms var(--tab-ease-out) 180ms both;
+  transition:
+    opacity 120ms var(--tab-ease-out),
+    transform 120ms var(--tab-ease-out),
+    border-color 140ms var(--tab-ease-out),
+    background-color 140ms var(--tab-ease-out);
 }
 
 .tab-demo[data-restarting="true"] .tab-demo-suggestion,
@@ -389,20 +398,13 @@
 }
 
 .tab-demo[data-accepted="true"] .tab-demo-overlay {
-  color: var(--primary-foreground);
-  background: var(--primary);
-  border-color: var(--primary);
-  opacity: 1;
-  transform: none;
+  opacity: 0;
+  transform: scale(0.985);
   animation: none;
 }
 
-.tab-demo[data-accepted="true"] .tab-demo-ready-label {
-  display: none;
-}
-
-.tab-demo[data-accepted="true"] .tab-demo-accepted-label {
-  display: inline;
+.tab-demo[data-step="3"] .tab-demo-overlay {
+  visibility: hidden;
 }
 
 .marketing-detail > summary::-webkit-details-marker {
