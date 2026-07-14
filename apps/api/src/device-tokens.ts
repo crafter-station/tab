@@ -43,7 +43,7 @@ export interface DeviceTokenStorage {
     code: string,
     payload: { userId: string; expiresAt: Date },
   ): Promise<void>;
-  consumeExchangeCode(code: string): Promise<{ userId: string } | null>;
+  consumeExchangeCode(code: string): Promise<{ userId: string; expiresAt: Date } | null>;
 }
 
 function generateOpaqueToken(): string {
@@ -139,12 +139,11 @@ export class InMemoryDeviceTokenStorage implements DeviceTokenStorage {
     });
   }
 
-  async consumeExchangeCode(code: string): Promise<{ userId: string } | null> {
+  async consumeExchangeCode(code: string): Promise<{ userId: string; expiresAt: Date } | null> {
     const record = this.exchangeCodes.get(code);
     if (!record) return null;
     this.exchangeCodes.delete(code);
-    if (record.expiresAt < new Date()) return null;
-    return { userId: record.userId };
+    return { userId: record.userId, expiresAt: record.expiresAt };
   }
 }
 
@@ -291,30 +290,30 @@ export class D1DeviceTokenStorage implements DeviceTokenStorage {
     });
   }
 
-  async consumeExchangeCode(code: string): Promise<{ userId: string } | null> {
-    const row = await this.db.query.deviceExchangeCodes.findFirst({
-      where: eq(deviceExchangeCodes.code, code),
-    });
-    if (!row) return null;
-
-    await this.db
+  async consumeExchangeCode(code: string): Promise<{ userId: string; expiresAt: Date } | null> {
+    const [row] = await this.db
       .delete(deviceExchangeCodes)
-      .where(eq(deviceExchangeCodes.code, code));
-
-    const expiresAt = new Date(row.expiresAt);
-    if (expiresAt < new Date()) return null;
-    return { userId: row.userId };
+      .where(eq(deviceExchangeCodes.code, code))
+      .returning({
+        userId: deviceExchangeCodes.userId,
+        expiresAt: deviceExchangeCodes.expiresAt,
+      });
+    return row
+      ? { userId: row.userId, expiresAt: new Date(row.expiresAt) }
+      : null;
   }
 }
 
 export type DeviceTokenServiceDependencies = {
   storage?: DeviceTokenStorage;
   exchangeCodeTtlMs?: number;
+  now?: () => Date;
 };
 
 export class DeviceTokenService {
   private storage: DeviceTokenStorage;
   private exchangeCodeTtlMs: number;
+  private now: () => Date;
 
   constructor(deps: DeviceTokenServiceDependencies = {}) {
     if (!deps.storage) {
@@ -322,17 +321,20 @@ export class DeviceTokenService {
     }
     this.storage = deps.storage;
     this.exchangeCodeTtlMs = deps.exchangeCodeTtlMs ?? 1000 * 60 * 5;
+    this.now = deps.now ?? (() => new Date());
   }
 
   async createExchangeCode(userId: string): Promise<string> {
     const code = crypto.randomUUID();
-    const expiresAt = new Date(Date.now() + this.exchangeCodeTtlMs);
+    const expiresAt = new Date(this.now().getTime() + this.exchangeCodeTtlMs);
     await this.storage.createExchangeCode(code, { userId, expiresAt });
     return code;
   }
 
   async consumeExchangeCode(code: string): Promise<{ userId: string } | null> {
-    return this.storage.consumeExchangeCode(code);
+    const exchange = await this.storage.consumeExchangeCode(code);
+    if (!exchange || exchange.expiresAt < this.now()) return null;
+    return { userId: exchange.userId };
   }
 
   async createDeviceToken(
@@ -341,7 +343,7 @@ export class DeviceTokenService {
   ): Promise<{ token: string; device: Device }> {
     const token = generateOpaqueToken();
     const tokenHash = await hashToken(token);
-    const now = new Date();
+    const now = this.now();
 
     const existing = await this.storage.findDeviceByDeviceId(userId, deviceInfo.deviceId);
     if (existing) {
@@ -379,7 +381,7 @@ export class DeviceTokenService {
   ): Promise<{ token: string; device: Device } | null> {
     const token = generateOpaqueToken();
     const tokenHash = await hashToken(token);
-    const now = new Date();
+    const now = this.now();
     const existing = await this.storage.findDeviceByDeviceId(userId, deviceInfo.deviceId);
     if (existing) {
       const updated: Device = {
@@ -425,7 +427,7 @@ export class DeviceTokenService {
 
     const updated: Device = {
       ...device,
-      lastSeenAt: new Date(),
+      lastSeenAt: this.now(),
     };
     await this.storage.updateDevice(updated);
     return updated;

@@ -2,7 +2,11 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { createApp } from "../apps/api/src/index.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
-import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
+import {
+  D1DeviceTokenStorage,
+  DeviceTokenService,
+  InMemoryDeviceTokenStorage,
+} from "../apps/api/src/device-tokens.ts";
 import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.ts";
 import { InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
@@ -11,6 +15,7 @@ import {
   DeviceAuthorizeResponseSchema,
   DeviceTokenExchangeResponseSchema,
 } from "../packages/contracts/src/index.ts";
+import { createTestDatabase } from "./test-db.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
 
@@ -78,6 +83,68 @@ async function signUpAndSignIn(app: ReturnType<typeof createApp>, billingService
 }
 
 describe("Better Auth browser handoff and device tokens", () => {
+  it("owns exchange-code expiry and one-time consumption in the token lifecycle", async () => {
+    let now = new Date("2026-07-14T12:00:00.000Z");
+    const deviceTokenService = new DeviceTokenService({
+      storage: new InMemoryDeviceTokenStorage(),
+      exchangeCodeTtlMs: 1_000,
+      now: () => now,
+    });
+
+    const validCode = await deviceTokenService.createExchangeCode("user-valid");
+    now = new Date("2026-07-14T12:00:01.000Z");
+    expect(await deviceTokenService.consumeExchangeCode(validCode)).toEqual({
+      userId: "user-valid",
+    });
+    expect(await deviceTokenService.consumeExchangeCode(validCode)).toBeNull();
+
+    const expiredCode = await deviceTokenService.createExchangeCode("user-expired");
+    now = new Date("2026-07-14T12:00:02.001Z");
+    expect(await deviceTokenService.consumeExchangeCode(expiredCode)).toBeNull();
+  });
+
+  it("atomically consumes a D1-backed exchange code once", async () => {
+    const database = new Database(":memory:");
+    database.run(`
+      CREATE TABLE device_exchange_codes (
+        code TEXT PRIMARY KEY NOT NULL,
+        user_id TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )
+    `);
+    const deviceTokenService = new DeviceTokenService({
+      storage: new D1DeviceTokenStorage(createTestDatabase(database)),
+      now: () => new Date("2026-07-14T12:00:00.000Z"),
+    });
+    const code = await deviceTokenService.createExchangeCode("user-d1");
+
+    const results = await Promise.all([
+      deviceTokenService.consumeExchangeCode(code),
+      deviceTokenService.consumeExchangeCode(code),
+    ]);
+
+    expect(results.filter(Boolean)).toEqual([{ userId: "user-d1" }]);
+  });
+
+  it("uses the lifecycle clock for device creation and verification", async () => {
+    let now = new Date("2026-07-14T12:00:00.000Z");
+    const deviceTokenService = new DeviceTokenService({
+      storage: new InMemoryDeviceTokenStorage(),
+      now: () => now,
+    });
+
+    const { token, device } = await deviceTokenService.createDeviceToken("user-1", {
+      deviceId: "device-1",
+      platform: "darwin",
+      appVersion: "0.0.1",
+    });
+    expect(device.createdAt).toEqual(now);
+    expect(device.lastSeenAt).toEqual(now);
+
+    now = new Date("2026-07-14T12:05:00.000Z");
+    expect((await deviceTokenService.verifyDeviceToken(token))?.lastSeenAt).toEqual(now);
+  });
+
   it("mounts Better Auth sign-up and sign-in endpoints", async () => {
     const { app } = await createAuthApp();
 
