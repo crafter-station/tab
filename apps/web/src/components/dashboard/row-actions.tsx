@@ -43,7 +43,10 @@ export function DeviceRowActions({ deviceId }: { deviceId: string }) {
   const triggerRef = useRef<HTMLButtonElement>(null);
   const openAfterMenuClose = useRef(false);
 
+  const action = `/dashboard/devices/${encodeURIComponent(deviceId)}/revoke`;
+
   return (
+    <>
     <AlertDialog open={confirmOpen} onOpenChange={setConfirmOpen}>
       <DropdownMenu>
         <ActionMenuTrigger label={`Actions for ${deviceId}`} triggerRef={triggerRef} />
@@ -74,7 +77,7 @@ export function DeviceRowActions({ deviceId }: { deviceId: string }) {
           <AlertDialogTitle>Remove this Mac?</AlertDialogTitle>
           <AlertDialogDescription>It will need to sign in again before using Tab.</AlertDialogDescription>
         </AlertDialogHeader>
-        <form method="post" action={`/dashboard/devices/${encodeURIComponent(deviceId)}/revoke`}>
+        <form method="post" action={action}>
           <input type="hidden" name="confirm" value={deviceId} />
           <AlertDialogFooter>
             <AlertDialogCancel type="button">Cancel</AlertDialogCancel>
@@ -83,6 +86,13 @@ export function DeviceRowActions({ deviceId }: { deviceId: string }) {
         </form>
       </AlertDialogContent>
     </AlertDialog>
+      <noscript>
+        <form method="post" action={action}>
+          <input type="hidden" name="confirm" value={deviceId} />
+          <Button type="submit" variant="destructive" size="sm">Remove access</Button>
+        </form>
+      </noscript>
+    </>
   );
 }
 
@@ -168,6 +178,20 @@ export function MemoryRowActions({ memory, label }: { memory: PersonalMemory; la
           </form>
         </AlertDialogContent>
       </AlertDialog>
+      <noscript>
+        <details>
+          <summary>Edit memory</summary>
+          <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/edit`}>
+            <label htmlFor={`memory-${memory.id}-content-noscript`}>Memory content</label>
+            <textarea id={`memory-${memory.id}-content-noscript`} name="content" maxLength={500} required rows={4} defaultValue={memory.content} />
+            <Button type="submit" size="sm">Update Memory</Button>
+          </form>
+        </details>
+        <form method="post" action={`/dashboard/memories/${encodeURIComponent(memory.id)}/delete`}>
+          <input type="hidden" name="confirm" value="delete-memory" />
+          <Button type="submit" variant="destructive" size="sm">Delete Memory</Button>
+        </form>
+      </noscript>
     </>
   );
 }

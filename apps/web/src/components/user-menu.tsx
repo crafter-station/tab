@@ -3,7 +3,6 @@ import type { SessionUser } from "@tab/contracts";
 import {
   Avatar,
   AvatarFallback,
-  AvatarImage,
   Button,
   DropdownMenu,
   DropdownMenuContent,
@@ -14,23 +13,15 @@ import {
   DropdownMenuTrigger,
 } from "@tab/ui";
 
-function userAvatarUrl(user: SessionUser): string {
-  const identity = user.email ?? user.id;
-  let hash = 0;
-  for (const character of identity) hash = (hash * 31 + character.charCodeAt(0)) >>> 0;
-  return `https://avatar.vercel.sh/${encodeURIComponent(hash.toString().padStart(9, "0"))}`;
-}
-
 export function UserMenu({ user }: { user: SessionUser }) {
   const userLabel = user.email ?? user.name ?? "Account";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button variant="secondary" size="icon" className="rounded-full p-1" aria-label="Open user menu">
-        <Avatar className="size-8">
-          <AvatarFallback>{userLabel.slice(0, 1).toUpperCase()}</AvatarFallback>
-            <AvatarImage src={userAvatarUrl(user)} alt={`${userLabel} profile picture`} width="32" height="32" loading="lazy" />
-        </Avatar>
+          <Avatar className="size-8">
+            <AvatarFallback>{userLabel.slice(0, 1).toUpperCase()}</AvatarFallback>
+          </Avatar>
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">

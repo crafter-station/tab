@@ -7,6 +7,8 @@ node_modules/
 !.dev.vars.example
 dist/
 build/
+playwright-report/
+test-results/
 apps/desktop/.dev/
 .wrangler/
 .apple/

@@ -1,6 +1,6 @@
 import { Brain, ChartBar, Desktop, House, UserCircle } from "@phosphor-icons/react";
 import { Outlet, useRouterState } from "@tanstack/react-router";
-import { createContext, useContext, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import {
   Sidebar,
   SidebarContent,
@@ -17,9 +17,7 @@ import {
   SurfaceHeader,
 } from "@tab/ui";
 import { BrandMenu } from "../brand-menu.tsx";
-import type { DashboardData, DashboardSection } from "./types.ts";
-
-const DashboardDataContext = createContext<DashboardData | undefined>(undefined);
+import type { DashboardSection } from "./types.ts";
 
 const dashboardNavigation = [
   { id: "overview", routeId: "/dashboard/", href: "/dashboard", label: "Overview", icon: House },
@@ -89,29 +87,21 @@ export function DashboardSectionContent({ section, children }: { section: Dashbo
   );
 }
 
-export function DashboardLayout({ data }: { data: DashboardData }) {
+export function DashboardLayout() {
   return (
-    <DashboardDataContext.Provider value={data}>
-      <SidebarProvider>
-        <DashboardSidebar />
-        <SidebarInset className="min-w-0 bg-background">
-          <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md sm:px-6">
-            <div className="flex min-w-0 items-center gap-3">
-              <SidebarTrigger className="-ml-1" />
-              <p className="truncate text-sm font-semibold">Tab account</p>
-            </div>
-          </header>
-          <main id="main-content" className="w-full flex-1 px-5 py-7 sm:px-8 sm:py-10 lg:px-10">
-            <div className="mx-auto w-full max-w-6xl"><Outlet /></div>
-          </main>
-        </SidebarInset>
-      </SidebarProvider>
-    </DashboardDataContext.Provider>
+    <SidebarProvider>
+      <DashboardSidebar />
+      <SidebarInset className="min-w-0 bg-background">
+        <header className="sticky top-0 z-30 flex h-16 shrink-0 items-center gap-3 border-b border-border bg-background/90 px-4 backdrop-blur-md sm:px-6">
+          <div className="flex min-w-0 items-center gap-3">
+            <SidebarTrigger className="-ml-1" />
+            <p className="truncate text-sm font-semibold">Tab account</p>
+          </div>
+        </header>
+        <main id="main-content" className="w-full flex-1 px-5 py-7 sm:px-8 sm:py-10 lg:px-10">
+          <div className="mx-auto w-full max-w-6xl"><Outlet /></div>
+        </main>
+      </SidebarInset>
+    </SidebarProvider>
   );
-}
-
-export function useDashboardData(): DashboardData {
-  const data = useContext(DashboardDataContext);
-  if (!data) throw new Error("Dashboard data is not available outside the dashboard layout.");
-  return data;
 }

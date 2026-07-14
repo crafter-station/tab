@@ -3,11 +3,14 @@ import { createApiClient, readApiError } from "../apps/web/src/lib/api.server.ts
 import {
   handleCheckout,
   handleDeviceRevoke,
+  handleForgotPassword,
   handleLogin,
   handleLogout,
   handleMemoryBulkDelete,
   handleMemoryCreate,
   handleMemoryExport,
+  handleResetPassword,
+  handleSignup,
 } from "../apps/web/src/lib/actions.server.ts";
 import { loadDashboardData } from "../apps/web/src/lib/dashboard.server.ts";
 
@@ -90,6 +93,50 @@ describe("TanStack Start web BFF module contracts", () => {
     expect(response.headers.get("location")).not.toContain("secret-password");
   });
 
+  it("relays cookies from failed auth and password-reset outcomes", async () => {
+    const cookie = (name: string) => {
+      const headers = new Headers();
+      headers.append("set-cookie", `${name}=value; Path=/; HttpOnly`);
+      headers.append("set-cookie", `${name}.csrf=value; Path=/; SameSite=Lax`);
+      return json(
+        { status: "error", error: { code: "failed", message: "Failed" } },
+        { status: 400, headers },
+      );
+    };
+    const { api } = createFakeApi({
+      "POST /api/auth/sign-in/email": () => cookie("login.failure"),
+      "POST /api/auth/sign-up/email": () => cookie("signup.failure"),
+      "POST /api/auth/request-password-reset": () => cookie("forgot.failure"),
+      "POST /api/auth/reset-password": () => cookie("reset.failure"),
+    });
+
+    const login = await handleLogin(request("/login", {
+      method: "POST",
+      body: new URLSearchParams({ email: "test@example.com", password: "wrong" }),
+    }), api);
+    const signup = await handleSignup(request("/signup", {
+      method: "POST",
+      body: new URLSearchParams({ name: "Test", email: "test@example.com", password: "password123" }),
+    }), api);
+    const forgot = await handleForgotPassword(request("/forgot-password", {
+      method: "POST",
+      body: new URLSearchParams({ email: "test@example.com" }),
+    }), api);
+    const reset = await handleResetPassword(request("/reset-password", {
+      method: "POST",
+      body: new URLSearchParams({ token: "reset-token", password: "password123" }),
+    }), api);
+
+    expect(login.headers.get("set-cookie")).toContain("login.failure=value");
+    expect(login.headers.get("set-cookie")).toContain("login.failure.csrf=value");
+    expect(signup.headers.get("set-cookie")).toContain("signup.failure=value");
+    expect(signup.headers.get("set-cookie")).toContain("signup.failure.csrf=value");
+    expect(forgot.headers.get("set-cookie")).toContain("forgot.failure=value");
+    expect(forgot.headers.get("set-cookie")).toContain("forgot.failure.csrf=value");
+    expect(reset.headers.get("set-cookie")).toContain("reset.failure=value");
+    expect(reset.headers.get("set-cookie")).toContain("reset.failure.csrf=value");
+  });
+
   it("preserves the desktop handoff and returns the authorization code", async () => {
     const { api } = createFakeApi();
     const response = await handleLogin(request("/login", {
@@ -98,6 +145,24 @@ describe("TanStack Start web BFF module contracts", () => {
     }), api);
     expect(response.status).toBe(303);
     expect(response.headers.get("location")).toBe("tab://auth/callback?code=device-code");
+  });
+
+  it("relays sign-in and device cookies when device authorization fails", async () => {
+    const { api } = createFakeApi({
+      "POST /api/auth/device/authorize": () => json(
+        { status: "error", error: { code: "device_failed", message: "Failed" } },
+        { status: 503, headers: { "set-cookie": "device.failure=value; Path=/; HttpOnly" } },
+      ),
+    });
+    const response = await handleLogin(request("/login", {
+      method: "POST",
+      body: new URLSearchParams({ email: "test@example.com", password: "password123", device_id: "mac-1", callback: "tab://auth/callback" }),
+    }), api);
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login?error=device_failed");
+    expect(response.headers.get("set-cookie")).toContain("tab.session=abc");
+    expect(response.headers.get("set-cookie")).toContain("device.failure=value");
   });
 
   it("normalizes checkout to monthly and forwards the session cookie", async () => {
@@ -162,6 +227,75 @@ describe("TanStack Start web BFF module contracts", () => {
     await handleMemoryBulkDelete(request("/dashboard/memories/delete-selected", { method: "POST", body: new URLSearchParams({ confirm: "wrong", memoryId: "memory-1" }) }), api);
     expect(revokeCalls).toBe(0);
     expect(deleteCalls).toBe(0);
+  });
+
+  it("returns an error for failed mutations and stops bulk delete at the first failure", async () => {
+    const deleted: string[] = [];
+    const { api } = createFakeApi({
+      "POST /api/account/memory": () => json(
+        { status: "error", error: { code: "write_failed", message: "Failed" } },
+        { status: 503, headers: { "set-cookie": "mutation.failure=value; Path=/" } },
+      ),
+      "DELETE /api/account/memory/memory-1": () => {
+        deleted.push("memory-1");
+        return json({ status: "error", error: { code: "delete_failed", message: "Failed" } }, { status: 503 });
+      },
+      "DELETE /api/account/memory/memory-2": () => {
+        deleted.push("memory-2");
+        return json({ status: "ok", data: { deleted: true } });
+      },
+    });
+    const createResponse = await handleMemoryCreate(request("/dashboard/memories/create", {
+      method: "POST",
+      body: new URLSearchParams({ content: "Remember this" }),
+    }), api);
+    const bulkResponse = await handleMemoryBulkDelete(request("/dashboard/memories/delete-selected", {
+      method: "POST",
+      body: new URLSearchParams([
+        ["confirm", "delete-selected-memories"],
+        ["memoryId", "memory-1"],
+        ["memoryId", "memory-2"],
+      ]),
+    }), api);
+
+    expect(createResponse.status).toBe(502);
+    expect(createResponse.headers.get("set-cookie")).toContain("mutation.failure=value");
+    expect(bulkResponse.status).toBe(502);
+    expect(deleted).toEqual(["memory-1"]);
+  });
+
+  it("does not report failed device revocation as success", async () => {
+    const { api } = createFakeApi({
+      "POST /api/auth/device/revoke": () => json(
+        { status: "error", error: { code: "revoke_failed", message: "Failed" } },
+        { status: 503, headers: { "set-cookie": "device.revoke.failure=value; Path=/" } },
+      ),
+    });
+    const response = await handleDeviceRevoke(request("/dashboard/devices/mac-1/revoke", {
+      method: "POST",
+      body: new URLSearchParams({ confirm: "mac-1" }),
+    }), api, "mac-1");
+
+    expect(response.status).toBe(502);
+    expect(response.headers.get("location")).toBeNull();
+    expect(response.headers.get("set-cookie")).toContain("device.revoke.failure=value");
+  });
+
+  it("preserves the login redirect and auth cookie for unauthenticated mutations", async () => {
+    const { api } = createFakeApi({
+      "GET /api/auth/get-session": () => json(null, {
+        status: 401,
+        headers: { "set-cookie": "tab.session=; Path=/; Max-Age=0" },
+      }),
+    });
+    const response = await handleMemoryCreate(request("/dashboard/memories/create", {
+      method: "POST",
+      body: new URLSearchParams({ content: "Remember this" }),
+    }), api);
+
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/login");
+    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
   });
 
   it("returns validated exports with private download headers", async () => {

@@ -34,6 +34,10 @@ function responseHeaders(...responses: Response[]): Headers {
   return headers;
 }
 
+function upstreamFailure(headers: Headers): Response {
+  return new Response("Upstream request failed", { status: 502, headers });
+}
+
 function loginLocation(next?: string): string {
   const safeNext = safeNextPath(next);
   return safeNext ? `/login?next=${encodeURIComponent(safeNext)}` : "/login";
@@ -64,12 +68,12 @@ async function authorizeDevice(request: Request, api: ApiClient, callback: strin
     callbackUrl = new URL(callback);
     if (callbackUrl.protocol !== "tab:") throw new Error("Unsupported callback protocol");
   } catch {
-    return redirectResponse("/login?error=device_failed");
+    return redirectResponse("/login?error=device_failed", responseHeaders(...sources));
   }
   const cookie = cookieHeaderFromSetCookie(sources[0]!);
-  if (!cookie) return redirectResponse("/login?error=device_failed");
+  if (!cookie) return redirectResponse("/login?error=device_failed", responseHeaders(...sources));
   const response = await api.request("/api/auth/device/authorize", requestWithCookie(request, cookie), { method: "POST" });
-  if (!response.ok) return redirectResponse("/login?error=device_failed");
+  if (!response.ok) return redirectResponse("/login?error=device_failed", responseHeaders(...sources, response));
   const body = apiSchemas.deviceAuthorize.parse(await response.json());
   callbackUrl.searchParams.set("code", body.code);
   const headers = new Headers();
@@ -93,7 +97,10 @@ export async function handleLogin(request: Request, api: ApiClient): Promise<Res
     body: JSON.stringify({ email: parsed.data.email, password: parsed.data.password, rememberMe: true }),
   });
   if (!response.ok) {
-    return redirectResponse(authFailureLocation("/login", values, response.status === 403 ? "email_unverified" : "invalid_credentials"));
+    return redirectResponse(
+      authFailureLocation("/login", values, response.status === 403 ? "email_unverified" : "invalid_credentials"),
+      responseHeaders(response),
+    );
   }
   if (parsed.data.device_id && parsed.data.callback) return authorizeDevice(request, api, parsed.data.callback, [response]);
   const headers = new Headers();
@@ -120,7 +127,7 @@ export async function handleSignup(request: Request, api: ApiClient): Promise<Re
       callbackURL: new URL("/dashboard", request.url).toString(),
     }),
   });
-  if (!response.ok) return redirectResponse(authFailureLocation("/signup", values, "signup_failed"));
+  if (!response.ok) return redirectResponse(authFailureLocation("/signup", values, "signup_failed"), responseHeaders(response));
   const headers = new Headers();
   appendSetCookies(headers, response);
   const cookie = cookieHeaderFromSetCookie(response);
@@ -147,7 +154,10 @@ export async function handleForgotPassword(request: Request, api: ApiClient): Pr
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ email: parsed.data.email, redirectTo: new URL("/reset-password", request.url).toString() }),
   });
-  return redirectResponse(response.ok ? "/forgot-password?status=reset_sent" : "/forgot-password?error=request_failed");
+  return redirectResponse(
+    response.ok ? "/forgot-password?status=reset_sent" : "/forgot-password?error=request_failed",
+    responseHeaders(response),
+  );
 }
 
 export async function handleResetPassword(request: Request, api: ApiClient): Promise<Response> {
@@ -164,12 +174,19 @@ export async function handleResetPassword(request: Request, api: ApiClient): Pro
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ token: parsed.data.token, newPassword: parsed.data.password }),
   });
-  return redirectResponse(response.ok ? "/login" : `/reset-password?error=reset_failed&token=${encodeURIComponent(parsed.data.token)}`);
+  return redirectResponse(
+    response.ok ? "/login" : `/reset-password?error=reset_failed&token=${encodeURIComponent(parsed.data.token)}`,
+    responseHeaders(response),
+  );
 }
 
 export async function handleLogout(request: Request, api: ApiClient): Promise<Response> {
   const upstream: Response[] = [];
-  await requireSession(request, api, (response) => upstream.push(response));
+  try {
+    await requireSession(request, api, (response) => upstream.push(response));
+  } catch {
+    return redirectResponse("/", responseHeaders(...upstream));
+  }
   const response = await api.request("/api/auth/sign-out", request, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -186,7 +203,7 @@ export async function handleCheckout(request: Request, api: ApiClient): Promise<
   try {
     await requireSession(request, api, (response) => upstream.push(response));
   } catch {
-    return redirectResponse(loginLocation(checkoutPath));
+    return redirectResponse(loginLocation(checkoutPath), responseHeaders(...upstream));
   }
   const response = await api.request(`/api/billing/checkout?plan=${encodeURIComponent(plan)}&interval=monthly`, request);
   upstream.push(response);
@@ -206,7 +223,7 @@ export async function handlePortal(request: Request, api: ApiClient): Promise<Re
   try {
     await requireSession(request, api, (response) => upstream.push(response));
   } catch {
-    return redirectResponse("/login");
+    return redirectResponse("/login", responseHeaders(...upstream));
   }
   const response = await api.request("/api/billing/portal", request);
   upstream.push(response);
@@ -218,7 +235,11 @@ export async function handlePortal(request: Request, api: ApiClient): Promise<Re
 
 export async function handleDeviceRevoke(request: Request, api: ApiClient, rawDeviceId: string): Promise<Response> {
   const upstream: Response[] = [];
-  await requireSession(request, api, (response) => upstream.push(response));
+  try {
+    await requireSession(request, api, (response) => upstream.push(response));
+  } catch {
+    return redirectResponse("/login", responseHeaders(...upstream));
+  }
   const deviceId = IdSchema.parse(rawDeviceId);
   const form = await request.formData();
   if (String(form.get("confirm") ?? "") !== deviceId) return redirectResponse("/dashboard/devices", responseHeaders(...upstream));
@@ -228,12 +249,18 @@ export async function handleDeviceRevoke(request: Request, api: ApiClient, rawDe
     body: JSON.stringify({ deviceId }),
   });
   upstream.push(response);
-  return redirectResponse(response.status === 401 ? "/login" : "/dashboard/devices", responseHeaders(...upstream));
+  if (response.status === 401) return redirectResponse("/login", responseHeaders(...upstream));
+  if (!response.ok) return upstreamFailure(responseHeaders(...upstream));
+  return redirectResponse("/dashboard/devices", responseHeaders(...upstream));
 }
 
 async function writeMemory(request: Request, api: ApiClient, path: string, method: "POST" | "PATCH"): Promise<Response> {
   const upstream: Response[] = [];
-  await requireSession(request, api, (response) => upstream.push(response));
+  try {
+    await requireSession(request, api, (response) => upstream.push(response));
+  } catch {
+    return redirectResponse("/login", responseHeaders(...upstream));
+  }
   const form = await request.formData();
   const parsed = MemoryWriteRequestSchema.safeParse({ content: form.get("content") });
   if (!parsed.success) return redirectResponse("/dashboard/memories?error=invalid_memory", responseHeaders(...upstream));
@@ -243,7 +270,9 @@ async function writeMemory(request: Request, api: ApiClient, path: string, metho
     body: JSON.stringify(parsed.data),
   });
   upstream.push(response);
-  return redirectResponse(response.status === 401 ? "/login" : "/dashboard/memories", responseHeaders(...upstream));
+  if (response.status === 401) return redirectResponse("/login", responseHeaders(...upstream));
+  if (!response.ok) return upstreamFailure(responseHeaders(...upstream));
+  return redirectResponse("/dashboard/memories", responseHeaders(...upstream));
 }
 
 export function handleMemoryCreate(request: Request, api: ApiClient): Promise<Response> {
@@ -257,18 +286,28 @@ export function handleMemoryEdit(request: Request, api: ApiClient, rawMemoryId: 
 
 export async function handleMemoryDelete(request: Request, api: ApiClient, rawMemoryId: string): Promise<Response> {
   const upstream: Response[] = [];
-  await requireSession(request, api, (response) => upstream.push(response));
+  try {
+    await requireSession(request, api, (response) => upstream.push(response));
+  } catch {
+    return redirectResponse("/login", responseHeaders(...upstream));
+  }
   const memoryId = IdSchema.parse(rawMemoryId);
   const form = await request.formData();
   if (String(form.get("confirm") ?? "") !== "delete-memory") return redirectResponse("/dashboard/memories", responseHeaders(...upstream));
   const response = await api.request(`/api/account/memory/${encodeURIComponent(memoryId)}`, request, { method: "DELETE" });
   upstream.push(response);
-  return redirectResponse(response.status === 401 ? "/login" : "/dashboard/memories", responseHeaders(...upstream));
+  if (response.status === 401) return redirectResponse("/login", responseHeaders(...upstream));
+  if (!response.ok) return upstreamFailure(responseHeaders(...upstream));
+  return redirectResponse("/dashboard/memories", responseHeaders(...upstream));
 }
 
 export async function handleMemoryBulkDelete(request: Request, api: ApiClient): Promise<Response> {
   const upstream: Response[] = [];
-  await requireSession(request, api, (response) => upstream.push(response));
+  try {
+    await requireSession(request, api, (response) => upstream.push(response));
+  } catch {
+    return redirectResponse("/login", responseHeaders(...upstream));
+  }
   const form = await request.formData();
   if (String(form.get("confirm") ?? "") !== "delete-selected-memories") return redirectResponse("/dashboard/memories", responseHeaders(...upstream));
   const ids = [...new Set(form.getAll("memoryId").map(String))].map((id) => IdSchema.parse(id));
@@ -276,13 +315,18 @@ export async function handleMemoryBulkDelete(request: Request, api: ApiClient): 
     const response = await api.request(`/api/account/memory/${encodeURIComponent(memoryId)}`, request, { method: "DELETE" });
     upstream.push(response);
     if (response.status === 401) return redirectResponse("/login", responseHeaders(...upstream));
+    if (!response.ok) return upstreamFailure(responseHeaders(...upstream));
   }
   return redirectResponse("/dashboard/memories", responseHeaders(...upstream));
 }
 
 export async function handleMemoryExport(request: Request, api: ApiClient): Promise<Response> {
   const upstream: Response[] = [];
-  await requireSession(request, api, (response) => upstream.push(response));
+  try {
+    await requireSession(request, api, (response) => upstream.push(response));
+  } catch {
+    return redirectResponse("/login", responseHeaders(...upstream));
+  }
   const response = await api.request("/api/account/memory/export", request);
   upstream.push(response);
   if (response.status === 401) return redirectResponse("/login", responseHeaders(...upstream));

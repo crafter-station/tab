@@ -35,6 +35,26 @@ function memorySourceLabel(createdBy: PersonalMemory["createdBy"]): string {
   return createdBy === "user" ? "Saved by you" : "Learned from your writing";
 }
 
+export function MemoryBulkNoscriptFallback({ memories }: { memories: readonly PersonalMemory[] }) {
+  return (
+    <noscript>
+      <form method="post" action="/dashboard/memories/delete-selected">
+        <fieldset className="grid gap-2">
+          <legend className="text-sm font-bold">Select memories to delete</legend>
+          {memories.map((memory) => (
+            <label className="flex items-start gap-2 text-sm" key={memory.id}>
+              <input type="checkbox" name="memoryId" value={memory.id} />
+              <span>{memory.content}</span>
+            </label>
+          ))}
+        </fieldset>
+        <input type="hidden" name="confirm" value="delete-selected-memories" />
+        <Button type="submit" variant="destructive" size="sm">Delete selected memories</Button>
+      </form>
+    </noscript>
+  );
+}
+
 export function DashboardMemoriesPage({ data }: { data: DashboardData }) {
   const memoryCountLabel = `${formatCount(data.memories.length)} ${data.memories.length === 1 ? "memory" : "memories"}`;
 
@@ -64,6 +84,7 @@ export function DashboardMemoriesPage({ data }: { data: DashboardData }) {
         ) : (
           <div className="grid gap-3">
             <form id={bulkDeleteMemoriesFormId} method="post" action="/dashboard/memories/delete-selected" />
+            <MemoryBulkNoscriptFallback memories={data.memories} />
             <div className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div className="grid gap-1">
                 <p className="text-sm font-bold text-foreground">Memory library</p>

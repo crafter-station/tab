@@ -158,6 +158,41 @@ describe("TanStack Start request routing", () => {
 		]);
 	});
 
+	it("rejects explicit cross-origin mutation requests before they reach the API", async () => {
+		const before = await personalMemoryStorage.listMemoriesByUser(userId);
+		for (const headers of [
+			{ origin: "https://evil.example" },
+			{ "sec-fetch-site": "cross-site" },
+		]) {
+			const response = await webRequest("/dashboard/memories/create", {
+				method: "POST",
+				headers: {
+					"content-type": "application/x-www-form-urlencoded",
+					cookie: sessionCookie,
+					...headers,
+				},
+				body: new URLSearchParams({ content: "Cross-site memory" }),
+			});
+			expect(response.status).toBe(403);
+		}
+		expect(await personalMemoryStorage.listMemoriesByUser(userId)).toEqual(before);
+	});
+
+	it("accepts an explicit same-origin mutation request", async () => {
+		const response = await webRequest("/dashboard/memories/create", {
+			method: "POST",
+			headers: {
+				"content-type": "application/x-www-form-urlencoded",
+				cookie: sessionCookie,
+				origin: WEB_ORIGIN,
+				"sec-fetch-site": "same-origin",
+			},
+			body: new URLSearchParams({ content: "Same-origin memory" }),
+		});
+		expect(response.status).toBe(303);
+		expect(response.headers.get("location")).toBe("/dashboard/memories");
+	});
+
 	it("routes Max Plan Change requests through canonical checkout", async () => {
 		const response = await webRequest("/billing/checkout?plan=max", {
 			headers: { cookie: sessionCookie },

@@ -2,14 +2,14 @@ import {
   Button,
   DropdownMenu,
   DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
   THEME_MODES,
   type ThemeMode,
 } from "@tab/ui";
-import { Check, Desktop, Moon, Sun } from "@phosphor-icons/react";
+import { Desktop, Moon, Sun } from "@phosphor-icons/react";
 import { useTheme } from "./theme-provider.tsx";
 
 const themeIcons: Record<ThemeMode, typeof Sun> = {
@@ -35,20 +35,18 @@ export function ThemeModeToggle() {
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         <DropdownMenuLabel>Theme</DropdownMenuLabel>
-        <DropdownMenuGroup>
+        <DropdownMenuRadioGroup value={theme} onValueChange={(value) => setTheme(value as ThemeMode)}>
           {THEME_MODES.map((mode) => {
             const Icon = themeIcons[mode];
-            const selected = theme === mode;
 
             return (
-              <DropdownMenuItem key={mode} onClick={() => setTheme(mode)} aria-pressed={selected}>
+              <DropdownMenuRadioItem key={mode} value={mode}>
                 <Icon data-icon="inline-start" />
                 {formatThemeModeLabel(mode)}
-                {selected ? <Check data-icon="inline-end" className="ml-auto" /> : null}
-              </DropdownMenuItem>
+              </DropdownMenuRadioItem>
             );
           })}
-        </DropdownMenuGroup>
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
