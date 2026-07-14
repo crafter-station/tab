@@ -437,21 +437,28 @@ describe("TanStack Start web BFF module contracts", () => {
     expect(response.headers.get("set-cookie")).toContain("device.revoke.failure=value");
   });
 
-  it("preserves the login redirect and auth cookie for unauthenticated mutations", async () => {
-    const { api } = createFakeApi({
+  it("preserves each protected action's login redirect and auth cookie", async () => {
+    const { api, requests } = createFakeApi({
       "GET /api/auth/get-session": () => json(null, {
         status: 401,
         headers: { "set-cookie": "tab.session=; Path=/; Max-Age=0" },
       }),
     });
-    const response = await handleMemoryCreate(request("/dashboard/memories/create", {
+    const mutation = await handleMemoryCreate(request("/dashboard/memories/create", {
       method: "POST",
       body: new URLSearchParams({ content: "Remember this" }),
     }), api);
+    const checkout = await handleCheckout(request("/billing/checkout?plan=max"), api);
 
-    expect(response.status).toBe(303);
-    expect(response.headers.get("location")).toBe("/login");
-    expect(response.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(mutation.status).toBe(303);
+    expect(mutation.headers.get("location")).toBe("/login");
+    expect(mutation.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(checkout.headers.get("location")).toBe("/login?next=%2Fbilling%2Fcheckout%3Fplan%3Dmax");
+    expect(checkout.headers.get("set-cookie")).toContain("Max-Age=0");
+    expect(requests.map((upstream) => new URL(upstream.url).pathname)).toEqual([
+      "/api/auth/get-session",
+      "/api/auth/get-session",
+    ]);
   });
 
   it("returns validated exports with private download headers", async () => {
