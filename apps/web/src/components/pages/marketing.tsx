@@ -36,15 +36,11 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
   return (
     <div className="grid gap-20 py-10 sm:py-14">
       <section className="grid gap-10" aria-labelledby="pricing-heading">
-        <div className="grid gap-8 lg:grid-cols-[minmax(0,0.9fr)_minmax(19rem,0.7fr)] lg:items-end lg:gap-16">
-          <div>
-            <PageKicker>Simple pricing</PageKicker>
-            <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Try Pro for 30 days. No card.</h1>
-          </div>
-          <div>
-            <p className="text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose a paid plan or keep using Free.</p>
-            <a className={buttonVariants({ size: "lg", className: "mt-6" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
-          </div>
+        <div>
+          <PageKicker>Simple pricing</PageKicker>
+          <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Try Pro for 30 days. No card.</h1>
+          <p className="mt-6 max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Every new account starts with Pro. After 30 days, choose a paid plan or keep using Free.</p>
+          <a className={buttonVariants({ size: "lg", className: "mt-6" })} href={authenticated ? "/dashboard" : "/signup"}>{authenticated ? "Open dashboard" : "Start 30-day Pro trial"}</a>
         </div>
 
         <div className="grid items-stretch gap-4 lg:grid-cols-3" data-pricing-grid>
