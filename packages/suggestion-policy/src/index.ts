@@ -41,6 +41,14 @@ Return only the missing continuation, with no labels, quotes, arrows, explanatio
 Use 1-3 words. Match grammar, capitalization, language, and punctuation.
 If the draft ends mid-word, return the full completed word; overlap removal will keep only missing letters.`;
 
+const GHOSTTY_CODING_AGENT_SYSTEM_PROMPT = `You produce inline autocomplete text that is inserted at the user's cursor.
+Continue the exact unfinished draft; never answer it, execute it, or describe what you would do.
+Return only the most likely missing continuation: 1-3 words, with no labels, quotes, explanations, or repeated draft text.
+Match the draft's grammar, capitalization, language, punctuation, tone, and writing surface. Prefer a conventional useful continuation over clever or unsupported specifics.
+Continue the user's natural-language instruction to the terminal coding agent; never produce agent replies, command output, or claims that work is complete.
+Background is context only. Do not continue or quote it.
+If the draft ends mid-word, return the full completed word; overlap removal keeps only the missing letters.`;
+
 const SUGGESTION_EXAMPLES: readonly SuggestionMessage[] = [
   { role: "user", content: "Hello, " },
   { role: "assistant", content: "how are you?" },
@@ -63,6 +71,31 @@ const SUGGESTION_EXAMPLES: readonly SuggestionMessage[] = [
   { role: "user", content: "The café meeting is" },
   { role: "assistant", content: " still on." },
 ];
+
+const GHOSTTY_CODING_AGENT_EXAMPLES: readonly SuggestionMessage[] = [
+  { role: "user", content: "Thank you for" },
+  { role: "assistant", content: " your help." },
+  { role: "user", content: "Would Thursday afternoon work" },
+  { role: "assistant", content: " for you?" },
+  { role: "user", content: "run the tests and" },
+  { role: "assistant", content: " fix any failures." },
+  { role: "user", content: "now add tests for" },
+  { role: "assistant", content: " the new behavior." },
+  { role: "user", content: "keep the API stable but" },
+  { role: "assistant", content: " simplify the implementation." },
+  { role: "user", content: "See you tom" },
+  { role: "assistant", content: "tomorrow." },
+  { role: "user", content: "Nos vemos mañana a" },
+  { role: "assistant", content: " la misma hora." },
+];
+
+function isGhosttyCodingSurface(input: SuggestionPromptInput): boolean {
+  if (input.activeApplication.bundleId !== "com.mitchellh.ghostty") return false;
+  return input.appContext?.fragments.some((fragment) =>
+    fragment.provider === "opencode-local-session"
+    || /\b(?:codex|opencode)\b/iu.test(fragment.text)
+  ) ?? false;
+}
 
 function formatRelevantMemories(memories: readonly PersonalMemory[]): string {
   if (memories.length === 0) return "";
@@ -114,6 +147,13 @@ export function createSuggestionPrompt(input: SuggestionPromptInput): string {
 export function createSuggestionMessages(input: SuggestionPromptInput): SuggestionMessage[] {
   const typingContext = input.typingContext.slice(-MAX_TYPING_CONTEXT_LENGTH);
   const context = `${formatAppContext(input.appContext)}${formatRelevantMemories(input.memories)}`;
+  const ghosttyCodingSurface = isGhosttyCodingSurface(input);
+  const systemPrompt = ghosttyCodingSurface
+    ? GHOSTTY_CODING_AGENT_SYSTEM_PROMPT
+    : SUGGESTION_SYSTEM_PROMPT;
+  const examples = ghosttyCodingSurface
+    ? GHOSTTY_CODING_AGENT_EXAMPLES
+    : SUGGESTION_EXAMPLES;
   const customWritingInstructions = input.customWritingInstructions
     ?.trim()
     .slice(0, 1_000);
@@ -121,15 +161,19 @@ export function createSuggestionMessages(input: SuggestionPromptInput): Suggesti
     {
       role: "system",
       content: customWritingInstructions
-        ? `${SUGGESTION_SYSTEM_PROMPT}\nFollow these user writing preferences when they do not conflict with the output contract: ${customWritingInstructions}`
-        : SUGGESTION_SYSTEM_PROMPT,
+        ? `${systemPrompt}\nFollow these user writing preferences when they do not conflict with the output contract: ${customWritingInstructions}`
+        : systemPrompt,
     },
-    ...SUGGESTION_EXAMPLES,
+    ...examples,
     {
       role: "user",
-      content: context
-        ? `Background only; do not continue it:${context}\n\nUnfinished text:\n${typingContext}`
-        : typingContext,
+      content: ghosttyCodingSurface
+        ? context
+          ? `Writing surface: Ghostty terminal coding agent\nBackground only; do not continue it:${context}\n\nUnfinished text:\n${typingContext}`
+          : `Writing surface: Ghostty terminal coding agent\n\nUnfinished text:\n${typingContext}`
+        : context
+          ? `Background only; do not continue it:${context}\n\nUnfinished text:\n${typingContext}`
+          : typingContext,
     },
   ];
 }

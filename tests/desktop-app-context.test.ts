@@ -429,6 +429,68 @@ describe("App Context privacy normalization", () => {
 });
 
 describe("OpenCode suggestion prompt context", () => {
+  it("keeps the general writing prompt for an ordinary Ghostty shell", () => {
+    const messages = createSuggestionMessages({
+      typingContext: "git status",
+      contextSource: "terminal_input",
+      activeApplication: { bundleId: "com.mitchellh.ghostty" },
+      memories: [],
+    });
+
+    expect(messages[0]?.content).toContain("inline autocomplete engine, not a chat assistant");
+    expect(messages[0]?.content).not.toContain("terminal coding agent");
+  });
+
+  it("keeps Claude Code on the general prompt after its specialized prompt did not improve acceptance", () => {
+    const messages = createSuggestionMessages({
+      typingContext: "run the tests and",
+      contextSource: "terminal_input",
+      activeApplication: { bundleId: "com.mitchellh.ghostty" },
+      memories: [],
+      appContext: {
+        fragments: [{
+          id: "claude-code-terminal",
+          provider: "ghostty-terminal",
+          kind: "terminal_visible_context",
+          text: "Claude Code is waiting for the next instruction.",
+          confidence: 0.9,
+          redaction: { applied: false, redactionCount: 0, kinds: [] },
+          requestable: true,
+          memoryEligible: false,
+        }],
+        metadata: { provider: "ghostty-terminal", status: "available", confidence: 0.9 },
+      },
+    });
+
+    expect(messages[0]?.content).toContain("inline autocomplete engine, not a chat assistant");
+    expect(messages[0]?.content).not.toContain("terminal coding agent");
+  });
+
+  it("uses the coding-agent prompt when Ghostty context identifies Codex", () => {
+    const messages = createSuggestionMessages({
+      typingContext: "fix the failing",
+      contextSource: "terminal_input",
+      activeApplication: { bundleId: "com.mitchellh.ghostty" },
+      memories: [],
+      appContext: {
+        fragments: [{
+          id: "codex-terminal",
+          provider: "ghostty-terminal",
+          kind: "terminal_visible_context",
+          text: "Codex is working in the current repository.",
+          confidence: 0.9,
+          redaction: { applied: false, redactionCount: 0, kinds: [] },
+          requestable: true,
+          memoryEligible: false,
+        }],
+        metadata: { provider: "ghostty-terminal", status: "available", confidence: 0.9 },
+      },
+    });
+
+    expect(messages[0]?.content).toContain("terminal coding agent");
+    expect(messages.at(-1)?.content).toContain("Writing surface: Ghostty terminal coding agent");
+  });
+
   it("reserves prompt space for current terminal context after conversation background", () => {
     const messages = createSuggestionMessages({
       typingContext: "Continue this",
@@ -465,6 +527,9 @@ describe("OpenCode suggestion prompt context", () => {
 
     expect(prompt.match(/\] (C+)/)?.[1]).toHaveLength(400);
     expect(prompt.match(/\] (T+)/)?.[1]).toHaveLength(200);
+    expect(messages[0]?.content).toContain("terminal coding agent");
+    expect(messages.some((message) => message.content === " fix any failures.")).toBe(true);
+    expect(prompt).toContain("Writing surface: Ghostty terminal coding agent");
     expect(prompt).toContain("Unfinished text:\nContinue this");
   });
 });
