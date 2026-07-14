@@ -16,6 +16,7 @@ import {
   type AtomicExtractionOperationInput,
   type ExtractionOperationOutcome,
   type PersonalMemoryStorage,
+  type PersonalMemoryStorageDependencies,
   type QueryPersonalMemoryVectorsInput,
   type PersonalMemoryEmbeddingService,
   type PersonalMemoryVectorIndex,
@@ -343,6 +344,7 @@ function extractionModel(
 
 function createD1MemoryStorage(options?: {
   readonly includeVectorDeletionOutbox?: boolean;
+  readonly storageDependencies?: PersonalMemoryStorageDependencies;
 }): D1PersonalMemoryStorage {
   const sqlite = new Database(":memory:");
   sqlite.exec(`
@@ -375,7 +377,10 @@ function createD1MemoryStorage(options?: {
       PRIMARY KEY (user_id, memory_id)
     );
   `);
-  return new D1PersonalMemoryStorage(createTestDatabase(sqlite));
+  return new D1PersonalMemoryStorage(
+    createTestDatabase(sqlite),
+    options?.storageDependencies,
+  );
 }
 
 function createExtractionIdempotencyDatabase(): Database {
@@ -581,6 +586,74 @@ async function expectExtractionScopedStorage(storage: PersonalMemoryStorage) {
 }
 
 describe("Personal Memory API", () => {
+  it("lets each storage adapter own deterministic memory and vector mutation metadata", async () => {
+    async function expectOwnedMetadata(
+      createStorage: (deps: PersonalMemoryStorageDependencies) => PersonalMemoryStorage,
+    ) {
+      let now = new Date("2026-07-14T10:00:00.000Z");
+      const ids = [
+        "memory-1",
+        "create-mutation",
+        "update-mutation",
+        "reindex-mutation",
+      ];
+      const storage = createStorage({
+        now: () => now,
+        createId: () => ids.shift() ?? "unexpected-id",
+      });
+      const service = new PersonalMemoryService({ storage });
+
+      const created = await storage.createMemory({
+        userId: "user-1",
+        content: "Original memory",
+        createdBy: "user",
+      });
+      expect(created).toMatchObject({
+        id: "memory-1",
+        createdAt: "2026-07-14T10:00:00.000Z",
+        updatedAt: "2026-07-14T10:00:00.000Z",
+      });
+      expect(await storage.listPendingVectorUpserts("user-1")).toEqual([
+        {
+          userId: "user-1",
+          memoryId: "memory-1",
+          mutationId: "create-mutation",
+          createdAt: "2026-07-14T10:00:00.000Z",
+        },
+      ]);
+
+      now = new Date("2026-07-14T10:01:00.000Z");
+      expect(
+        await storage.updateMemory("user-1", created.id, {
+          content: "Updated memory",
+        }),
+      ).toMatchObject({ updatedAt: "2026-07-14T10:01:00.000Z" });
+      expect(await storage.listPendingVectorUpserts("user-1")).toEqual([
+        expect.objectContaining({
+          mutationId: "update-mutation",
+          createdAt: "2026-07-14T10:01:00.000Z",
+        }),
+      ]);
+
+      now = new Date("2026-07-14T10:02:00.000Z");
+      await service.reindexMemoryForUser("user-1", created.id);
+      expect(await storage.listPendingVectorUpserts("user-1")).toEqual([
+        expect.objectContaining({
+          mutationId: "reindex-mutation",
+          createdAt: "2026-07-14T10:02:00.000Z",
+        }),
+      ]);
+      expect(ids).toEqual([]);
+    }
+
+    await expectOwnedMetadata(
+      (deps) => new InMemoryPersonalMemoryStorage(deps),
+    );
+    await expectOwnedMetadata((deps) =>
+      createD1MemoryStorage({ storageDependencies: deps }),
+    );
+  });
+
   it("scopes canonical reads and mutations to the owning user in every storage adapter", async () => {
     await expectOwnerScopedStorage(new InMemoryPersonalMemoryStorage());
     await expectOwnerScopedStorage(createD1MemoryStorage());

@@ -59,6 +59,11 @@ export type AtomicExtractionOperationInput = {
   readonly now: string;
 };
 
+export type PersonalMemoryStorageDependencies = {
+  readonly now?: () => Date;
+  readonly createId?: () => string;
+};
+
 export interface PersonalMemoryStorage {
   createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory>;
   listMemoriesByUser(userId: string): Promise<PersonalMemory[]>;
@@ -88,7 +93,6 @@ export interface PersonalMemoryStorage {
   enqueueVectorUpsert(
     userId: string,
     memoryId: string,
-    mutationId: string,
   ): Promise<void>;
   acknowledgeVectorUpsert(
     userId: string,
@@ -225,15 +229,19 @@ function toISOTimestamp(date: Date): string {
   return date.toISOString();
 }
 
-function createMemoryRecord(input: CreatePersonalMemoryInput): PersonalMemory {
-  const now = toISOTimestamp(new Date());
+function createMemoryRecord(
+  input: CreatePersonalMemoryInput,
+  now: Date,
+  id: string,
+): PersonalMemory {
+  const timestamp = toISOTimestamp(now);
   return {
-    id: crypto.randomUUID(),
+    id,
     userId: input.userId,
     content: input.content,
     createdBy: input.createdBy,
-    createdAt: now,
-    updatedAt: now,
+    createdAt: timestamp,
+    updatedAt: timestamp,
   };
 }
 
@@ -254,9 +262,16 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     string,
     PendingPersonalMemoryVectorUpsert
   >();
+  private readonly now: () => Date;
+  private readonly createId: () => string;
+
+  constructor(deps: PersonalMemoryStorageDependencies = {}) {
+    this.now = deps.now ?? (() => new Date());
+    this.createId = deps.createId ?? (() => crypto.randomUUID());
+  }
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
-    const memory = createMemoryRecord(input);
+    const memory = createMemoryRecord(input, this.now(), this.createId());
     this.memories.set(memory.id, memory);
     this.enqueueVectorUpsertRecord(memory);
     return memory;
@@ -288,7 +303,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
       ...existing,
       ...(input.content !== undefined && { content: input.content }),
       ...(input.createdBy !== undefined && { createdBy: input.createdBy }),
-      updatedAt: toISOTimestamp(new Date()),
+      updatedAt: toISOTimestamp(this.now()),
     };
     this.memories.set(id, updated);
     this.enqueueVectorUpsertRecord(updated);
@@ -319,7 +334,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     const updated: PersonalMemory = {
       ...existing,
       content: input.content,
-      updatedAt: toISOTimestamp(new Date()),
+      updatedAt: toISOTimestamp(this.now()),
     };
     this.memories.set(id, updated);
     this.enqueueVectorUpsertRecord(updated);
@@ -366,7 +381,7 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     this.pendingVectorDeletions.set(key, {
       userId,
       memoryId,
-      createdAt: toISOTimestamp(new Date()),
+      createdAt: toISOTimestamp(this.now()),
     });
   }
 
@@ -384,13 +399,12 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
   async enqueueVectorUpsert(
     userId: string,
     memoryId: string,
-    mutationId: string,
   ): Promise<void> {
     this.pendingVectorUpserts.set(`${userId}:${memoryId}`, {
       userId,
       memoryId,
-      mutationId,
-      createdAt: toISOTimestamp(new Date()),
+      mutationId: this.createId(),
+      createdAt: toISOTimestamp(this.now()),
     });
   }
 
@@ -463,8 +477,8 @@ export class InMemoryPersonalMemoryStorage implements PersonalMemoryStorage {
     this.pendingVectorUpserts.set(`${memory.userId}:${memory.id}`, {
       userId: memory.userId,
       memoryId: memory.id,
-      mutationId: crypto.randomUUID(),
-      createdAt: toISOTimestamp(new Date()),
+      mutationId: this.createId(),
+      createdAt: toISOTimestamp(this.now()),
     });
   }
 
@@ -496,14 +510,18 @@ function rowToMemory(row: typeof personalMemories.$inferSelect): PersonalMemory 
  */
 export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
   private db: AppDatabase;
+  private readonly now: () => Date;
+  private readonly createId: () => string;
 
-  constructor(db: AppDatabase) {
+  constructor(db: AppDatabase, deps: PersonalMemoryStorageDependencies = {}) {
     this.db = db;
+    this.now = deps.now ?? (() => new Date());
+    this.createId = deps.createId ?? (() => crypto.randomUUID());
   }
 
   async createMemory(input: CreatePersonalMemoryInput): Promise<PersonalMemory> {
-    const memory = createMemoryRecord(input);
-    const vectorMutationId = crypto.randomUUID();
+    const memory = createMemoryRecord(input, this.now(), this.createId());
+    const vectorMutationId = this.createId();
 
     const insertCanonical = this.db.insert(personalMemories).values({
       id: memory.id,
@@ -563,8 +581,8 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     id: string,
     input: UpdatePersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
-    const updatedAt = toISOTimestamp(new Date());
-    const vectorMutationId = crypto.randomUUID();
+    const updatedAt = toISOTimestamp(this.now());
+    const vectorMutationId = this.createId();
     const updateCanonical = this.db
       .update(personalMemories)
       .set({
@@ -622,8 +640,8 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
     id: string,
     input: UpdateExtractedPersonalMemoryInput,
   ): Promise<PersonalMemory | null> {
-    const updatedAt = toISOTimestamp(new Date());
-    const vectorMutationId = crypto.randomUUID();
+    const updatedAt = toISOTimestamp(this.now());
+    const vectorMutationId = this.createId();
     const updateCanonical = this.db
       .update(personalMemories)
       .set({
@@ -717,7 +735,7 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
       .values({
         userId,
         memoryId,
-        createdAt: toISOTimestamp(new Date()),
+        createdAt: toISOTimestamp(this.now()),
       })
       .onConflictDoNothing();
   }
@@ -742,9 +760,9 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
   async enqueueVectorUpsert(
     userId: string,
     memoryId: string,
-    mutationId: string,
   ): Promise<void> {
-    const createdAt = toISOTimestamp(new Date());
+    const mutationId = this.createId();
+    const createdAt = toISOTimestamp(this.now());
     await this.db
       .insert(pendingPersonalMemoryVectorUpserts)
       .values({ userId, memoryId, mutationId, createdAt })
@@ -793,7 +811,7 @@ export class D1PersonalMemoryStorage implements PersonalMemoryStorage {
           .select({
             userId: personalMemories.userId,
             memoryId: personalMemories.id,
-            createdAt: sql<string>`${toISOTimestamp(new Date())}`.as(
+            createdAt: sql<string>`${toISOTimestamp(this.now())}`.as(
               "created_at",
             ),
           })
@@ -1073,7 +1091,7 @@ export class PersonalMemoryService {
     const memory = await this.storage.findMemoryById(userId, id);
     if (!memory) return null;
 
-    await this.storage.enqueueVectorUpsert(userId, id, crypto.randomUUID());
+    await this.storage.enqueueVectorUpsert(userId, id);
     await this.reconcilePendingVectorMutations(userId, id);
     return this.storage.findMemoryById(userId, id);
   }
