@@ -85,7 +85,7 @@ jobs:
           bun run test
 
       - name: Build signed and notarized app
-        run: bun run --cwd apps/desktop dist:mac
+        run: bun run --cwd apps/desktop dist:mac -- --publish never
 
       - name: Verify signature, notarization, and architectures
         shell: bash
