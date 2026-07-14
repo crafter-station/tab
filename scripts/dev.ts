@@ -9,7 +9,7 @@ const processes = [
   {
     name: "web",
     command: ["bun", "run", "--cwd", "apps/web", "dev"],
-    env: { PORT: String(env.WEB_PORT) },
+    env: { WEB_PORT: String(env.WEB_PORT) },
   },
 ];
 

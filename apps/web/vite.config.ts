@@ -5,7 +5,7 @@ import viteReact from "@vitejs/plugin-react";
 import { defineConfig, type PluginOption } from "vite";
 
 export default defineConfig(({ command, isPreview }) => {
-  const rawPort = process.env.WEB_PORT ?? process.env.PORT ?? "3000";
+  const rawPort = process.env.WEB_PORT ?? "3000";
   const port = Number(rawPort);
   if (!Number.isInteger(port) || port < 1 || port > 65_535) {
     throw new Error(`Invalid web development port: ${rawPort}`);
