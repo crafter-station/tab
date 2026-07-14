@@ -96,7 +96,7 @@ function FooterThemeToggle() {
             type="button"
             variant="ghost"
             size="icon"
-            className="size-7 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+            className="size-7 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-[var(--tab-shadow-control)]"
             aria-label={`${mode.label} theme`}
             aria-pressed={theme === mode.id}
             title={`${mode.label} theme`}
