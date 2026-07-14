@@ -22,6 +22,8 @@ const fixedBrandExportFiles = new Set([
   "packages/ui/src/assets/brand/tab-lockup-dark.svg",
   "apps/web/public/brand/tab-mark-dark.svg",
   "apps/web/public/brand/tab-lockup-dark.svg",
+  "apps/web/public/brand-assets/og-image.svg",
+  "apps/web/public/brand-assets/favicon.svg",
 ]);
 
 function collectSourceFiles(path: string): string[] {
