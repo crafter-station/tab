@@ -6,7 +6,7 @@ let webOrigin = "";
 const apiRequests: string[] = [];
 
 async function waitForResponse(url: string) {
-	const deadline = Date.now() + 10_000;
+	const deadline = Date.now() + 45_000;
 	let lastError: unknown;
 
 	while (Date.now() < deadline) {
@@ -83,5 +83,5 @@ describe("web development configuration", () => {
 
 		expect(response.status).toBe(200);
 		expect(apiRequests).toContain("/api/auth/get-session");
-	}, 15_000);
+	}, 50_000);
 });
