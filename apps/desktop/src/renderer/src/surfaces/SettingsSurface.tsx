@@ -340,16 +340,16 @@ export function SettingsSurface() {
               />
               <div className="settings-group__actions">
                 {status.entitlement?.upgradeUrl ? (
-                  <Button onClick={() => window.tab?.openPricing?.()}>
+                  <Button onClick={() => window.tab?.openPricing?.()} size="sm">
                     View plans
                   </Button>
                 ) : null}
                 {status.auth === "signed_in" ? (
-                  <Button variant="secondary" onClick={() => window.tab?.signOut?.()}>
+                  <Button onClick={() => window.tab?.signOut?.()} size="sm" variant="secondary">
                     Sign out
                   </Button>
                 ) : (
-                  <Button onClick={() => window.tab?.signIn?.()}>Sign in</Button>
+                  <Button onClick={() => window.tab?.signIn?.()} size="sm">Sign in</Button>
                 )}
               </div>
             </SettingsGroup>
@@ -379,7 +379,7 @@ export function SettingsSurface() {
                 </StatusBadge>
                 {localInferenceStatus.status === "unavailable"
                   && ["missing_model", "artifact_mismatch", "download_failed"].includes(localInferenceStatus.reason) && (
-                  <Button onClick={handleDownloadModel}>Download model</Button>
+                  <Button onClick={handleDownloadModel} size="sm">Download model</Button>
                 )}
               </div>
             </SettingsRow>

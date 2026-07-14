@@ -334,7 +334,7 @@ export function OnboardingSurface() {
               </div>
             </div>
           )}
-          <Button className="onboarding-later" onClick={() => window.tab?.skipOnboarding?.()} variant="ghost">
+          <Button className="onboarding-later" onClick={() => window.tab?.skipOnboarding?.()} size="sm" variant="ghost">
             Not now
           </Button>
           <span className="onboarding-later__hint">Permissions remain available in Settings.</span>
