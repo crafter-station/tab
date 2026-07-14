@@ -195,6 +195,93 @@ summary {
   padding-top: 14px;
 }
 
+.completion-history > div:first-child {
+  gap: 2px;
+  padding: 14px 16px 10px;
+}
+
+.completion-history > div:first-child h2 {
+  font-size: 15px;
+}
+
+.completion-history > div:first-child > div {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.completion-history > div:last-child {
+  padding: 0;
+}
+
+.completion-history__columns,
+.completion-history__row {
+  display: grid;
+  grid-template-columns: 168px minmax(0, 0.85fr) minmax(0, 1.25fr);
+  column-gap: 18px;
+}
+
+.completion-history__columns {
+  padding: 7px 16px;
+  color: var(--muted-foreground);
+  border-top: 1px solid var(--tab-hairline);
+  border-bottom: 1px solid var(--tab-hairline);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.045em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.completion-history__row {
+  align-items: start;
+  min-height: 56px;
+  padding: 9px 16px;
+  border-bottom: 1px solid var(--tab-hairline);
+}
+
+.completion-history__row:last-child {
+  border-bottom: 0;
+}
+
+.completion-history__meta {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.completion-history__meta time {
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.completion-history__preview {
+  min-width: 0;
+}
+
+.completion-history__preview > span {
+  display: none;
+}
+
+.completion-history__preview pre {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--foreground);
+  font-family: var(--font-code);
+  font-size: 12px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.completion-history__preview--context pre {
+  color: var(--muted-foreground);
+}
+
 .settings-theme-toggle {
   gap: 0;
   padding: 3px;
@@ -312,5 +399,26 @@ summary {
   .settings-paused {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .completion-history__columns {
+    display: none;
+  }
+
+  .completion-history__row {
+    grid-template-columns: 1fr;
+    gap: 7px;
+    padding-block: 11px;
+  }
+
+  .completion-history__preview > span {
+    display: block;
+    margin-bottom: 2px;
+    color: var(--muted-foreground);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.045em;
+    line-height: 1;
+    text-transform: uppercase;
   }
 }

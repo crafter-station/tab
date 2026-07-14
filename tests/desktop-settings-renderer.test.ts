@@ -35,4 +35,15 @@ describe("desktop settings renderer", () => {
     expect(source).toInclude("window.tab.downloadUpdate()");
     expect(source).toInclude("window.tab.installUpdate()");
   });
+
+  it("distinguishes compact Local and Deep Complete history entries", () => {
+    const source = readFileSync(
+      "apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx",
+      "utf8",
+    );
+
+    expect(source).toInclude('className="completion-history__row"');
+    expect(source).toInclude('tone={entry.mode === "local" ? "neutral" : "brand"}');
+    expect(source).toInclude('{entry.mode === "local" ? "Local" : "Deep Complete"}');
+  });
 });

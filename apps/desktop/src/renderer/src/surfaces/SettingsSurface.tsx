@@ -378,28 +378,37 @@ export function SettingsSurface() {
       case "completions":
         return (
           <SettingsGroup
+            className="completion-history"
             title="This session"
-            description="Cleared when Tab quits."
+            description={`${completionHistory.length} ${completionHistory.length === 1 ? "suggestion" : "suggestions"}. Cleared when Tab quits.`}
           >
             {completionHistory.length === 0 ? (
-              <EmptyState title="No Suggestions yet" description="Suggestions from this session will appear here." />
+              <EmptyState className="m-4 mt-0" title="No Suggestions yet" description="Suggestions from this session will appear here." />
             ) : (
-              <div className="divide-y divide-border">
+              <div className="completion-history__list" role="list" aria-label="Suggestion history">
+                <div className="completion-history__columns" aria-hidden="true">
+                  <span>Type and time</span>
+                  <span>Context</span>
+                  <span>Suggestion</span>
+                </div>
                 {completionHistory.map((entry) => (
-                  <article className="p-4" key={entry.id}>
-                    <div className="mb-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <StatusBadge tone={entry.mode === "local" ? "brand" : "neutral"}>{entry.mode === "local" ? "Local" : "Deep Complete"}</StatusBadge>
+                  <article className="completion-history__row" key={entry.id} role="listitem">
+                    <div className="completion-history__meta">
+                      <StatusBadge
+                        className="px-2 py-0.5 text-[10px]"
+                        tone={entry.mode === "local" ? "neutral" : "brand"}
+                      >
+                        {entry.mode === "local" ? "Local" : "Deep Complete"}
+                      </StatusBadge>
                       <time dateTime={entry.createdAt}>{new Date(entry.createdAt).toLocaleTimeString()}</time>
                     </div>
-                    <div className="grid gap-3">
-                      <div>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Context</div>
-                        <pre className="whitespace-pre-wrap break-words font-mono text-sm">{entry.input}</pre>
-                      </div>
-                      <div>
-                        <div className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">Suggestion</div>
-                        <pre className="whitespace-pre-wrap break-words font-mono text-sm text-foreground">{entry.output}</pre>
-                      </div>
+                    <div className="completion-history__preview completion-history__preview--context">
+                      <span>Context</span>
+                      <pre title={entry.input}>{entry.input}</pre>
+                    </div>
+                    <div className="completion-history__preview">
+                      <span>Suggestion</span>
+                      <pre title={entry.output}>{entry.output}</pre>
                     </div>
                   </article>
                 ))}
