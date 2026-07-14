@@ -602,17 +602,18 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   return Unmanaged.passUnretained(event)
 }
 
+let keyDownMask = CGEventMask(1) << CGEventType.keyDown.rawValue
+let flagsChangedMask = CGEventMask(1) << CGEventType.flagsChanged.rawValue
+let leftMouseDownMask = CGEventMask(1) << CGEventType.leftMouseDown.rawValue
+let rightMouseDownMask = CGEventMask(1) << CGEventType.rightMouseDown.rawValue
+let otherMouseDownMask = CGEventMask(1) << CGEventType.otherMouseDown.rawValue
+let eventMask = keyDownMask | flagsChangedMask | leftMouseDownMask | rightMouseDownMask | otherMouseDownMask
+
 guard let eventTap = CGEvent.tapCreate(
   tap: .cgSessionEventTap,
   place: .headInsertEventTap,
   options: .listenOnly,
-  eventsOfInterest: CGEventMask(
-    (1 << CGEventType.keyDown.rawValue)
-      | (1 << CGEventType.flagsChanged.rawValue)
-      | (1 << CGEventType.leftMouseDown.rawValue)
-      | (1 << CGEventType.rightMouseDown.rawValue)
-      | (1 << CGEventType.otherMouseDown.rawValue)
-  ),
+  eventsOfInterest: eventMask,
   callback: callback,
   userInfo: nil
 ) else {
