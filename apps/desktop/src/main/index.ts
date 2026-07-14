@@ -52,8 +52,7 @@ import { createDeviceApiClient } from "./device-api-client.ts";
 import { createMemoryExtractionWindow } from "./memory-extraction-window.ts";
 import { createMemoryExtractionDispatcher } from "./memory-extraction-dispatcher.ts";
 import { MACOS_PERMISSION_SETTINGS_URLS, createOnboardingManager, getMacOSAppBundlePath } from "./onboarding.ts";
-import { createOnboardingWindowManager } from "./onboarding-window.ts";
-import { createSettingsWindowManager } from "./settings-window.ts";
+import { createControlWindowManager } from "./settings-window.ts";
 import { createTrayMenu, type TabTray } from "./tray-menu.ts";
 import { createPreferencesManager, createFilePreferencesStorage } from "./preferences.ts";
 import { createDesktopUpdater } from "./release.ts";
@@ -162,12 +161,7 @@ const onboardingManager = createOnboardingManager({
   setPreferences: (onboarding) => preferencesManager.update({ onboarding }),
 });
 
-const onboardingWindowManager = createOnboardingWindowManager({
-  rendererPath: APP_RENDERER_PATH,
-  preloadPath: PRELOAD_PATH,
-});
-
-const settingsWindowManager = createSettingsWindowManager({
+const controlWindowManager = createControlWindowManager({
   rendererPath: APP_RENDERER_PATH,
   preloadPath: PRELOAD_PATH,
 });
@@ -233,10 +227,10 @@ const requestCloudSuggestion = createApiSuggestionClient({
     currentDesktopStatus?.entitlement?.capabilities.customWritingInstructions
       ? preferencesManager.get().suggestions.customWritingInstructions || undefined
       : undefined,
-  onEntitlementError: () => settingsWindowManager.show(),
+  onEntitlementError: () => controlWindowManager.show(),
 });
 const completionHistory = createCompletionHistory((entries) => {
-  settingsWindowManager.sendCompletionHistory(entries);
+  controlWindowManager.sendCompletionHistory(entries);
 });
 const requestDeepComplete: ReturnType<typeof createApiSuggestionClient> = requestCloudSuggestion;
 const recordInteractionTelemetry = createDesktopTelemetryClient({
@@ -288,7 +282,7 @@ const desktopUpdater = createDesktopUpdater({
   currentVersion: APP_VERSION,
   nativeUpdater: autoUpdater,
   onChange: (state) => {
-    settingsWindowManager.sendUpdateState(state);
+    controlWindowManager.sendUpdateState(state);
     updateTray();
     if (state.status === "available" && !notifiedUpdateVersions.has(state.version)) {
       notifiedUpdateVersions.add(state.version);
@@ -297,7 +291,7 @@ const desktopUpdater = createDesktopUpdater({
           title: "Tab update available",
           body: `Version ${state.version} is ready to download.`,
         });
-        notification.on("click", () => settingsWindowManager.show());
+        notification.on("click", () => controlWindowManager.show());
         notification.show();
       }
     }
@@ -321,8 +315,7 @@ const statusService = createDesktopStatusService({
     authClient.publishIfCredentialGenerationCurrent(credentialGeneration, publish),
   onChange: (status, credentialGeneration) => {
     currentDesktopStatus = status;
-    settingsWindowManager.sendStatus(status);
-    onboardingWindowManager.sendStatus(status);
+    controlWindowManager.sendStatus(status);
     updateTrayFromStatus(status);
     reconcileLocalModelAccess();
     if (credentialGeneration !== null) {
@@ -397,16 +390,15 @@ const localInference = createLocalModelManager({
     ? (event, details) => logLocalSuggestion(`inference.${event}`, details)
     : undefined,
   onStatusChange: (status) => {
-    settingsWindowManager.sendLocalInferenceStatus(status);
-    onboardingWindowManager.sendLocalInferenceStatus(status);
+    controlWindowManager.sendLocalInferenceStatus(status);
     if (status.status === "unavailable") {
       updateDebugApiState({ status: "local-unavailable", reason: status.reason });
     }
   },
-  onCatalogChange: (catalog) => settingsWindowManager.sendLocalModelCatalog(catalog),
+  onCatalogChange: (catalog) => controlWindowManager.sendLocalModelCatalog(catalog),
   onSelectedModelChange: (localModelId) => {
     const preferences = preferencesManager.update({ suggestions: { localModelId } });
-    settingsWindowManager.sendPreferences(preferences);
+    controlWindowManager.sendPreferences(preferences);
   },
 });
 reconcileLocalModelAccess = () => {
@@ -419,7 +411,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
   appContext: appContextExtractor,
   memoryExtraction: memoryExtractionDispatcher,
   getAutomaticSuggestion: async (snapshot, options) => {
-    if (onboardingWindowManager.isOpen()) return null;
+    if (controlWindowManager.isRoute("onboarding")) return null;
     updateDebugApiState({ status: "loading" });
     const startedAt = performance.now();
     try {
@@ -502,7 +494,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
         ? currentDesktopStatus.entitlement.capabilities.localAcceptedWordsPerDay
         : 100,
     ),
-  onLocalAllowanceExhausted: () => settingsWindowManager.show(),
+  onLocalAllowanceExhausted: () => controlWindowManager.show(),
   recordAcceptedUsage: (event) => {
     acceptedWordLedger.record(event);
     void synchronizeAcceptedWordLedger();
@@ -538,7 +530,7 @@ function delay(ms: number): Promise<void> {
 async function refreshMemories(): Promise<void> {
   const memories = await memoryClient.listMemories();
   currentMemories = memories;
-  settingsWindowManager.sendMemories(memories);
+  controlWindowManager.sendMemories(memories);
 }
 
 function updateTrayFromStatus(status: DesktopStatus): void {
@@ -547,7 +539,7 @@ function updateTrayFromStatus(status: DesktopStatus): void {
 
 function setUsePersonalMemoryForSuggestions(enabled: boolean): void {
   const preferences = preferencesManager.update({ suggestions: { usePersonalMemory: enabled } });
-  settingsWindowManager.sendPreferences(preferences);
+  controlWindowManager.sendPreferences(preferences);
 }
 
 function setContinuousMemoryExtraction(enabled: boolean): void {
@@ -555,14 +547,14 @@ function setContinuousMemoryExtraction(enabled: boolean): void {
     suggestions: { continuousMemoryExtraction: enabled },
   });
   if (!enabled) memoryExtractionDispatcher.cancelAndClear();
-  settingsWindowManager.sendPreferences(preferences);
+  controlWindowManager.sendPreferences(preferences);
 }
 
 function setCustomWritingInstructions(value: string): void {
   const preferences = preferencesManager.update({
     suggestions: { customWritingInstructions: value.trimStart().slice(0, 1_000) },
   });
-  settingsWindowManager.sendPreferences(preferences);
+  controlWindowManager.sendPreferences(preferences);
 }
 
 function updateTray(): void {
@@ -581,7 +573,7 @@ function createTrayState(status: DesktopStatus) {
 async function togglePause(): Promise<void> {
   const paused = !nativeAutocompleteApp.isPaused();
   nativeAutocompleteApp.setPaused(paused);
-  settingsWindowManager.sendPaused(paused);
+  controlWindowManager.sendPaused(paused);
   updateTray();
   if (paused) {
     clearContextAndHide();
@@ -625,20 +617,17 @@ function enablePackagedAuthCallbackHandling(): void {
 }
 
 function showSignedOutSurface(): void {
-  onboardingWindowManager.close();
-  settingsWindowManager.show("sign-in");
+  controlWindowManager.show("sign-in");
 }
 
 function showAuthenticatedDesktopSurface(): void {
   if (onboardingManager.shouldShowOnboarding()) {
     clearContextAndHide();
-    settingsWindowManager.close();
-    onboardingWindowManager.show();
+    controlWindowManager.show("onboarding");
     return;
   }
 
-  onboardingWindowManager.close();
-  settingsWindowManager.show();
+  controlWindowManager.show();
 }
 
 async function showInitialDesktopSurface(): Promise<void> {
@@ -880,7 +869,7 @@ function registerObsidianTabAcceptance(): void {
 }
 
 function showOverlay(suggestion: Suggestion, provenance: SuggestionProvenance): void {
-  if (onboardingWindowManager.isOpen()) return;
+  if (controlWindowManager.isRoute("onboarding")) return;
   if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
   const snapshot = nativeAutocompleteApp.getCurrentSnapshot();
   const inline = isObsidianInlineTarget(snapshot);
@@ -1027,7 +1016,7 @@ async function requestSuggestionNow(): Promise<void> {
 }
 
 function handleSuggestNow(): void {
-  if (onboardingWindowManager.isOpen()) return;
+  if (controlWindowManager.isRoute("onboarding")) return;
   requestSuggestionNow().catch((error) => {
     console.error("Failed to suggest now from double-tap Option:", error);
   });
@@ -1082,8 +1071,8 @@ async function bootstrap(): Promise<void> {
   enablePackagedAuthCallbackHandling();
 
   const registered = globalShortcut.register("Alt+Tab", () => {
-    if (onboardingWindowManager.isFocused()) {
-      onboardingWindowManager.sendOptionTab();
+    if (controlWindowManager.isRoute("onboarding") && controlWindowManager.isFocused()) {
+      controlWindowManager.sendOptionTab();
       return;
     }
     acceptCurrentSuggestion().catch((error) => {
@@ -1107,8 +1096,7 @@ async function bootstrap(): Promise<void> {
   // and tray menu.
   ipcMain.on("complete-onboarding", () => {
     onboardingManager.completeOnboarding();
-    onboardingWindowManager.close();
-    settingsWindowManager.show();
+    controlWindowManager.show();
   });
 
   ipcMain.on("complete-onboarding-and-relaunch", () => {
@@ -1168,20 +1156,20 @@ async function bootstrap(): Promise<void> {
   ipcMain.handle("select-local-model", (_event, modelId: unknown) =>
     localInference.selectModel(LocalModelIdSchema.parse(modelId)));
   ipcMain.handle("check-for-updates", (event) => {
-    if (!settingsWindowManager.ownsFrame(event.senderFrame)) {
+    if (!controlWindowManager.ownsFrame(event.senderFrame)) {
       throw new Error("Update controls are only available from the control window");
     }
     if (!app.isPackaged) return;
     return desktopUpdater.checkForUpdates();
   });
   ipcMain.handle("download-update", (event) => {
-    if (!settingsWindowManager.ownsFrame(event.senderFrame)) {
+    if (!controlWindowManager.ownsFrame(event.senderFrame)) {
       throw new Error("Update controls are only available from the control window");
     }
     return desktopUpdater.downloadUpdate();
   });
   ipcMain.handle("install-update", (event) => {
-    if (!settingsWindowManager.ownsFrame(event.senderFrame)) {
+    if (!controlWindowManager.ownsFrame(event.senderFrame)) {
       throw new Error("Update controls are only available from the control window");
     }
     desktopUpdater.quitAndInstall();

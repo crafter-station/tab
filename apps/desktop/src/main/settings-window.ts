@@ -1,4 +1,4 @@
-import { BrowserWindow, nativeTheme, type WebFrameMain } from "electron";
+import { BrowserWindow, nativeTheme, screen, type WebFrameMain } from "electron";
 import { pathToFileURL } from "node:url";
 import { PLATFORM_COLORS } from "@tab/ui/platform-colors";
 import type { DesktopStatus } from "./status.ts";
@@ -10,16 +10,31 @@ import type { DesktopUpdateState } from "./release.ts";
 
 export type ControlWindowRoute = "settings" | "onboarding" | "sign-in";
 
-export type CreateSettingsWindowDependencies = {
+export type CreateControlWindowDependencies = {
   rendererPath: string;
   preloadPath: string;
 };
 
+function getControlWindowSize(route: ControlWindowRoute) {
+  if (route === "onboarding") {
+    const workArea = screen.getPrimaryDisplay().workAreaSize;
+    const width = Math.min(760, workArea.width - 32);
+    const height = Math.min(760, workArea.height - 32);
+    return {
+      width,
+      height,
+      minWidth: Math.min(600, width),
+      minHeight: Math.min(600, height),
+    };
+  }
+
+  return controlWindowSizes[route];
+}
+
 const controlWindowSizes = {
   settings: { width: 940, height: 720, minWidth: 840, minHeight: 640 },
   "sign-in": { width: 900, height: 620, minWidth: 840, minHeight: 580 },
-  onboarding: { width: 760, height: 760, minWidth: 720, minHeight: 720 },
-} satisfies Record<ControlWindowRoute, { width: number; height: number; minWidth: number; minHeight: number }>;
+} satisfies Record<Exclude<ControlWindowRoute, "onboarding">, { width: number; height: number; minWidth: number; minHeight: number }>;
 
 const controlWindowTitles: Record<ControlWindowRoute, string> = {
   settings: "Tab Settings",
@@ -28,14 +43,16 @@ const controlWindowTitles: Record<ControlWindowRoute, string> = {
 };
 
 function applyControlWindowSize(win: BrowserWindow, route: ControlWindowRoute): void {
-  const size = controlWindowSizes[route];
+  const size = getControlWindowSize(route);
   win.setMinimumSize(size.minWidth, size.minHeight);
   win.setSize(size.width, size.height);
   win.setTitle(controlWindowTitles[route]);
+  win.setMinimizable(route !== "onboarding");
 }
 
-export function createSettingsWindow(deps: CreateSettingsWindowDependencies, route: ControlWindowRoute = "settings"): BrowserWindow {
-  const size = controlWindowSizes[route];
+export function createControlWindow(deps: CreateControlWindowDependencies, route: ControlWindowRoute = "settings"): BrowserWindow {
+  const size = getControlWindowSize(route);
+  const isOnboarding = route === "onboarding";
   const win = new BrowserWindow({
     width: size.width,
     height: size.height,
@@ -44,16 +61,18 @@ export function createSettingsWindow(deps: CreateSettingsWindowDependencies, rou
     useContentSize: true,
     center: true,
     resizable: true,
-    minimizable: true,
+    minimizable: !isOnboarding,
     maximizable: false,
     fullscreenable: false,
     show: false,
     title: controlWindowTitles[route],
     backgroundColor: PLATFORM_COLORS.theme[nativeTheme.shouldUseDarkColors ? "dark" : "light"].canvas,
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
-    trafficLightPosition: process.platform === "darwin" ? { x: 18, y: 18 } : undefined,
+    trafficLightPosition: process.platform === "darwin" ? { x: isOnboarding ? 16 : 18, y: isOnboarding ? 16 : 18 } : undefined,
     webPreferences: {
       preload: deps.preloadPath,
+      contextIsolation: true,
+      nodeIntegration: false,
     },
   });
 
@@ -63,32 +82,42 @@ export function createSettingsWindow(deps: CreateSettingsWindowDependencies, rou
   return win;
 }
 
-export type SettingsWindowManagerDependencies = {
+export type ControlWindowManagerDependencies = {
   rendererPath: string;
   preloadPath: string;
 };
 
-export function createSettingsWindowManager(deps: SettingsWindowManagerDependencies) {
+export function createControlWindowManager(deps: ControlWindowManagerDependencies) {
   let win: BrowserWindow | null = null;
+  let currentRoute: ControlWindowRoute | null = null;
 
   function show(route: ControlWindowRoute = "settings"): BrowserWindow {
     if (win && !win.isDestroyed()) {
-      const routeChanged = Boolean(win.webContents.getURL()) && !win.webContents.getURL().endsWith(`#${route}`);
+      const routeChanged = currentRoute !== route;
+      if (routeChanged && (currentRoute === "onboarding" || route === "onboarding")) {
+        close();
+        return show(route);
+      }
       if (routeChanged) {
         applyControlWindowSize(win, route);
         win.loadFile(deps.rendererPath, { hash: route });
+        currentRoute = route;
       }
       win.focus();
       return win;
     }
 
-    win = createSettingsWindow({ rendererPath: deps.rendererPath, preloadPath: deps.preloadPath }, route);
+    const createdWindow = createControlWindow({ rendererPath: deps.rendererPath, preloadPath: deps.preloadPath }, route);
+    win = createdWindow;
+    currentRoute = route;
 
-    win.on("closed", () => {
+    createdWindow.on("closed", () => {
+      if (win !== createdWindow) return;
       win = null;
+      currentRoute = null;
     });
 
-    return win;
+    return createdWindow;
   }
 
   function close(): void {
@@ -96,6 +125,7 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
       win.close();
     }
     win = null;
+    currentRoute = null;
   }
 
   function sendStatus(status: DesktopStatus): void {
@@ -146,10 +176,18 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     }
   }
 
+  function sendOptionTab(): void {
+    if (win && !win.isDestroyed() && currentRoute === "onboarding") {
+      win.webContents.send("onboarding-option-tab");
+    }
+  }
+
   return {
     show,
     close,
     isOpen: () => win !== null && !win.isDestroyed(),
+    isRoute: (route: ControlWindowRoute) => currentRoute === route && win !== null && !win.isDestroyed(),
+    isFocused: () => win?.isFocused() ?? false,
     ownsFrame: (frame: WebFrameMain | null) => {
       if (!win || win.isDestroyed() || !frame || frame !== win.webContents.mainFrame) return false;
       return frame.url.split("#", 1)[0] === pathToFileURL(deps.rendererPath).toString();
@@ -162,5 +200,6 @@ export function createSettingsWindowManager(deps: SettingsWindowManagerDependenc
     sendLocalModelCatalog,
     sendCompletionHistory,
     sendUpdateState,
+    sendOptionTab,
   };
 }

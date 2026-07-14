@@ -24,9 +24,9 @@ describe("desktop renderer setup surfaces", () => {
     expect(onboardingSource).toInclude("I turned it on");
     expect(onboardingSource).toInclude("<SuggestionCommand");
     expect(onboardingSource).not.toInclude("Try another");
-    expect(desktopMainSource).toInclude("onboardingWindowManager.isFocused()");
-    expect(desktopMainSource).toInclude("onboardingWindowManager.sendOptionTab()");
-    expect(desktopMainSource).toInclude("if (onboardingWindowManager.isOpen()) return null");
+    expect(desktopMainSource).toInclude('controlWindowManager.isRoute("onboarding")');
+    expect(desktopMainSource).toInclude("controlWindowManager.sendOptionTab()");
+    expect(desktopMainSource).not.toInclude("onboardingWindowManager");
   });
 
   it("uses plan-neutral paid entitlement copy in settings", () => {
