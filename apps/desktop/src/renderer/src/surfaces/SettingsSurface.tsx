@@ -23,11 +23,12 @@ import {
   setThemePreference,
   type ThemeMode,
 } from "@tab/ui";
-import type {
-  LocalInferenceStatus,
-  LocalModelCatalogState,
-  LocalModelId,
-  PersonalMemory,
+import {
+  DEFAULT_LOCAL_MODEL_ID,
+  type LocalInferenceStatus,
+  type LocalModelCatalogState,
+  type LocalModelId,
+  type PersonalMemory,
 } from "@tab/contracts";
 import type { DesktopStatus } from "../../../main/status";
 import type { CompletionHistoryEntry } from "../../../main/completion-history";
@@ -155,7 +156,7 @@ export function SettingsSurface() {
   const [customWritingInstructions, setCustomWritingInstructions] = useState("");
   const [localInferenceStatus, setLocalInferenceStatus] = useState<LocalInferenceStatus>({ status: "stopped" });
   const [localModelCatalog, setLocalModelCatalog] = useState<LocalModelCatalogState>({
-    selectedModelId: "qwen2.5-3b-instruct-q4_k_m",
+    selectedModelId: DEFAULT_LOCAL_MODEL_ID,
     models: [],
   });
   const [modelDownloadError, setModelDownloadError] = useState<{ modelId: string; message: string } | null>(null);

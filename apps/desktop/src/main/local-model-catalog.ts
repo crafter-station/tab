@@ -55,6 +55,7 @@ type RuntimeFactory = (options: LocalInferencePrototypeOptions) => LocalInferenc
 
 export type LocalModelManagerOptions = {
   readonly entries: readonly LocalModelCatalogEntry[];
+  readonly defaultModelId: LocalModelId;
   readonly selectedModelId: LocalModelId;
   readonly port?: number;
   readonly getMemories?: LocalInferencePrototypeOptions["getMemories"];
@@ -75,9 +76,12 @@ export function createLocalModelManager(options: LocalModelManagerOptions) {
   const runtimeFactory = options.runtimeFactory ?? createLocalInferencePrototype;
   const modelExists = options.modelExists ?? existsSync;
   const runtimes = new Map<LocalModelId, LocalInferenceRuntime>();
+  const defaultEntry = entries.get(options.defaultModelId) ?? (() => {
+    throw new Error("The default local model must exist in the catalog");
+  })();
   let selectedModelId = entries.has(options.selectedModelId)
     ? options.selectedModelId
-    : options.entries[0]!.configuration.id;
+    : defaultEntry.configuration.id;
 
   function requireEntry(modelId: LocalModelId): LocalModelCatalogEntry {
     const entry = entries.get(modelId);
@@ -166,7 +170,7 @@ export function createLocalModelManager(options: LocalModelManagerOptions) {
 
   async function reconcileAccess(): Promise<void> {
     if (isAvailable(requireEntry(selectedModelId))) return;
-    const fallback = options.entries.find(isAvailable);
+    const fallback = isAvailable(defaultEntry) ? defaultEntry : options.entries.find(isAvailable);
     if (!fallback) throw new Error("No local model is available");
     const fallbackId = fallback.configuration.id;
     getRuntime(selectedModelId).stop();
@@ -214,24 +218,24 @@ export function createDefaultLocalModelCatalog(options: {
       executablePath: options.qwenExecutablePath,
       requiresCatalogAccess: false,
       experimental: false,
-      recommended: true,
+      recommended: false,
       license: "Apache-2.0",
-      supportSummary: "Tab's default model for this Mac.",
+      supportSummary: "A lighter alternative for Automatic Suggestions.",
       configuration: QWEN_25_3B_Q4_K_M,
     },
     {
       name: "Ternary Bonsai 8B",
-      description: "Experimental higher-capability model with an efficient 2-bit footprint.",
+      description: "Higher-capability model with an efficient 2-bit footprint.",
       downloadSizeBytes: 2_182_184_672,
       fileName: "Ternary-Bonsai-8B-Q2_0.gguf",
       modelPath: join(options.modelsDirectory, "Ternary-Bonsai-8B-Q2_0.gguf"),
       modelUrl: "https://huggingface.co/prism-ml/Ternary-Bonsai-8B-gguf/resolve/c2aefbeb4b24469cd11579c3384b990404c17a30/Ternary-Bonsai-8B-Q2_0.gguf",
       executablePath: options.bonsaiExecutablePath ?? options.qwenExecutablePath,
       requiresCatalogAccess: false,
-      experimental: true,
-      recommended: false,
+      experimental: false,
+      recommended: true,
       license: "Apache-2.0",
-      supportSummary: "Validation is in progress; no Mac hardware tier is supported yet.",
+      supportSummary: "Tab's default model for Automatic Suggestions.",
       configuration: BONSAI_8B_Q2_0,
     },
   ];

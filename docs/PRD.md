@@ -106,7 +106,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Enforce Accepted Word and Deep Complete allowances from local app/backend entitlement state without calling Polar synchronously in either hot path.
 - Configure a one-month trial on both paid products in Polar. The trial starts only after checkout, requires a payment method, converts to the selected monthly plan unless canceled, and uses Polar's trial-abuse prevention.
 - After the trial, Free includes 100 Accepted Words per day, 10 Deep Completes per month, one Mac, and management of existing Personal Memory.
-- Make the experimental Ternary Bonsai 8B local model downloadable and selectable on every plan, including Free. It is not part of the paid supported model catalog until it passes Tab's support gates.
+- Use Ternary Bonsai 8B as the default local model for Automatic Suggestions and make it downloadable and selectable on every plan, including Free. Additional supported catalog models may remain a paid capability.
 - Pro costs $10 per month and includes unlimited Accepted Words, 300 Deep Completes per month, continuous Memory Extraction, custom writing instructions, the supported model catalog, and up to three personal Macs.
 - Max costs $20 per month and includes 1,000 Deep Completes per month. Its other capabilities and three-device limit are the same as Pro.
 - Offer paid plans monthly only. There is no annual plan and there are no annual customers.

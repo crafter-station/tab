@@ -24,11 +24,29 @@ describe("Local Model Catalog", () => {
       fileName: "Ternary-Bonsai-8B-Q2_0.gguf",
       executablePath: "/runtime/prism-llama-server",
       requiresCatalogAccess: false,
+      experimental: false,
+      recommended: true,
       configuration: BONSAI_8B_Q2_0,
     });
+    expect(catalog[0]?.recommended).toBe(false);
     expect(catalog[1]?.modelUrl).toContain(
       "/resolve/c2aefbeb4b24469cd11579c3384b990404c17a30/Ternary-Bonsai-8B-Q2_0.gguf",
     );
+  });
+
+  it("falls back to the configured Bonsai default for an unknown saved selection", () => {
+    const entries = createDefaultLocalModelCatalog({
+      modelsDirectory: "/models",
+      qwenExecutablePath: "/runtime/llama-server",
+      bonsaiExecutablePath: "/runtime/prism-llama-server",
+    });
+    const manager = createLocalModelManager({
+      entries,
+      defaultModelId: BONSAI_8B_Q2_0.id,
+      selectedModelId: "removed-model" as never,
+    });
+
+    expect(manager.getSelectedModelId()).toBe("ternary-bonsai-8b-q2_0");
   });
 
   it("downloads a model without replacing the selected runtime, then switches explicitly", async () => {
@@ -45,6 +63,7 @@ describe("Local Model Catalog", () => {
 
     const manager = createLocalModelManager({
       entries,
+      defaultModelId: bonsaiId,
       selectedModelId: qwenId,
       canAccessCatalog: () => true,
       modelExists: (path) => downloadedPaths.has(path),
@@ -100,8 +119,10 @@ describe("Local Model Catalog", () => {
       bonsaiExecutablePath: "/runtime/prism-llama-server",
     });
     const downloadedPaths = new Set([entries[0]!.modelPath]);
+    const bonsaiId = entries[1]!.configuration.id;
     const manager = createLocalModelManager({
       entries,
+      defaultModelId: bonsaiId,
       selectedModelId: entries[0]!.configuration.id,
       canAccessCatalog: () => false,
       modelExists: (path) => downloadedPaths.has(path),
@@ -115,8 +136,6 @@ describe("Local Model Catalog", () => {
         getLastTiming: () => null,
       }),
     });
-    const bonsaiId = entries[1]!.configuration.id;
-
     expect(manager.getCatalogState().models[1]?.available).toBe(true);
     await manager.downloadModel(bonsaiId);
     expect(manager.getCatalogState().models[1]?.downloaded).toBe(true);
@@ -135,6 +154,7 @@ describe("Local Model Catalog", () => {
     const bonsaiId = entries[1]!.configuration.id;
     const manager = createLocalModelManager({
       entries,
+      defaultModelId: bonsaiId,
       selectedModelId: qwenId,
       canAccessCatalog: () => true,
       runtimeFactory: (options) => ({

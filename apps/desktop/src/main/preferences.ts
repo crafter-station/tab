@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import {
   BillingStatusDataSchema,
+  DEFAULT_LOCAL_MODEL_ID,
   type BillingStatusData,
   LocalModelIdSchema,
   type LocalModelId,
@@ -37,7 +38,7 @@ const DEFAULT_PREFERENCES: DesktopPreferences = {
     usePersonalMemory: false,
     continuousMemoryExtraction: false,
     customWritingInstructions: "",
-    localModelId: "qwen2.5-3b-instruct-q4_k_m",
+    localModelId: DEFAULT_LOCAL_MODEL_ID,
   },
 };
 

@@ -57,7 +57,7 @@ import { createPreferencesManager, createFilePreferencesStorage } from "./prefer
 import { createDesktopUpdater } from "./release.ts";
 import { createDefaultLocalModelCatalog, createLocalModelManager } from "./local-model-catalog.ts";
 import { createCompletionHistory } from "./completion-history.ts";
-import { LocalModelIdSchema, type Suggestion, type PersonalMemory } from "@tab/contracts";
+import { DEFAULT_LOCAL_MODEL_ID, LocalModelIdSchema, type Suggestion, type PersonalMemory } from "@tab/contracts";
 import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
 import { boundsEqual } from "./window-position.ts";
@@ -385,6 +385,7 @@ const localModelCatalog = createDefaultLocalModelCatalog({
 });
 const localInference = createLocalModelManager({
   entries: localModelCatalog,
+  defaultModelId: DEFAULT_LOCAL_MODEL_ID,
   selectedModelId: preferencesManager.get().suggestions.localModelId,
   port: env.TAB_LOCAL_INFERENCE_PORT,
   canAccessCatalog: () =>

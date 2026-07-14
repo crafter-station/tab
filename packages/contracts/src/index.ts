@@ -20,6 +20,7 @@ export const LocalModelIdSchema = z.enum([
   "qwen2.5-3b-instruct-q4_k_m",
   "ternary-bonsai-8b-q2_0",
 ]);
+export const DEFAULT_LOCAL_MODEL_ID = "ternary-bonsai-8b-q2_0" as const;
 
 export const LocalInferenceUnavailableReasonSchema = z.enum([
   "missing_model",
