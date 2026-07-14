@@ -1,4 +1,7 @@
 import { describe, expect, it } from "bun:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { createLocalInferencePrototype } from "../apps/desktop/src/main/local-inference-prototype.ts";
 import { createSafeTypingContextSnapshot, type RequestableTypingContextSnapshot } from "../apps/desktop/src/main/typing-context.ts";
 
@@ -78,6 +81,46 @@ function chatCompletionStream(content: string): Response {
 }
 
 describe("local inference prototype", () => {
+  it("publishes model download progress only when the displayed percentage changes", async () => {
+    const directory = await mkdtemp(join(tmpdir(), "tab-model-progress-"));
+    const statuses: Array<{ status: string; progress?: number | null }> = [];
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let index = 0; index < 1_000; index += 1) controller.enqueue(Uint8Array.of(1));
+        controller.close();
+      },
+    });
+    const runtime = createLocalInferencePrototype({
+      executablePath: "/opt/llama-server",
+      modelPath: join(directory, "model.gguf"),
+      modelUrl: "https://models.example/model.gguf",
+      modelExists: () => true,
+      verifyModelArtifact: async () => true,
+      getRuntimeVersion: async () => "version: 9910 (f5525f7e7)",
+      spawnHelper: () => ({ pid: 123, kill: () => true, once: () => {} }),
+      fetch: async (input) => String(input).endsWith("/health")
+        ? new Response("ok")
+        : new Response(body, { headers: { "content-length": "1000" } }),
+      onStatusChange: (status) => statuses.push(status),
+    });
+
+    try {
+      await runtime.downloadModel();
+
+      const displayedPercents = statuses.flatMap((status) =>
+        status.status === "downloading" && typeof status.progress === "number"
+          ? [Math.round(status.progress * 100)]
+          : []
+      );
+      expect(displayedPercents).toHaveLength(new Set(displayedPercents).size);
+      expect(displayedPercents.at(-1)).toBe(100);
+      expect(runtime.getStatus().status).toBe("ready");
+    } finally {
+      runtime.stop();
+      await rm(directory, { recursive: true, force: true });
+    }
+  });
+
   it("starts the pinned llama.cpp configuration and returns a normalized Suggestion", async () => {
     const spawnCalls: Array<{ executable: string; args: string[] }> = [];
     const requestBodies: unknown[] = [];

@@ -257,14 +257,22 @@ export function createLocalInferencePrototype(options: LocalInferencePrototypeOp
 
         const totalBytes = Number(response.headers.get("content-length")) || null;
         let downloadedBytes = 0;
+        let lastPublishedPercent = -1;
         const progress = new Transform({
           transform(chunk, _encoding, callback) {
             downloadedBytes += chunk.length;
-            publish({
-              status: "downloading",
-              modelId: model.id,
-              progress: totalBytes ? Math.min(downloadedBytes / totalBytes, 1) : null,
-            });
+            if (totalBytes) {
+              const downloadProgress = Math.min(downloadedBytes / totalBytes, 1);
+              const displayPercent = Math.round(downloadProgress * 100);
+              if (displayPercent !== lastPublishedPercent) {
+                lastPublishedPercent = displayPercent;
+                publish({
+                  status: "downloading",
+                  modelId: model.id,
+                  progress: downloadProgress,
+                });
+              }
+            }
             callback(null, chunk);
           },
         });
