@@ -9,7 +9,8 @@ import type { AuthInstance } from "../auth.ts";
 import type { BillingService } from "../billing.ts";
 import type { DeviceTokenService } from "../device-tokens.ts";
 import { requireSession } from "../http/auth.ts";
-import { createErrorResponse, formatValidationIssues } from "../http/responses.ts";
+import { readJsonRequest } from "../http/request.ts";
+import { createErrorResponse } from "../http/responses.ts";
 
 export function registerDeviceAuthRoutes(
   app: ApiApp,
@@ -31,29 +32,16 @@ export function registerDeviceAuthRoutes(
   });
 
   app.post("/api/auth/device/exchange", async (c) => {
-    let payload: unknown;
-    try {
-      payload = await c.req.json();
-    } catch {
+    const request = await readJsonRequest(c.req, DeviceTokenExchangeRequestSchema);
+    if (!request.ok) {
       return c.json(
-        createErrorResponse("invalid_request", "Request body must be valid JSON."),
-        400,
-      );
-    }
-
-    const parseResult = DeviceTokenExchangeRequestSchema.safeParse(payload);
-    if (!parseResult.success) {
-      return c.json(
-        createErrorResponse(
-          "invalid_request",
-          formatValidationIssues(parseResult.error.issues),
-        ),
+        createErrorResponse("invalid_request", request.message),
         400,
       );
     }
 
     const exchange = await deps.deviceTokenService.consumeExchangeCode(
-      parseResult.data.code,
+      request.data.code,
     );
     if (!exchange) {
       return c.json(
@@ -71,9 +59,9 @@ export function registerDeviceAuthRoutes(
     const linked = await deps.deviceTokenService.createDeviceTokenWithinLimit(
       exchange.userId,
       {
-        deviceId: parseResult.data.deviceId,
-        platform: parseResult.data.platform,
-        appVersion: parseResult.data.appVersion,
+        deviceId: request.data.deviceId,
+        platform: request.data.platform,
+        appVersion: request.data.appVersion,
       },
       entitlement.capabilities.personalDeviceLimit,
     );

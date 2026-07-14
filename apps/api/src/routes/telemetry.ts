@@ -5,7 +5,8 @@ import {
 } from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
 import type { TelemetryService } from "../telemetry.ts";
-import { createErrorResponse, formatValidationIssues } from "../http/responses.ts";
+import { readJsonRequest } from "../http/request.ts";
+import { createErrorResponse } from "../http/responses.ts";
 import type { AuthInstance } from "../auth.ts";
 import { requireSession } from "../http/auth.ts";
 
@@ -25,49 +26,36 @@ export function registerTelemetryRoutes(
   });
 
   app.post("/telemetry/events", async (c) => {
-    let payload: unknown;
-    try {
-      payload = await c.req.json();
-    } catch {
+    const request = await readJsonRequest(c.req, RecordTelemetryEventsRequestSchema);
+    if (!request.ok) {
       return c.json(
-        createErrorResponse("invalid_request", "Request body must be valid JSON."),
-        400,
-      );
-    }
-
-    const parseResult = RecordTelemetryEventsRequestSchema.safeParse(payload);
-    if (!parseResult.success) {
-      return c.json(
-        createErrorResponse(
-          "invalid_request",
-          formatValidationIssues(parseResult.error.issues),
-        ),
+        createErrorResponse("invalid_request", request.message),
         400,
       );
     }
 
     const device = c.get("device");
 
-    for (const request of parseResult.data) {
+    for (const event of request.data) {
       try {
         await deps.telemetryService.record({
-          id: request.eventId,
-          eventType: request.eventType,
-          requestId: request.requestId,
+          id: event.eventId,
+          eventType: event.eventType,
+          requestId: event.requestId,
           userId: device.userId,
           deviceId: device.deviceId,
-          timestamp: request.timestamp,
-          suggestionLength: request.suggestionLength,
-          latencyMs: request.latencyMs,
-          errorCode: request.errorCode,
-          modelId: request.modelId,
-          inferenceSource: request.inferenceSource,
-          trigger: request.trigger,
-          acceptedWordCount: request.acceptedWordCount,
-          acceptedCharacterCount: request.acceptedCharacterCount,
-          applicationCategory: request.applicationCategory,
-          memoryUsed: request.memoryUsed,
-          memoryCount: request.memoryCount,
+          timestamp: event.timestamp,
+          suggestionLength: event.suggestionLength,
+          latencyMs: event.latencyMs,
+          errorCode: event.errorCode,
+          modelId: event.modelId,
+          inferenceSource: event.inferenceSource,
+          trigger: event.trigger,
+          acceptedWordCount: event.acceptedWordCount,
+          acceptedCharacterCount: event.acceptedCharacterCount,
+          applicationCategory: event.applicationCategory,
+          memoryUsed: event.memoryUsed,
+          memoryCount: event.memoryCount,
         });
       } catch {
         // Telemetry ingestion is best-effort; one failed event must not block the batch.

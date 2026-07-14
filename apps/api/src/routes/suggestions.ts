@@ -2,7 +2,8 @@ import { SuggestionRequestSchema } from "@tab/contracts";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { SuggestionUseCase } from "../suggestion-use-case.ts";
-import { createErrorResponse, createSuccessResponse, formatValidationIssues } from "../http/responses.ts";
+import { readJsonRequest } from "../http/request.ts";
+import { createErrorResponse, createSuccessResponse } from "../http/responses.ts";
 
 function getWaitUntil(
   c: Context<{ Bindings: ApiBindings; Variables: ApiVariables }>,
@@ -20,30 +21,17 @@ export function registerSuggestionRoutes(
   deps: { suggestionUseCase: SuggestionUseCase },
 ) {
   app.post("/suggestions", async (c) => {
-    let payload: unknown;
-    try {
-      payload = await c.req.json();
-    } catch {
+    const request = await readJsonRequest(c.req, SuggestionRequestSchema);
+    if (!request.ok) {
       return c.json(
-        createErrorResponse("invalid_request", "Request body must be valid JSON."),
-        400,
-      );
-    }
-
-    const parseResult = SuggestionRequestSchema.safeParse(payload);
-    if (!parseResult.success) {
-      return c.json(
-        createErrorResponse(
-          "invalid_request",
-          formatValidationIssues(parseResult.error.issues),
-        ),
+        createErrorResponse("invalid_request", request.message),
         400,
       );
     }
 
     const result = await deps.suggestionUseCase.handle(
       c.get("device"),
-      parseResult.data,
+      request.data,
       { waitUntil: getWaitUntil(c) },
     );
 
