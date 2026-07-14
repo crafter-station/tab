@@ -716,7 +716,7 @@ function isBoundsOnScreen(bounds: Electron.Rectangle, displays = screen.getAllDi
 
 function installOverlayPositionTracking(win: BrowserWindow, getBounds: () => Electron.Rectangle): void {
   const reposition = () => {
-    if (win.isDestroyed()) return;
+    if (win.isDestroyed() || !win.isVisible()) return;
     const currentBounds = win.getBounds();
     const displays = screen.getAllDisplays();
     if (!isBoundsOnScreen(currentBounds, displays) || displays.length > 1) {
@@ -727,13 +727,28 @@ function installOverlayPositionTracking(win: BrowserWindow, getBounds: () => Ele
     }
   };
 
-  const interval = setInterval(reposition, OVERLAY_POSITION_CHECK_MS);
+  let interval: ReturnType<typeof setInterval> | null = null;
+  const stopTracking = () => {
+    if (interval === null) return;
+    clearInterval(interval);
+    interval = null;
+  };
+  const startTracking = () => {
+    if (interval !== null || win.isDestroyed()) return;
+    reposition();
+    interval = setInterval(reposition, OVERLAY_POSITION_CHECK_MS);
+  };
   const onDisplayChanged = () => reposition();
+  win.on("show", startTracking);
+  win.on("hide", stopTracking);
   screen.on("display-added", onDisplayChanged);
   screen.on("display-removed", onDisplayChanged);
   screen.on("display-metrics-changed", onDisplayChanged);
+  if (win.isVisible()) startTracking();
   win.on("closed", () => {
-    clearInterval(interval);
+    stopTracking();
+    win.off("show", startTracking);
+    win.off("hide", stopTracking);
     screen.off("display-added", onDisplayChanged);
     screen.off("display-removed", onDisplayChanged);
     screen.off("display-metrics-changed", onDisplayChanged);
