@@ -220,7 +220,7 @@ const Sidebar = React.forwardRef<
           <SheetContent
             data-sidebar="sidebar"
             data-mobile="true"
-            className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:hidden"
+            className="w-(--sidebar-width) bg-sidebar p-0 text-sidebar-foreground [&>button]:right-2 [&>button]:top-3"
             style={
               {
                 "--sidebar-width": SIDEBAR_WIDTH_MOBILE,
@@ -297,7 +297,7 @@ const SidebarTrigger = React.forwardRef<
       data-sidebar="trigger"
       variant="ghost"
       size="icon"
-      className={cn("!size-7", className)}
+      className={cn("size-9", className)}
       onClick={(event) => {
         onClick?.(event)
         toggleSidebar()
@@ -342,10 +342,10 @@ SidebarRail.displayName = "SidebarRail"
 
 const SidebarInset = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"main">
+  React.ComponentProps<"div">
 >(({ className, ...props }, ref) => {
   return (
-    <main
+    <div
       ref={ref}
       className={cn(
         "relative flex w-full flex-1 flex-col bg-background",
