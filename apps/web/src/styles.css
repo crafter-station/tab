@@ -258,7 +258,6 @@
   animation: tab-privacy-scan 5.6s linear infinite;
 }
 
-[data-motion-region][data-motion-paused="true"] .tab-app-marquee-track,
 [data-motion-region][data-motion-paused="true"] .tab-workflow-command,
 [data-motion-region][data-motion-paused="true"] .tab-memory-row,
 [data-motion-region][data-motion-paused="true"] .tab-memory-output,
@@ -289,12 +288,6 @@
     top: 50%;
     left: 0;
     animation-name: tab-privacy-transfer-x;
-  }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .tab-app-marquee:hover .tab-app-marquee-track {
-    animation-play-state: paused;
   }
 }
 

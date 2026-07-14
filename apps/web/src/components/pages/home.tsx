@@ -18,18 +18,18 @@ import type { CSSProperties } from "react";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
 
 const appLogos = [
-  { name: "Gmail", src: "/logos/gmail.svg" },
-  { name: "Slack", src: "/logos/slack.svg" },
-  { name: "Notion", src: "/logos/notion.svg" },
-  { name: "Linear", src: "/logos/linear.svg" },
-  { name: "Chrome", src: "/logos/chrome.svg" },
-  { name: "WhatsApp", src: "/logos/whatsapp.svg" },
-  { name: "Ghostty", src: "/logos/ghostty.svg" },
-  { name: "Messages", src: "/logos/messages.svg" },
-  { name: "Discord", src: "/logos/discord.svg" },
-  { name: "VS Code", src: "/logos/vscode.svg" },
-  { name: "Obsidian", src: "/logos/obsidian.svg" },
-  { name: "Zed", src: "/logos/zed.svg" },
+  { name: "Gmail", src: "/logos/gmail.svg", href: "https://mail.google.com/" },
+  { name: "Slack", src: "/logos/slack.svg", href: "https://slack.com/" },
+  { name: "Notion", src: "/logos/notion.svg", href: "https://www.notion.com/" },
+  { name: "Linear", src: "/logos/linear.svg", href: "https://linear.app/" },
+  { name: "Chrome", src: "/logos/chrome.svg", href: "https://www.google.com/chrome/" },
+  { name: "WhatsApp", src: "/logos/whatsapp.svg", href: "https://www.whatsapp.com/" },
+  { name: "Ghostty", src: "/logos/ghostty.svg", href: "https://ghostty.org/" },
+  { name: "Messages", src: "/logos/messages.svg", href: "https://www.apple.com/ios/messages/" },
+  { name: "Discord", src: "/logos/discord.svg", href: "https://discord.com/" },
+  { name: "VS Code", src: "/logos/vscode.svg", href: "https://code.visualstudio.com/" },
+  { name: "Obsidian", src: "/logos/obsidian.svg", href: "https://obsidian.md/" },
+  { name: "Zed", src: "/logos/zed.svg", href: "https://zed.dev/" },
 ] as const;
 
 function AppIcon({ src, className, glyphClassName }: { src: string; className: string; glyphClassName: string }) {
@@ -231,20 +231,19 @@ function MotionToggle({ controls, className }: { controls: string; className?: s
 
 function AppMarquee() {
   return (
-    <div id="app-marquee-animation" className="tab-app-marquee" aria-labelledby="app-marquee-title" role="region" data-motion-region data-motion-paused="false">
-      <div className="mb-5 flex items-center justify-between gap-4">
+    <div id="app-marquee-animation" className="tab-app-marquee" aria-labelledby="app-marquee-title" role="region">
+      <div className="mb-5">
         <p id="app-marquee-title" className="text-sm font-semibold text-muted-foreground">Supported app examples</p>
-        <MotionToggle controls="app-marquee-animation" />
       </div>
       <div className="tab-app-marquee-viewport overflow-hidden">
         <div className="tab-app-marquee-track flex w-max items-center">
           {[false, true].map((duplicate) => (
             <div className={cn("flex items-center gap-7 pr-7", duplicate ? "tab-app-marquee-copy" : "tab-app-marquee-group")} aria-hidden={duplicate || undefined} key={String(duplicate)}>
               {appLogos.map((app) => (
-                <div className="flex items-center gap-3 whitespace-nowrap text-sm font-semibold" key={app.name}>
+                <a className="flex items-center gap-3 whitespace-nowrap rounded-[var(--radius-control)] text-sm font-semibold transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-muted-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={app.href} target="_blank" rel="noreferrer" tabIndex={duplicate ? -1 : undefined} key={app.name}>
                   <AppIcon className="size-9 rounded-[var(--radius-media)] border border-border" glyphClassName="size-4" src={app.src} />
                   {app.name}
-                </div>
+                </a>
               ))}
             </div>
           ))}
