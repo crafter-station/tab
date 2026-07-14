@@ -10,9 +10,13 @@ type Feedback = {
 };
 
 type PermissionState = "complete" | "current" | "upcoming";
+type DeepPracticeState = "idle" | "armed" | "suggestion" | "accepted";
 
 const INITIAL_DRAFT = "Hi Jordan, quick update on the launch plan:";
 const SAMPLE_SUGGESTION = "Everything is on track for Friday. I will share the final checklist shortly.";
+const DEEP_DRAFT = "We delayed the launch after the final security review because";
+const DEEP_SUGGESTION = "the remaining issues could affect customer data, and protecting that trust matters more than shipping this week.";
+const DOUBLE_OPTION_WINDOW_MS = 400;
 
 function CheckIcon({ className }: { className?: string }) {
   return (
@@ -72,8 +76,13 @@ export function OnboardingSurface() {
   const [feedback, setFeedback] = useState<Feedback | null>(null);
   const [practiceText, setPracticeText] = useState(INITIAL_DRAFT);
   const [acceptedPractice, setAcceptedPractice] = useState(false);
+  const [deepPracticeText, setDeepPracticeText] = useState(DEEP_DRAFT);
+  const [deepPracticeState, setDeepPracticeState] = useState<DeepPracticeState>("idle");
   const [localInferenceStatus, setLocalInferenceStatus] = useState<LocalInferenceStatus>({ status: "stopped" });
   const acceptedPracticeRef = useRef(false);
+  const deepPracticeStateRef = useRef<DeepPracticeState>("idle");
+  const lastOptionReleaseRef = useRef<number | null>(null);
+  const optionResetTimerRef = useRef<number | null>(null);
   const pollRef = useRef<number | null>(null);
   const stepHeadingRef = useRef<HTMLHeadingElement>(null);
   const initialStepRef = useRef(true);
@@ -214,9 +223,70 @@ export function OnboardingSurface() {
     setAcceptedPractice(true);
   }, []);
 
+  const setDeepState = useCallback((state: DeepPracticeState) => {
+    deepPracticeStateRef.current = state;
+    setDeepPracticeState(state);
+  }, []);
+
+  const requestDeepPracticeSuggestion = useCallback(() => {
+    lastOptionReleaseRef.current = null;
+    if (optionResetTimerRef.current !== null) window.clearTimeout(optionResetTimerRef.current);
+    optionResetTimerRef.current = null;
+    setDeepState("suggestion");
+  }, [setDeepState]);
+
+  const acceptDeepPracticeSuggestion = useCallback(() => {
+    if (deepPracticeStateRef.current !== "suggestion") return;
+    setDeepPracticeText((value) => `${value.trimEnd()} ${DEEP_SUGGESTION}`);
+    setDeepState("accepted");
+  }, [setDeepState]);
+
   useEffect(() => window.tab?.onOnboardingOptionTab?.(() => {
     if (step === "try") acceptPracticeSuggestion();
-  }), [acceptPracticeSuggestion, step]);
+    if (step === "deep") acceptDeepPracticeSuggestion();
+  }), [acceptDeepPracticeSuggestion, acceptPracticeSuggestion, step]);
+
+  useEffect(() => {
+    if (step !== "deep") return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (deepPracticeStateRef.current === "suggestion" || deepPracticeStateRef.current === "accepted") return;
+      if (event.key !== "Alt") {
+        lastOptionReleaseRef.current = null;
+        setDeepState("idle");
+      }
+    }
+
+    function handleKeyUp(event: KeyboardEvent) {
+      if (deepPracticeStateRef.current === "suggestion" || deepPracticeStateRef.current === "accepted") return;
+      if (event.key !== "Alt" || event.repeat) return;
+      const now = performance.now();
+      const previousRelease = lastOptionReleaseRef.current;
+      if (previousRelease !== null && now - previousRelease <= DOUBLE_OPTION_WINDOW_MS) {
+        requestDeepPracticeSuggestion();
+        return;
+      }
+
+      lastOptionReleaseRef.current = now;
+      setDeepState("armed");
+      if (optionResetTimerRef.current !== null) window.clearTimeout(optionResetTimerRef.current);
+      optionResetTimerRef.current = window.setTimeout(() => {
+        lastOptionReleaseRef.current = null;
+        optionResetTimerRef.current = null;
+        setDeepState("idle");
+      }, DOUBLE_OPTION_WINDOW_MS);
+    }
+
+    window.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("keyup", handleKeyUp);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("keyup", handleKeyUp);
+      if (optionResetTimerRef.current !== null) window.clearTimeout(optionResetTimerRef.current);
+      optionResetTimerRef.current = null;
+      lastOptionReleaseRef.current = null;
+    };
+  }, [requestDeepPracticeSuggestion, setDeepState, step]);
 
   async function downloadLocalModel() {
     setBusy(true);
@@ -249,6 +319,10 @@ export function OnboardingSurface() {
           return;
         }
         goNext();
+        return;
+
+      case "deep":
+        if (deepPracticeState === "accepted") goNext();
         return;
 
       case "permissions":
@@ -286,6 +360,7 @@ export function OnboardingSurface() {
       return "Preparing model...";
     }
     if (step === "try") return acceptedPractice ? "Continue" : "Accept sample Suggestion";
+    if (step === "deep") return deepPracticeState === "accepted" ? "Continue" : "Complete the shortcut above";
     if (step === "done") return "Relaunch Tab";
     if (!accessibilityGranted) return "Open Accessibility Settings";
     if (!inputMonitoringOpened) return "Open Input Monitoring";
@@ -467,6 +542,81 @@ export function OnboardingSurface() {
               </>
             ) : null}
 
+            {step === "deep" ? (
+              <>
+                <header className="onboarding-hero">
+                  <Eyebrow>More context, when you ask</Eyebrow>
+                  <h1 id="onboarding-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                    Ask for a Deep Complete Suggestion.
+                  </h1>
+                  <p className="lede">
+                    Double-tap Option when a thought needs more context. Then accept the Suggestion with the same Option+Tab shortcut.
+                  </p>
+                </header>
+
+                <div className="practice-demo deep-practice">
+                  <div className="practice-demo__header">
+                    <span>Deep Complete rehearsal</span>
+                    <small>Cloud, only when requested</small>
+                  </div>
+                  <div className="practice-demo__body">
+                    <label htmlFor="deep-practice-draft">Your draft</label>
+                    <Textarea
+                      className="practice-input"
+                      id="deep-practice-draft"
+                      onChange={(event) => {
+                        setDeepPracticeText(event.target.value);
+                        if (deepPracticeState !== "idle") setDeepState("idle");
+                      }}
+                      rows={4}
+                      value={deepPracticeText}
+                    />
+
+                    {deepPracticeState === "accepted" ? (
+                      <div className="practice-result">
+                        <div className="practice-result__icon">
+                          <CheckIcon />
+                        </div>
+                        <div>
+                          <strong>Deep Complete accepted</strong>
+                          <span>You requested more context, then chose to add it.</span>
+                        </div>
+                      </div>
+                    ) : deepPracticeState === "suggestion" ? (
+                      <SuggestionCommand
+                        aria-label={`Accept Deep Complete suggestion: ${DEEP_SUGGESTION}`}
+                        onClick={acceptDeepPracticeSuggestion}
+                        source="cloud"
+                        suggestion={DEEP_SUGGESTION}
+                      />
+                    ) : (
+                      <div className="deep-practice__trigger" data-armed={deepPracticeState === "armed" || undefined}>
+                        <div className="deep-practice__keys" aria-hidden="true">
+                          <kbd>⌥</kbd>
+                          <kbd>⌥</kbd>
+                        </div>
+                        <div>
+                          <strong>{deepPracticeState === "armed" ? "Option once. Press it again." : "Double-tap Option"}</strong>
+                          <span>Request a higher-capability Suggestion for this draft.</span>
+                        </div>
+                        <Button onClick={requestDeepPracticeSuggestion} size="sm" variant="ghost">
+                          Show sample
+                        </Button>
+                      </div>
+                    )}
+
+                    <p className="practice-demo__hint" aria-live="polite">
+                      {deepPracticeState === "suggestion"
+                        ? "Now press Option+Tab to accept the Deep Complete Suggestion."
+                        : deepPracticeState === "accepted"
+                          ? "That is the full Deep Complete flow: request, review, then accept."
+                          : "This rehearsal does not send anything. In other apps, the gesture sends bounded, redacted context only when you request it."}
+                    </p>
+                  </div>
+                </div>
+              </>
+            ) : null}
+
             {step === "permissions" ? (
               <>
                 <header className="onboarding-hero">
@@ -598,7 +748,7 @@ export function OnboardingSurface() {
           </div>
         </div>
 
-        {step === "try" && !acceptedPractice ? null : (
+        {(step === "try" && !acceptedPractice) || (step === "deep" && deepPracticeState !== "accepted") ? null : (
           <footer className="onboarding-actions no-drag">
             <div>
               {currentStepIndex > 0 ? (

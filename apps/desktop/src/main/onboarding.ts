@@ -7,7 +7,7 @@ export type OnboardingManagerDependencies = {
   setPreferences(prefs: Partial<OnboardingPreferences>): void;
 };
 
-export const ONBOARDING_STEPS = ["model", "try", "permissions", "done"] as const;
+export const ONBOARDING_STEPS = ["model", "try", "deep", "permissions", "done"] as const;
 
 export type OnboardingStep = (typeof ONBOARDING_STEPS)[number];
 
@@ -19,6 +19,10 @@ export const ONBOARDING_STEP_COPY: Record<OnboardingStep, { title: string; subti
   try: {
     title: "Try Tab",
     subtitle: "Practice accepting a Suggestion.",
+  },
+  deep: {
+    title: "Try Deep Complete",
+    subtitle: "Ask for more help when you need it.",
   },
   permissions: {
     title: "Allow access",

@@ -16,6 +16,9 @@ describe("desktop renderer setup surfaces", () => {
     expect(signInSource).toInclude("pug-dot-grid");
     expect(signInSource).toInclude("<TabMark />");
     expect(onboardingSource).toInclude("Try accepting a Suggestion");
+    expect(onboardingSource).toInclude("Ask for a Deep Complete Suggestion");
+    expect(onboardingSource).toInclude("DOUBLE_OPTION_WINDOW_MS = 400");
+    expect(onboardingSource).toInclude('source="cloud"');
     expect(onboardingSource).toInclude("Download local model");
     expect(onboardingSource).toInclude("onOnboardingOptionTab");
     expect(onboardingSource).toInclude("I turned it on");
