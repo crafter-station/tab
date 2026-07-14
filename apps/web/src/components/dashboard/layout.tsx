@@ -15,6 +15,7 @@ import {
   SidebarRail,
   SidebarTrigger,
   SurfaceHeader,
+  useSidebar,
 } from "@tab/ui";
 import { BrandMenu } from "../brand-menu.tsx";
 import type { DashboardSection } from "./types.ts";
@@ -36,6 +37,7 @@ const dashboardSectionCopy: Record<DashboardSection, { title: string; descriptio
 };
 
 function DashboardSidebar() {
+  const { isMobile, setOpenMobile } = useSidebar();
   const activeRouteId = useRouterState({
     select: (state) => state.matches[state.matches.length - 1]?.routeId,
   });
@@ -60,7 +62,9 @@ function DashboardSidebar() {
                 return (
                   <SidebarMenuItem key={item.id}>
                     <SidebarMenuButton asChild isActive={active} tooltip={item.label} className="h-10 group-data-[collapsible=icon]:!h-10">
-                      <Link to={item.href} aria-current={active ? "page" : undefined}>
+                      <Link to={item.href} aria-current={active ? "page" : undefined} onClick={() => {
+                        if (isMobile) setOpenMobile(false);
+                      }}>
                         <Icon weight={active ? "fill" : "regular"} aria-hidden="true" />
                         <span className="dashboard-sidebar-label">{item.label}</span>
                       </Link>

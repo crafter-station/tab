@@ -119,7 +119,7 @@ export function BrandPage() {
       <header className="grid gap-6 border-b border-border pb-12 pt-4 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end sm:pb-16 sm:pt-10">
         <div className="grid gap-5">
           <PageKicker>Brand assets</PageKicker>
-          <h1 className="max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(3rem,7vw,6rem)] font-bold leading-[0.92] tracking-[-0.04em]">
+          <h1 className="max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.625rem,7vw,6rem)] font-bold leading-[0.98] tracking-[-0.04em] sm:leading-[0.92]">
             A small, deliberate continuation.
           </h1>
           <p className="max-w-[44rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">

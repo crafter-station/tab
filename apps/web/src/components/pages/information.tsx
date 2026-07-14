@@ -17,7 +17,7 @@ function PageIntro({
   return (
     <header className="grid gap-5 border-b border-border pb-12 pt-4 sm:pb-16 sm:pt-10">
       <PageKicker>{eyebrow}</PageKicker>
-      <h1 className="max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(3rem,7vw,6rem)] font-bold leading-[0.92] tracking-[-0.035em]">{title}</h1>
+      <h1 className="max-w-[13ch] text-balance font-[var(--font-display)] text-[clamp(2.625rem,7vw,6rem)] font-bold leading-[0.98] tracking-[-0.035em] sm:leading-[0.92]">{title}</h1>
       <p className="max-w-[44rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">{description}</p>
     </header>
   );
@@ -81,11 +81,11 @@ export function ContactPage() {
     <>
       <PageIntro eyebrow="Contact" title="Talk to a person." description="Questions about setup, privacy, billing, or the product are welcome. Choose the channel that fits the conversation." />
       <section className="grid gap-4 py-12 sm:py-20 md:grid-cols-2">
-        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="mailto:tab@cueva.io">
+        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:p-8" href="mailto:tab@cueva.io">
           <div className="flex items-center justify-between"><EnvelopeSimple aria-hidden="true" /><ArrowUpRight className="text-muted-foreground" aria-hidden="true" /></div>
           <div><p className="text-sm font-semibold text-muted-foreground">Email</p><h2 className="mt-2 text-2xl font-bold">tab@cueva.io</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for account, billing, privacy, and general product questions.</p></div>
         </a>
-        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] sm:p-8" href="https://github.com/crafter-station/tab/issues" target="_blank" rel="noreferrer">
+        <a className="group flex min-h-64 flex-col justify-between rounded-[var(--radius-card)] border border-border bg-card p-6 no-underline transition-[border-color,transform] duration-150 ease-[var(--tab-ease-out)] active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:p-8" href="https://github.com/crafter-station/tab/issues" target="_blank" rel="noreferrer">
           <div className="flex items-center justify-between"><GithubLogo aria-hidden="true" /><ArrowUpRight className="text-muted-foreground" aria-hidden="true" /></div>
           <div><p className="text-sm font-semibold text-muted-foreground">GitHub</p><h2 className="mt-2 text-2xl font-bold">Report an issue</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for reproducible bugs and technical product feedback.</p></div>
         </a>

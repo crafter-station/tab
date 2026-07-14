@@ -131,7 +131,7 @@ function AppMarquee() {
           {[false, true].map((duplicate) => (
             <div className={cn("flex items-center gap-7 pr-7", duplicate ? "tab-app-marquee-copy" : "tab-app-marquee-group")} aria-hidden={duplicate || undefined} key={String(duplicate)}>
               {appLogos.map((app) => (
-                <a className="flex items-center gap-3 whitespace-nowrap rounded-[var(--radius-control)] text-sm font-semibold transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-muted-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={app.href} target="_blank" rel="noreferrer" tabIndex={duplicate ? -1 : undefined} key={app.name}>
+                <a className="flex items-center gap-3 whitespace-nowrap rounded-[var(--radius-control)] text-sm font-semibold transition-[background-color,transform] duration-150 ease-[var(--tab-ease-out)] hover:bg-[var(--tab-hover)] active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" href={app.href} target="_blank" rel="noreferrer" tabIndex={duplicate ? -1 : undefined} key={app.name}>
                   <AppIcon className="size-9 rounded-[var(--radius-media)] border border-border" glyphClassName="size-4" src={app.src} />
                   {app.name}
                 </a>
@@ -169,13 +169,13 @@ function WorkflowMap() {
 
         <div className="absolute left-1/2 top-[7%] w-[min(76%,23rem)] -translate-x-1/2 rounded-[var(--radius-card)] border border-border bg-card p-3 shadow-[var(--tab-shadow-card)] sm:p-4">
           <p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Your thought</p>
-          <p className="mt-1 truncate text-sm font-semibold sm:text-base">Would Tuesday afternoon <span className="tab-workflow-completion text-muted-foreground">work for a quick review?</span></p>
+          <p className="mt-1 text-sm font-semibold leading-snug sm:text-base">Would Tuesday afternoon <span className="tab-workflow-completion text-muted-foreground">work for a quick review?</span></p>
         </div>
 
         {[{ name: "Mail", src: "/logos/apple.svg", side: "left-[7%]" }, { name: "Slack", src: "/logos/slack.svg", side: "right-[7%]" }].map((app) => (
-          <div className={cn("absolute top-[40%] flex w-[28%] max-w-40 items-center gap-2 rounded-[var(--radius-card)] border border-border bg-card p-2.5 shadow-[var(--tab-shadow-card)] sm:gap-3 sm:p-3", app.side)} key={app.name}>
-            <AppIcon className="size-8 shrink-0 rounded-[var(--radius-media)] border border-border" glyphClassName="size-4" src={app.src} />
-            <span className="min-w-0"><span className="block truncate text-sm font-bold">{app.name}</span><span className="hidden truncate text-xs text-muted-foreground min-[460px]:block">Active app</span></span>
+          <div className={cn("absolute top-[42%] flex w-[34%] max-w-40 items-center gap-2 rounded-[var(--radius-card)] border border-border bg-card p-2 shadow-[var(--tab-shadow-card)] min-[420px]:top-[40%] min-[420px]:w-[28%] sm:gap-3 sm:p-3", app.side)} key={app.name}>
+            <AppIcon className="size-7 shrink-0 rounded-[var(--radius-media)] border border-border sm:size-8" glyphClassName="size-3.5 sm:size-4" src={app.src} />
+            <span className="min-w-0"><span className="block text-xs font-bold min-[360px]:text-sm">{app.name}</span><span className="hidden truncate text-xs text-muted-foreground min-[460px]:block">Active app</span></span>
           </div>
         ))}
 
@@ -397,7 +397,7 @@ export function HomePage() {
       <section className="grid gap-12 py-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(31rem,1.12fr)] lg:items-center lg:gap-16 lg:py-20">
         <div className="marketing-intro grid content-center gap-6">
           <PageKicker>Autocomplete across your Mac</PageKicker>
-          <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(3.25rem,7vw,6.4rem)] font-bold leading-[0.88] tracking-[-0.035em]">Finish the sentence without leaving the app.</h1>
+          <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.625rem,7vw,6.4rem)] font-bold leading-[0.96] tracking-[-0.035em] sm:leading-[0.9] lg:leading-[0.88]">Finish the sentence without leaving the app.</h1>
           <p className="max-w-[38rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next words in supported Mac text fields. Press Option+Tab to insert them, or keep typing to ignore them.</p>
           <p className="max-w-[38rem] text-pretty text-sm leading-relaxed text-muted-foreground">Automatic Suggestions run on your Mac. Double-tap Option when you want Deep Complete.</p>
           <div className="flex flex-col gap-3 min-[420px]:flex-row">

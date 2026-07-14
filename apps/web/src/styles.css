@@ -113,6 +113,16 @@
   will-change: transform;
 }
 
+.tab-app-marquee:focus-within .tab-app-marquee-track {
+  animation-play-state: paused;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .tab-app-marquee:hover .tab-app-marquee-track {
+    animation-play-state: paused;
+  }
+}
+
 .tab-app-icon-glyph {
   background: var(--tab-app-icon-foreground);
   -webkit-mask: var(--tab-app-icon-mask) center / contain no-repeat;
@@ -329,6 +339,18 @@
   display: none;
 }
 
+.tab-demo-app-tab {
+  transition:
+    color 160ms var(--tab-ease-out),
+    background-color 160ms var(--tab-ease-out),
+    border-color 160ms var(--tab-ease-out),
+    transform 120ms var(--tab-ease-out);
+}
+
+.tab-demo-app-tab:active {
+  transform: scale(0.97);
+}
+
 .tab-demo[data-active="mail"] [data-demo-scene="mail"],
 .tab-demo[data-active="slack"] [data-demo-scene="slack"],
 .tab-demo[data-active="notes"] [data-demo-scene="notes"] {
@@ -339,9 +361,9 @@
 .tab-demo[data-active="mail"] [data-demo-target="mail"],
 .tab-demo[data-active="slack"] [data-demo-target="slack"],
 .tab-demo[data-active="notes"] [data-demo-target="notes"] {
-  color: var(--background);
-  background: var(--foreground);
-  border-color: var(--foreground);
+  color: var(--tab-overlay-text);
+  background: var(--tab-overlay-key-bg);
+  border-color: var(--tab-overlay-divider);
 }
 
 .tab-demo-suggestion {
@@ -561,7 +583,8 @@
 @media (prefers-reduced-motion: reduce) {
   .tab-action-link,
   .tab-action-link::after,
-  .tab-action-link > svg {
+  .tab-action-link > svg,
+  .tab-demo-app-tab {
     transition: none;
   }
 
@@ -569,6 +592,10 @@
   .tab-action-link:hover > svg,
   .tab-action-link:focus-visible > svg {
     transform: none;
+  }
+
+  .marketing-detail-icon {
+    transition: none;
   }
 
   .brand-asset-action {

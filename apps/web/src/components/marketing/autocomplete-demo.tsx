@@ -17,7 +17,7 @@ function AppIcon({ app }: { app: Example }) {
 
 function DemoScene({ name, children }: { name: Example; children: React.ReactNode }) {
   return (
-    <TabsContent className="m-0 min-h-[19rem] content-between gap-8 p-5 sm:min-h-[22rem] sm:p-7" forceMount value={name} data-demo-scene={name} id={`demo-panel-${name}`}>
+    <TabsContent className="m-0 min-h-[19rem] content-between gap-8 p-5 sm:min-h-[22rem] sm:p-7" forceMount value={name} data-demo-scene={name}>
       {children}
       <SuggestionCommand
         aria-label="Accept this suggestion with Option plus Tab"
@@ -72,14 +72,16 @@ export function AutocompleteDemo() {
         <p className="text-xs font-semibold text-muted-foreground">Interactive example</p>
         <ReplayButton label="Replay interactive example" onReplay={() => replay()} />
       </div>
-      <TabsList className="flex h-auto justify-start gap-2 rounded-none border-x-0 border-t-0 bg-transparent p-3" aria-label="Choose an app example">
-        {examples.map((app) => (
-          <TabsTrigger className="gap-2 border border-border bg-background text-xs font-semibold capitalize shadow-none data-[state=active]:border-foreground data-[state=active]:bg-foreground data-[state=active]:text-background" data-demo-target={app} id={`demo-tab-${app}`} key={app} value={app}>
-            <AppIcon app={app} />{app}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      <div className="bg-card" aria-live="polite" onClick={(event) => {
+      <div className="border-b border-border bg-[var(--tab-surface-sunken)] p-3 sm:px-4">
+        <TabsList className="tab-demo-app-tabs flex h-auto w-fit max-w-full justify-start gap-1 overflow-x-auto rounded-[var(--radius-card)] border border-[var(--tab-overlay-border)] bg-[var(--tab-overlay-bg)] p-1 shadow-[var(--tab-overlay-shadow)] backdrop-blur-xl" aria-label="Choose an app example">
+          {examples.map((app) => (
+            <TabsTrigger className="tab-demo-app-tab min-w-fit gap-2 border border-transparent bg-transparent text-xs font-semibold capitalize text-[var(--tab-overlay-muted)] shadow-none" data-demo-target={app} key={app} value={app}>
+              <AppIcon app={app} />{app}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </div>
+      <div className="bg-card" onClick={(event) => {
         if ((event.target as Element).closest("[data-demo-accept]")) accept();
       }}>
         <DemoScene name="mail"><div><div className="grid gap-2 border-b border-border pb-4 text-sm"><p className="flex gap-5"><span className="w-12 text-muted-foreground">To</span><span>Maya Chen</span></p><p className="flex gap-5"><span className="w-12 text-muted-foreground">Subject</span><span>Tuesday review</span></p></div><div className="pt-6 text-[1.025rem] leading-8 sm:text-lg"><p>Hi Maya,</p><p className="mt-4">I finished the launch notes. Would Tuesday afternoon <span className="tab-demo-suggestion text-muted-foreground">work for a quick review?</span></p></div></div></DemoScene>
