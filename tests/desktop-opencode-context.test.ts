@@ -121,19 +121,44 @@ describe("OpenCode local session context", () => {
     expect(candidate.fragments[0]?.text).toContain("Assistant: I will use the local session database");
   });
 
-  it("publishes only the newest observation when the target changes during a query", async () => {
-    const firstQuery = deferred<OpenCodeContextRow[]>();
-    const secondQuery = deferred<OpenCodeContextRow[]>();
+  it("reuses cached database rows while the database revision is unchanged", async () => {
+    let now = 1_000;
     let queryCount = 0;
     const context = createOpenCodeConversationContext({
       dataDirectory: "/missing",
       databasePaths: ["opencode.db"],
+      databaseRevision: () => "revision-1",
+      now: () => now,
+      queryDatabase: async () => {
+        queryCount += 1;
+        return [];
+      },
+    });
+    const snapshot = terminalSnapshot();
+
+    await context.observe(snapshot);
+    now += 751;
+    await context.observe(snapshot);
+
+    expect(queryCount).toBe(1);
+  });
+
+  it("publishes only the newest observation when the target changes during a query", async () => {
+    const firstQuery = deferred<OpenCodeContextRow[]>();
+    const secondQuery = deferred<OpenCodeContextRow[]>();
+    let queryCount = 0;
+    let databaseRevision = "revision-1";
+    const context = createOpenCodeConversationContext({
+      dataDirectory: "/missing",
+      databasePaths: ["opencode.db"],
+      databaseRevision: () => databaseRevision,
       queryDatabase: () => (++queryCount === 1 ? firstQuery.promise : secondQuery.promise),
     });
     const firstSnapshot = terminalSnapshot("OC | First session");
     const secondSnapshot = terminalSnapshot("OC | Second session");
     const firstObservation = context.observe(firstSnapshot);
 
+    databaseRevision = "revision-2";
     void context.observe(secondSnapshot);
     expect(context.getState(secondSnapshot)).toMatchObject({ pending: true, candidate: { fragments: [] } });
 
@@ -169,6 +194,7 @@ describe("OpenCode local session context", () => {
     const secondMessage = "Second unique conversation excerpt confirms matching session one.";
     const nextQuery = deferred<OpenCodeContextRow[]>();
     let queryCount = 0;
+    let databaseRevision = "revision-1";
     const rows: OpenCodeContextRow[] = [firstMessage, secondMessage].map((text, index) => ({
       session_id: "session-1",
       title: "New session - 2026-07-12T00:00:00.000Z",
@@ -182,6 +208,7 @@ describe("OpenCode local session context", () => {
     const context = createOpenCodeConversationContext({
       dataDirectory: "/missing",
       databasePaths: ["opencode.db"],
+      databaseRevision: () => databaseRevision,
       queryDatabase: () => (++queryCount === 1 ? Promise.resolve(rows) : nextQuery.promise),
     });
     const firstSnapshot = {
@@ -195,6 +222,7 @@ describe("OpenCode local session context", () => {
       ...terminalSnapshot("OpenCode"),
       terminalContents: "┃ A different new session\n▣ Build · model · 1s\n╹",
     };
+    databaseRevision = "revision-2";
     const observation = context.observe(secondSnapshot);
 
     expect(context.getState(secondSnapshot)).toMatchObject({ pending: true, candidate: { fragments: [] } });

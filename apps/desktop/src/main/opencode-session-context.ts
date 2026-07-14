@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { AppContextCandidate } from "./app-context-policy.ts";
@@ -49,6 +49,7 @@ export type OpenCodeConversationContextOptions = {
   readonly dataDirectory: string;
   readonly databasePaths?: readonly string[];
   readonly queryDatabase?: (databasePath: string) => Promise<OpenCodeContextRow[]>;
+  readonly databaseRevision?: (databasePath: string) => string;
   readonly now?: () => number;
 };
 
@@ -110,6 +111,19 @@ function databasePaths(dataDirectory: string): string[] {
   } catch {
     return [];
   }
+}
+
+function fileRevision(filePath: string): string {
+  try {
+    const stats = statSync(filePath, { bigint: true });
+    return `${stats.mtimeNs}:${stats.size}`;
+  } catch {
+    return "missing";
+  }
+}
+
+function databaseRevision(databasePath: string): string {
+  return `${fileRevision(databasePath)}:${fileRevision(`${databasePath}-wal`)}`;
 }
 
 function sessionsFromRows(rows: readonly OpenCodeContextRow[]): OpenCodeSession[] {
@@ -219,6 +233,7 @@ export function createOpenCodeConversationContext(
   options: OpenCodeConversationContextOptions,
 ): OpenCodeConversationContext {
   const queryDatabase = options.queryDatabase ?? queryOpenCodeDatabase;
+  const getDatabaseRevision = options.databaseRevision ?? databaseRevision;
   const now = options.now ?? Date.now;
   let state = {
     targetKey: null as string | null,
@@ -230,6 +245,7 @@ export function createOpenCodeConversationContext(
   let latestTargetKey: string | null = null;
   let queuedObservation: TerminalObservation | null = null;
   let runner: Promise<void> | null = null;
+  const databaseRows = new Map<string, { revision: string; rows: OpenCodeContextRow[] }>();
   const listeners = new Set<(state: OpenCodeConversationState) => void>();
 
   function publicState(): OpenCodeConversationState {
@@ -267,8 +283,18 @@ export function createOpenCodeConversationContext(
       queuedObservation = null;
       lastRefreshAt = now();
       const rows = (await Promise.all(
-        (options.databasePaths ?? databasePaths(options.dataDirectory))
-          .map((databasePath) => queryDatabase(databasePath).catch(() => [])),
+        (options.databasePaths ?? databasePaths(options.dataDirectory)).map(async (databasePath) => {
+          const revision = getDatabaseRevision(databasePath);
+          const cached = databaseRows.get(databasePath);
+          if (cached?.revision === revision) return cached.rows;
+          try {
+            const nextRows = await queryDatabase(databasePath);
+            databaseRows.set(databasePath, { revision, rows: nextRows });
+            return nextRows;
+          } catch {
+            return [];
+          }
+        }),
       )).flat();
       if (latestTargetKey !== observation.targetKey) continue;
 
