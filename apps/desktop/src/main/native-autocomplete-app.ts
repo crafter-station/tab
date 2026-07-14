@@ -5,12 +5,11 @@ import type {
   Suggestion,
   SuggestionContextSource,
 } from "@tab/contracts";
-import { countAcceptedWords } from "@tab/billing";
 import { classifyTypingContextSource } from "@tab/memory-policy";
 import {
-  acceptAndInsertSuggestion,
+  createSuggestionAcceptance,
   type InsertionDependencies,
-  type InsertionResult,
+  type SuggestionProvenance as AcceptanceSuggestionProvenance,
 } from "./acceptance.ts";
 import type { AppContextSnapshot } from "./app-context.ts";
 import { createHash } from "node:crypto";
@@ -108,7 +107,7 @@ type VisibleSuggestionTelemetry = {
   readonly applicationCategory: ApplicationCategory;
 };
 
-export type SuggestionProvenance = "automatic" | "deep_complete";
+export type SuggestionProvenance = AcceptanceSuggestionProvenance;
 
 type VisibleSuggestion = {
   readonly suggestion: Suggestion;
@@ -212,7 +211,8 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     eventType: InteractionTelemetryEventType,
     options: {
       eventId?: string;
-      acceptedText?: string;
+      acceptedWordCount?: number;
+      acceptedCharacterCount?: number;
     } = {},
   ): RecordTelemetryEventRequest | null {
     if (!visibleSuggestionTelemetry) return null;
@@ -229,9 +229,11 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       applicationCategory: visibleSuggestionTelemetry.applicationCategory,
     };
 
-    if (options.acceptedText !== undefined) {
-      event.acceptedWordCount = countAcceptedWords(options.acceptedText);
-      event.acceptedCharacterCount = options.acceptedText.length;
+    if (options.acceptedWordCount !== undefined) {
+      event.acceptedWordCount = options.acceptedWordCount;
+    }
+    if (options.acceptedCharacterCount !== undefined) {
+      event.acceptedCharacterCount = options.acceptedCharacterCount;
     }
 
     if (visibleSuggestionTelemetry.modelId) {
@@ -243,7 +245,11 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
 
   function recordInteractionTelemetry(
     eventType: InteractionTelemetryEventType,
-    options?: { eventId?: string; acceptedText?: string },
+    options?: {
+      eventId?: string;
+      acceptedWordCount?: number;
+      acceptedCharacterCount?: number;
+    },
   ): void {
     if (!deps.recordInteractionTelemetry) return;
 
@@ -545,6 +551,25 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     deepComplete.invalidate();
   }
 
+  const suggestionAcceptance = createSuggestionAcceptance({
+    canAcceptLocalSuggestion: deps.canAcceptLocalSuggestion,
+    onLocalAllowanceExhausted: deps.onLocalAllowanceExhausted,
+    recordAcceptance: () => compatibilityStore.recordAcceptance(currentSafeSnapshot()),
+    recordInteractionTelemetry: ({
+      acceptanceId,
+      acceptedWordCount,
+      acceptedCharacterCount,
+    }) => {
+      recordInteractionTelemetry("suggestion_accepted", {
+        eventId: acceptanceId,
+        acceptedWordCount,
+        acceptedCharacterCount,
+      });
+    },
+    recordAcceptedUsage: deps.recordAcceptedUsage,
+    onLocalSuggestionAccepted: deps.onLocalSuggestionAccepted,
+  });
+
   return {
     appendText(text: string): void {
       if (observationPaused) return;
@@ -645,58 +670,37 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       if (replacingSuggestion || acceptanceInFlight) return;
       const acceptedVisibleSuggestion = visibleSuggestion;
       const acceptedSuggestion = acceptedVisibleSuggestion?.suggestion ?? null;
-      if (
-        acceptedVisibleSuggestion?.provenance === "automatic" &&
-        deps.canAcceptLocalSuggestion &&
-        !deps.canAcceptLocalSuggestion()
-      ) {
-        clearVisibleSuggestion();
-        outputs.hideOverlay();
-        deps.onLocalAllowanceExhausted?.();
-        return;
-      }
       acceptanceInFlight = true;
       const acceptedFromTextSession = textSessionSnapshot !== null;
       const insertionDeps = deps.createAcceptanceDependencies(
         () => visibleSuggestion?.suggestion ?? null,
         () => previouslyActiveApplication,
       );
-      let result: InsertionResult;
+      let result;
       try {
-        result = await acceptAndInsertSuggestion({
-          ...insertionDeps,
-          getVisibleTextSessionTarget: () => visibleTextSessionTarget,
-          getCurrentTextSessionTarget: () => textSessionSnapshot,
-          shouldPreferClipboardFallback: (targetApp) => compatibilityStore.shouldPreferClipboardInsertion(targetApp),
-          recordInsertionOutcome: (strategy, outcome, targetApp) => {
-            compatibilityStore.recordInsertionOutcome(targetApp, strategy, outcome);
+        result = await suggestionAcceptance.accept({
+          candidate: acceptedVisibleSuggestion,
+          insertion: {
+            ...insertionDeps,
+            getVisibleTextSessionTarget: () => visibleTextSessionTarget,
+            getCurrentTextSessionTarget: () => textSessionSnapshot,
+            shouldPreferClipboardFallback: (targetApp) => compatibilityStore.shouldPreferClipboardInsertion(targetApp),
+            recordInsertionOutcome: (strategy, outcome, targetApp) => {
+              compatibilityStore.recordInsertionOutcome(targetApp, strategy, outcome);
+            },
           },
         });
       } finally {
         acceptanceInFlight = false;
       }
 
+      if (result === "allowance_exhausted") {
+        clearVisibleSuggestion();
+        outputs.hideOverlay();
+        return;
+      }
+
       if (result === "inserted") {
-        const acceptanceId = crypto.randomUUID();
-        const acceptedAt = new Date().toISOString();
-        compatibilityStore.recordAcceptance(currentSafeSnapshot());
-        recordInteractionTelemetry("suggestion_accepted", {
-          eventId: acceptanceId,
-          acceptedText: acceptedSuggestion?.text,
-        });
-        if (acceptedVisibleSuggestion?.provenance === "automatic" && acceptedSuggestion) {
-          deps.onLocalSuggestionAccepted?.(acceptedSuggestion.id);
-          Promise.resolve(
-            deps.recordAcceptedUsage?.({
-              acceptanceId,
-              acceptedAt,
-              wordCount: countAcceptedWords(acceptedSuggestion.text),
-              characterCount: acceptedSuggestion.text.length,
-            }),
-          ).catch(() => {
-            // The durable ledger callback owns retry behavior and cannot block insertion.
-          });
-        }
         outputs.hideOverlay();
         if (acceptedSuggestion && !acceptedFromTextSession) {
           automaticSuggestion.invalidate();
