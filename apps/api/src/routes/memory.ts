@@ -12,21 +12,18 @@ import {
 import { summarizeMemoryExtractionWindow } from "@tab/memory-policy";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
-import type { AuthInstance } from "../auth.ts";
 import type { BillingService } from "../billing.ts";
 import type { PersonalMemoryService } from "../personal-memory.ts";
 import {
   MEMORY_EXTRACTION_MODEL_ID,
   type MemoryExtractionService,
 } from "../personal-memory-extraction.ts";
-import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
 import type { TelemetryService } from "../telemetry.ts";
 
 export function registerMemoryRoutes(
   app: ApiApp,
   deps: {
-    auth: AuthInstance;
     personalMemoryService: PersonalMemoryService;
     memoryExtractionService: MemoryExtractionService;
     telemetryService: TelemetryService;
@@ -258,16 +255,12 @@ export function registerMemoryRoutes(
   );
 
   app.get("/api/account/memory", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    return listMemories(c, sessionCheck.session.user.id);
+    return listMemories(c, c.get("session").user.id);
   });
 
   app.get("/api/account/memory/export", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
     const memories = await deps.personalMemoryService.listMemories(
-      sessionCheck.session.user.id,
+      c.get("session").user.id,
     );
     return c.json(
       MemoryExportResponseSchema.parse({
@@ -279,20 +272,14 @@ export function registerMemoryRoutes(
   });
 
   app.delete("/api/account/memory/:id", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    return deleteMemory(c, sessionCheck.session.user.id);
+    return deleteMemory(c, c.get("session").user.id);
   });
 
   app.post("/api/account/memory", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    return createMemory(c, sessionCheck.session.user.id);
+    return createMemory(c, c.get("session").user.id);
   });
 
   app.patch("/api/account/memory/:id", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    return updateMemory(c, sessionCheck.session.user.id);
+    return updateMemory(c, c.get("session").user.id);
   });
 }

@@ -5,27 +5,21 @@ import {
   DeviceTokenExchangeResponseSchema,
 } from "@tab/contracts";
 import type { ApiApp } from "../api-types.ts";
-import type { AuthInstance } from "../auth.ts";
 import type { BillingService } from "../billing.ts";
 import type { DeviceTokenService } from "../device-tokens.ts";
-import { requireSession } from "../http/auth.ts";
 import { readJsonRequest } from "../http/request.ts";
 import { createErrorResponse } from "../http/responses.ts";
 
 export function registerDeviceAuthRoutes(
   app: ApiApp,
   deps: {
-    auth: AuthInstance;
     billingService: BillingService;
     deviceTokenService: DeviceTokenService;
   },
 ) {
   app.post("/api/auth/device/authorize", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-
     const code = await deps.deviceTokenService.createExchangeCode(
-      sessionCheck.session.user.id,
+      c.get("session").user.id,
     );
 
     return c.json(DeviceAuthorizeResponseSchema.parse({ code }), 200);
@@ -88,9 +82,6 @@ export function registerDeviceAuthRoutes(
   });
 
   app.post("/api/auth/device/revoke", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-
     let payload: { deviceId?: string } = {};
     try {
       payload = (await c.req.json()) as { deviceId?: string };
@@ -103,7 +94,7 @@ export function registerDeviceAuthRoutes(
     }
 
     const revoked = await deps.deviceTokenService.revokeDevice(
-      sessionCheck.session.user.id,
+      c.get("session").user.id,
       payload.deviceId,
     );
 
@@ -115,11 +106,8 @@ export function registerDeviceAuthRoutes(
   });
 
   app.get("/api/auth/devices", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-
     const devices = await deps.deviceTokenService.listDevices(
-      sessionCheck.session.user.id,
+      c.get("session").user.id,
     );
 
     return c.json(

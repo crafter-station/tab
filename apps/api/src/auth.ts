@@ -10,6 +10,9 @@ import { env } from "./env.ts";
 export type AuthDatabase = Database | unknown;
 
 export type AuthInstance = ReturnType<typeof betterAuth>;
+export type AuthSession = NonNullable<
+  Awaited<ReturnType<AuthInstance["api"]["getSession"]>>
+>;
 
 async function deliverAuthEmail(
   email: Parameters<typeof sendEmail>[0],

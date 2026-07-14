@@ -39,20 +39,20 @@ export function createDeviceAuthenticator(deviceTokenService: DeviceTokenService
   };
 }
 
-export async function requireSession(c: Context, auth: AuthInstance) {
-  const session = await auth.api.getSession({
-    headers: c.req.raw.headers,
-  });
-
-  if (!session) {
-    return {
-      ok: false as const,
-      response: c.json(
+export function createSessionAuthenticator(auth: AuthInstance) {
+  return async function authenticateSession(
+    c: Context<{ Variables: ApiVariables }>,
+    next: Next,
+  ) {
+    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    if (!session) {
+      return c.json(
         createErrorResponse("unauthenticated", "Sign in required."),
         401,
-      ),
-    };
-  }
+      );
+    }
 
-  return { ok: true as const, session };
+    c.set("session", session);
+    await next();
+  }
 }

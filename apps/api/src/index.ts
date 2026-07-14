@@ -46,7 +46,10 @@ import {
 import { createDatabase } from "./db/index.ts";
 import type { D1Database, ExecutionContext } from "@cloudflare/workers-types";
 import type { ApiBindings, ApiVariables } from "./api-types.ts";
-import { createDeviceAuthenticator } from "./http/auth.ts";
+import {
+  createDeviceAuthenticator,
+  createSessionAuthenticator,
+} from "./http/auth.ts";
 import { registerDeviceAuthRoutes } from "./routes/auth-device.ts";
 import { registerStatusRoutes } from "./routes/status.ts";
 import { registerMemoryRoutes } from "./routes/memory.ts";
@@ -145,8 +148,25 @@ export function createApp(deps: ApiDependencies = {}) {
 
   const app = new Hono<{ Bindings: ApiBindings; Variables: ApiVariables }>();
   const authenticateDevice = createDeviceAuthenticator(deviceTokenService);
+  const authenticateSession = createSessionAuthenticator(auth);
 
-  registerDeviceAuthRoutes(app, { auth, billingService, deviceTokenService });
+  for (const path of [
+    "/api/auth/device/authorize",
+    "/api/auth/device/revoke",
+    "/api/auth/devices",
+    "/api/billing/status",
+    "/api/billing/quota",
+    "/api/billing/reconcile",
+    "/api/billing/checkout",
+    "/api/billing/portal",
+    "/api/account/memory",
+    "/api/account/memory/*",
+    "/api/activity/local-suggestions",
+  ]) {
+    app.use(path, authenticateSession);
+  }
+
+  registerDeviceAuthRoutes(app, { billingService, deviceTokenService });
   app.on(["POST", "GET"], "/api/auth/*", async (c) => {
     const response = await auth.handler(c.req.raw);
     if (c.req.path.endsWith("/sign-up/email") && response.ok) {
@@ -172,20 +192,18 @@ export function createApp(deps: ApiDependencies = {}) {
     deviceTokenService,
   });
   registerMemoryRoutes(app, {
-    auth,
     personalMemoryService,
     memoryExtractionService,
     telemetryService,
     billingService,
   });
   registerBillingRoutes(app, {
-    auth,
     billingService,
     billingCheckoutClient,
     deviceTokenService,
   });
   registerSuggestionRoutes(app, { suggestionUseCase });
-  registerTelemetryRoutes(app, { telemetryService, auth });
+  registerTelemetryRoutes(app, { telemetryService });
   registerUsageRoutes(app, { billingService });
 
   return app;

@@ -7,19 +7,14 @@ import type { ApiApp } from "../api-types.ts";
 import type { TelemetryService } from "../telemetry.ts";
 import { readJsonRequest } from "../http/request.ts";
 import { createErrorResponse } from "../http/responses.ts";
-import type { AuthInstance } from "../auth.ts";
-import { requireSession } from "../http/auth.ts";
 
 export function registerTelemetryRoutes(
   app: ApiApp,
-  deps: { telemetryService: TelemetryService; auth: AuthInstance },
+  deps: { telemetryService: TelemetryService },
 ) {
   app.get("/api/activity/local-suggestions", async (c) => {
-    const session = await requireSession(c, deps.auth);
-    if (!session.ok) return session.response;
-
     const activity = await deps.telemetryService.getLocalSuggestionActivity(
-      session.session.user.id,
+      c.get("session").user.id,
       new Date(),
     );
     return c.json(LocalSuggestionActivityResponseSchema.parse({ status: "ok", data: activity }), 200);

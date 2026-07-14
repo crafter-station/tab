@@ -1,5 +1,6 @@
 import type { D1Database } from "@cloudflare/workers-types";
 import type { Hono } from "hono";
+import type { AuthSession } from "./auth.ts";
 import type { Device } from "./device-tokens.ts";
 
 export type WorkersAiBinding = {
@@ -32,6 +33,7 @@ export type VectorizeBinding = {
 
 export type ApiVariables = {
   device: Device;
+  session: AuthSession;
 };
 
 export type ApiBindings = {

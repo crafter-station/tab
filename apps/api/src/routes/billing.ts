@@ -6,20 +6,17 @@ import {
 } from "@tab/contracts";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
-import type { AuthInstance } from "../auth.ts";
 import {
   hasActivePolarEntitlement,
   type BillingCheckoutClient,
   type BillingService,
 } from "../billing.ts";
 import type { DeviceTokenService } from "../device-tokens.ts";
-import { requireSession } from "../http/auth.ts";
 import { createErrorResponse } from "../http/responses.ts";
 
 export function registerBillingRoutes(
   app: ApiApp,
   deps: {
-    auth: AuthInstance;
     billingService: BillingService;
     billingCheckoutClient: BillingCheckoutClient;
     deviceTokenService: DeviceTokenService;
@@ -28,13 +25,12 @@ export function registerBillingRoutes(
   const billingStatus = async (
     c: Context<{ Bindings: ApiBindings; Variables: ApiVariables }>,
   ) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    if (sessionCheck.session.user.emailVerified) {
+    const session = c.get("session");
+    if (session.user.emailVerified) {
       const provisioning = deps.billingService.provisionAccount({
-        id: sessionCheck.session.user.id,
-        email: sessionCheck.session.user.email,
-        name: sessionCheck.session.user.name,
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
       });
       try {
         c.executionCtx.waitUntil(provisioning);
@@ -43,10 +39,10 @@ export function registerBillingRoutes(
       }
     }
     const devices = await deps.deviceTokenService.listDevices(
-      sessionCheck.session.user.id,
+      session.user.id,
     );
     const status = await deps.billingService.getStatus(
-      sessionCheck.session.user.id,
+      session.user.id,
       { activeDevices: devices.filter((device) => !device.revoked).length },
     );
     return c.json(
@@ -61,16 +57,13 @@ export function registerBillingRoutes(
   app.get("/api/billing/quota", billingStatus);
 
   app.post("/api/billing/reconcile", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    await deps.billingService.reconcileEntitlement(sessionCheck.session.user.id);
+    await deps.billingService.reconcileEntitlement(c.get("session").user.id);
     return c.json({ status: "ok", data: { reconciled: true } }, 200);
   });
 
   app.get("/api/billing/checkout", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    if (!sessionCheck.session.user.emailVerified) {
+    const session = c.get("session");
+    if (!session.user.emailVerified) {
       return c.json(
         createErrorResponse(
           "email_unverified",
@@ -89,12 +82,12 @@ export function registerBillingRoutes(
       );
     }
 
-    const userId = sessionCheck.session.user.id;
+    const userId = session.user.id;
     await deps.billingService.initializeAccount(userId);
     const entitlement = await deps.billingService.provisionAccount({
       id: userId,
-      email: sessionCheck.session.user.email,
-      name: sessionCheck.session.user.name,
+      email: session.user.email,
+      name: session.user.name,
     });
     if (hasActivePolarEntitlement(entitlement, new Date())) {
       try {
@@ -123,8 +116,8 @@ export function registerBillingRoutes(
         "monthly",
         {
           id: userId,
-          email: sessionCheck.session.user.email,
-          name: sessionCheck.session.user.name,
+          email: session.user.email,
+          name: session.user.name,
         },
         entitlement.polarSubscriptionId?.startsWith("pending:")
           ? undefined
@@ -142,14 +135,13 @@ export function registerBillingRoutes(
   });
 
   app.get("/api/billing/portal", async (c) => {
-    const sessionCheck = await requireSession(c, deps.auth);
-    if (!sessionCheck.ok) return sessionCheck.response;
-    const userId = sessionCheck.session.user.id;
-    const entitlement = sessionCheck.session.user.emailVerified
+    const session = c.get("session");
+    const userId = session.user.id;
+    const entitlement = session.user.emailVerified
       ? await deps.billingService.provisionAccount({
           id: userId,
-          email: sessionCheck.session.user.email,
-          name: sessionCheck.session.user.name,
+          email: session.user.email,
+          name: session.user.name,
         })
       : await deps.billingService.getEntitlement(userId);
     try {
