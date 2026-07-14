@@ -57,12 +57,20 @@ describe("desktop preferences", () => {
     const storage = createMemoryPreferencesStorage();
     const manager = createPreferencesManager({ storage });
 
-    manager.update({ suggestions: { usePersonalMemory: true } });
+    const updated = manager.update({ suggestions: { usePersonalMemory: true } });
 
-    expect(manager.get().suggestions.usePersonalMemory).toBe(true);
+    expect(updated.suggestions).toMatchObject({
+      usePersonalMemory: true,
+      continuousMemoryExtraction: false,
+      customWritingInstructions: "",
+      localModelId: "ternary-bonsai-8b-q2_0",
+    });
+    updated.suggestions.localModelId = "qwen2.5-3b-instruct-q4_k_m";
+    expect(manager.get().suggestions.localModelId).toBe("ternary-bonsai-8b-q2_0");
 
     const reloaded = createPreferencesManager({ storage });
     expect(reloaded.get().suggestions.usePersonalMemory).toBe(true);
+    expect(reloaded.get().suggestions.localModelId).toBe("ternary-bonsai-8b-q2_0");
   });
 
   it("persists the selected local model", () => {

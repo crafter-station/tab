@@ -165,8 +165,7 @@ const acceptedWordLedger = createAcceptedWordLedger({
 
 const onboardingManager = createOnboardingManager({
   getPreferences: () => preferencesManager.get().onboarding,
-  setPreferences: (patch) =>
-    preferencesManager.update({ onboarding: { ...preferencesManager.get().onboarding, ...patch } }),
+  setPreferences: (onboarding) => preferencesManager.update({ onboarding }),
 });
 
 const onboardingWindowManager = createOnboardingWindowManager({
@@ -412,13 +411,8 @@ const localInference = createLocalModelManager({
   },
   onCatalogChange: (catalog) => settingsWindowManager.sendLocalModelCatalog(catalog),
   onSelectedModelChange: (localModelId) => {
-    const preferences = preferencesManager.get();
-    const nextPreferences = {
-      ...preferences,
-      suggestions: { ...preferences.suggestions, localModelId },
-    };
-    preferencesManager.update(nextPreferences);
-    settingsWindowManager.sendPreferences(nextPreferences);
+    const preferences = preferencesManager.update({ suggestions: { localModelId } });
+    settingsWindowManager.sendPreferences(preferences);
   },
 });
 reconcileLocalModelAccess = () => {
@@ -553,44 +547,23 @@ function updateTrayFromStatus(status: DesktopStatus): void {
 }
 
 function setUsePersonalMemoryForSuggestions(enabled: boolean): void {
-  const preferences = preferencesManager.get();
-  const nextPreferences = {
-    ...preferences,
-    suggestions: {
-      ...preferences.suggestions,
-      usePersonalMemory: enabled,
-    },
-  };
-
-  preferencesManager.update(nextPreferences);
-  settingsWindowManager.sendPreferences(nextPreferences);
+  const preferences = preferencesManager.update({ suggestions: { usePersonalMemory: enabled } });
+  settingsWindowManager.sendPreferences(preferences);
 }
 
 function setContinuousMemoryExtraction(enabled: boolean): void {
-  const preferences = preferencesManager.get();
-  const nextPreferences = {
-    ...preferences,
-    suggestions: {
-      ...preferences.suggestions,
-      continuousMemoryExtraction: enabled,
-    },
-  };
-  preferencesManager.update(nextPreferences);
+  const preferences = preferencesManager.update({
+    suggestions: { continuousMemoryExtraction: enabled },
+  });
   if (!enabled) memoryExtractionDispatcher.cancelAndClear();
-  settingsWindowManager.sendPreferences(nextPreferences);
+  settingsWindowManager.sendPreferences(preferences);
 }
 
 function setCustomWritingInstructions(value: string): void {
-  const preferences = preferencesManager.get();
-  const nextPreferences = {
-    ...preferences,
-    suggestions: {
-      ...preferences.suggestions,
-      customWritingInstructions: value.trimStart().slice(0, 1_000),
-    },
-  };
-  preferencesManager.update(nextPreferences);
-  settingsWindowManager.sendPreferences(nextPreferences);
+  const preferences = preferencesManager.update({
+    suggestions: { customWritingInstructions: value.trimStart().slice(0, 1_000) },
+  });
+  settingsWindowManager.sendPreferences(preferences);
 }
 
 function updateTray(): void {

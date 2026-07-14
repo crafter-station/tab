@@ -136,6 +136,14 @@ export type PreferencesManagerDependencies = {
   storage: PreferencesStorage;
 };
 
+export type DesktopPreferencesPatch = Omit<
+  Partial<DesktopPreferences>,
+  "onboarding" | "suggestions"
+> & {
+  onboarding?: Partial<DesktopPreferences["onboarding"]>;
+  suggestions?: Partial<DesktopPreferences["suggestions"]>;
+};
+
 export function createPreferencesManager(deps: PreferencesManagerDependencies) {
   let prefs = normalizeDesktopPreferences(deps.storage.load());
 
@@ -143,9 +151,15 @@ export function createPreferencesManager(deps: PreferencesManagerDependencies) {
     return structuredClone(prefs);
   }
 
-  function update(patch: Partial<DesktopPreferences>): void {
-    prefs = { ...prefs, ...patch };
+  function update(patch: DesktopPreferencesPatch): DesktopPreferences {
+    prefs = normalizeDesktopPreferences({
+      ...prefs,
+      ...patch,
+      onboarding: { ...prefs.onboarding, ...patch.onboarding },
+      suggestions: { ...prefs.suggestions, ...patch.suggestions },
+    });
     deps.storage.save(prefs);
+    return get();
   }
 
   return {
