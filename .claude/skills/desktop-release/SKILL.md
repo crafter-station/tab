@@ -50,14 +50,6 @@ the same version — the guard job skips CI whenever the release already
 exists, so a local publish silently preempts the CI run (and vice versa,
 the local script refuses to run once CI has published).
 
-**Pending first validation**: this path has never completed a real release
-(v0.1.0 shipped locally; CI only ever failed fast on then-missing secrets).
-Ship v0.1.1 through CI as its live test: bump the version, push to main,
-then push the tag and watch the Actions run. If it fails, fall back to
-Path A — delete any partial draft release it left behind first
-(`gh release view v<version>` / `gh release delete`). Once it passes,
-remove this paragraph.
-
 ## Credentials (Path A)
 
 `apps/desktop/.env` (gitignored) must contain:
