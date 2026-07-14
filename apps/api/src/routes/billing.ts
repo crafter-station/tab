@@ -6,11 +6,8 @@ import {
 } from "@tab/contracts";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
-import {
-  hasActivePolarEntitlement,
-  type BillingCheckoutClient,
-  type BillingService,
-} from "../billing.ts";
+import type { BillingDestinationService } from "../billing-destinations.ts";
+import type { BillingService } from "../billing.ts";
 import type { DeviceTokenService } from "../device-tokens.ts";
 import { createErrorResponse } from "../http/responses.ts";
 
@@ -18,7 +15,7 @@ export function registerBillingRoutes(
   app: ApiApp,
   deps: {
     billingService: BillingService;
-    billingCheckoutClient: BillingCheckoutClient;
+    billingDestinationService: BillingDestinationService;
     deviceTokenService: DeviceTokenService;
   },
 ) {
@@ -82,46 +79,15 @@ export function registerBillingRoutes(
       );
     }
 
-    const userId = session.user.id;
-    await deps.billingService.initializeAccount(userId);
-    const entitlement = await deps.billingService.provisionAccount({
-      id: userId,
-      email: session.user.email,
-      name: session.user.name,
-    });
-    if (hasActivePolarEntitlement(entitlement, new Date())) {
-      try {
-        const url = await deps.billingCheckoutClient.createPortalUrl(
-          userId,
-          entitlement.polarCustomerId,
-        );
-        return c.json(
-          BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
-          200,
-        );
-      } catch {
-        return c.json(
-          BillingCheckoutResponseSchema.parse({
-            status: "ok",
-            data: { url: "/billing/portal" },
-          }),
-          200,
-        );
-      }
-    }
-
     try {
-      const url = await deps.billingCheckoutClient.createCheckoutUrl(
-        planId,
-        "monthly",
+      const url = await deps.billingDestinationService.createPlanChangeUrl(
         {
-          id: userId,
+          id: session.user.id,
           email: session.user.email,
           name: session.user.name,
+          emailVerified: session.user.emailVerified,
         },
-        entitlement.polarSubscriptionId?.startsWith("pending:")
-          ? undefined
-          : entitlement.polarSubscriptionId,
+        planId,
       );
       return c.json(
         BillingCheckoutResponseSchema.parse({ status: "ok", data: { url } }),
@@ -136,19 +102,13 @@ export function registerBillingRoutes(
 
   app.get("/api/billing/portal", async (c) => {
     const session = c.get("session");
-    const userId = session.user.id;
-    const entitlement = session.user.emailVerified
-      ? await deps.billingService.provisionAccount({
-          id: userId,
-          email: session.user.email,
-          name: session.user.name,
-        })
-      : await deps.billingService.getEntitlement(userId);
     try {
-      const url = await deps.billingCheckoutClient.createPortalUrl(
-        userId,
-        entitlement.polarCustomerId,
-      );
+      const url = await deps.billingDestinationService.createPortalUrl({
+        id: session.user.id,
+        email: session.user.email,
+        name: session.user.name,
+        emailVerified: session.user.emailVerified,
+      });
       return c.json(
         BillingPortalResponseSchema.parse({ status: "ok", data: { url } }),
         200,

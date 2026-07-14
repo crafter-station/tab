@@ -12,6 +12,7 @@ import {
   createBillingCheckoutClient,
   createBillingProvisioningClient,
 } from "./billing.ts";
+import { BillingDestinationService } from "./billing-destinations.ts";
 import {
   CloudflareVectorizePersonalMemoryIndex,
   D1PersonalMemoryStorage,
@@ -145,6 +146,10 @@ export function createApp(deps: ApiDependencies = {}) {
     telemetryService,
     generateSuggestion,
   });
+  const billingDestinationService = new BillingDestinationService(
+    billingService,
+    billingCheckoutClient,
+  );
 
   const app = new Hono<{ Bindings: ApiBindings; Variables: ApiVariables }>();
   const authenticateDevice = createDeviceAuthenticator(deviceTokenService);
@@ -199,7 +204,7 @@ export function createApp(deps: ApiDependencies = {}) {
   });
   registerBillingRoutes(app, {
     billingService,
-    billingCheckoutClient,
+    billingDestinationService,
     deviceTokenService,
   });
   registerSuggestionRoutes(app, { suggestionUseCase });
