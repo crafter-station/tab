@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
+  <title id="title">Tab - Native autocomplete for your Mac</title>
+  <desc id="description">A branded social sharing image for Tab.</desc>
+  <defs>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <path d="M48 0H0V48" fill="none" stroke="#d7dad4" stroke-width="1"/>
+    </pattern>
+    <radialGradient id="wash" cx="0" cy="0" r="1" gradientTransform="translate(960 315) rotate(90) scale(330 430)" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#f4e2d9"/>
+      <stop offset="1" stop-color="#f4e2d9" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="#f2f3f0"/>
+  <rect width="1200" height="630" fill="url(#grid)" opacity="0.55"/>
+  <rect width="1200" height="630" fill="url(#wash)"/>
+  <rect x="40" y="40" width="1120" height="550" fill="none" stroke="#d7dad4"/>
+
+  <g transform="translate(88 78) scale(2.4)" fill="#c83f00">
+    <path d="M1 8h10.8l-2.2 8H1Z"/>
+    <path d="M14.4 8H23v8H12.2Z"/>
+  </g>
+  <text x="154" y="119" fill="#1a1c1a" font-family="Space Grotesk, Helvetica Neue, Arial, sans-serif" font-size="50" font-weight="700" letter-spacing="-2">Tab</text>
+
+  <text x="88" y="284" fill="#1a1c1a" font-family="Space Grotesk, Helvetica Neue, Arial, sans-serif" font-size="68" font-weight="700" letter-spacing="-3">
+    <tspan x="88">Native autocomplete</tspan>
+    <tspan x="88" dy="76">for your Mac.</tspan>
+  </text>
+  <text x="92" y="455" fill="#626660" font-family="Geist, Helvetica Neue, Arial, sans-serif" font-size="27" font-weight="500">
+    <tspan x="92">Local Suggestions as you type.</tspan>
+    <tspan x="92" dy="39">Deep Complete when you ask.</tspan>
+  </text>
+
+  <g transform="translate(790 170)">
+    <rect width="296" height="290" rx="18" fill="#fbfcf9" stroke="#d7dad4"/>
+    <circle cx="30" cy="30" r="5" fill="#c83f00"/>
+    <circle cx="48" cy="30" r="5" fill="#d7dad4"/>
+    <circle cx="66" cy="30" r="5" fill="#d7dad4"/>
+    <path d="M28 76h180M28 106h232M28 136h148" stroke="#d7dad4" stroke-width="9" stroke-linecap="round"/>
+    <path d="M28 183h105" stroke="#1a1c1a" stroke-width="9" stroke-linecap="round"/>
+    <path d="M139 183h92" stroke="#858a82" stroke-width="9" stroke-linecap="round"/>
+    <rect x="65" y="215" width="198" height="46" rx="9" fill="#1e201d"/>
+    <path d="M82 237h10.8l-2.2 8H82Zm13.4 0H104v8h-10.8Z" fill="#ff6a2b"/>
+    <text x="116" y="245" fill="#fffaf7" font-family="Geist, Helvetica Neue, Arial, sans-serif" font-size="14" font-weight="600">Press Tab to accept</text>
+  </g>
+  <text x="1088" y="550" text-anchor="end" fill="#a83200" font-family="SFMono-Regular, Consolas, monospace" font-size="15" font-weight="700" letter-spacing="1.4">TAB.CUEVA.IO</text>
+</svg>
