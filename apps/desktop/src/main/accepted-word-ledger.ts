@@ -1,4 +1,5 @@
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { getLocalAcceptedWordsPeriod } from "@tab/billing";
 
 export type AcceptedWordLedgerEvent = {
   readonly userId: string;
@@ -21,14 +22,6 @@ export type AcceptedWordLedgerStorage = {
   load(): unknown;
   save(state: AcceptedWordLedgerState): void;
 };
-
-function localDay(date: Date): string {
-  return [
-    date.getFullYear(),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ].join("-");
-}
 
 function isLedgerEvent(value: unknown): value is AcceptedWordLedgerEvent {
   if (!value || typeof value !== "object") return false;
@@ -128,7 +121,10 @@ export function createAcceptedWordLedger(deps: {
   getUserId?: () => string | undefined;
 }) {
   const now = deps.now ?? (() => new Date());
-  let state = normalizeState(deps.storage.load(), localDay(now()));
+  let state = normalizeState(
+    deps.storage.load(),
+    getLocalAcceptedWordsPeriod(now()).period,
+  );
 
   function currentUserId(): string | undefined {
     return deps.getUserId ? deps.getUserId() : "local";
@@ -139,7 +135,7 @@ export function createAcceptedWordLedger(deps: {
   }
 
   function observeDay(): string {
-    const observed = localDay(now());
+    const observed = getLocalAcceptedWordsPeriod(now()).period;
     if (observed > state.lastObservedDay) {
       state = {
         ...state,

@@ -3,6 +3,7 @@ import {
   DesktopStatusResponseSchema,
 } from "@tab/contracts";
 import {
+  getLocalAcceptedWordsPeriod,
   projectBillingStatus,
   type EntitlementFacts,
 } from "@tab/billing";
@@ -230,19 +231,13 @@ export function createDesktopStatusService(deps: DesktopStatusServiceDependencie
 
     try {
       const localNow = now();
-      const localDay = [
-        localNow.getFullYear(),
-        String(localNow.getMonth() + 1).padStart(2, "0"),
-        String(localNow.getDate()).padStart(2, "0"),
-      ].join("-");
-      const localResetAt = new Date(
-        localNow.getFullYear(),
-        localNow.getMonth(),
-        localNow.getDate() + 1,
-      ).toISOString();
+      const localAcceptedWordsPeriod = getLocalAcceptedWordsPeriod(localNow);
       const statusUrl = new URL("/api/status", deps.apiBaseUrl);
-      statusUrl.searchParams.set("localDay", localDay);
-      statusUrl.searchParams.set("localResetAt", localResetAt);
+      statusUrl.searchParams.set("localDay", localAcceptedWordsPeriod.period);
+      statusUrl.searchParams.set(
+        "localResetAt",
+        localAcceptedWordsPeriod.periodEndsAt,
+      );
       const response = await http(
         statusUrl,
         {

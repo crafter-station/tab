@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import {
   countAcceptedWords,
   getAllowancePeriods,
+  getLocalAcceptedWordsPeriod,
   getPlanCapabilities,
   isPaidPlanId,
   isPlanId,
@@ -63,6 +64,16 @@ describe("Deep Complete accounting", () => {
 });
 
 describe("billing status projection", () => {
+  it("projects the Accepted Word period from the Mac local calendar", () => {
+    const localTime = new Date(2026, 11, 31, 23, 30);
+
+    expect(getLocalAcceptedWordsPeriod(localTime)).toEqual({
+      period: "2026-12-31",
+      periodStartsAt: "2026-12-31T00:00:00",
+      periodEndsAt: new Date(2027, 0, 1).toISOString(),
+    });
+  });
+
   it("uses an explicit local day and exact Polar subscription period", () => {
     expect(
       getAllowancePeriods({

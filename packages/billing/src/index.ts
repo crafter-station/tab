@@ -93,16 +93,21 @@ export function getPlanCapabilities(planId: PlanId) {
   };
 }
 
-function localDay(date: Date): string {
-  return [
+export function getLocalAcceptedWordsPeriod(date: Date): AllowancePeriod {
+  const period = [
     date.getFullYear(),
     String(date.getMonth() + 1).padStart(2, "0"),
     String(date.getDate()).padStart(2, "0"),
   ].join("-");
-}
-
-function nextLocalDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+  return {
+    period,
+    periodStartsAt: `${period}T00:00:00`,
+    periodEndsAt: new Date(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate() + 1,
+    ).toISOString(),
+  };
 }
 
 export function getAllowancePeriods(input: {
@@ -111,12 +116,14 @@ export function getAllowancePeriods(input: {
   readonly localResetAt?: Date;
   readonly deepCompletePeriod: AllowancePeriod;
 }) {
-  const localPeriod = input.localDay ?? localDay(input.now);
+  const projectedLocalPeriod = getLocalAcceptedWordsPeriod(input.now);
+  const localPeriod = input.localDay ?? projectedLocalPeriod.period;
   return {
     localAcceptedWords: {
       period: localPeriod,
       periodStartsAt: `${localPeriod}T00:00:00`,
-      periodEndsAt: (input.localResetAt ?? nextLocalDay(input.now)).toISOString(),
+      periodEndsAt:
+        input.localResetAt?.toISOString() ?? projectedLocalPeriod.periodEndsAt,
     },
     deepCompletes: input.deepCompletePeriod,
   };
