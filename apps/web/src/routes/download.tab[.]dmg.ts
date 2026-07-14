@@ -6,8 +6,7 @@ export const Route = createFileRoute("/download/tab.dmg")({
   server: {
     handlers: {
       GET: () => {
-        const config = getRuntimeConfig();
-        return downloadRedirect({ version: config.TAB_DESKTOP_LATEST_VERSION, url: config.TAB_MAC_DOWNLOAD_URL, notes: "" });
+        return downloadRedirect(getRuntimeConfig());
       },
     },
   },

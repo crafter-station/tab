@@ -1,8 +1,15 @@
 import { describe, it, expect } from "bun:test";
 import { readFileSync } from "node:fs";
-import { downloadMetadata, downloadRedirect } from "../apps/web/src/lib/download.ts";
+import {
+  createDownloadInfo,
+  downloadMetadata,
+  downloadRedirect,
+} from "../apps/web/src/lib/download.ts";
 
-const downloadInfo = { version: "0.2.0", url: "https://cdn.example.com/tab-0.2.0.dmg", notes: "" };
+const downloadConfig = {
+  TAB_DESKTOP_LATEST_VERSION: "0.2.0",
+  TAB_MAC_DOWNLOAD_URL: "https://cdn.example.com/tab-0.2.0.dmg",
+};
 const homeSource = readFileSync(new URL("../apps/web/src/components/pages/home.tsx", import.meta.url), "utf8");
 const marketingSource = readFileSync(new URL("../apps/web/src/components/pages/marketing.tsx", import.meta.url), "utf8");
 const autocompleteSource = readFileSync(new URL("../apps/web/src/components/marketing/autocomplete-demo.tsx", import.meta.url), "utf8");
@@ -12,7 +19,7 @@ const pricingSource = readFileSync(new URL("../apps/web/src/components/pricing/p
 
 describe("Web download surface", () => {
   it("redirects /download/tab.dmg to the configured macOS artifact URL", async () => {
-    const response = downloadRedirect(downloadInfo);
+    const response = downloadRedirect(downloadConfig);
 
     expect(response.status).toBe(302);
     expect(response.headers.get("location")).toBe(
@@ -21,7 +28,7 @@ describe("Web download surface", () => {
   });
 
   it("serves /download/latest.json with the current version and artifact URL", async () => {
-    const response = downloadMetadata(downloadInfo);
+    const response = downloadMetadata(downloadConfig);
 
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toInclude("application/json");
@@ -32,6 +39,15 @@ describe("Web download surface", () => {
     };
     expect(body.version).toBe("0.2.0");
     expect(body.url).toBe("https://cdn.example.com/tab-0.2.0.dmg");
+    expect(body.notes).toBe("");
+  });
+
+  it("owns the public release descriptor projection", () => {
+    expect(createDownloadInfo(downloadConfig)).toEqual({
+      version: "0.2.0",
+      url: "https://cdn.example.com/tab-0.2.0.dmg",
+      notes: "",
+    });
   });
 
   it("download page links to the .dmg route", async () => {
