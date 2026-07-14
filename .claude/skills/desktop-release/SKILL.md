@@ -41,8 +41,22 @@ Push a tag matching the desktop version and let
 git tag v<version> && git push origin v<version>
 ```
 
-Requires Actions secrets: `MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PASSWORD`,
-`APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`.
+All required Actions secrets are configured (as of 2026-07-14):
+`MACOS_CERTIFICATE`, `MACOS_CERTIFICATE_PASSWORD`, `APPLE_API_KEY`,
+`APPLE_API_KEY_ID`, `APPLE_API_ISSUER`.
+
+IMPORTANT: when shipping via CI, do NOT also run the local ship script for
+the same version — the guard job skips CI whenever the release already
+exists, so a local publish silently preempts the CI run (and vice versa,
+the local script refuses to run once CI has published).
+
+**Pending first validation**: this path has never completed a real release
+(v0.1.0 shipped locally; CI only ever failed fast on then-missing secrets).
+Ship v0.1.1 through CI as its live test: bump the version, push to main,
+then push the tag and watch the Actions run. If it fails, fall back to
+Path A — delete any partial draft release it left behind first
+(`gh release view v<version>` / `gh release delete`). Once it passes,
+remove this paragraph.
 
 ## Credentials (Path A)
 
