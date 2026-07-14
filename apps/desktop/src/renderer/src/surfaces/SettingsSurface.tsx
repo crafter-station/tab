@@ -45,7 +45,7 @@ const SETTINGS_TABS: { value: SettingsTab; label: string; description: string }[
 ];
 
 function getAuthStatusRowTone(auth: DesktopStatus["auth"]) {
-  if (auth === "signed_in") return "success";
+  if (auth === "signed_in") return "brand";
   if (auth === "revoked_device") return "warning";
   return "neutral";
 }
@@ -97,20 +97,20 @@ function describeLocalInference(status: LocalInferenceStatus, error: string | nu
   }
 }
 
-function describeUpdate(state: DesktopUpdateState): { label: string; description: string; tone: "brand" | "neutral" | "success" | "warning" } {
+function describeUpdate(state: DesktopUpdateState): { label: string; description: string; tone: "brand" | "neutral" | "warning" } {
   switch (state.status) {
     case "idle":
       return { label: "Ready to check", description: "Check GitHub Releases for a newer signed version of Tab.", tone: "neutral" };
     case "checking":
       return { label: "Checking", description: "Looking for the latest version of Tab.", tone: "neutral" };
     case "not-available":
-      return { label: "Up to date", description: `Tab ${state.currentVersion} is the latest version.`, tone: "success" };
+      return { label: "Up to date", description: `Tab ${state.currentVersion} is the latest version.`, tone: "brand" };
     case "available":
       return { label: "Available", description: `Tab ${state.version} is ready to download.`, tone: "warning" };
     case "downloading":
       return { label: `${Math.round(state.percent)}%`, description: `Downloading Tab ${state.version}. Keep Tab open.`, tone: "brand" };
     case "downloaded":
-      return { label: "Ready to install", description: `Restart Tab to install version ${state.version}.`, tone: "success" };
+      return { label: "Ready to install", description: `Restart Tab to install version ${state.version}.`, tone: "brand" };
     case "error":
       return { label: "Try again", description: state.message, tone: "warning" };
   }
@@ -335,7 +335,7 @@ export function SettingsSurface() {
               <StatusRow
                 label="Account services"
                 value={status.connectivity === "online" ? "Online" : "Offline"}
-                tone={status.connectivity === "online" ? "success" : "warning"}
+                tone={status.connectivity === "online" ? "brand" : "warning"}
                 description="Used for Deep Complete and Personal Memory sync."
               />
               <div className="settings-group__actions">
@@ -374,7 +374,7 @@ export function SettingsSurface() {
               description={localInference.description}
             >
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <StatusBadge tone={localInferenceStatus.status === "ready" ? "success" : "warning"}>
+                <StatusBadge tone={localInferenceStatus.status === "ready" ? "brand" : "warning"}>
                   {localInference.label}
                 </StatusBadge>
                 {localInferenceStatus.status === "unavailable"
@@ -477,10 +477,14 @@ export function SettingsSurface() {
                 description="Required to read the text field you are using and add suggestions you accept."
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
-                  <StatusBadge tone={accessibilityGranted ? "success" : "warning"}>
+                  <StatusBadge tone={accessibilityGranted ? "brand" : "warning"}>
                     {accessibilityGranted ? "Enabled" : "Needs access"}
                   </StatusBadge>
-                  {accessibilityGranted ? null : <Button disabled={permissionBusy === "accessibility"} onClick={handleAccessibility}>Open System Settings</Button>}
+                  {accessibilityGranted ? null : (
+                    <Button disabled={permissionBusy === "accessibility"} onClick={handleAccessibility} size="sm" variant="secondary">
+                      Open System Settings
+                    </Button>
+                  )}
                 </div>
               </SettingsRow>
               <SettingsRow
@@ -489,13 +493,13 @@ export function SettingsSurface() {
               >
                 <div className="flex flex-wrap items-center justify-end gap-2">
                   <StatusBadge tone="neutral">Check in System Settings</StatusBadge>
-                  <Button disabled={permissionBusy === "input-monitoring"} onClick={handleInputMonitoring}>
+                  <Button disabled={permissionBusy === "input-monitoring"} onClick={handleInputMonitoring} size="sm" variant="secondary">
                     Open System Settings
                   </Button>
                 </div>
               </SettingsRow>
               <div className="settings-group__actions">
-                <Button variant="secondary" onClick={() => window.tab?.relaunchForPermissions?.()}>
+                <Button variant="secondary" size="sm" onClick={() => window.tab?.relaunchForPermissions?.()}>
                   Relaunch Tab
                 </Button>
               </div>
@@ -617,7 +621,14 @@ export function SettingsSurface() {
               <StatusBadge tone={update.tone}>{update.label}</StatusBadge>
             </SettingsRow>
             <div className="settings-group__actions">
-              <Button disabled={busy} onClick={handleUpdateAction}>{actionLabel}</Button>
+              <Button
+                disabled={busy}
+                onClick={handleUpdateAction}
+                size="sm"
+                variant={updateState.status === "available" || updateState.status === "downloaded" ? "default" : "secondary"}
+              >
+                {actionLabel}
+              </Button>
             </div>
           </SettingsGroup>
         );
