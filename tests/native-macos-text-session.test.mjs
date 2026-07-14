@@ -35,7 +35,7 @@ test("macOS helper emits Accessibility Text Session snapshots accepted by deskto
   assert.match(nativeHelper, /"terminalContents"/);
   assert.match(nativeHelper, /"terminalTitle"/);
   assert.match(nativeHelper, /kAXStringForRangeParameterizedAttribute/);
-  assert.match(nativeHelper, /emitTextSessionSnapshotIfChanged\(\)/);
+  assert.match(nativeHelper, /emitTextSessionSnapshotIfChanged\(/);
 
   assert.match(typingContext, /readonly selectedText\?: string/);
   assert.match(desktopEventIngress, /snapshot\.selectedText === undefined \|\| typeof snapshot\.selectedText === "string"/);
@@ -65,6 +65,16 @@ test("macOS helper discovers the active window only once per polling cycle", () 
   assert.equal(pollingBody.match(/activeWindowSnapshot\(\)/g)?.length, 1);
   assert.match(pollingBody, /emitActiveWindowIfChanged\(snapshot:/);
   assert.match(pollingBody, /emitTextSessionSnapshotIfChanged\(activeWindow:/);
+});
+
+test("macOS helper reuses active-window discovery within each input event", () => {
+  const callbackStart = nativeHelper.indexOf("let callback: CGEventTapCallBack");
+  const callbackEnd = nativeHelper.indexOf("guard let eventTap", callbackStart);
+  const callbackBody = nativeHelper.slice(callbackStart, callbackEnd);
+
+  assert.equal(callbackBody.match(/activeWindowSnapshot\(\)/g)?.length, 2);
+  assert.doesNotMatch(callbackBody, /emitActiveWindowIfChanged\(\)/);
+  assert.doesNotMatch(callbackBody, /emitTextSessionSnapshotIfChanged\(\)/);
 });
 
 test("macOS helper reserves Option+Tab for suggestion acceptance", () => {

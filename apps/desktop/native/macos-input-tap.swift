@@ -513,9 +513,10 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   }
 
   if type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown {
-    if activeWindowSnapshot()?.bundleId == "com.mitchellh.ghostty" {
-      emitActiveWindowIfChanged()
-      emitTextSessionSnapshotIfChanged()
+    let activeWindow = activeWindowSnapshot()
+    if activeWindow?.bundleId == "com.mitchellh.ghostty" {
+      emitActiveWindowIfChanged(snapshot: activeWindow)
+      emitTextSessionSnapshotIfChanged(activeWindow: activeWindow)
       emit(["type": "context-invalidated", "message": "mouse_input"])
     }
     return Unmanaged.passUnretained(event)
@@ -524,7 +525,8 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   guard type == .keyDown else { return Unmanaged.passUnretained(event) }
   lastOptionKeyUpTimestamp = 0
 
-  let activeBundleId = activeWindowSnapshot()?.bundleId
+  let activeWindow = activeWindowSnapshot()
+  let activeBundleId = activeWindow?.bundleId
   let isGhostty = activeBundleId == "com.mitchellh.ghostty"
   let isDeleteKey = keyCode == 51
 
@@ -536,8 +538,8 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
       return Unmanaged.passUnretained(event)
     }
 
-    emitActiveWindowIfChanged()
-    emitTextSessionSnapshotIfChanged()
+    emitActiveWindowIfChanged(snapshot: activeWindow)
+    emitTextSessionSnapshotIfChanged(activeWindow: activeWindow)
     emitAppContextTreeSnapshotIfChanged()
     emit(["type": "delete", "unit": flags.contains(.maskAlternate) ? "token" : "character"])
     return Unmanaged.passUnretained(event)
@@ -554,8 +556,8 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     && !flags.contains(.maskControl) && !flags.contains(.maskHelp)
   if isCommandPaste {
     guard isGhostty else { return Unmanaged.passUnretained(event) }
-    emitActiveWindowIfChanged()
-    emitTextSessionSnapshotIfChanged()
+    emitActiveWindowIfChanged(snapshot: activeWindow)
+    emitTextSessionSnapshotIfChanged(activeWindow: activeWindow)
     if let text = NSPasteboard.general.string(forType: .string) {
       emit(["type": "paste", "text": text])
     } else if isGhostty {
@@ -593,8 +595,8 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     return Unmanaged.passUnretained(event)
   }
 
-  emitActiveWindowIfChanged()
-  emitTextSessionSnapshotIfChanged()
+  emitActiveWindowIfChanged(snapshot: activeWindow)
+  emitTextSessionSnapshotIfChanged(activeWindow: activeWindow)
   emitAppContextTreeSnapshotIfChanged()
   emit(["type": "text", "text": text])
   return Unmanaged.passUnretained(event)
