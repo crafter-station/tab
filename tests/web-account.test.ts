@@ -52,6 +52,8 @@ class TestBillingCheckoutClient implements BillingCheckoutClient {
 }
 
 async function createWebTestEnv(options: {
+  apiBaseUrl?: string;
+  apiRequestOrigins?: string[];
   enforceSignOutJson?: boolean;
   requireEmailVerification?: boolean;
   sendVerificationEmail?: (input: { email: string; url: string }) => Promise<void>;
@@ -82,13 +84,14 @@ async function createWebTestEnv(options: {
   });
 
   const webApp = createWebApp({
-    apiBaseUrl: TEST_ORIGIN,
+    apiBaseUrl: options.apiBaseUrl ?? TEST_ORIGIN,
     fetch: (input, init) => {
       const url = new URL(
         typeof input === "string" ? input : input.url,
         TEST_ORIGIN,
       );
       const headers = new Headers(init?.headers);
+      options.apiRequestOrigins?.push(headers.get("origin") ?? "");
       if (
         options.enforceSignOutJson &&
         url.pathname === "/api/auth/sign-out" &&
@@ -520,6 +523,27 @@ describe("Web account surface", () => {
     const memoriesResponse = await webRequest(webApp, "/dashboard/memories", {}, setCookie!);
     expect(memoriesResponse.status).toBe(200);
     await textIncludes(memoriesResponse, "No saved memories yet");
+  });
+
+  it("uses the web origin when the development API host differs from the auth base URL", async () => {
+    const apiRequestOrigins: string[] = [];
+    const { apiApp, database, webApp } = await createWebTestEnv({
+      apiBaseUrl: "http://api.tab.cueva.io",
+      apiRequestOrigins,
+    });
+    const email = `origin-${crypto.randomUUID()}@example.com`;
+    const password = "password123456";
+    await signUpUser(apiApp, database, email, password);
+
+    const response = await webRequest(webApp, "/login", {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({ email, password }),
+    });
+
+    expect(response.status).toBe(302);
+    expect(response.headers.get("location")).toBe("/dashboard");
+    expect(apiRequestOrigins.at(-1)).toBe(WEB_ORIGIN);
   });
 
   it("signs out through the web form and clears the session", async () => {

@@ -385,7 +385,10 @@ export function createWebApp(config: WebAppConfig) {
       "/api/auth/sign-in/email",
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          origin: new URL(request.url).origin,
+        },
         body: JSON.stringify({ email, password, rememberMe: true }),
       },
       cookieHeader,
@@ -431,7 +434,10 @@ export function createWebApp(config: WebAppConfig) {
       "/api/auth/sign-up/email",
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          origin: new URL(request.url).origin,
+        },
         body: JSON.stringify({
           name,
           email,
@@ -483,7 +489,10 @@ export function createWebApp(config: WebAppConfig) {
     const redirectTo = new URL("/reset-password", request.url).toString();
     const response = await apiRequest("/api/auth/request-password-reset", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        origin: new URL(request.url).origin,
+      },
       body: JSON.stringify({ email, redirectTo }),
     });
 
@@ -506,7 +515,10 @@ export function createWebApp(config: WebAppConfig) {
     const newPassword = String(formData.get("password") ?? "");
     const response = await apiRequest("/api/auth/reset-password", {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        origin: new URL(request.url).origin,
+      },
       body: JSON.stringify({ token, newPassword }),
     });
 
@@ -760,6 +772,7 @@ export function createWebApp(config: WebAppConfig) {
   }
 
   async function logoutHandler(
+    request: Request,
     cookieHeader: string | undefined,
   ): Promise<Response> {
     const sessionCheck = await requireSession(cookieHeader);
@@ -769,7 +782,10 @@ export function createWebApp(config: WebAppConfig) {
       "/api/auth/sign-out",
       {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: {
+          "content-type": "application/json",
+          origin: new URL(request.url).origin,
+        },
         body: JSON.stringify({}),
       },
       cookieHeader,
@@ -892,7 +908,7 @@ export function createWebApp(config: WebAppConfig) {
       }
 
       if (path === "/logout" && request.method === "POST") {
-        return logoutHandler(cookieHeader);
+        return logoutHandler(request, cookieHeader);
       }
 
       if (path === "/account" && request.method === "GET") {
