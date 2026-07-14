@@ -41,6 +41,7 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
   const http = deps.fetch ?? globalThis.fetch;
   let credentialGeneration = 0 as CredentialGeneration;
   let credentialOperation = Promise.resolve();
+  let cachedToken: string | null | undefined;
 
   function enqueueCredentialOperation<T>(operation: () => Promise<T>): Promise<T> {
     const result = credentialOperation.then(operation);
@@ -53,6 +54,12 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
 
   function advanceCredentialGeneration(): void {
     credentialGeneration = (credentialGeneration + 1) as CredentialGeneration;
+  }
+
+  async function readToken(): Promise<string | null> {
+    if (cachedToken !== undefined) return cachedToken;
+    cachedToken = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+    return cachedToken;
   }
 
   function buildBrowserLoginUrl({
@@ -106,18 +113,20 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
 
     await enqueueCredentialOperation(async () => {
       await deps.keychain.set(TOKEN_SERVICE, TOKEN_ACCOUNT, parsed.data.token);
+      cachedToken = parsed.data.token;
       advanceCredentialGeneration();
     });
     return parsed.data.token;
   }
 
   async function getToken(): Promise<string | null> {
-    return enqueueCredentialOperation(() => deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT));
+    return enqueueCredentialOperation(readToken);
   }
 
   async function clearToken(): Promise<void> {
     await enqueueCredentialOperation(async () => {
       await deps.keychain.remove(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      cachedToken = null;
       advanceCredentialGeneration();
     });
   }
@@ -127,9 +136,10 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
   ): Promise<boolean> {
     return enqueueCredentialOperation(async () => {
       if (credentialGeneration !== observedGeneration) return false;
-      if ((await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT)) === null) return false;
+      if ((await readToken()) === null) return false;
 
       await deps.keychain.remove(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      cachedToken = null;
       advanceCredentialGeneration();
       return true;
     });
@@ -137,7 +147,7 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
 
   async function isAuthenticated(): Promise<boolean> {
     return enqueueCredentialOperation(async () => {
-      const token = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      const token = await readToken();
       return token !== null;
     });
   }
@@ -147,7 +157,7 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
   ): Promise<ObservedCredentialState> {
     return enqueueCredentialOperation(async () => {
       if (credentialGeneration !== observedGeneration) return "stale";
-      const token = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      const token = await readToken();
       return token === null ? "current_absent" : "current_present";
     });
   }
@@ -176,7 +186,7 @@ export function createDesktopAuthClient(deps: DesktopAuthClientDependencies) {
 
   async function getAuthorizationObservation(): Promise<DesktopAuthorizationObservation> {
     return enqueueCredentialOperation(async () => {
-      const token = await deps.keychain.get(TOKEN_SERVICE, TOKEN_ACCOUNT);
+      const token = await readToken();
       return {
         authorizationHeader: token ? `Bearer ${token}` : null,
         credentialGeneration,

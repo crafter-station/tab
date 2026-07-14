@@ -304,6 +304,38 @@ describe("desktop auth client", () => {
     );
   });
 
+  it("reads an unchanged credential from the keychain only once", async () => {
+    let getCount = 0;
+    const client = createDesktopAuthClient({
+      apiBaseUrl: TEST_ORIGIN,
+      webBaseUrl: "http://localhost:3000",
+      deviceId: "desktop-device-cached-credential",
+      appVersion: "0.0.1",
+      platform: "darwin",
+      keychain: {
+        set: async () => {},
+        get: async () => {
+          getCount += 1;
+          return "token-a";
+        },
+        remove: async () => {},
+      },
+    });
+
+    const [header, token, authenticated] = await Promise.all([
+      client.getAuthorizationHeader(),
+      client.getToken(),
+      client.isAuthenticated(),
+    ]);
+    const observation = await client.getAuthorizationObservation();
+
+    expect(header).toBe("Bearer token-a");
+    expect(token).toBe("token-a");
+    expect(authenticated).toBe(true);
+    expect(await client.getCredentialState(observation.credentialGeneration)).toBe("current_present");
+    expect(getCount).toBe(1);
+  });
+
   it("serializes replacement storage behind a generation-conditional removal", async () => {
     let token: string | null = "token-a";
     const removeStarted = createDeferred<void>();
