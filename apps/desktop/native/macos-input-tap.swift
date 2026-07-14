@@ -419,6 +419,16 @@ func emitPolledContextSnapshots() {
   emitAppContextTreeSnapshotIfChanged()
 }
 
+func invalidateGhosttyClickIfStillActive(_ clickedWindow: ActiveWindowSnapshot) {
+  // Frontmost application changes can settle after the global mouse event.
+  // Do not invalidate the Ghostty session when this click actually switched apps.
+  DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+    guard activeWindowSnapshot() == clickedWindow else { return }
+    emitTextSessionSnapshotIfChanged(activeWindow: clickedWindow)
+    emit(["type": "context-invalidated", "message": "mouse_input"])
+  }
+}
+
 func currentKeyboardLayout() -> UnsafePointer<UCKeyboardLayout>? {
   guard let inputSource = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
         let layoutData = TISGetInputSourceProperty(inputSource, kTISPropertyUnicodeKeyLayoutData) else {
@@ -514,10 +524,8 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
 
   if type == .leftMouseDown || type == .rightMouseDown || type == .otherMouseDown {
     let activeWindow = activeWindowSnapshot()
-    if activeWindow?.bundleId == "com.mitchellh.ghostty" {
-      emitActiveWindowIfChanged(snapshot: activeWindow)
-      emitTextSessionSnapshotIfChanged(activeWindow: activeWindow)
-      emit(["type": "context-invalidated", "message": "mouse_input"])
+    if let activeWindow = activeWindow, activeWindow.bundleId == "com.mitchellh.ghostty" {
+      invalidateGhosttyClickIfStillActive(activeWindow)
     }
     return Unmanaged.passUnretained(event)
   }

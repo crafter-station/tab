@@ -28,8 +28,15 @@ export type TypingContextBuffer = {
   setSecureInput(active: boolean): void;
   setPaused(active: boolean): void;
   clear(): void;
+  clearAll(): void;
   getState(): TypingContextState;
   getSnapshot(): SafeTypingContextSnapshot;
+};
+
+export type TypingContextBufferOptions = {
+  readonly retentionMs?: number;
+  readonly maxRetainedSessions?: number;
+  readonly now?: () => number;
 };
 
 export type TypingDeletionUnit = "character" | "token";
@@ -216,12 +223,53 @@ function normalizeMacOSAccentPickerText(text: string): string {
   });
 }
 
-export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffer {
+export function createTypingContextBuffer(
+  maxLength = 5_000,
+  options: TypingContextBufferOptions = {},
+): TypingContextBuffer {
+  const retentionMs = options.retentionMs ?? 5 * 60 * 1_000;
+  const maxRetainedSessions = options.maxRetainedSessions ?? 20;
+  const now = options.now ?? Date.now;
+  const retainedSessions = new Map<string, {
+    context: string;
+    source: SuggestionContextSource;
+    savedAt: number;
+  }>();
   let context = "";
   let activeApplication: ActiveApplication | null = null;
   let secureInput = false;
   let paused = false;
   let lastSource: SuggestionContextSource = "typed_text";
+
+  function clearAllContexts(): void {
+    context = "";
+    retainedSessions.clear();
+  }
+
+  function retainCurrentSession(): void {
+    const key = activeApplicationKey(activeApplication);
+    if (!key || context.length === 0 || isPrivateContext()) return;
+    retainedSessions.delete(key);
+    retainedSessions.set(key, { context, source: lastSource, savedAt: now() });
+    while (retainedSessions.size > maxRetainedSessions) {
+      const oldestKey = retainedSessions.keys().next().value;
+      if (oldestKey === undefined) break;
+      retainedSessions.delete(oldestKey);
+    }
+  }
+
+  function restoreSession(app: ActiveApplication | null): void {
+    context = "";
+    lastSource = "typed_text";
+    const key = activeApplicationKey(app);
+    if (!key) return;
+
+    const restored = retainedSessions.get(key);
+    retainedSessions.delete(key);
+    if (!restored || now() - restored.savedAt > retentionMs) return;
+    context = restored.context;
+    lastSource = restored.source;
+  }
 
   function isPrivateContext(): boolean {
     return secureInput || isPrivateActiveApplication(activeApplication);
@@ -284,27 +332,31 @@ export function createTypingContextBuffer(maxLength = 5_000): TypingContextBuffe
     setActiveApplication(app) {
       if (paused) return;
       if (activeApplicationKey(app) !== activeApplicationKey(activeApplication)) {
-        context = "";
+        retainCurrentSession();
+        restoreSession(app);
       }
       activeApplication = app;
       if (isPasswordManagerContext()) {
-        context = "";
+        clearAllContexts();
       }
     },
     setSecureInput(active) {
       secureInput = active;
       if (active) {
-        context = "";
+        clearAllContexts();
       }
     },
     setPaused(active) {
       paused = active;
       if (active) {
-        context = "";
+        clearAllContexts();
       }
     },
     clear() {
       context = "";
+    },
+    clearAll() {
+      clearAllContexts();
     },
     getState,
     getSnapshot() {

@@ -369,7 +369,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     onSuggestionFailed: recordLocalFailure,
     onSecretLikeContextDetected: () => {
       deps.clearAppContext?.();
-      deps.typingContext.clear();
+      deps.typingContext.clearAll();
       outputs.onSecretLikeContextDetected?.();
     },
     debounceMs: deps.debounceMs,
@@ -395,7 +395,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     onRequestFinished: outputs.onRequestFinished,
     onSecretLikeContextDetected: () => {
       deps.clearAppContext?.();
-      deps.typingContext.clear();
+      deps.typingContext.clearAll();
       outputs.onSecretLikeContextDetected?.();
     },
     triggerPolicy,
@@ -627,7 +627,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
         setPreviouslyActiveApplication(textSessionSnapshot.activeApplication);
         if (isPrivateTextSessionSnapshot(textSessionSnapshot)) {
           deps.clearAppContext?.();
-          deps.typingContext.clear();
+          deps.typingContext.clearAll();
         }
       }
       contextChanged({ suppressUnchangedTextSession: true });

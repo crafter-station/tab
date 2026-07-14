@@ -49,6 +49,13 @@ test("macOS helper captures terminal paste and invalidates uncertain edits", () 
   assert.match(nativeHelper, /CGEventType\.leftMouseDown/);
 });
 
+test("macOS helper does not invalidate Ghostty when a mouse click switches apps", () => {
+  const invalidationBody = functionBody(nativeHelper, "func invalidateGhosttyClickIfStillActive");
+  assert.match(invalidationBody, /DispatchQueue\.main\.asyncAfter/);
+  assert.match(invalidationBody, /guard activeWindowSnapshot\(\) == clickedWindow else \{ return \}/);
+  assert.match(invalidationBody, /"message": "mouse_input"/);
+});
+
 test("macOS helper does not turn passive Ghostty output into typing activity", () => {
   assert.match(
     nativeHelper,

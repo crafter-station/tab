@@ -1385,7 +1385,7 @@ app.on("will-quit", () => {
   inputTapProcess?.kill();
   localInference.stop();
   memoryExtractionDispatcher.stop();
-  typingContextBuffer.clear();
+  typingContextBuffer.clearAll();
   void authCallback.close().catch(() => {});
 });
 

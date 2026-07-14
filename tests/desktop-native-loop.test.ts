@@ -135,15 +135,68 @@ describe("desktop native suggestion loop", () => {
       expect(buffer.getState().context).toBe("");
     });
 
-    it("does not resume old context when switching back to a previous window", () => {
+    it("resumes recent context when returning to a previous app window", () => {
+      let now = 1_000;
+      const buffer = createTypingContextBuffer(5_000, { now: () => now });
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+      buffer.appendText("Explain this function", "terminal_input");
+
+      now += 30_000;
+      buffer.setActiveApplication({ bundleId: "com.google.Chrome", windowId: "window:2" });
+      buffer.appendText("Search query");
+
+      now += 30_000;
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+
+      expect(buffer.getState().context).toBe("Explain this function");
+      expect(buffer.getState().contextSource).toBe("terminal_input");
+    });
+
+    it("expires context retained for an inactive app window", () => {
+      let now = 1_000;
+      const buffer = createTypingContextBuffer(5_000, { retentionMs: 60_000, now: () => now });
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+      buffer.appendText("Old terminal context", "terminal_input");
+      buffer.setActiveApplication({ bundleId: "com.google.Chrome", windowId: "window:2" });
+
+      now += 60_001;
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+
+      expect(buffer.getState().context).toBe("");
+    });
+
+    it("clears only the active session on ordinary context invalidation", () => {
       const buffer = createTypingContextBuffer();
-      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:1" });
-      buffer.appendText("Hello");
-      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:2" });
-      buffer.appendText("World");
-      buffer.setActiveApplication({ bundleId: "com.apple.TextEdit", windowId: "window:1" });
-      buffer.appendText("Again");
-      expect(buffer.getState().context).toBe("Again");
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+      buffer.appendText("Keep this", "terminal_input");
+      buffer.setActiveApplication({ bundleId: "com.google.Chrome", windowId: "window:2" });
+      buffer.appendText("Discard this");
+      buffer.clear();
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+
+      expect(buffer.getState().context).toBe("Keep this");
+    });
+
+    it("purges retained sessions when secure input starts", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+      buffer.appendText("Do not retain this", "terminal_input");
+      buffer.setActiveApplication({ bundleId: "com.google.Chrome", windowId: "window:2" });
+      buffer.setSecureInput(true);
+      buffer.setSecureInput(false);
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+
+      expect(buffer.getState().context).toBe("");
+    });
+
+    it("purges retained sessions when entering a private application", () => {
+      const buffer = createTypingContextBuffer();
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+      buffer.appendText("Do not retain this", "terminal_input");
+      buffer.setActiveApplication({ bundleId: "com.1password.1password" });
+      buffer.setActiveApplication({ bundleId: "com.mitchellh.ghostty", windowId: "window:1" });
+
+      expect(buffer.getState().context).toBe("");
     });
 
     it("clears context on secure input", () => {
