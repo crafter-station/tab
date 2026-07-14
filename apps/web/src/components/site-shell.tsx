@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowUpRight, CaretDown, List } from "@phosphor-icons/react";
+import { ArrowUpRight, CaretDown, Desktop, List, Moon, Sun } from "@phosphor-icons/react";
 import {
   Button,
   DropdownMenu,
@@ -15,7 +15,9 @@ import {
   SheetTitle,
   SheetTrigger,
   TabMark,
+  type ThemeMode,
 } from "@tab/ui";
+import { useTheme } from "./theme-provider.tsx";
 
 const primaryLinks = [
   { href: "/#how-it-works", label: "How it works" },
@@ -30,6 +32,12 @@ const secondaryLinks = [
 ] as const;
 
 const mobileLinks = [...primaryLinks, ...secondaryLinks] as const;
+
+const themeModes = [
+  { id: "light", label: "Light", icon: Sun },
+  { id: "dark", label: "Dark", icon: Moon },
+  { id: "system", label: "System", icon: Desktop },
+] as const;
 
 const baseFooterGroups = [
   {
@@ -72,6 +80,33 @@ function Brand() {
       <TabMark className="size-7 transition-transform duration-150 ease-[var(--tab-ease-out)] group-active:scale-[0.97]" />
       <span className="font-[var(--font-display)] text-base font-bold">Tab</span>
     </a>
+  );
+}
+
+function FooterThemeToggle() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <div className="flex items-center gap-0.5 rounded-[var(--radius-control)] border border-border bg-muted/40 p-0.5" role="group" aria-label="Theme">
+      {themeModes.map((mode) => {
+        const Icon = mode.icon;
+        return (
+          <Button
+            key={mode.id}
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-7 text-muted-foreground aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm"
+            aria-label={`${mode.label} theme`}
+            aria-pressed={theme === mode.id}
+            title={`${mode.label} theme`}
+            onClick={() => setTheme(mode.id as ThemeMode)}
+          >
+            <Icon aria-hidden="true" />
+          </Button>
+        );
+      })}
+    </div>
   );
 }
 
@@ -172,9 +207,14 @@ export function SiteFooter({ authenticated = false }: { authenticated?: boolean 
             ))}
           </div>
         </div>
-        <div className="mt-12 flex flex-col gap-3 border-t border-border pt-6 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} Crafter Station. All rights reserved.</p>
-          <p>Made for macOS. You choose what Tab adds.</p>
+        <div className="mt-12 border-t border-border pt-6 text-xs text-muted-foreground">
+          <div className="flex justify-end">
+            <FooterThemeToggle />
+          </div>
+          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p>© {new Date().getFullYear()} Crafter Station. All rights reserved.</p>
+            <p>Made for macOS. You choose what Tab adds.</p>
+          </div>
         </div>
       </div>
     </footer>

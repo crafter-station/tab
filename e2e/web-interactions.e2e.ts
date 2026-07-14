@@ -60,15 +60,18 @@ test("marketing controls use hydrated Tabs and Toggle state", async ({ page }) =
   await expect(pause).toHaveAttribute("aria-label", "Resume animation");
 });
 
-test("stored theme selection persists across navigation", async ({ page }) => {
-  await page.addInitScript(() => localStorage.setItem("tab-theme", "dark"));
+test("footer theme selection persists across navigation", async ({ page }) => {
   await page.goto("/");
 
+  const darkTheme = page.getByRole("button", { name: "Dark theme" });
+  await waitForHydration(darkTheme);
+  await darkTheme.click();
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
   await expect.poll(() => page.evaluate(() => localStorage.getItem("tab-theme"))).toBe("dark");
 
   await page.goto("/pricing");
   await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+  await expect(page.getByRole("button", { name: "Dark theme" })).toHaveAttribute("aria-pressed", "true");
 });
 
 test("Option+Tab advances through consecutive Suggestions", async ({ page }) => {
