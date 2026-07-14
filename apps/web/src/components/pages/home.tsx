@@ -49,17 +49,17 @@ const steps = [
   {
     number: "01",
     title: "Keep typing",
-    description: "Tab uses recent typing from the active text field to prepare a short continuation.",
+    description: "Tab uses recent Typing Context from the active text field to prepare the next short phrase.",
   },
   {
     number: "02",
-    title: "Preview the next words",
-    description: "The suggestion appears separately from your draft, so nothing changes before you act.",
+    title: "Press Option+Tab",
+    description: "Accept the current Suggestion without leaving the keyboard. Nothing changes until you act.",
   },
   {
     number: "03",
-    title: "Accept or ignore",
-    description: "Press Option+Tab to insert it, or keep typing to dismiss it.",
+    title: "Keep going",
+    description: "The inserted phrase becomes context for the next Suggestion. Repeat, or keep typing to ignore it.",
   },
 ] as const;
 
@@ -155,7 +155,7 @@ function WorkflowMap() {
   return (
     <WorkflowInteraction id="workflow-animation" className="tab-workflow overflow-hidden rounded-[var(--radius-surface)] border border-border bg-card">
       <div className="flex items-center justify-between gap-4 border-b border-border bg-muted/30 px-4 py-3 sm:px-5">
-        <div><p className="text-sm font-bold">Suggestion path</p><p className="text-xs text-muted-foreground">From your draft to a deliberate insertion</p></div>
+        <div><p className="text-sm font-bold">The Acceptance loop</p><p className="text-xs text-muted-foreground">Each inserted phrase makes room for the next</p></div>
         <MotionToggle controls="workflow-animation" />
       </div>
       <div className="tab-workflow-map relative isolate min-h-[19rem] overflow-hidden bg-[var(--tab-surface-sunken)] sm:min-h-[23rem]">
@@ -170,7 +170,7 @@ function WorkflowMap() {
 
         <div className="absolute left-1/2 top-[7%] w-[min(76%,23rem)] -translate-x-1/2 rounded-[var(--radius-card)] border border-border bg-card p-3 shadow-[var(--tab-shadow-card)] sm:p-4">
           <p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Your thought</p>
-          <p className="mt-1 text-sm font-semibold leading-snug sm:text-base">Would Tuesday afternoon <span className="tab-workflow-completion text-muted-foreground">work for a quick review?</span></p>
+          <p className="mt-1 text-sm font-semibold leading-snug sm:text-base">Would Tuesday afternoon<span className="tab-workflow-fragment" data-workflow-fragment="0"> work for a review?</span><span className="tab-workflow-fragment" data-workflow-fragment="1"> I'll send the draft.</span><span className="tab-workflow-fragment" data-workflow-fragment="2"> Does 2 PM work?</span></p>
         </div>
 
         {[{ name: "Mail", src: "/logos/apple.svg", side: "left-[7%]" }, { name: "Slack", src: "/logos/slack.svg", side: "right-[7%]" }].map((app) => (
@@ -187,8 +187,9 @@ function WorkflowMap() {
             data-workflow-accept
             suggestion={(
               <>
-                <span className="tab-workflow-ready-label">work for a quick review?</span>
-                <span className="tab-workflow-accepted-label hidden">Added to your sentence</span>
+                <span className="tab-workflow-command-label" data-workflow-command-label="0">work for a review?</span>
+                <span className="tab-workflow-command-label" data-workflow-command-label="1">I'll send the draft.</span>
+                <span className="tab-workflow-command-label" data-workflow-command-label="2">Does 2 PM work?</span>
               </>
             )}
           />
@@ -398,8 +399,8 @@ export function HomePage() {
       <section className="grid gap-12 py-10 lg:grid-cols-[minmax(0,0.88fr)_minmax(31rem,1.12fr)] lg:items-center lg:gap-16 lg:py-20">
         <div className="marketing-intro grid content-center gap-6">
           <PageKicker>Autocomplete across your Mac</PageKicker>
-          <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.625rem,7vw,6.4rem)] font-bold leading-[0.96] tracking-[-0.035em] sm:leading-[0.9] lg:leading-[0.88]">Finish the sentence without leaving the app.</h1>
-          <p className="max-w-[38rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next words in supported Mac text fields. Press Option+Tab to insert them, or keep typing to ignore them.</p>
+          <h1 className="max-w-[11ch] text-balance font-[var(--font-display)] text-[clamp(2.625rem,7vw,6.4rem)] font-bold leading-[0.96] tracking-[-0.035em] sm:leading-[0.9] lg:leading-[0.88]">Keep the thought moving without leaving the app.</h1>
+          <p className="max-w-[38rem] text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">Tab suggests the next phrase in supported Mac text fields. Press Option+Tab to insert it, then again for the next. Keep typing whenever you want to ignore one.</p>
           <p className="max-w-[38rem] text-pretty text-sm leading-relaxed text-muted-foreground">Automatic Suggestions run on your Mac. Double-tap Option when you want Deep Complete.</p>
           <div className="flex flex-col gap-3 min-[420px]:flex-row">
             <Button asChild size="lg"><a href="/download/tab.dmg"><DownloadSimple data-icon="inline-start" aria-hidden="true" />Download for Mac</a></Button>
@@ -420,7 +421,7 @@ export function HomePage() {
       <section id="how-it-works" className="scroll-mt-24 py-20 sm:py-28">
         <div className="max-w-3xl">
           <PageKicker>How it works</PageKicker>
-          <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">Three steps. No new writing workflow.</h2>
+          <h2 className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.5rem,5vw,4.75rem)] font-bold leading-[0.96] tracking-[-0.03em]">One shortcut. Then the next Suggestion.</h2>
         </div>
         <div className="mt-12"><WorkflowMap /></div>
       </section>

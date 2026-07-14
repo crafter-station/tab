@@ -166,31 +166,38 @@
   filter: drop-shadow(0 0 4px var(--tab-illustration-signal));
 }
 
-.tab-workflow-completion {
-  transition: color 220ms var(--tab-ease-out);
-}
-
 .tab-workflow-command {
-  animation: tab-workflow-command 3.2s var(--tab-ease-in-out) infinite;
+  transition:
+    opacity 120ms var(--tab-ease-out),
+    transform 120ms var(--tab-ease-out);
 }
 
-.tab-workflow[data-accepted="true"] .tab-workflow-completion {
-  color: var(--foreground);
-}
-
-.tab-workflow[data-accepted="true"] .tab-workflow-command {
-  color: var(--primary-foreground);
-  background: var(--primary);
-  border-color: var(--primary);
-  animation: none;
-}
-
-.tab-workflow[data-accepted="true"] .tab-workflow-ready-label {
+.tab-workflow-fragment,
+.tab-workflow-command-label {
   display: none;
 }
 
-.tab-workflow[data-accepted="true"] .tab-workflow-accepted-label {
+.tab-workflow[data-step="0"] [data-workflow-fragment="0"],
+.tab-workflow[data-step="0"] [data-workflow-command-label="0"],
+.tab-workflow[data-step="1"] [data-workflow-fragment="0"],
+.tab-workflow[data-step="1"] [data-workflow-fragment="1"],
+.tab-workflow[data-step="1"] [data-workflow-command-label="1"],
+.tab-workflow[data-step="2"] [data-workflow-fragment="0"],
+.tab-workflow[data-step="2"] [data-workflow-fragment="1"],
+.tab-workflow[data-step="2"] [data-workflow-fragment="2"],
+.tab-workflow[data-step="2"] [data-workflow-command-label="2"] {
   display: inline;
+}
+
+.tab-workflow[data-step="0"] [data-workflow-fragment="0"],
+.tab-workflow[data-step="1"] [data-workflow-fragment="1"],
+.tab-workflow[data-step="2"] [data-workflow-fragment="2"] {
+  color: var(--muted-foreground);
+}
+
+.tab-workflow[data-accepted="true"] .tab-workflow-command {
+  opacity: 0;
+  transform: scale(0.985);
 }
 
 .tab-showcase-canvas {
@@ -491,17 +498,6 @@
 @keyframes tab-app-marquee {
   to {
     transform: translate3d(-50%, 0, 0);
-  }
-}
-
-@keyframes tab-workflow-command {
-  0%,
-  72%,
-  100% {
-    transform: translate3d(0, 0, 0);
-  }
-  80% {
-    transform: translate3d(0, -0.2rem, 0);
   }
 }
 

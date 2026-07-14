@@ -112,6 +112,21 @@ test("double Option requests Deep Complete before Option+Tab accepts it", async 
   await expect(demo.locator("[data-deep-announcement]")).toHaveText("Deep Complete suggestion accepted.");
 });
 
+test("reduced motion keeps both workflows usable without looping movement", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+
+  await expect(page.locator(".tab-motion-toggle").first()).toBeHidden();
+  await expect(page.locator(".tab-deep-key").first()).toHaveCSS("animation-name", "none");
+  await expect(page.locator(".tab-app-marquee-track")).toHaveCSS("animation-name", "none");
+
+  const demo = page.getByRole("region", { name: "Interactive Tab autocomplete example" });
+  await waitForHydration(demo);
+  await demo.focus();
+  await page.keyboard.press("Alt+Tab");
+  await expect(demo).toHaveAttribute("data-step", "1");
+});
+
 test("links and account forms remain usable without JavaScript", async ({ browser }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();

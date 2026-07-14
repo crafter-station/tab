@@ -41,7 +41,7 @@ describe("Web download surface", () => {
   it("renders a direct, interactive landing-page funnel", async () => {
     const body = homeSource;
     expect(body).toInclude('href="/download/tab.dmg"');
-    expect(body).toInclude("Finish the sentence without leaving the app");
+    expect(body).toInclude("Keep the thought moving without leaving the app");
     expect(autocompleteSource).toInclude("data-tab-demo");
     expect(autocompleteSource).toInclude("Interactive example");
     expect(body).toInclude('id="how-it-works"');
