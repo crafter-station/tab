@@ -7,6 +7,8 @@ import {
   CheckCircle,
   Command,
   DownloadSimple,
+  Pause,
+  Play,
   Plus,
   ShieldCheck,
 } from "@phosphor-icons/react";
@@ -152,9 +154,8 @@ function AutocompleteDemo() {
           <span className="size-2.5 rounded-full bg-foreground/[0.08]" />
         </div>
         <p className="text-xs font-semibold text-muted-foreground">Interactive example</p>
-        <button className="inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-demo-replay>
-          <ArrowClockwise aria-hidden="true" />
-          Replay
+        <button className="inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 ease-[var(--tab-ease-out)] hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-demo-replay aria-label="Replay interactive example" title="Replay">
+          <ArrowClockwise className="size-4" data-replay-icon aria-hidden="true" />
         </button>
       </div>
       <div className="flex gap-2 border-b border-border p-3" role="tablist" aria-label="Choose an app example">
@@ -211,15 +212,19 @@ function MotionToggle({ controls, className }: { controls: string; className?: s
   return (
     <button
       className={cn(
-        "tab-motion-toggle inline-flex cursor-pointer items-center rounded-[var(--radius-control)] border border-border bg-background/90 px-2 py-1 text-xs font-semibold text-muted-foreground shadow-[var(--tab-shadow-control)] transition-colors duration-150 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "tab-motion-toggle inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
       type="button"
       data-motion-toggle
       aria-controls={controls}
       aria-pressed="false"
+      aria-label="Pause animation"
+      title="Pause animation"
     >
-      <span data-motion-toggle-label>Pause animation</span>
+      <Pause className="tab-motion-pause-icon size-4 [grid-area:1/1]" aria-hidden="true" />
+      <Play className="tab-motion-play-icon size-4 [grid-area:1/1]" aria-hidden="true" />
+      <span className="sr-only" data-motion-toggle-label>Pause animation</span>
     </button>
   );
 }
@@ -330,8 +335,8 @@ function MemoryShowcase() {
           <div><p className="text-sm font-bold">Memory in context</p><p className="text-xs text-muted-foreground">A matching detail shapes the suggestion</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="memory-showcase-animation" />
-            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
-              <ArrowClockwise aria-hidden="true" /> Replay
+            <button className="tab-showcase-replay inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay aria-label="Replay animation" title="Replay animation">
+              <ArrowClockwise className="size-4" data-replay-icon aria-hidden="true" />
             </button>
           </div>
         </div>
@@ -394,8 +399,8 @@ function PrivacyPipeline() {
           <div><p className="text-sm font-bold">Deep Complete boundary</p><p className="text-xs text-muted-foreground">What moves after your explicit action</p></div>
           <div className="flex shrink-0 items-center gap-1">
             <MotionToggle controls="privacy-showcase-animation" />
-            <button className="tab-showcase-replay inline-flex cursor-pointer items-center gap-1.5 rounded-[var(--radius-control)] px-2 py-1 text-xs font-semibold text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay>
-              <ArrowClockwise aria-hidden="true" /> Replay
+            <button className="tab-showcase-replay inline-grid size-8 shrink-0 cursor-pointer place-items-center rounded-[var(--radius-control)] text-muted-foreground transition-[color,transform] duration-150 hover:text-foreground active:scale-[0.97] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" type="button" data-showcase-replay aria-label="Replay animation" title="Replay animation">
+              <ArrowClockwise className="size-4" data-replay-icon aria-hidden="true" />
             </button>
           </div>
         </div>

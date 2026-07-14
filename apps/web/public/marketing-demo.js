@@ -64,6 +64,23 @@
     }));
   }
 
+  function animateReplay(control) {
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const icon = control.querySelector("[data-replay-icon]");
+    if (!icon?.animate) return;
+    icon.getAnimations?.().forEach((animation) => animation.cancel());
+    icon.animate(
+      [
+        { transform: "rotate(0deg)" },
+        { transform: "rotate(360deg)" },
+      ],
+      {
+        duration: 420,
+        easing: "cubic-bezier(0.23, 1, 0.32, 1)",
+      },
+    );
+  }
+
   function setMotionPaused(region, paused) {
     region.dataset.motionPaused = String(paused);
     region.querySelectorAll("svg").forEach((svg) => {
@@ -73,8 +90,11 @@
     });
     region.querySelectorAll("[data-motion-toggle]").forEach((button) => {
       button.setAttribute("aria-pressed", String(paused));
+      const nextLabel = paused ? "Resume animation" : "Pause animation";
+      button.setAttribute("aria-label", nextLabel);
+      button.setAttribute("title", nextLabel);
       const label = button.querySelector("[data-motion-toggle-label]");
-      if (label) label.textContent = paused ? "Resume animation" : "Pause animation";
+      if (label) label.textContent = nextLabel;
     });
   }
 
@@ -108,6 +128,7 @@
     }
 
     if (control.hasAttribute("data-showcase-replay")) {
+      animateReplay(control);
       const showcase = control.closest("[data-animated-showcase]");
       if (showcase) replayShowcase(showcase);
       return;
@@ -132,6 +153,7 @@
       return;
     }
 
+    animateReplay(control);
     replay(demo);
   });
 

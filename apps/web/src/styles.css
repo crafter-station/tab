@@ -113,6 +113,27 @@
   mask: var(--tab-app-icon-mask) center / contain no-repeat;
 }
 
+.tab-motion-pause-icon,
+.tab-motion-play-icon {
+  transition:
+    opacity 160ms var(--tab-ease-out),
+    transform 160ms var(--tab-ease-out),
+    filter 160ms var(--tab-ease-out);
+}
+
+.tab-motion-play-icon,
+.tab-motion-toggle[aria-pressed="true"] .tab-motion-pause-icon {
+  opacity: 0;
+  transform: scale(0.92);
+  filter: blur(1px);
+}
+
+.tab-motion-toggle[aria-pressed="true"] .tab-motion-play-icon {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0);
+}
+
 .tab-workflow-map {
   background-image:
     radial-gradient(circle at 50% 48%, var(--tab-illustration-wash) 0, transparent 62%),
