@@ -13,3 +13,4 @@ apps/desktop/.dev/
 .sandcastle/*.auth.json
 apps/desktop/release
 dev.vars.prod
+*.p8

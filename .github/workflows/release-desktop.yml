@@ -9,7 +9,30 @@ permissions:
   contents: write
 
 jobs:
+  # Releases can also be published directly from a dev machine via
+  # apps/desktop/scripts/build-and-upload.sh, which creates the v* tag and
+  # the GitHub Release itself. In that case this workflow still fires on the
+  # tag push, so skip the build when the release already exists.
+  guard:
+    runs-on: ubuntu-latest
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - name: Check for existing release
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $GITHUB_REF_NAME already exists (published locally); skipping CI build."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
   release:
+    needs: guard
+    if: needs.guard.outputs.skip != 'true'
     runs-on: macos-14
     env:
       CSC_LINK: ${{ secrets.MACOS_CERTIFICATE }}

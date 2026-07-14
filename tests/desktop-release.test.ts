@@ -68,11 +68,18 @@ describe("Desktop release packaging", () => {
     expect(lower).not.toInclude("kTCCServiceSystemPolicyAllFiles".toLowerCase());
   });
 
-  it("has a notarization script that skips when signing credentials are missing", async () => {
-    const script = await Bun.file("apps/desktop/scripts/notarize.cjs").text();
-    expect(script).toInclude("notarize");
-    expect(script).toInclude("APPLE_API_KEY");
-    expect(script).toInclude("APPLE_API_KEY_ID");
+  it("notarizes via electron-builder with API key credentials sourced by the ship scripts", async () => {
+    const config = await Bun.file("apps/desktop/electron-builder.yml").text();
+    expect(config).toInclude("notarize: true");
+    expect(config).toInclude("releaseType: draft");
+
+    const shipScript = await Bun.file("apps/desktop/scripts/build-and-upload.sh").text();
+    expect(shipScript).toInclude("APPLE_API_KEY");
+    expect(shipScript).toInclude("APPLE_API_KEY_ID");
+    expect(shipScript).toInclude("APPLE_API_ISSUER");
+    expect(shipScript).toInclude("GH_TOKEN");
+    expect(shipScript).toInclude("source .env");
+    expect(shipScript).toInclude("--draft=false");
   });
 
   it("defaults packaged builds to the production web and API origins", async () => {

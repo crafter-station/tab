@@ -6,26 +6,29 @@ This checklist covers producing a signed, notarized, direct-download macOS build
 
 - macOS machine with Xcode command-line tools.
 - Valid Apple Developer ID Application certificate installed in Keychain Access.
-- App Store Connect API key with notarization access.
+- Apple ID, app-specific password, and Team ID for notarization.
 - `TAB_MAC_DOWNLOAD_URL` and `TAB_DESKTOP_LATEST_VERSION` set for the web surface.
 
 For GitHub releases, configure these Actions secrets:
 
 - `MACOS_CERTIFICATE`: base64-encoded Developer ID Application `.p12` certificate.
 - `MACOS_CERTIFICATE_PASSWORD`: password for the `.p12` certificate.
-- `APPLE_API_KEY`: contents of the App Store Connect API `.p8` key.
-- `APPLE_API_KEY_ID`: App Store Connect API key ID.
-- `APPLE_API_ISSUER`: App Store Connect API issuer UUID.
+- `APPLE_API_KEY`: contents of the App Store Connect API key `.p8` file.
+- `APPLE_API_KEY_ID`: the API key id.
+- `APPLE_API_ISSUER`: the API key issuer uuid.
 
 ## Environment variables
 
+Local releases read credentials from `apps/desktop/.env` (gitignored):
+
 ```sh
-export APPLE_API_KEY="/path/to/AuthKey_KEY_ID.p8"
-export APPLE_API_KEY_ID="KEY_ID"
-export APPLE_API_ISSUER="ISSUER_UUID"
-export TAB_MAC_DOWNLOAD_URL="https://downloads.tab.app/Tab-0.1.0.dmg"
-export TAB_DESKTOP_LATEST_VERSION="0.1.0"
+APPLE_API_KEY="./AuthKey_<id>.p8"   # App Store Connect API key, next to .env
+APPLE_API_KEY_ID="<key id>"
+APPLE_API_ISSUER="<issuer uuid>"
+GH_TOKEN="<PAT with Contents: write on crafter-station/tab>"
 ```
+
+For the web surface, also set `TAB_MAC_DOWNLOAD_URL` and `TAB_DESKTOP_LATEST_VERSION`.
 
 ## Build and package
 
@@ -49,18 +52,16 @@ export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 
 ## Signing and notarization
 
-- The `electron-builder.yml` sets `hardenedRuntime: true`, `gatekeeperAssess: false`, and points to `build/entitlements.mac.plist`.
+- The `electron-builder.yml` sets `hardenedRuntime: true`, `gatekeeperAssess: false`, `notarize: true`, and points to `build/entitlements.mac.plist`.
 - The entitlements file intentionally does **not** request Screen Recording (`kTCCServiceScreenCapture`) or Full Disk Access (`kTCCServiceSystemPolicyAllFiles`).
-- The `scripts/notarize.cjs` afterSign hook notarizes the `.app` with App Store Connect API key credentials. Apple ID credentials remain available as a local fallback.
-- If credentials are missing, the hook logs a warning and skips notarization so local builds still succeed.
-- After packaging, staple the app:
-  ```sh
-  xcrun stapler staple "release/mac-universal/Tab.app"
-  ```
-- Verify code signature:
+- electron-builder's built-in notarization uses the App Store Connect API key credentials `APPLE_API_KEY`/`APPLE_API_KEY_ID`/`APPLE_API_ISSUER` — locally from `apps/desktop/.env`, in CI from the Actions secrets (the workflow writes `APPLE_API_KEY_CONTENT` to a temp `.p8` file).
+- If credentials are missing, electron-builder logs a warning and skips notarization so local builds still succeed. Note that bare `bun run dist:mac` does NOT pass `.env` through to electron-builder — use `scripts/build-signed.sh` (build only) or `scripts/build-and-upload.sh` (build + publish), which source `.env` explicitly.
+- Stapling happens automatically after notarization.
+- Verify code signature and notarization:
   ```sh
   codesign -dv --verbose=4 "release/mac-universal/Tab.app"
   spctl -a -v "release/mac-universal/Tab.app"
+  xcrun stapler validate "release/mac-universal/Tab.app"
   ```
 
 ## Download surface
@@ -112,9 +113,23 @@ export TAB_DESKTOP_LATEST_VERSION="0.1.0"
 - Attach the DMG and ZIP artifacts to the GitHub release notes.
 - Note any blockers or follow-ups in the release issue.
 
-## GitHub release workflow
+## Publishing a release
 
-After the required Actions secrets are configured, publish a release by pushing a tag that matches the desktop package version:
+There are two publish paths. Both end with a GitHub Release `v<version>` on `crafter-station/tab` containing the DMG, ZIP, blockmap, `latest-mac.yml`, the stable `Tab.dmg` alias, and `SHA256SUMS.txt`.
+
+### From a dev machine (default)
+
+1. Bump the patch version in `apps/desktop/package.json`, commit, and push to `main`.
+2. Run:
+   ```sh
+   apps/desktop/scripts/build-and-upload.sh
+   ```
+   It builds, signs, notarizes, publishes via `electron-builder --publish always`, verifies the signed app, and uploads the `Tab.dmg` alias and checksums. Credentials come from `apps/desktop/.env`.
+3. The tag push fires `.github/workflows/release-desktop.yml`, whose guard job detects the existing release and skips the CI build.
+
+### From CI
+
+After the required Actions secrets are configured, publish by pushing a tag that matches the desktop package version:
 
 ```sh
 git tag v0.1.0

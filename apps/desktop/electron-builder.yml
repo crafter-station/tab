@@ -1,5 +1,6 @@
 appId: app.tab.desktop
 productName: Tab
+electronVersion: 43.0.0
 copyright: Copyright © Tab
 directories:
   output: release
@@ -25,6 +26,7 @@ mac:
         - universal
   hardenedRuntime: true
   gatekeeperAssess: false
+  notarize: true
   entitlements: build/entitlements.mac.plist
   entitlementsInherit: build/entitlements.mac.plist
   extendInfo:
@@ -33,8 +35,16 @@ mac:
   artifactName: "${productName}-${version}-${arch}.${ext}"
 dmg:
   sign: false
-afterSign: scripts/notarize.cjs
 publish:
+  # Releases are published as GitHub Releases on this same (public) repo.
+  # The auto-updater (electron-updater) reads latest-mac.yml straight from
+  # the repo's releases, so clients need no token. Publishing requires
+  # GH_TOKEN (in apps/desktop/.env) with Contents: write on crafter-station/tab.
   provider: github
   owner: crafter-station
   repo: tab
+  # draft: GitHub refuses to create a *published* release for a tag that
+  # doesn't exist yet (422 "Published releases must have a valid tag").
+  # build-and-upload.sh flips the draft live after all assets upload,
+  # which is when GitHub creates the v<version> tag.
+  releaseType: draft

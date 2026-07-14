@@ -30,6 +30,14 @@
 - Treat `apps/api/src/db/schema.ts` as the database source of truth. Run `bun run db:generate`; do not handwrite files under `apps/api/drizzle/`.
 - Validate generated migrations with `bun run db:migrate:local`. `bun run db:migrate` uses Drizzle's D1 HTTP driver and needs `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_DATABASE_ID`, and `CLOUDFLARE_D1_TOKEN`; `bun run db:migrate:remote` applies the generated files through Wrangler.
 
+## Desktop Releases
+
+- Desktop releases are GitHub Releases on this same public repo (`crafter-station/tab`), tagged `v<version>`. Pre-v1, bump only the patch version in `apps/desktop/package.json`.
+- Default path: bump the version, push to `main`, then run `apps/desktop/scripts/build-and-upload.sh` — it builds, signs, notarizes, publishes, and uploads the stable `Tab.dmg` alias. Credentials live in the gitignored `apps/desktop/.env` (`APPLE_API_KEY*` for notarization, `GH_TOKEN` for publishing).
+- `bun run dist:mac` alone does not load `apps/desktop/.env` into electron-builder; use `scripts/build-signed.sh` for a signed local build without publishing.
+- The `v*` tag created by a local publish fires `.github/workflows/release-desktop.yml`; its guard job sees the existing release and skips. CI-only publishing (push the tag yourself) still works and uses the Actions secrets.
+- Full manual verification steps: `docs/release-checklist.md`. The stable download URL is `https://github.com/crafter-station/tab/releases/latest/download/Tab.dmg`.
+
 ## Repository Workflow
 
 - Work tracking is GitHub Issues in `crafter-station/tab`; external pull requests are not a triage surface. See `docs/agents/issue-tracker.md`.
