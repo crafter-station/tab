@@ -5,16 +5,15 @@ import {
   type SuggestionRequest,
 } from "@tab/contracts";
 import type { RequestableTypingContextSnapshot } from "./typing-context.ts";
+import type { DeviceApiClient } from "./device-api-client.ts";
 
 export type ApiSuggestionClientDependencies = {
-  apiBaseUrl: string;
+  api: Pick<DeviceApiClient, "request">;
   deviceId: string;
   appVersion: string;
   platform: string;
   memoryEnabled?: boolean | (() => boolean);
   getCustomWritingInstructions?: () => string | undefined;
-  fetch?: typeof globalThis.fetch;
-  getAuthorizationHeader?: () => Promise<string | null>;
   onEntitlementError?: () => void;
 };
 
@@ -54,8 +53,6 @@ function buildSuggestionRequest(
 }
 
 export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies) {
-  const http = deps.fetch ?? globalThis.fetch;
-
   return async function requestSuggestion(
     snapshot: RequestableTypingContextSnapshot,
     options?: { signal?: AbortSignal },
@@ -67,17 +64,9 @@ export function createApiSuggestionClient(deps: ApiSuggestionClientDependencies)
     }
 
     try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      const authorization = await deps.getAuthorizationHeader?.();
-      if (authorization) {
-        headers.Authorization = authorization;
-      }
-
-      const response = await http(`${deps.apiBaseUrl}/suggestions`, {
+      const response = await deps.api.request("/suggestions", {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed.data),
         signal: options?.signal,
       });

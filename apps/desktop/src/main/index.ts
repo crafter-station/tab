@@ -47,6 +47,7 @@ import {
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
 import { createDesktopMemoryClient } from "./memory-client.ts";
+import { createDeviceApiClient } from "./device-api-client.ts";
 import { createMemoryExtractionWindow } from "./memory-extraction-window.ts";
 import { createMemoryExtractionDispatcher } from "./memory-extraction-dispatcher.ts";
 import { MACOS_PERMISSION_SETTINGS_URLS, createOnboardingManager, getMacOSAppBundlePath } from "./onboarding.ts";
@@ -224,9 +225,13 @@ const authClient = createDesktopAuthClient({
     await shell.openExternal(url);
   },
 });
+const deviceApi = createDeviceApiClient({
+  apiBaseUrl: API_BASE_URL,
+  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+});
 
 const requestCloudSuggestion = createApiSuggestionClient({
-  apiBaseUrl: API_BASE_URL,
+  api: deviceApi,
   deviceId: DEVICE_ID,
   appVersion: APP_VERSION,
   platform: process.platform,
@@ -235,7 +240,6 @@ const requestCloudSuggestion = createApiSuggestionClient({
     currentDesktopStatus?.entitlement?.capabilities.customWritingInstructions
       ? preferencesManager.get().suggestions.customWritingInstructions || undefined
       : undefined,
-  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
   onEntitlementError: () => settingsWindowManager.show(),
 });
 const completionHistory = createCompletionHistory((entries) => {
@@ -243,12 +247,10 @@ const completionHistory = createCompletionHistory((entries) => {
 });
 const requestDeepComplete: ReturnType<typeof createApiSuggestionClient> = requestCloudSuggestion;
 const recordInteractionTelemetry = createDesktopTelemetryClient({
-  apiBaseUrl: API_BASE_URL,
-  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+  api: deviceApi,
 });
 const synchronizeLocalAcceptance = createLocalAcceptanceUsageClient({
-  apiBaseUrl: API_BASE_URL,
-  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+  api: deviceApi,
 });
 
 async function synchronizeAcceptedWordLedger(): Promise<void> {
@@ -261,8 +263,7 @@ async function synchronizeAcceptedWordLedger(): Promise<void> {
 }
 
 const memoryClient = createDesktopMemoryClient({
-  apiBaseUrl: API_BASE_URL,
-  getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+  api: deviceApi,
 });
 
 const memoryExtractionWindow = createMemoryExtractionWindow({

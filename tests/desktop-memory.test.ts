@@ -7,12 +7,29 @@ import { BillingService, InMemoryBillingStorage } from "../apps/api/src/billing.
 import { PersonalMemoryService, InMemoryPersonalMemoryStorage } from "../apps/api/src/personal-memory.ts";
 import { InMemoryTelemetryStorage } from "../apps/api/src/telemetry.ts";
 import type { MemoryAgentModel, MemoryJob } from "../apps/api/src/personal-memory-extraction.ts";
-import { createDesktopMemoryClient } from "../apps/desktop/src/main/memory-client.ts";
+import {
+  createDesktopMemoryClient as createDesktopMemoryClientWithApi,
+  type DesktopMemoryClientDependencies,
+} from "../apps/desktop/src/main/memory-client.ts";
+import { createDeviceApiClient } from "../apps/desktop/src/main/device-api-client.ts";
 import { createMemoryExtractionDispatcher } from "../apps/desktop/src/main/memory-extraction-dispatcher.ts";
 import { createMemoryExtractionWindow } from "../apps/desktop/src/main/memory-extraction-window.ts";
 
 const TEST_ORIGIN = "http://localhost:8787";
 const textEncoder = new TextEncoder();
+
+function createDesktopMemoryClient(
+  deps: Omit<DesktopMemoryClientDependencies, "api"> & {
+    apiBaseUrl: string;
+    getAuthorizationHeader: () => Promise<string | null>;
+    fetch?: typeof globalThis.fetch;
+  },
+) {
+  const { apiBaseUrl, getAuthorizationHeader, fetch } = deps;
+  return createDesktopMemoryClientWithApi({
+    api: createDeviceApiClient({ apiBaseUrl, getAuthorizationHeader, fetch }),
+  });
+}
 
 type ScheduledTimer = { readonly id: number; readonly delayMs: number; readonly callback: () => void };
 
@@ -261,11 +278,10 @@ describe("desktop memory client", () => {
     expect(requests).toHaveLength(1);
     expect(requests[0].url).toBe(`${TEST_ORIGIN}/api/memory/extract`);
     expect(requests[0].init?.method).toBe("POST");
-    expect(requests[0].init?.headers).toMatchObject({
-      Authorization: "Bearer device-token",
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    });
+    const headers = new Headers(requests[0].init?.headers);
+    expect(headers.get("authorization")).toBe("Bearer device-token");
+    expect(headers.get("accept")).toBe("application/json");
+    expect(headers.get("content-type")).toBe("application/json");
     expect(JSON.parse(String(requests[0].init?.body))).toMatchObject({ batchId: "batch-client" });
   });
 });

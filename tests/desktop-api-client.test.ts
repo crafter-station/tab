@@ -1,12 +1,34 @@
 import { describe, it, expect } from "bun:test";
 import { SuggestionRequestSchema } from "../packages/contracts/src/index.ts";
-import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
+import {
+  createApiSuggestionClient as createApiSuggestionClientWithApi,
+  type ApiSuggestionClientDependencies,
+} from "../apps/desktop/src/main/suggestion-client.ts";
+import { createDeviceApiClient } from "../apps/desktop/src/main/device-api-client.ts";
 import {
   createSafeTypingContextSnapshot,
   type RequestableTypingContextSnapshot,
   type TypingContextState,
 } from "../apps/desktop/src/main/typing-context.ts";
 import type { AppContextSnapshot } from "../apps/desktop/src/main/app-context.ts";
+
+function createApiSuggestionClient(
+  deps: Omit<ApiSuggestionClientDependencies, "api"> & {
+    apiBaseUrl: string;
+    fetch?: typeof globalThis.fetch;
+    getAuthorizationHeader?: () => Promise<string | null>;
+  },
+) {
+  const { apiBaseUrl, fetch, getAuthorizationHeader, ...clientDeps } = deps;
+  return createApiSuggestionClientWithApi({
+    ...clientDeps,
+    api: createDeviceApiClient({
+      apiBaseUrl,
+      fetch,
+      getAuthorizationHeader: getAuthorizationHeader ?? (async () => null),
+    }),
+  });
+}
 
 function makeState(overrides: Partial<TypingContextState> = {}): TypingContextState {
   return {

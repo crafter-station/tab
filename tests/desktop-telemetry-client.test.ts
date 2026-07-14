@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test";
 import type { RecordTelemetryEventRequest } from "@tab/contracts";
 import { createDesktopTelemetryClient } from "../apps/desktop/src/main/telemetry-client.ts";
+import { createDeviceApiClient } from "../apps/desktop/src/main/device-api-client.ts";
 
 function event(eventType: RecordTelemetryEventRequest["eventType"]): RecordTelemetryEventRequest {
   return {
@@ -17,12 +18,14 @@ describe("desktop telemetry client", () => {
   it("sends synchronously adjacent events in one request", async () => {
     const requests: RequestInit[] = [];
     const client = createDesktopTelemetryClient({
-      apiBaseUrl: "https://api.example.com",
-      getAuthorizationHeader: async () => "Bearer device-token",
-      fetch: async (_input, init) => {
-        requests.push(init ?? {});
-        return Response.json({ status: "ok", data: { recorded: true } });
-      },
+      api: createDeviceApiClient({
+        apiBaseUrl: "https://api.example.com",
+        getAuthorizationHeader: async () => "Bearer device-token",
+        fetch: async (_input, init) => {
+          requests.push(init ?? {});
+          return Response.json({ status: "ok", data: { recorded: true } });
+        },
+      }),
     });
 
     await Promise.all([

@@ -14,6 +14,7 @@ import {
 } from "../apps/desktop/src/main/auth.ts";
 import { createMemoryKeychain } from "../apps/desktop/src/main/keychain.ts";
 import { createApiSuggestionClient } from "../apps/desktop/src/main/suggestion-client.ts";
+import { createDeviceApiClient } from "../apps/desktop/src/main/device-api-client.ts";
 import {
   createSafeTypingContextSnapshot,
   type RequestableTypingContextSnapshot,
@@ -232,12 +233,14 @@ describe("desktop auth client", () => {
     await authClient.handleCallback(`tab://auth/callback?code=${code}`);
 
     const suggestionClient = createApiSuggestionClient({
-      apiBaseUrl: TEST_ORIGIN,
+      api: createDeviceApiClient({
+        apiBaseUrl: TEST_ORIGIN,
+        fetch: makeFetch(app),
+        getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+      }),
       deviceId: "desktop-device-1",
       appVersion: "0.0.1",
       platform: "darwin",
-      fetch: makeFetch(app),
-      getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
     });
 
     const suggestion = await suggestionClient(makeSnapshot());
@@ -273,12 +276,14 @@ describe("desktop auth client", () => {
     });
 
     const suggestionClient = createApiSuggestionClient({
-      apiBaseUrl: TEST_ORIGIN,
+      api: createDeviceApiClient({
+        apiBaseUrl: TEST_ORIGIN,
+        fetch: makeFetch(app),
+        getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
+      }),
       deviceId: "desktop-device-revoked",
       appVersion: "0.0.1",
       platform: "darwin",
-      fetch: makeFetch(app),
-      getAuthorizationHeader: () => authClient.getAuthorizationHeader(),
     });
 
     const suggestion = await suggestionClient(makeSnapshot());

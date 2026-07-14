@@ -7,30 +7,20 @@ import {
   type MemoryExtractionRequest,
   type PersonalMemory,
 } from "@tab/contracts";
+import type { DeviceApiClient } from "./device-api-client.ts";
 
 export type DesktopMemoryClientDependencies = {
-  apiBaseUrl: string;
-  getAuthorizationHeader(): Promise<string | null>;
-  fetch?: typeof globalThis.fetch;
+  api: Pick<DeviceApiClient, "requestAuthorized">;
 };
 
 export function createDesktopMemoryClient(deps: DesktopMemoryClientDependencies) {
-  const http = deps.fetch ?? globalThis.fetch;
-
   async function listMemories(): Promise<PersonalMemory[]> {
-    const authorization = await deps.getAuthorizationHeader();
-    if (!authorization) return [];
-
     try {
-      const response = await http(`${deps.apiBaseUrl}/api/memory`, {
+      const response = await deps.api.requestAuthorized("/api/memory", {
         method: "GET",
-        headers: {
-          Authorization: authorization,
-          Accept: "application/json",
-        },
       });
 
-      if (!response.ok) return [];
+      if (!response?.ok) return [];
 
       const raw = (await response.json()) as unknown;
       const parsed = MemoryListResponseSchema.safeParse(raw);
@@ -44,19 +34,12 @@ export function createDesktopMemoryClient(deps: DesktopMemoryClientDependencies)
   }
 
   async function deleteMemory(id: string): Promise<boolean> {
-    const authorization = await deps.getAuthorizationHeader();
-    if (!authorization) return false;
-
     try {
-      const response = await http(`${deps.apiBaseUrl}/api/memory/${encodeURIComponent(id)}`, {
+      const response = await deps.api.requestAuthorized(`/api/memory/${encodeURIComponent(id)}`, {
         method: "DELETE",
-        headers: {
-          Authorization: authorization,
-          Accept: "application/json",
-        },
       });
 
-      if (!response.ok) return false;
+      if (!response?.ok) return false;
 
       const raw = (await response.json()) as unknown;
       const parsed = MemoryDeleteResponseSchema.safeParse(raw);
@@ -72,19 +55,15 @@ export function createDesktopMemoryClient(deps: DesktopMemoryClientDependencies)
     const parsedRequest = MemoryExtractionRequestSchema.safeParse(request);
     if (!parsedRequest.success) throw new Error("Invalid memory extraction request");
 
-    const authorization = await deps.getAuthorizationHeader();
-    if (!authorization) throw new Error("Missing device authorization");
-
-    const response = await http(`${deps.apiBaseUrl}/api/memory/extract`, {
+    const response = await deps.api.requestAuthorized("/api/memory/extract", {
       method: "POST",
       headers: {
-        Authorization: authorization,
-        Accept: "application/json",
         "Content-Type": "application/json",
       },
       body: JSON.stringify(parsedRequest.data),
     });
 
+    if (!response) throw new Error("Missing device authorization");
     if (!response.ok) throw new Error(`Memory extraction failed with status ${response.status}`);
 
     const raw = (await response.json()) as unknown;

@@ -3,15 +3,13 @@ import {
   TelemetryEventsResponseSchema,
   type RecordTelemetryEventRequest,
 } from "@tab/contracts";
+import type { DeviceApiClient } from "./device-api-client.ts";
 
 export type DesktopTelemetryClientDependencies = {
-  readonly apiBaseUrl: string;
-  readonly fetch?: typeof globalThis.fetch;
-  readonly getAuthorizationHeader?: () => Promise<string | null>;
+  readonly api: Pick<DeviceApiClient, "request">;
 };
 
 export function createDesktopTelemetryClient(deps: DesktopTelemetryClientDependencies) {
-  const http = deps.fetch ?? globalThis.fetch;
   const pending: Array<{
     event: RecordTelemetryEventRequest;
     resolve: () => void;
@@ -20,17 +18,9 @@ export function createDesktopTelemetryClient(deps: DesktopTelemetryClientDepende
 
   async function sendBatch(events: RecordTelemetryEventRequest[]): Promise<void> {
     try {
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      const authorization = await deps.getAuthorizationHeader?.();
-      if (authorization) {
-        headers.Authorization = authorization;
-      }
-
-      const response = await http(`${deps.apiBaseUrl}/telemetry/events`, {
+      const response = await deps.api.request("/telemetry/events", {
         method: "POST",
-        headers,
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(events),
       });
 

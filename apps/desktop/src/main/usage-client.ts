@@ -4,13 +4,11 @@ import {
 } from "@tab/contracts";
 import type { AllowanceState } from "@tab/contracts";
 import type { AcceptedWordLedgerEvent } from "./accepted-word-ledger.ts";
+import type { DeviceApiClient } from "./device-api-client.ts";
 
 export function createLocalAcceptanceUsageClient(deps: {
-  apiBaseUrl: string;
-  fetch?: typeof globalThis.fetch;
-  getAuthorizationHeader?: () => Promise<string | null>;
+  api: Pick<DeviceApiClient, "requestAuthorized">;
 }) {
-  const http = deps.fetch ?? globalThis.fetch;
   return async function synchronizeLocalAcceptance(
     event: AcceptedWordLedgerEvent,
   ): Promise<AllowanceState | null> {
@@ -22,19 +20,17 @@ export function createLocalAcceptanceUsageClient(deps: {
       characterCount: event.characterCount,
     });
     try {
-      const authorization = await deps.getAuthorizationHeader?.();
-      if (!authorization) return null;
-      const response = await http(
-        `${deps.apiBaseUrl}/api/usage/local-acceptances`,
+      const response = await deps.api.requestAuthorized(
+        "/api/usage/local-acceptances",
         {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: authorization,
           },
           body: JSON.stringify(payload),
         },
       );
+      if (!response) return null;
       if (!response.ok) return null;
       const parsed = LocalAcceptanceUsageResponseSchema.safeParse(
         (await response.json()) as unknown,
