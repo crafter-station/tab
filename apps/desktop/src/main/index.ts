@@ -41,9 +41,8 @@ import {
   DEFAULT_DESKTOP_AUTH_CALLBACK_URL,
 } from "./auth.ts";
 import {
+  createPackagedAuthCallback,
   createLoopbackAuthCallback,
-  findAuthCallbackUrl,
-  isAuthCallbackUrl,
 } from "./auth-callback.ts";
 import { createMacOSKeychain } from "./keychain.ts";
 import { createDesktopStatusService, type DesktopStatus } from "./status.ts";
@@ -70,26 +69,16 @@ const electronUpdater = (
 const { autoUpdater } = electronUpdater;
 if (app.isPackaged) autoUpdater.logger = null;
 
-let authCallbackHandlingReady = false;
-const pendingAuthCallbackUrls: string[] = [];
-const receivedAuthCallbackUrls = new Set<string>();
-
-function dispatchPackagedAuthCallback(url: string): boolean {
-  if (!isAuthCallbackUrl(url, DEFAULT_DESKTOP_AUTH_CALLBACK_URL)) return false;
-  if (receivedAuthCallbackUrls.has(url)) return true;
-  receivedAuthCallbackUrls.add(url);
-  if (!authCallbackHandlingReady) {
-    pendingAuthCallbackUrls.push(url);
-    return true;
-  }
-  completeBrowserHandoff(url).catch((error) => {
+const packagedAuthCallback = createPackagedAuthCallback({
+  expectedCallbackUrl: DEFAULT_DESKTOP_AUTH_CALLBACK_URL,
+  onCallback: completeBrowserHandoff,
+  onError: (error) => {
     console.error("Failed to complete browser handoff:", error);
-  });
-  return true;
-}
+  },
+});
 
 app.on("open-url", (event, url) => {
-  if (dispatchPackagedAuthCallback(url)) event.preventDefault();
+  if (packagedAuthCallback.dispatch(url)) event.preventDefault();
 });
 
 const execAsync = promisify(exec);
@@ -605,17 +594,6 @@ async function completeBrowserHandoff(url: string): Promise<void> {
   showAuthenticatedDesktopSurface();
 }
 
-function enablePackagedAuthCallbackHandling(): void {
-  authCallbackHandlingReady = true;
-  const startupCallback = findAuthCallbackUrl(process.argv, DEFAULT_DESKTOP_AUTH_CALLBACK_URL);
-  if (startupCallback) dispatchPackagedAuthCallback(startupCallback);
-  for (const url of pendingAuthCallbackUrls.splice(0)) {
-    completeBrowserHandoff(url).catch((error) => {
-      console.error("Failed to complete browser handoff:", error);
-    });
-  }
-}
-
 function showSignedOutSurface(): void {
   controlWindowManager.show("sign-in");
 }
@@ -1068,7 +1046,7 @@ async function bootstrap(): Promise<void> {
 
   overlayWindow = createOverlayWindow();
   debugOverlayWindow = SHOW_DEBUG_TYPING_OVERLAY ? createDebugOverlayWindow() : null;
-  enablePackagedAuthCallbackHandling();
+  packagedAuthCallback.activate(process.argv);
 
   const registered = globalShortcut.register("Alt+Tab", () => {
     if (controlWindowManager.isRoute("onboarding") && controlWindowManager.isFocused()) {

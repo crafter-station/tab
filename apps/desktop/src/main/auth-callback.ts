@@ -11,6 +11,11 @@ export type LoopbackAuthCallback = {
   close(): Promise<void>;
 };
 
+export type PackagedAuthCallback = {
+  dispatch(url: string): boolean;
+  activate(startupArgs: readonly string[]): void;
+};
+
 type LoopbackAuthCallbackServerDependencies = {
   onCallback(url: string): Promise<void>;
 };
@@ -64,6 +69,43 @@ export function isAuthCallbackUrl(candidate: string, expectedCallbackUrl: string
 
 export function findAuthCallbackUrl(args: readonly string[], expectedCallbackUrl: string): string | null {
   return args.find((arg) => isAuthCallbackUrl(arg, expectedCallbackUrl)) ?? null;
+}
+
+export function createPackagedAuthCallback(deps: {
+  readonly expectedCallbackUrl: string;
+  readonly onCallback: (url: string) => Promise<void>;
+  readonly onError?: (error: unknown) => void;
+}): PackagedAuthCallback {
+  let active = false;
+  const pendingUrls: string[] = [];
+  const receivedUrls = new Set<string>();
+
+  function deliver(url: string): void {
+    deps.onCallback(url).catch((error) => deps.onError?.(error));
+  }
+
+  function dispatch(url: string): boolean {
+    if (!isAuthCallbackUrl(url, deps.expectedCallbackUrl)) return false;
+    if (receivedUrls.has(url)) return true;
+
+    receivedUrls.add(url);
+    if (active) deliver(url);
+    else pendingUrls.push(url);
+    return true;
+  }
+
+  return {
+    dispatch,
+    activate(startupArgs) {
+      active = true;
+      const startupUrl = findAuthCallbackUrl(
+        startupArgs,
+        deps.expectedCallbackUrl,
+      );
+      if (startupUrl) dispatch(startupUrl);
+      for (const url of pendingUrls.splice(0)) deliver(url);
+    },
+  };
 }
 
 export async function startLoopbackAuthCallbackServer(

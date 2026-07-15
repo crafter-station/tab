@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import {
+  createPackagedAuthCallback,
   createLoopbackAuthCallback,
   findAuthCallbackUrl,
   isAuthCallbackUrl,
@@ -16,6 +17,48 @@ describe("desktop auth callback delivery", () => {
     expect(isAuthCallbackUrl("tab://auth/other?code=one-time", expected)).toBe(false);
     expect(isAuthCallbackUrl("tab://auth/callback", expected)).toBe(false);
     expect(findAuthCallbackUrl(["electron", "--flag", callback], expected)).toBe(callback);
+  });
+
+  it("queues, deduplicates, and recovers packaged callbacks through activation", () => {
+    const expected = "tab://auth/callback";
+    const queued = "tab://auth/callback?code=queued";
+    const startup = "tab://auth/callback?code=startup";
+    const received: string[] = [];
+    const callback = createPackagedAuthCallback({
+      expectedCallbackUrl: expected,
+      onCallback: async (url) => {
+        received.push(url);
+      },
+    });
+
+    expect(callback.dispatch("tab://auth/other?code=ignored")).toBe(false);
+    expect(callback.dispatch(queued)).toBe(true);
+    expect(callback.dispatch(queued)).toBe(true);
+    expect(received).toEqual([]);
+
+    callback.activate(["Tab", startup]);
+
+    expect(received).toEqual([startup, queued]);
+    expect(callback.dispatch(startup)).toBe(true);
+    expect(received).toEqual([startup, queued]);
+  });
+
+  it("routes packaged callback failures through the adapter", async () => {
+    const errors: unknown[] = [];
+    const callback = createPackagedAuthCallback({
+      expectedCallbackUrl: "tab://auth/callback",
+      onCallback: async () => {
+        throw new Error("exchange failed");
+      },
+      onError: (error) => errors.push(error),
+    });
+    callback.activate([]);
+
+    callback.dispatch("tab://auth/callback?code=one-time");
+    await Promise.resolve();
+
+    expect(errors).toHaveLength(1);
+    expect(errors[0]).toBeInstanceOf(Error);
   });
 
   it("receives callbacks only on the loopback callback path", async () => {
