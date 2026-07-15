@@ -2,7 +2,7 @@ import { MEMORY_EXTRACTION_WINDOW_POLICY, SUGGESTION_CONTEXT_SOURCES } from "@ta
 import { PLAN_IDS } from "@tab/billing";
 import { z } from "zod";
 
-const errorCodes = [
+export const API_ERROR_CODES = [
   "invalid_request",
   "unauthenticated",
   "email_unverified",
@@ -451,7 +451,7 @@ export const TelemetryEventSchema = z.object({
   planId: z.string().min(1).optional(),
   modelId: z.string().min(1).optional(),
   latencyMs: z.number().int().nonnegative().optional(),
-  errorCode: z.enum(errorCodes).optional(),
+  errorCode: z.enum(API_ERROR_CODES).optional(),
   memoryEligible: z.boolean().optional(),
   redactionApplied: z.boolean().optional(),
   redactionCount: z.number().int().nonnegative().optional(),
@@ -487,7 +487,7 @@ export const RecordTelemetryEventRequestSchema = z
     timestamp: z.string().datetime(),
     suggestionLength: z.number().int().nonnegative().optional(),
     latencyMs: z.number().int().nonnegative().optional(),
-    errorCode: z.enum(errorCodes).optional(),
+    errorCode: z.enum(API_ERROR_CODES).optional(),
     modelId: z.string().min(1).optional(),
     inferenceSource: SuggestionInferenceSourceSchema,
     trigger: SuggestionTriggerSchema,
@@ -556,7 +556,7 @@ export const EntitlementErrorDetailsSchema = z.object({
 export const ApiErrorResponseSchema = z.object({
   status: z.literal("error"),
   error: z.object({
-    code: z.enum(errorCodes),
+    code: z.enum(API_ERROR_CODES),
     message: z.string().min(1),
     details: EntitlementErrorDetailsSchema.optional(),
   }),
@@ -587,6 +587,7 @@ export type EntitlementErrorDetails = z.infer<
   typeof EntitlementErrorDetailsSchema
 >;
 export type ApiSuccessResponse = z.infer<typeof ApiSuccessResponseSchema>;
+export type ApiErrorCode = (typeof API_ERROR_CODES)[number];
 export type ApiErrorResponse = z.infer<typeof ApiErrorResponseSchema>;
 export type ApiResponse = z.infer<typeof ApiResponseSchema>;
 export type DeviceTokenExchangeRequest = z.infer<

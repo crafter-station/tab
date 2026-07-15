@@ -1,25 +1,12 @@
 import {
   ApiErrorResponseSchema,
   ApiSuccessResponseSchema,
+  type ApiErrorCode,
   type Suggestion,
 } from "@tab/contracts";
 
-export const ERROR_CODES = [
-  "invalid_request",
-  "unauthenticated",
-  "email_unverified",
-  "revoked_device",
-  "billing_required",
-  "plan_change_required",
-  "quota_exhausted",
-  "device_limit_reached",
-  "feature_unavailable",
-  "rate_limited",
-  "provider_failure",
-] as const;
-
 export function createErrorResponse(
-  code: (typeof ERROR_CODES)[number],
+  code: ApiErrorCode,
   message: string,
   details?: Record<string, unknown>,
 ) {
