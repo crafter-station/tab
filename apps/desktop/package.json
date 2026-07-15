@@ -2,7 +2,7 @@
   "name": "@tab/desktop",
   "type": "module",
   "private": true,
-  "version": "0.1.8",
+  "version": "0.1.9",
   "main": "dist/main.cjs",
   "scripts": {
     "dev": "bun scripts/dev.ts",
