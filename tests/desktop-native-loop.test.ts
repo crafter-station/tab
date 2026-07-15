@@ -1615,20 +1615,32 @@ describe("desktop native suggestion loop", () => {
       };
       const signals: AbortSignal[] = [];
       const hashes: string[] = [];
+      let markFallbackStarted: () => void = () => {};
+      let markContextRetryStarted: () => void = () => {};
+      const fallbackStarted = new Promise<void>((resolve) => {
+        markFallbackStarted = resolve;
+      });
+      const contextRetryStarted = new Promise<void>((resolve) => {
+        markContextRetryStarted = resolve;
+      });
       const { session, publishAppContextChange } = makeSession({
         appContextGraceMs: 2,
         getAppContextState: () => contextState,
         getLocalSuggestion: (snapshot, options) => {
           hashes.push(snapshot.contextHash);
           if (options?.signal) signals.push(options.signal);
-          if (signals.length > 1) return null;
+          if (signals.length > 1) {
+            markContextRetryStarted();
+            return null;
+          }
+          markFallbackStarted();
           return new Promise((resolve) => options?.signal?.addEventListener("abort", () => resolve(null), { once: true }));
         },
       });
 
       session.setActiveApplication("com.mitchellh.ghostty", "window:1");
       session.appendText("Explain this");
-      await wait(10);
+      await fallbackStarted;
       expect(signals).toHaveLength(1);
 
       contextState = {
@@ -1649,7 +1661,7 @@ describe("desktop native suggestion loop", () => {
         revision: 2,
       };
       publishAppContextChange();
-      await wait(10);
+      await contextRetryStarted;
 
       expect(signals[0]?.aborted).toBe(true);
       expect(hashes).toHaveLength(2);
