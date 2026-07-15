@@ -51,6 +51,7 @@ describe("hydrated dashboard component architecture", () => {
     expect(sources).toContain("Words inserted");
     expect(sources).toContain("accepted words used today");
     expect(sources).toContain("words left");
+    expect(sources).toContain("Deep Suggestions used");
     expect(sources).toContain('title="Deep Suggestions"');
     expect(sources).toContain("Resets with your billing cycle on");
     expect(sources).toContain("Resets daily");
@@ -73,6 +74,7 @@ describe("hydrated dashboard component architecture", () => {
     const source = readFileSync("apps/web/src/components/dashboard/usage.tsx", "utf8");
     expect(source).toContain("Billing");
     expect(source).toContain("Compare plans for higher limits");
+    expect(source).toContain("Manage your");
     expect(source).toContain('href="/billing/portal"');
     expect(source).toContain("Manage billing");
     expect(source).not.toContain("Manage subscription");
