@@ -62,6 +62,10 @@ import { env } from "./env.ts";
 import { createOpenCodeConversationContext } from "./opencode-session-context.ts";
 import { boundsEqual } from "./window-position.ts";
 import * as electronUpdaterModule from "electron-updater";
+import {
+  getLocalRuntimeExecutablePath,
+  requireLocalRuntimeArchitecture,
+} from "../../local-runtime-manifest.ts";
 
 const electronUpdater = (
   "default" in electronUpdaterModule ? electronUpdaterModule.default : electronUpdaterModule
@@ -88,23 +92,22 @@ const OVERLAY_RENDERER_PATH = env.TAB_OVERLAY_RENDERER_PATH ?? path.join(runtime
 const APP_RENDERER_PATH = env.TAB_APP_RENDERER_PATH ?? path.join(runtimeRoot, "renderer", "app.html");
 const TRAY_ICON_PATH = env.TAB_TRAY_ICON_PATH ?? path.join(runtimeRoot, "assets", "iconTemplate.png");
 const packagedInputTapPath = path.join(process.resourcesPath, "app.asar.unpacked", "dist", "macos-input-tap");
-const packagedQwenRuntimePath = path.join(
+const packagedLocalRuntimeRoot = path.join(
   process.resourcesPath,
   "app.asar.unpacked",
   "dist",
   "local-runtime",
-  "qwen",
-  process.arch,
-  "llama-server",
 );
-const packagedBonsaiRuntimePath = path.join(
-  process.resourcesPath,
-  "app.asar.unpacked",
-  "dist",
-  "local-runtime",
+const localRuntimeArchitecture = requireLocalRuntimeArchitecture(process.arch);
+const packagedQwenRuntimePath = getLocalRuntimeExecutablePath(
+  packagedLocalRuntimeRoot,
+  "qwen",
+  localRuntimeArchitecture,
+);
+const packagedBonsaiRuntimePath = getLocalRuntimeExecutablePath(
+  packagedLocalRuntimeRoot,
   "bonsai",
-  process.arch,
-  "llama-server",
+  localRuntimeArchitecture,
 );
 const INPUT_TAP_PATH = env.TAB_INPUT_TAP_PATH ?? (app.isPackaged ? packagedInputTapPath : path.join(runtimeRoot, "macos-input-tap"));
 const LOCAL_INFERENCE_MODEL_PATH = env.TAB_LOCAL_INFERENCE_MODEL_PATH ?? path.join(

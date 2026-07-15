@@ -1,6 +1,10 @@
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { env } from "../src/main/env.ts";
+import {
+  getLocalRuntimeExecutablePath,
+  requireLocalRuntimeArchitecture,
+} from "../local-runtime-manifest.ts";
 
 const desktopRoot = path.resolve(import.meta.dir, "..");
 const workspaceRoot = path.resolve(desktopRoot, "../..");
@@ -81,9 +85,10 @@ async function buildLocalRuntime() {
   });
   const exitCode = await child.exited;
   if (exitCode !== 0) throw new Error("Failed to prepare the local inference runtime");
+  const architecture = requireLocalRuntimeArchitecture(process.arch);
   return {
-    qwen: path.join(runtimeRoot, "qwen", process.arch, "llama-server"),
-    bonsai: path.join(runtimeRoot, "bonsai", process.arch, "llama-server"),
+    qwen: getLocalRuntimeExecutablePath(runtimeRoot, "qwen", architecture),
+    bonsai: getLocalRuntimeExecutablePath(runtimeRoot, "bonsai", architecture),
   };
 }
 

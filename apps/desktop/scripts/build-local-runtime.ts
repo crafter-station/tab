@@ -2,49 +2,30 @@ import { createHash } from "node:crypto";
 import { chmodSync, cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import {
+  LOCAL_RUNTIME_ARCHITECTURES,
+  LOCAL_RUNTIME_RELEASES,
+  getLocalRuntimeDirectory,
+  getLocalRuntimeExecutablePath,
+  type LocalRuntimeArchitecture,
+  type LocalRuntimeName,
+} from "../local-runtime-manifest.ts";
 
 const desktopRoot = path.resolve(import.meta.dir, "..");
 
-const runtimes = {
-  qwen: {
-    repository: "ggml-org/llama.cpp",
-    release: "b9910",
-    directory: "llama-b9910",
-    artifacts: {
-      arm64: {
-        fileName: "llama-b9910-bin-macos-arm64.tar.gz",
-        sha256: "1121afc2b6f019d763fede47a9b7595daac4719589cd9681cc44ed9148fbeadb",
-      },
-      x64: {
-        fileName: "llama-b9910-bin-macos-x64.tar.gz",
-        sha256: "b850733ad1659fc17a20390c8c7173af77aced9c6bd8f2578d35593858aff0dc",
-      },
-    },
-  },
-  bonsai: {
-    repository: "PrismML-Eng/llama.cpp",
-    release: "prism-b9591-62061f9",
-    directory: "llama-prism-b9591-62061f9",
-    artifacts: {
-      arm64: {
-        fileName: "llama-prism-b9591-62061f9-bin-macos-arm64.tar.gz",
-        sha256: "e8dd4d8a23704afb02eda7136be3ed05f875c02bb82f413a5e897c9a50f774a8",
-      },
-      x64: {
-        fileName: "llama-prism-b9591-62061f9-bin-macos-x64.tar.gz",
-        sha256: "32c37d209bf92d4e9c0ea99baf54d8e46ca0d06d56ecea69f485378bca5deed3",
-      },
-    },
-  },
-} as const;
-
-type RuntimeName = keyof typeof runtimes;
-type RuntimeArchitecture = keyof (typeof runtimes)[RuntimeName]["artifacts"];
-
-async function prepareRuntime(runtimeName: RuntimeName, architecture: RuntimeArchitecture): Promise<void> {
-  const runtime = runtimes[runtimeName];
-  const outputDirectory = path.join(desktopRoot, "dist", "local-runtime", runtimeName, architecture);
-  const outputExecutable = path.join(outputDirectory, "llama-server");
+async function prepareRuntime(runtimeName: LocalRuntimeName, architecture: LocalRuntimeArchitecture): Promise<void> {
+  const runtime = LOCAL_RUNTIME_RELEASES[runtimeName];
+  const runtimeRoot = path.join(desktopRoot, "dist", "local-runtime");
+  const outputDirectory = getLocalRuntimeDirectory(
+    runtimeRoot,
+    runtimeName,
+    architecture,
+  );
+  const outputExecutable = getLocalRuntimeExecutablePath(
+    runtimeRoot,
+    runtimeName,
+    architecture,
+  );
   if (existsSync(outputExecutable) && existsSync(path.join(outputDirectory, "LICENSE"))) return;
 
   const artifact = runtime.artifacts[architecture];
@@ -90,12 +71,12 @@ rmSync(path.join(desktopRoot, "dist", "local-runtime", "arm64"), { recursive: tr
 rmSync(path.join(desktopRoot, "dist", "local-runtime", "x64"), { recursive: true, force: true });
 
 const requestedArchitecture = process.argv[2];
-const architectures: RuntimeArchitecture[] = requestedArchitecture === "arm64" || requestedArchitecture === "x64"
+const architectures: LocalRuntimeArchitecture[] = requestedArchitecture === "arm64" || requestedArchitecture === "x64"
   ? [requestedArchitecture]
-  : ["arm64", "x64"];
+  : [...LOCAL_RUNTIME_ARCHITECTURES];
 
 await Promise.all(
-  (Object.keys(runtimes) as RuntimeName[]).flatMap((runtimeName) =>
+  (Object.keys(LOCAL_RUNTIME_RELEASES) as LocalRuntimeName[]).flatMap((runtimeName) =>
     architectures.map((architecture) => prepareRuntime(runtimeName, architecture))),
 );
 console.log(`Prepared pinned local inference runtimes for ${architectures.join(" and ")}.`);
