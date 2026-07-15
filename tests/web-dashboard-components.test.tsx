@@ -47,14 +47,14 @@ describe("hydrated dashboard component architecture", () => {
       readFileSync("apps/web/src/components/dashboard/shared.tsx", "utf8"),
     ].join("\n");
 
-    expect(sources).toContain("Automatic Suggestions accepted");
+    expect(sources).toContain("Suggestions used");
     expect(sources).toContain("Words inserted");
     expect(sources).toContain("accepted words used today");
     expect(sources).toContain("words left");
-    expect(sources).toContain("used this billing period");
+    expect(sources).toContain("Deep Suggestions used");
     expect(sources).toContain("Resets with your billing cycle on");
-    expect(sources).toContain("Resets daily at local midnight");
-    expect(sources).toContain("Deep Completes left");
+    expect(sources).toContain("Resets daily");
+    expect(sources).toContain("Deep Suggestions");
     expect(sources).not.toContain("Words completed");
     expect(sources).not.toContain("Local Accepted Words today");
     expect(allowancePercentage({ used: 3, limit: 100, remaining: 97, resetAt: "2026-07-15T04:00:00.000Z", exhausted: false })).toBe(3);
@@ -71,10 +71,10 @@ describe("hydrated dashboard component architecture", () => {
 
   it("uses Polar as the billing, plan change, and metered usage surface", () => {
     const source = readFileSync("apps/web/src/components/dashboard/usage.tsx", "utf8");
-    expect(source).toContain("Billing & usage");
-    expect(source).toContain("change plans, and inspect metered usage in Polar");
+    expect(source).toContain("Billing");
+    expect(source).toContain("Manage your");
     expect(source).toContain('href="/billing/portal"');
-    expect(source).toContain("Open Polar portal");
+    expect(source).toContain("Manage billing");
     expect(source).not.toContain("Manage subscription");
   });
 });

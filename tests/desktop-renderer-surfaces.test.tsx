@@ -8,15 +8,15 @@ describe("desktop renderer setup surfaces", () => {
     const desktopMainSource = readFileSync("apps/desktop/src/main/index.ts", "utf8");
 
     expect(signInSource).toInclude("Connect this Mac");
-    expect(signInSource).toInclude("Accessibility");
-    expect(signInSource).toInclude("Input Monitoring");
+    expect(signInSource).toInclude("Allow access");
+    expect(signInSource).toInclude("two macOS permissions");
     expect(signInSource).toInclude("Try a Suggestion");
     expect(signInSource).toInclude("Continue in browser");
     expect(signInSource).toInclude("Open browser again");
     expect(signInSource).toInclude("pug-dot-grid");
     expect(signInSource).toInclude("<TabMark />");
     expect(onboardingSource).toInclude("Try accepting a Suggestion");
-    expect(onboardingSource).toInclude("Ask for a Deep Complete Suggestion");
+    expect(onboardingSource).toInclude("Ask for a Deep Suggestion");
     expect(onboardingSource).toInclude("DOUBLE_OPTION_WINDOW_MS = 400");
     expect(onboardingSource).toInclude('source="cloud"');
     expect(onboardingSource).toInclude("Download local model");
@@ -41,10 +41,10 @@ describe("desktop renderer setup surfaces", () => {
   it("uses clear activity and allowance language in account settings", () => {
     const settingsSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SettingsSurface.tsx", "utf8");
 
-    expect(settingsSource).toInclude("Automatic Suggestions accepted");
+    expect(settingsSource).toInclude("Suggestions used");
     expect(settingsSource).toInclude("Words inserted");
     expect(settingsSource).toInclude("accepted words used today");
-    expect(settingsSource).toInclude("Deep Completes left");
+    expect(settingsSource).toInclude("Deep Suggestions");
     expect(settingsSource).toInclude("No daily limit on");
     expect(settingsSource).not.toInclude('label="Words completed"');
     expect(settingsSource).not.toInclude('label="Accepted Words today"');
