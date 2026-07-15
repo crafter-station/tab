@@ -15,7 +15,7 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
     <DashboardSectionContent section="usage">
       <div className="grid gap-10">
         <section className="grid gap-7">
-          <SectionCard>
+          <SectionCard variant="quiet">
             <CardContent className="grid gap-x-8 gap-y-2 p-5 sm:grid-cols-2 lg:grid-cols-4">
               <SummaryMetric label="Suggestions used" value={formatCount(data.localSuggestionActivity.acceptedSuggestions)} detail="This month" />
               <SummaryMetric label="Words inserted" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="This month" />
@@ -23,7 +23,7 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
               <SummaryMetric label="Active writing days" value={formatCount(data.localSuggestionActivity.activeWritingDays)} detail="This month" />
             </CardContent>
           </SectionCard>
-          <SectionCard>
+          <SectionCard variant="quiet">
             <CardContent className="flex items-center justify-between gap-4 p-5">
               <div>
                 <p className="text-xs font-semibold uppercase text-muted-foreground">Current plan</p>
@@ -32,8 +32,8 @@ export function DashboardUsagePage({ data }: { data: DashboardData }) {
               <p className="text-sm text-muted-foreground">{billing.trial.active ? `Ends ${formatDate(billing.trial.endsAt)}` : billing.billingInterval ? `${billing.billingInterval} billing` : "Free account"}</p>
             </CardContent>
           </SectionCard>
-          <SectionCard>
-            <CardContent className="grid gap-4 p-5 sm:p-6">
+          <SectionCard variant="plain">
+            <CardContent className="grid gap-4 p-0">
               <div>
                 <h2 className="text-base font-bold">Plan allowances</h2>
                 <p className="mt-1 text-sm text-muted-foreground">Each limit resets separately.</p>

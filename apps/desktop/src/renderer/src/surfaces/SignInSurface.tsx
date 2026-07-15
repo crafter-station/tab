@@ -39,7 +39,7 @@ export function SignInSurface() {
             {setupSteps.map((setupStep) => (
               <article className="sign-in-proof__step" key={setupStep.title}>
                 <div>
-                  <strong>{setupStep.title}</strong>
+                  <h2>{setupStep.title}</h2>
                   <span>{setupStep.description}</span>
                 </div>
               </article>

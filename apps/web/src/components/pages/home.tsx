@@ -436,7 +436,7 @@ export function HomePage() {
           <p className="mt-6 max-w-[42rem] text-pretty text-lg leading-relaxed text-muted-foreground">Press Option+Tab for the next phrase. For more help, double-tap Option to request a Deep Suggestion.</p>
         </div>
         <div className="mt-12"><DeepCompleteDemo /></div>
-        <div className="mt-8 grid gap-6 border-y border-border py-6 sm:grid-cols-3">
+        <div className="mt-8 grid gap-8 sm:grid-cols-3 sm:gap-12">
           <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Suggestions</p><p className="mt-2 text-sm font-semibold">A short continuation appears after you pause.</p></div>
           <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Deep Suggestions</p><p className="mt-2 text-sm font-semibold">Double-tap Option when you want more help.</p></div>
           <div><p className="font-[var(--font-code)] text-[0.625rem] font-semibold uppercase text-muted-foreground">Insert</p><p className="mt-2 text-sm font-semibold">Option+Tab inserts either suggestion.</p></div>

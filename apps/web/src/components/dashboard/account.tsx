@@ -8,7 +8,7 @@ export function DashboardAccountPage({ data }: { data: DashboardData }) {
 
   return (
     <DashboardSectionContent section="account">
-      <SectionCard>
+      <SectionCard variant="quiet">
         <CardContent className="grid gap-4 p-5 sm:p-6">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">

@@ -46,17 +46,17 @@ export function AboutPage() {
           <p>That is why Tab runs as a native desktop app, keeps the active application in focus, and makes every Acceptance deliberate. The product should feel less like a destination and more like a quiet extension of typing.</p>
         </div>
       </section>
-      <section className="border-y border-border py-16 sm:py-20">
+      <section className="py-16 sm:py-20">
         <PageKicker>Product principles</PageKicker>
-        <div className="mt-10 grid gap-px overflow-hidden rounded-[var(--radius-card)] border border-border bg-border md:grid-cols-3">
+        <div className="mt-10 grid gap-10 md:grid-cols-3 md:gap-12">
           {[
             { title: "Stay in context", copy: "The active Mac app remains the place where writing happens." },
             { title: "Keep consent visible", copy: "A suggestion is a preview until the person writing chooses to add it." },
             { title: "Make memory controllable", copy: "Personal facts should be visible and removable, never hidden in a profile." },
           ].map((principle) => (
-            <article className="min-h-64 bg-card p-7" key={principle.title}>
+            <article key={principle.title}>
               <ShieldCheck aria-hidden="true" />
-              <h3 className="mt-20 text-xl font-bold">{principle.title}</h3>
+              <h3 className="mt-5 text-xl font-bold">{principle.title}</h3>
               <p className="mt-3 text-pretty leading-relaxed text-muted-foreground">{principle.copy}</p>
             </article>
           ))}
@@ -90,7 +90,7 @@ export function ContactPage() {
           <div><p className="text-sm font-semibold text-muted-foreground">GitHub</p><h2 className="mt-2 text-2xl font-bold">Report an issue</h2><p className="mt-3 text-sm leading-relaxed text-muted-foreground">Best for reproducible bugs and technical product feedback.</p></div>
         </a>
       </section>
-      <section className="grid gap-8 border-y border-border py-10 sm:grid-cols-3">
+      <section className="grid gap-8 py-10 sm:grid-cols-3 sm:gap-12">
         <div><p className="text-sm font-bold">Include the basics</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Your macOS version, the active app, and what you expected to happen help us investigate faster.</p></div>
         <div><p className="text-sm font-bold">Protect private writing</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Do not send passwords, payment details, confidential text, or other sensitive typing context.</p></div>
         <div><p className="text-sm font-bold">Account help</p><p className="mt-2 text-sm leading-relaxed text-muted-foreground">Email from the address on your Tab account so we can identify the right account safely.</p></div>

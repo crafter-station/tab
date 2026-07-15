@@ -25,7 +25,6 @@ export type PricingPlan = {
   features: ReactNode[];
   action: PricingPlanAction;
   actionNote?: string;
-  preAction?: ReactNode;
   featured?: boolean;
   id?: string;
 };
@@ -72,7 +71,6 @@ export function PricingPlanCard({ plan, headingLevel = 3 }: { plan: PricingPlan;
           </ul>
         </CardContent>
         <CardFooter className="mt-8 block p-6 pt-0 sm:p-8 sm:pt-0">
-          {plan.preAction}
           {plan.action.kind === "checkout" ? (
             <form action="/billing/checkout" method="get" className="grid gap-3">
               <input type="hidden" name="plan" value={plan.action.plan} />

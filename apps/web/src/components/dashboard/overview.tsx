@@ -12,7 +12,7 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
   return (
     <DashboardSectionContent section="overview">
       <div className="grid gap-10">
-        <SectionCard>
+        <SectionCard variant="quiet">
           <CardContent className="grid gap-x-8 gap-y-2 p-5 sm:grid-cols-2 lg:grid-cols-4">
             <SummaryMetric label="Suggestions used" value={formatCount(data.localSuggestionActivity.acceptedSuggestions)} detail="This month" />
             <SummaryMetric label="Words inserted" value={formatCount(data.localSuggestionActivity.acceptedWords)} detail="This month" />
@@ -21,8 +21,8 @@ export function DashboardOverviewPage({ data }: { data: DashboardData }) {
           </CardContent>
         </SectionCard>
         <section className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_17rem] lg:items-start">
-          <SectionCard>
-            <CardContent className="grid gap-7 p-5 sm:p-6">
+          <SectionCard variant="plain">
+            <CardContent className="grid gap-7 p-0">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-base font-bold">Plan allowances</h2>
                 <p className="text-sm text-muted-foreground">{formatPlanName(data.billing.planId)} plan{data.billing.trial.active ? ` trial ends ${formatDate(data.billing.trial.endsAt)}` : ""}</p>

@@ -26,6 +26,8 @@ Use shared radius tokens: `--radius-control` for buttons and inputs, `--radius-m
 
 Use `--tab-canvas`, `--tab-sidebar`, `--tab-surface-raised`, and `--tab-surface-sunken` to establish hierarchy before adding borders or shadows. Sidebar utilities are aliases of these canonical roles rather than a separate palette, so review surfaces and explicit theme boundaries stay consistent. Use `--tab-hover` and `--tab-active` for interactive states, and the shared control, card, and window shadows only at their corresponding elevation. Large app surfaces remain opaque; reserve blur for the small Floating Suggestion Overlay, which uses the dedicated `--tab-overlay-*` tokens for reliable contrast over third-party applications.
 
+Group passive information with whitespace by default. Use a borderless sunken surface when an informational group needs more emphasis, and use hairline dividers only when rows form a dense sequence or comparison that would be harder to scan with spacing alone. Reserve raised cards, borders, and shadows for interactive choices, controls, or genuinely contained product surfaces. Do not put short marketing explanations into individual cards or add dividers merely to decorate a multi-column layout.
+
 ## Motion
 
 Use `--tab-ease-out` for direct feedback and entrances and `--tab-ease-in-out` only for movement between visible positions. Keep interaction feedback at 150ms or less and animate only opacity or transforms. Frequently used surfaces, including the suggestion overlay and settings tab changes, appear immediately; they do not replay decorative entrance motion. Pressable controls use a subtle `scale(0.97)` response and must honor reduced motion.

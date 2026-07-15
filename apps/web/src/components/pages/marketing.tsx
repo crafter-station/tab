@@ -1,5 +1,4 @@
 import { planCapabilities } from "@tab/billing";
-import { CaretDown } from "@phosphor-icons/react";
 import { Button } from "@tab/ui";
 import { PricingPlanGrid } from "../pricing/pricing-plan-card.tsx";
 import { PageKicker, formatCount, formatMonthlyPrice } from "./shared.tsx";
@@ -32,34 +31,33 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
     {
       name: "Free" as const,
       price: "$0",
-      billing: "No card or subscription required",
-      badge: "No subscription",
-      description: "Everyday suggestions with occasional deeper help.",
+      billing: "Free, with no subscription",
+      badge: "For occasional use",
+      description: "Local Suggestions and Deep Completes for occasional writing.",
       features: [
-        <><strong className="text-foreground">{formatCount(free.localAcceptedWordsPerDay)} inserted words</strong> each day</>,
-        <><strong className="text-foreground">{formatCount(free.deepCompletesPerMonth)} Deep Suggestions</strong> each month</>,
+        <><strong className="text-foreground">{formatCount(free.localAcceptedWordsPerDay)} Accepted Words</strong> each day</>,
+        <><strong className="text-foreground">{formatCount(free.deepCompletesPerMonth)} Deep Completes</strong> each month</>,
         <><strong className="text-foreground">{formatCount(free.personalDeviceLimit)} Mac</strong></>,
         <>View, edit, export, and delete existing Personal Memory</>,
       ],
-      preAction: <div className="mb-3 grid gap-3"><p className="text-xs font-semibold text-muted-foreground">No billing details</p><div className="flex h-11 items-center rounded-[var(--radius-control)] border border-border bg-muted/35 px-3 text-sm font-semibold">Free is available without checkout</div></div>,
-      action: { kind: "link" as const, href: authenticated ? "/dashboard" : "/signup", label: authenticated ? "Open dashboard" : "Create a Free account" },
-      actionNote: "No charge unless you choose a paid plan.",
+      action: { kind: "link" as const, href: authenticated ? "/dashboard" : "/signup", label: authenticated ? "Go to dashboard" : "Get started free" },
+      actionNote: "No credit card required.",
     },
     {
       name: "Pro" as const,
       price: formatMonthlyPrice(pro.monthlyPriceUsd),
       billing: "Billed monthly",
       badge: "Best for daily use",
-      description: "Unlimited suggestions, more Deep Suggestions, and automatic memory.",
+      description: "Unlimited Local Suggestions, more Deep Completes, and automatic Personal Memory.",
       features: [
-        <><strong className="text-background">Unlimited inserted words</strong></>,
-        <><strong className="text-background">{formatCount(pro.deepCompletesPerMonth)} Deep Suggestions</strong> each month</>,
+        <><strong className="text-background">Unlimited Accepted Words</strong></>,
+        <><strong className="text-background">{formatCount(pro.deepCompletesPerMonth)} Deep Completes</strong> each month</>,
         <>Up to <strong className="text-background">{formatCount(pro.personalDeviceLimit)} Macs</strong></>,
         <>Automatic Personal Memory</>,
         <>Custom writing instructions and supported model catalog</>,
       ],
-      action: { kind: "checkout" as const, plan: "pro" as const, label: authenticated ? "Choose Pro" : "Start Pro with one month free" },
-      actionNote: authenticated ? "Continue to checkout or manage your current plan." : "Sign in, then continue to checkout.",
+      action: { kind: "checkout" as const, plan: "pro" as const, label: authenticated ? "Choose Pro" : "Try Pro free for one month" },
+      actionNote: "Payment details required. Cancel anytime.",
       featured: true,
       id: "paid-plans",
     },
@@ -67,17 +65,17 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       name: "Max" as const,
       price: formatMonthlyPrice(max.monthlyPriceUsd),
       billing: "Billed monthly",
-      badge: "Most Deep Suggestions",
-      description: "Everything in Pro, with more Deep Suggestions.",
+      badge: "Most Deep Completes",
+      description: `Everything in Pro, with ${formatCount(max.deepCompletesPerMonth)} Deep Completes each month.`,
       features: [
-        <><strong className="text-foreground">Unlimited inserted words</strong></>,
-        <><strong className="text-foreground">{formatCount(max.deepCompletesPerMonth)} Deep Suggestions</strong> each month</>,
+        <><strong className="text-foreground">Unlimited Accepted Words</strong></>,
+        <><strong className="text-foreground">{formatCount(max.deepCompletesPerMonth)} Deep Completes</strong> each month</>,
         <>Up to <strong className="text-foreground">{formatCount(max.personalDeviceLimit)} Macs</strong></>,
         <>Automatic Personal Memory</>,
         <>Custom writing instructions and supported model catalog</>,
       ],
-      action: { kind: "checkout" as const, plan: "max" as const, label: authenticated ? "Choose Max" : "Start Max with one month free" },
-      actionNote: authenticated ? "Continue to checkout or manage your current plan." : "Sign in, then continue to checkout.",
+      action: { kind: "checkout" as const, plan: "max" as const, label: authenticated ? "Choose Max" : "Try Max free for one month" },
+      actionNote: "Payment details required. Cancel anytime.",
     },
   ];
 
@@ -86,9 +84,9 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
       <section className="grid gap-10" aria-labelledby="pricing-heading">
         <div>
           <PageKicker>Simple pricing</PageKicker>
-          <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Your first month of Pro or Max is free.</h1>
-          <p className="mt-6 max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Choose a paid plan. You will not be charged until the one-month trial ends.</p>
-          <Button asChild size="lg" className="mt-6"><a href={authenticated ? "#paid-plans" : "/signup"}>{authenticated ? "Choose a plan" : "Create an account"}</a></Button>
+          <h1 id="pricing-heading" className="mt-4 max-w-[14ch] text-balance font-[var(--font-display)] text-[clamp(2.75rem,6vw,5.5rem)] font-bold leading-[0.94] tracking-[-0.03em]">Start free. Upgrade when you need more.</h1>
+          <p className="mt-6 max-w-[52ch] text-pretty text-lg leading-relaxed text-muted-foreground">Use Tab for free with no credit card. Or try Pro or Max free for one month.</p>
+          <Button asChild size="lg" className="mt-6"><a href={authenticated ? "#paid-plans" : "/signup"}>{authenticated ? "Compare plans" : "Get started free"}</a></Button>
         </div>
 
         <PricingPlanGrid headingLevel={2} plans={pricingPlans} />
@@ -103,8 +101,8 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
             <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Only words you insert count. Ignored suggestions do not.</p>
           </article>
           <article>
-            <h3 className="font-bold">Deep Suggestions</h3>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Only successful suggestions count.</p>
+            <h3 className="font-bold">Deep Completes</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Only requests that return a Suggestion count.</p>
           </article>
           <article>
             <h3 className="font-bold">No automatic overages</h3>
@@ -113,17 +111,24 @@ export function PricingPage({ authenticated = false }: { authenticated?: boolean
         </div>
       </section>
 
-      <details className="marketing-detail rounded-[var(--radius-card)] bg-muted/35 p-5 sm:p-6">
-        <summary className="flex cursor-pointer list-none items-center justify-between gap-4 font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-          Trial, renewal, and cancellation details
-          <CaretDown className="tab-disclosure-chevron shrink-0" aria-hidden="true" />
-        </summary>
-        <div className="tab-disclosure-panel mt-6 grid gap-6 text-sm leading-relaxed text-muted-foreground sm:grid-cols-3">
-          <div><h3 className="font-bold text-foreground">Trial</h3><p className="mt-2">Your free month starts at checkout. Payment details are required.</p></div>
-          <div><h3 className="font-bold text-foreground">Paid plans</h3><p className="mt-2">Plans renew monthly. Change or cancel your plan in <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing settings</a>.</p></div>
-          <div><h3 className="font-bold text-foreground">Personal Memory</h3><p className="mt-2">Downgrading does not remove your controls to view, edit, export, or delete existing Personal Memory.</p></div>
+      <section aria-labelledby="billing-details-heading">
+        <PageKicker>Good to know</PageKicker>
+        <h2 id="billing-details-heading" className="mt-3 max-w-[18ch] text-balance font-[var(--font-display)] text-3xl font-bold tracking-[-0.015em] sm:text-4xl">Before you start a paid trial.</h2>
+        <div className="mt-8 grid gap-8 md:grid-cols-3 md:gap-12">
+          <article>
+            <h3 className="font-bold">One month free</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">Your trial starts at checkout. A payment method is required, but you will not be charged until the trial ends.</p>
+          </article>
+          <article>
+            <h3 className="font-bold">Renews monthly</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">After your trial, the plan renews at its listed monthly price. Change or cancel anytime in <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/billing/portal">billing settings</a>.</p>
+          </article>
+          <article>
+            <h3 className="font-bold">Your memory stays yours</h3>
+            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">If you downgrade or cancel, you can still view, edit, export, and delete your existing Personal Memory.</p>
+          </article>
         </div>
-      </details>
+      </section>
 
       <p className="text-center text-sm leading-relaxed text-muted-foreground">Prices are in USD before applicable taxes. See the <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/terms">Terms of Service</a> and <a className="font-semibold text-foreground underline decoration-border underline-offset-4" href="/privacy">Privacy Policy</a>.</p>
     </div>
