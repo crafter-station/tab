@@ -55,7 +55,13 @@ async function buildRenderer() {
 
 async function copyTrayIcon() {
   const iconPath = path.join(devAssets, "iconTemplate.png");
-  await Bun.write(iconPath, Bun.file(path.join(desktopRoot, "assets", "iconTemplate.png")));
+  await Promise.all([
+    Bun.write(iconPath, Bun.file(path.join(desktopRoot, "assets", "iconTemplate.png"))),
+    Bun.write(
+      path.join(devAssets, "iconTemplate@2x.png"),
+      Bun.file(path.join(desktopRoot, "assets", "iconTemplate@2x.png")),
+    ),
+  ]);
   return iconPath;
 }
 
