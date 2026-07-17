@@ -145,6 +145,56 @@ describe("Better Auth browser handoff and device tokens", () => {
     expect((await deviceTokenService.verifyDeviceToken(token))?.lastSeenAt).toEqual(now);
   });
 
+  it("does not let an in-flight verification restore a rotated device token", async () => {
+    let releaseVerification!: () => void;
+    let verificationRead!: () => void;
+    const verificationWasRead = new Promise<void>((resolve) => {
+      verificationRead = resolve;
+    });
+    const verificationCanContinue = new Promise<void>((resolve) => {
+      releaseVerification = resolve;
+    });
+    let pauseNextTokenLookup = false;
+
+    class InterleavedDeviceTokenStorage extends InMemoryDeviceTokenStorage {
+      override async findDeviceByTokenHash(tokenHash: string) {
+        const device = await super.findDeviceByTokenHash(tokenHash);
+        if (pauseNextTokenLookup) {
+          pauseNextTokenLookup = false;
+          verificationRead();
+          await verificationCanContinue;
+        }
+        return device;
+      }
+    }
+
+    const deviceTokenService = new DeviceTokenService({
+      storage: new InterleavedDeviceTokenStorage(),
+    });
+    const deviceInfo = {
+      deviceId: "device-token-rotation-race",
+      platform: "darwin",
+      appVersion: "0.0.1",
+    };
+    const { token: oldToken } = await deviceTokenService.createDeviceToken(
+      "user-rotation-race",
+      deviceInfo,
+    );
+
+    pauseNextTokenLookup = true;
+    const oldVerification = deviceTokenService.verifyDeviceToken(oldToken);
+    await verificationWasRead;
+    const { token: newToken } = await deviceTokenService.createDeviceToken(
+      "user-rotation-race",
+      deviceInfo,
+    );
+    releaseVerification();
+    await oldVerification;
+
+    expect(await deviceTokenService.verifyDeviceToken(newToken)).not.toBeNull();
+    expect(await deviceTokenService.verifyDeviceToken(oldToken)).toBeNull();
+  });
+
   it("mounts Better Auth sign-up and sign-in endpoints", async () => {
     const { app } = await createAuthApp();
 

@@ -2,7 +2,7 @@ import {
   DeviceTokenExchangeRequestSchema,
   type DeviceMetadata,
 } from "@tab/contracts";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import type { AppDatabase } from "./db/index.ts";
 import { deviceExchangeCodes, deviceTokens } from "./db/schema.ts";
@@ -37,6 +37,11 @@ export interface DeviceTokenStorage {
   ): Promise<Device | null>;
   findDeviceByTokenHash(tokenHash: string): Promise<Device | null>;
   findDeviceByDeviceId(userId: string, deviceId: string): Promise<Device | null>;
+  touchDeviceLastSeen(
+    deviceId: string,
+    tokenHash: string,
+    lastSeenAt: Date,
+  ): Promise<boolean>;
   updateDevice(device: Device): Promise<Device>;
   listDevicesByUser(userId: string): Promise<Device[]>;
   createExchangeCode(
@@ -108,6 +113,17 @@ export class InMemoryDeviceTokenStorage implements DeviceTokenStorage {
 
   async findDeviceByDeviceId(userId: string, deviceId: string): Promise<Device | null> {
     return this.devicesByDeviceId.get(`${userId}:${deviceId}`) ?? null;
+  }
+
+  async touchDeviceLastSeen(
+    deviceId: string,
+    tokenHash: string,
+    lastSeenAt: Date,
+  ): Promise<boolean> {
+    const current = this.devices.get(deviceId);
+    if (!current || current.tokenHash !== tokenHash) return false;
+    await this.updateDevice({ ...current, lastSeenAt });
+    return true;
   }
 
   async updateDevice(device: Device): Promise<Device> {
@@ -253,6 +269,24 @@ export class D1DeviceTokenStorage implements DeviceTokenStorage {
       where: sql`${deviceTokens.userId} = ${userId} AND ${deviceTokens.deviceId} = ${deviceId}`,
     });
     return row ? deviceRowToDevice(row) : null;
+  }
+
+  async touchDeviceLastSeen(
+    deviceId: string,
+    tokenHash: string,
+    lastSeenAt: Date,
+  ): Promise<boolean> {
+    const [updated] = await this.db
+      .update(deviceTokens)
+      .set({ lastSeenAt: lastSeenAt.toISOString() })
+      .where(
+        and(
+          eq(deviceTokens.id, deviceId),
+          eq(deviceTokens.tokenHash, tokenHash),
+        ),
+      )
+      .returning({ id: deviceTokens.id });
+    return Boolean(updated);
   }
 
   async updateDevice(device: Device): Promise<Device> {
@@ -425,12 +459,13 @@ export class DeviceTokenService {
     const device = await this.storage.findDeviceByTokenHash(tokenHash);
     if (!device) return null;
 
-    const updated: Device = {
-      ...device,
-      lastSeenAt: this.now(),
-    };
-    await this.storage.updateDevice(updated);
-    return updated;
+    const lastSeenAt = this.now();
+    const touched = await this.storage.touchDeviceLastSeen(
+      device.id,
+      tokenHash,
+      lastSeenAt,
+    );
+    return touched ? { ...device, lastSeenAt } : null;
   }
 
   async revokeDevice(userId: string, deviceId: string): Promise<boolean> {
