@@ -248,6 +248,30 @@ describe("Hono suggestion API", () => {
     expect(normalizeGeneratedRewrite(validRewriteRequest.selectedText, "This sentence is clear.")).toBe("This sentence is clear.");
   });
 
+  it("records provider metadata for a suppressed Rewrite", async () => {
+    const { app, token, billingService, telemetryService } = await createAuthenticatedTestApp(async () => ({
+      text: "",
+      modelId: "rewrite-model",
+      cloudCostUsdMicros: 7,
+    }));
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRewriteRequest, requestId: "suppressed-metadata" }),
+    });
+
+    const body = await parseApiResponse(response);
+    expect(body.status === "ok" && body.data.suggestions).toEqual([]);
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(0);
+    expect((await telemetryService.listEvents())[0]).toMatchObject({
+      eventType: "suggestion_generated",
+      suggestionMode: "rewrite",
+      suggestionLength: 0,
+      modelId: "rewrite-model",
+      cloudCostUsdMicros: 7,
+    });
+  });
+
   it("rate limits Rewrite before provider generation or allowance consumption", async () => {
     let generations = 0;
     const { app, token, billingService } = await createAuthenticatedTestApp(async () => {

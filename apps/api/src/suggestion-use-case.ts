@@ -102,17 +102,20 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
     const suggestionText = input.mode === "rewrite"
       ? normalizeGeneratedRewrite(input.selectedText, text)
       : normalizeGeneratedSuggestion(input.typingContext, text);
-    if (!suggestionText || (input.mode === "deep_complete" && !isSuggestionContractValid(input.typingContext, suggestionText))) {
-      return null;
-    }
-
-    return {
-      text: suggestionText,
+    const providerMetadata = {
       modelId,
       cloudCostUsdMicros: Math.round(
         (usage.inputTokens ?? 0) * GROQ_INPUT_USD_PER_MILLION_TOKENS
         + (usage.outputTokens ?? 0) * GROQ_OUTPUT_USD_PER_MILLION_TOKENS,
       ),
+    };
+    if (!suggestionText || (input.mode === "deep_complete" && !isSuggestionContractValid(input.typingContext, suggestionText))) {
+      return input.mode === "rewrite" ? { text: "", ...providerMetadata } : null;
+    }
+
+    return {
+      text: suggestionText,
+      ...providerMetadata,
     };
   };
 }
