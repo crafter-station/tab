@@ -8,6 +8,7 @@ import {
   normalizeGeneratedSuggestion,
 } from "../apps/api/src/index.ts";
 import { isSuggestionContractValid } from "../packages/suggestion-policy/src/index.ts";
+import { normalizeGeneratedRewrite } from "../packages/suggestion-policy/src/index.ts";
 import { BillingService, InMemoryBillingStorage, InMemoryUsageMeterClient, UsageMeterService } from "../apps/api/src/billing.ts";
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
@@ -22,9 +23,10 @@ async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerato
   await migrateAuth(auth);
   const deviceTokenStorage = new InMemoryDeviceTokenStorage();
   const deviceTokenService = new DeviceTokenService({ storage: deviceTokenStorage });
-    const billingStorage = new InMemoryBillingStorage();
+  const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
-  const app = createApp({ generateSuggestion, auth, deviceTokenService, billingService, telemetryStorage: new InMemoryTelemetryStorage(), personalMemoryStorage: new InMemoryPersonalMemoryStorage() });
+  const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
+  const app = createApp({ generateSuggestion, auth, deviceTokenService, billingService, telemetryService, personalMemoryStorage: new InMemoryPersonalMemoryStorage() });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
     deviceId: "device-1",
     platform: "darwin",
@@ -38,7 +40,7 @@ async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerato
     status: "active",
     cachedAt: new Date(),
   });
-  return { app, token };
+  return { app, token, billingService, telemetryService };
 }
 
 async function parseApiResponse(response: Response) {
@@ -56,6 +58,20 @@ const validRequest = {
   memoryEnabled: true,
   contextHash: "com.apple.TextEdit:Hello:false",
   clientMetadata: { appVersion: "0.0.1", platform: "darwin" },
+} as const;
+
+const validRewriteRequest = {
+  ...validRequest,
+  requestId: "rewrite-1",
+  mode: "rewrite",
+  selectedText: "This sentence are unclear.",
+  textBeforeSelection: "Introduction. ",
+  textAfterSelection: " Conclusion.",
+  selectedRange: { location: 14, length: 26 },
+  focusedElementId: "field-1",
+  textElementId: "text-1",
+  contextIdentity: "rewrite-target-1",
+  activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window-1" },
 } as const;
 
 const appContext = {
@@ -167,6 +183,82 @@ describe("Hono suggestion API", () => {
     expect(body.data.suggestions).toHaveLength(1);
     expect(body.data.suggestions[0].text).toBe(" world");
     expect(body.data.suggestions[0].id).toContain("req-1");
+  });
+
+  it("returns a validated replacement for an authenticated Rewrite", async () => {
+    let input: SuggestionInput | null = null;
+    const { app, token, billingService, telemetryService } = await createAuthenticatedTestApp(async (captured) => {
+      input = captured;
+      return { text: "This sentence is clear.", modelId: "rewrite-model", cloudCostUsdMicros: 12 };
+    });
+    const response = await app.request("/suggestions", {
+      method: "POST", headers: authHeaders(token), body: JSON.stringify(validRewriteRequest),
+    });
+    expect(response.status).toBe(200);
+    const body = await parseApiResponse(response);
+    expect(body.status === "ok" && body.data.suggestions[0]?.text).toBe("This sentence is clear.");
+    expect(input).toMatchObject({ mode: "rewrite", selectedText: validRewriteRequest.selectedText });
+    expect(input && "typingContext" in input).toBe(false);
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(1);
+    const events = await telemetryService.listEvents();
+    expect(events[0]).toMatchObject({ suggestionMode: "rewrite", selectedTextLength: 26, surroundingTextLength: 26, cloudCostUsdMicros: 12 });
+    const serialized = JSON.stringify(events);
+    for (const raw of [validRewriteRequest.selectedText, validRewriteRequest.textBeforeSelection, validRewriteRequest.textAfterSelection, "This sentence is clear."]) expect(serialized).not.toContain(raw);
+
+    const replay = await app.request("/suggestions", { method: "POST", headers: authHeaders(token), body: JSON.stringify(validRewriteRequest) });
+    expect(replay.status).toBe(409);
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(1);
+  });
+
+  it("rejects malformed Rewrite targets and enforces the 2,000-character boundary", async () => {
+    const { app, token } = await createAuthenticatedTestApp(async () => ({ text: "better" }));
+    const cases = [
+      { ...validRewriteRequest, selectedText: "", selectedRange: { location: 0, length: 0 } },
+      { ...validRewriteRequest, selectedRange: { location: 14, length: 2 } },
+      { ...validRewriteRequest, focusedElementId: "" },
+      { ...validRewriteRequest, activeApplication: { bundleId: "com.apple.TextEdit" } },
+      { ...validRewriteRequest, selectedText: "x".repeat(2_001), selectedRange: { location: 0, length: 2_001 } },
+      { ...validRewriteRequest, redaction: { applied: true, redactionCount: 1, kinds: ["api_key"] } },
+      { ...validRewriteRequest, selectedText: "api_key=abcdefghijklmnop", selectedRange: { location: 0, length: 24 } },
+    ];
+    for (const request of cases) {
+      const response = await app.request("/suggestions", { method: "POST", headers: authHeaders(token), body: JSON.stringify(request) });
+      expect(response.status).toBe(400);
+    }
+    const boundary = { ...validRewriteRequest, requestId: "rewrite-boundary", selectedText: "word ".repeat(400), selectedRange: { location: 0, length: 2_000 } };
+    expect((await app.request("/suggestions", { method: "POST", headers: authHeaders(token), body: JSON.stringify(boundary) })).status).toBe(200);
+  });
+
+  it("suppresses unchanged, explanatory, quoted, empty, and oversized Rewrite output", async () => {
+    for (const [index, output] of [
+      validRewriteRequest.selectedText,
+      "Here is a clearer version: text",
+      '"This sentence is clear."',
+      " ",
+      "x".repeat(2_001),
+    ].entries()) {
+      const { app, token } = await createAuthenticatedTestApp(async () => ({ text: output }));
+      const response = await app.request("/suggestions", { method: "POST", headers: authHeaders(token), body: JSON.stringify({ ...validRewriteRequest, requestId: `invalid-output-${index}` }) });
+      const body = await parseApiResponse(response);
+      expect(body.status === "ok" && body.data.suggestions).toEqual([]);
+    }
+    expect(normalizeGeneratedRewrite(validRewriteRequest.selectedText, "This sentence is clear.")).toBe("This sentence is clear.");
+  });
+
+  it("rate limits Rewrite before provider generation or allowance consumption", async () => {
+    let generations = 0;
+    const { app, token, billingService } = await createAuthenticatedTestApp(async () => {
+      generations += 1;
+      return null;
+    });
+    for (let index = 0; index < 60; index += 1) {
+      const response = await app.request("/suggestions", { method: "POST", headers: authHeaders(token), body: JSON.stringify({ ...validRewriteRequest, requestId: `rate-${index}` }) });
+      expect(response.status).toBe(200);
+    }
+    const limited = await app.request("/suggestions", { method: "POST", headers: authHeaders(token), body: JSON.stringify({ ...validRewriteRequest, requestId: "rate-limited" }) });
+    expect(limited.status).toBe(429);
+    expect(generations).toBe(60);
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(0);
   });
 
   it("returns an empty suggestions array when the provider returns no confident suggestion", async () => {

@@ -5,10 +5,12 @@ import { getMemoryEligibility } from "@tab/memory-policy";
 import {
   createSuggestionPrompt,
   createSuggestionMessages,
+  createRewriteMessages,
   isSuggestionContractValid,
   MAX_SUGGESTION_LENGTH,
   MAX_SUGGESTION_TOKENS,
   normalizeGeneratedSuggestion,
+  normalizeGeneratedRewrite,
 } from "@tab/suggestion-policy";
 import type {
   ActiveApplication,
@@ -33,9 +35,8 @@ const SUGGESTION_MODEL_ID = "llama-3.1-8b-instant";
 
 export { createSuggestionPrompt, MAX_SUGGESTION_LENGTH, normalizeGeneratedSuggestion };
 
-export type SuggestionInput = {
+type SuggestionInputBase = {
   readonly requestId: string;
-  readonly typingContext: string;
   readonly contextSource: SuggestionContextSource;
   readonly activeApplication: ActiveApplication;
   readonly memoryEnabled: boolean;
@@ -44,9 +45,14 @@ export type SuggestionInput = {
   readonly customWritingInstructions?: string;
 };
 
+export type SuggestionInput = SuggestionInputBase & (
+  | { readonly mode: "deep_complete"; readonly typingContext: string }
+  | { readonly mode: "rewrite"; readonly selectedText: string; readonly textBeforeSelection: string; readonly textAfterSelection: string }
+);
+
 export type SuggestionGenerator = (
   input: SuggestionInput,
-) => Promise<{ text: string; modelId?: string } | null>;
+) => Promise<{ text: string; modelId?: string; cloudCostUsdMicros?: number } | null>;
 
 export type SuggestionUseCaseDependencies = {
   readonly billingService: BillingService;
@@ -79,21 +85,22 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       throw new Error("GROQ_API_KEY is not configured");
     }
 
-    const [systemMessage, ...messages] = createSuggestionMessages(input);
+    const [systemMessage, ...messages] = input.mode === "rewrite"
+      ? createRewriteMessages(input)
+      : createSuggestionMessages(input);
 
     const { text } = await generateText({
       model: groq(modelId),
       instructions: systemMessage?.content,
       messages,
-      maxOutputTokens: MAX_SUGGESTION_TOKENS,
+      maxOutputTokens: input.mode === "rewrite" ? 2_500 : MAX_SUGGESTION_TOKENS,
       temperature: 0.3,
     });
 
-    const suggestionText = normalizeGeneratedSuggestion(
-      input.typingContext,
-      text,
-    );
-    if (!isSuggestionContractValid(input.typingContext, suggestionText)) {
+    const suggestionText = input.mode === "rewrite"
+      ? normalizeGeneratedRewrite(input.selectedText, text)
+      : normalizeGeneratedSuggestion(input.typingContext, text);
+    if (!suggestionText || (input.mode === "deep_complete" && !isSuggestionContractValid(input.typingContext, suggestionText))) {
       return null;
     }
 
@@ -174,9 +181,8 @@ export class SuggestionUseCase {
     const memories = await this.selectRelevantMemories(device, request);
 
     try {
-      const generated = await this.deps.generateSuggestion({
+      const commonInput = {
         requestId: request.requestId,
-        typingContext: request.typingContext,
         contextSource: request.contextSource,
         activeApplication: request.activeApplication,
         memoryEnabled: request.memoryEnabled,
@@ -186,11 +192,17 @@ export class SuggestionUseCase {
           .customWritingInstructions
           ? request.customWritingInstructions
           : undefined,
-      });
+      };
+      const generated = await this.deps.generateSuggestion(request.mode === "rewrite"
+        ? { ...commonInput, mode: "rewrite", selectedText: request.selectedText, textBeforeSelection: request.textBeforeSelection, textAfterSelection: request.textAfterSelection }
+        : { ...commonInput, mode: "deep_complete", typingContext: request.typingContext });
 
       const latencyMs = Math.round(performance.now() - suggestionStart);
-      const suggestions: Suggestion[] = generated?.text
-        ? [{ id: `sg-${request.requestId}`, text: generated.text }]
+      const validatedText = request.mode === "rewrite" && generated?.text
+        ? normalizeGeneratedRewrite(request.selectedText, generated.text)
+        : generated?.text;
+      const suggestions: Suggestion[] = validatedText
+        ? [{ id: `sg-${request.requestId}`, text: validatedText }]
         : [];
       const shouldConsume = shouldCountDeepComplete(suggestions.length);
       if (!shouldConsume) {
@@ -212,6 +224,10 @@ export class SuggestionUseCase {
         memoryUsed: memories.length > 0,
         memoryCount: memories.length,
         providerId: "groq",
+        cloudCostUsdMicros: generated?.cloudCostUsdMicros,
+        suggestionMode: request.mode,
+        selectedTextLength: request.mode === "rewrite" ? request.selectedText.length : undefined,
+        surroundingTextLength: request.mode === "rewrite" ? request.textBeforeSelection.length + request.textAfterSelection.length : undefined,
         latencyMs,
         redactionApplied: request.redaction.applied,
         redactionCount: request.redaction.redactionCount,
@@ -266,6 +282,9 @@ export class SuggestionUseCase {
         redactionCount: request.redaction.redactionCount,
         clientAppVersion: request.clientMetadata?.appVersion,
         clientPlatform: request.clientMetadata?.platform,
+        suggestionMode: request.mode,
+        selectedTextLength: request.mode === "rewrite" ? request.selectedText.length : undefined,
+        surroundingTextLength: request.mode === "rewrite" ? request.textBeforeSelection.length + request.textAfterSelection.length : undefined,
       });
 
       return {
@@ -288,7 +307,9 @@ export class SuggestionUseCase {
     try {
       return await this.deps.personalMemoryService.selectRelevantMemories({
         userId: device.userId,
-        typingContext: request.typingContext,
+        typingContext: request.mode === "rewrite"
+          ? `${request.textBeforeSelection}\n${request.textAfterSelection}`
+          : request.typingContext,
         activeApplication: request.activeApplication,
         memoryEnabled: true,
       });

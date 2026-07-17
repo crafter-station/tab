@@ -85,6 +85,13 @@
       "when": 1784049723762,
       "tag": "0011_redundant_pretty_boy",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1784325325823,
+      "tag": "0012_chunky_white_queen",
+      "breakpoints": true
     }
   ]
 }

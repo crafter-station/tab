@@ -133,6 +133,9 @@ function assertNoRawText(events: readonly Record<string, unknown>[], rawContext:
     "memoryCount",
     "providerId",
     "cloudCostUsdMicros",
+    "suggestionMode",
+    "selectedTextLength",
+    "surroundingTextLength",
   ]);
 
   for (const event of events) {

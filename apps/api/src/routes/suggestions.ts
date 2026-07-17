@@ -1,4 +1,5 @@
 import { SuggestionRequestSchema } from "@tab/contracts";
+import { detectSensitiveData } from "@tab/redaction";
 import type { Context } from "hono";
 import type { ApiApp, ApiBindings, ApiVariables } from "../api-types.ts";
 import type { SuggestionUseCase } from "../suggestion-use-case.ts";
@@ -20,6 +21,7 @@ export function registerSuggestionRoutes(
   app: ApiApp,
   deps: { suggestionUseCase: SuggestionUseCase },
 ) {
+  const requestWindows = new Map<string, { startedAt: number; count: number }>();
   app.post("/suggestions", async (c) => {
     const request = await readJsonRequest(c.req, SuggestionRequestSchema);
     if (!request.ok) {
@@ -27,6 +29,33 @@ export function registerSuggestionRoutes(
         createErrorResponse("invalid_request", request.message),
         400,
       );
+    }
+    if (request.data.mode === "rewrite") {
+      const sensitive = detectSensitiveData(
+        `${request.data.textBeforeSelection}\n${request.data.selectedText}\n${request.data.textAfterSelection}`,
+      );
+      if (request.data.redaction.applied || sensitive.hasSensitiveData) {
+        return c.json(
+          createErrorResponse("invalid_request", "Rewrite contains sensitive text."),
+          400,
+        );
+      }
+    }
+
+    if (request.data.mode === "rewrite") {
+      const now = Date.now();
+      const key = c.get("device").deviceId;
+      const current = requestWindows.get(key);
+      const window = !current || now - current.startedAt >= 60_000
+        ? { startedAt: now, count: 1 }
+        : { ...current, count: current.count + 1 };
+      requestWindows.set(key, window);
+      if (window.count > 60) {
+        return c.json(
+          createErrorResponse("rate_limited", "Rewrite request rate limit exceeded."),
+          429,
+        );
+      }
     }
 
     const result = await deps.suggestionUseCase.handle(
