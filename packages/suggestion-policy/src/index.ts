@@ -62,8 +62,8 @@ export function createRewriteMessages(input: RewritePromptInput): SuggestionMess
 export function normalizeGeneratedRewrite(selectedText: string, generatedText: string): string {
   const text = generatedText.trim();
   if (!text || text === selectedText.trim() || Array.from(text).length > MAX_REWRITE_LENGTH) return "";
-  if (/^(?:```|(?:here(?:'s| is)|sure\b|rewritten(?: text)?\s*:|rewrite\s*:|replacement\s*:))/iu.test(text)) return "";
-  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("“") && text.endsWith("”"))) return "";
+  if (/^(?:```|(?:here(?:['’]s| is)|sure\b|i\s+(?:rewrote|have rewritten|['’]ve rewritten)\b|rewritten(?: text)?\s*:|rewrite\s*:|replacement\s*:))/iu.test(text)) return "";
+  if ([['"', '"'], ["'", "'"], ["“", "”"], ["‘", "’"]].some(([open, close]) => text.startsWith(open) && text.endsWith(close))) return "";
   return text;
 }
 

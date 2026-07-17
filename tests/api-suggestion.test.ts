@@ -233,7 +233,10 @@ describe("Hono suggestion API", () => {
     for (const [index, output] of [
       validRewriteRequest.selectedText,
       "Here is a clearer version: text",
+      "I rewrote it for clarity: This sentence is clear.",
       '"This sentence is clear."',
+      "'This sentence is clear.'",
+      "‘This sentence is clear.’",
       " ",
       "x".repeat(2_001),
     ].entries()) {
