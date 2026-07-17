@@ -32,6 +32,8 @@ import type { TelemetryService } from "./telemetry.ts";
 import { env } from "./env.ts";
 
 const SUGGESTION_MODEL_ID = "llama-3.1-8b-instant";
+const GROQ_INPUT_USD_PER_MILLION_TOKENS = 0.05;
+const GROQ_OUTPUT_USD_PER_MILLION_TOKENS = 0.08;
 
 export { createSuggestionPrompt, MAX_SUGGESTION_LENGTH, normalizeGeneratedSuggestion };
 
@@ -89,7 +91,7 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
       ? createRewriteMessages(input)
       : createSuggestionMessages(input);
 
-    const { text } = await generateText({
+    const { text, usage } = await generateText({
       model: groq(modelId),
       instructions: systemMessage?.content,
       messages,
@@ -107,6 +109,10 @@ export function createRealSuggestionGenerator(): SuggestionGenerator {
     return {
       text: suggestionText,
       modelId,
+      cloudCostUsdMicros: Math.round(
+        (usage.inputTokens ?? 0) * GROQ_INPUT_USD_PER_MILLION_TOKENS
+        + (usage.outputTokens ?? 0) * GROQ_OUTPUT_USD_PER_MILLION_TOKENS,
+      ),
     };
   };
 }
