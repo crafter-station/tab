@@ -63,7 +63,8 @@ export function normalizeGeneratedRewrite(selectedText: string, generatedText: s
   const text = generatedText.trim();
   if (!text || text === selectedText.trim() || Array.from(text).length > MAX_REWRITE_LENGTH) return "";
   if (/^(?:```|(?:here(?:['’]s| is)|sure\b|i\s+(?:rewrote|have rewritten|['’]ve rewritten)\b|rewritten(?: text)?\s*:|rewrite\s*:|replacement\s*:))/iu.test(text)) return "";
-  if ([['"', '"'], ["'", "'"], ["“", "”"], ["‘", "’"]].some(([open, close]) => text.startsWith(open) && text.endsWith(close))) return "";
+  const quotePairs: readonly (readonly [string, string])[] = [['"', '"'], ["'", "'"], ["“", "”"], ["‘", "’"]];
+  if (quotePairs.some(([open, close]) => text.startsWith(open) && text.endsWith(close))) return "";
   return text;
 }
 
