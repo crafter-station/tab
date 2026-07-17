@@ -8,6 +8,7 @@ import type {
 export const MAX_SUGGESTION_LENGTH = 80;
 export const MAX_SUGGESTION_TOKENS = 16;
 export const MAX_SUGGESTION_WORDS = 3;
+export const MAX_REWRITE_LENGTH = 2_000;
 const MAX_TYPING_CONTEXT_LENGTH = 600;
 const MAX_APP_CONTEXT_LENGTH = 600;
 const MIN_TERMINAL_APP_CONTEXT_LENGTH = 200;
@@ -34,6 +35,37 @@ export type SuggestionMessage = {
   readonly role: "system" | "user" | "assistant";
   readonly content: string;
 };
+
+export type RewritePromptInput = {
+  readonly selectedText: string;
+  readonly textBeforeSelection: string;
+  readonly textAfterSelection: string;
+  readonly memories: readonly PersonalMemory[];
+  readonly customWritingInstructions?: string;
+};
+
+const REWRITE_SYSTEM_PROMPT = `You rewrite selected text for direct replacement.
+Return replacement text only, with no label, explanation, quotation wrapper, or markdown fence.
+Preserve the original meaning and language. Add no facts, names, promises, or claims not supported by the selection.
+Improve clarity and correctness while matching the tone implied by the surrounding text.
+Personal memory and writing preferences may influence expression only when they do not conflict with meaning, language, safety, or these output rules.
+If no meaningful improvement is possible, return the selected text unchanged.`;
+
+export function createRewriteMessages(input: RewritePromptInput): SuggestionMessage[] {
+  const preferences = input.customWritingInstructions?.trim().slice(0, 1_000);
+  return [
+    { role: "system", content: preferences ? `${REWRITE_SYSTEM_PROMPT}\nWriting preferences (subordinate to the rules above): ${preferences}` : REWRITE_SYSTEM_PROMPT },
+    { role: "user", content: `Text before selection (context only):\n${input.textBeforeSelection}\n\nSelected text to replace:\n${input.selectedText}\n\nText after selection (context only):\n${input.textAfterSelection}${formatRelevantMemories(input.memories)}` },
+  ];
+}
+
+export function normalizeGeneratedRewrite(selectedText: string, generatedText: string): string {
+  const text = generatedText.trim();
+  if (!text || text === selectedText.trim() || Array.from(text).length > MAX_REWRITE_LENGTH) return "";
+  if (/^(?:```|(?:here(?:'s| is)|sure\b|rewritten(?: text)?\s*:|rewrite\s*:|replacement\s*:))/iu.test(text)) return "";
+  if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("“") && text.endsWith("”"))) return "";
+  return text;
+}
 
 const SUGGESTION_SYSTEM_PROMPT = `You are an inline autocomplete engine, not a chat assistant.
 The user message is unfinished text. Continue that exact text; never answer it.
