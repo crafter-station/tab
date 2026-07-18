@@ -3,12 +3,13 @@ import {
   TelemetryEventSchema,
   type TelemetryEvent,
 } from "@tab/contracts";
-import { and, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, sql } from "drizzle-orm";
 import type { AppDatabase } from "./db/index.ts";
 import { telemetryEvents } from "./db/schema.ts";
 
 export interface TelemetryStorage {
   recordEvent(event: TelemetryEvent): Promise<void>;
+  reconcileAcceptedSuggestion(userId: string, requestId: string): Promise<void>;
   listEvents(): Promise<readonly TelemetryEvent[]>;
   getLocalSuggestionActivity(userId: string, since: string): Promise<LocalSuggestionActivity>;
 }
@@ -48,6 +49,9 @@ export class TelemetryService {
       id: event.id ?? crypto.randomUUID(),
     });
     await this.storage.recordEvent(record);
+    if (record.eventType === "suggestion_generated" || record.eventType === "suggestion_accepted") {
+      await this.storage.reconcileAcceptedSuggestion(record.userId, record.requestId);
+    }
     return record;
   }
 
@@ -57,6 +61,13 @@ export class TelemetryService {
   ): Promise<void> {
     for (const event of events) {
       try {
+        const generation = event.eventType === "suggestion_accepted"
+          ? [...await this.storage.listEvents()].reverse().find((candidate) =>
+            candidate.userId === identity.userId &&
+            candidate.requestId === event.requestId &&
+            candidate.eventType === "suggestion_generated"
+          )
+          : undefined;
         await this.record({
           id: event.eventId,
           eventType: event.eventType,
@@ -67,12 +78,14 @@ export class TelemetryService {
           suggestionLength: event.suggestionLength,
           latencyMs: event.latencyMs,
           errorCode: event.errorCode,
-          modelId: event.modelId,
+          planId: generation?.planId,
+          modelId: event.modelId ?? generation?.modelId,
           inferenceSource: event.inferenceSource,
           trigger: event.trigger,
           acceptedWordCount: event.acceptedWordCount,
           acceptedCharacterCount: event.acceptedCharacterCount,
           applicationCategory: event.applicationCategory,
+          selectedTextLength: event.selectedTextLength,
           memoryUsed: event.memoryUsed,
           memoryCount: event.memoryCount,
         });
@@ -97,6 +110,26 @@ export class InMemoryTelemetryStorage implements TelemetryStorage {
 
   async recordEvent(event: TelemetryEvent): Promise<void> {
     this.events.push(event);
+  }
+
+  async reconcileAcceptedSuggestion(userId: string, requestId: string): Promise<void> {
+    const generation = [...this.events].reverse().find((event) =>
+      event.userId === userId &&
+      event.requestId === requestId &&
+      event.eventType === "suggestion_generated"
+    );
+    if (!generation) return;
+    this.events = this.events.map((event) =>
+      event.userId === userId &&
+        event.requestId === requestId &&
+        event.eventType === "suggestion_accepted"
+        ? {
+            ...event,
+            planId: event.planId ?? generation.planId,
+            modelId: event.modelId ?? generation.modelId,
+          }
+        : event
+    );
   }
 
   async listEvents(): Promise<readonly TelemetryEvent[]> {
@@ -224,6 +257,31 @@ export class D1TelemetryStorage implements TelemetryStorage {
       selectedTextLength: event.selectedTextLength ?? null,
       surroundingTextLength: event.surroundingTextLength ?? null,
     });
+  }
+
+  async reconcileAcceptedSuggestion(userId: string, requestId: string): Promise<void> {
+    const [generation] = await this.db
+      .select({ planId: telemetryEvents.planId, modelId: telemetryEvents.modelId })
+      .from(telemetryEvents)
+      .where(and(
+        eq(telemetryEvents.userId, userId),
+        eq(telemetryEvents.requestId, requestId),
+        eq(telemetryEvents.eventType, "suggestion_generated"),
+      ))
+      .orderBy(desc(telemetryEvents.timestamp))
+      .limit(1);
+    if (!generation) return;
+    await this.db
+      .update(telemetryEvents)
+      .set({
+        planId: sql`coalesce(${telemetryEvents.planId}, ${generation.planId})`,
+        modelId: sql`coalesce(${telemetryEvents.modelId}, ${generation.modelId})`,
+      })
+      .where(and(
+        eq(telemetryEvents.userId, userId),
+        eq(telemetryEvents.requestId, requestId),
+        eq(telemetryEvents.eventType, "suggestion_accepted"),
+      ));
   }
 
   async listEvents(): Promise<readonly TelemetryEvent[]> {

@@ -2,6 +2,7 @@ import type { Suggestion, ActiveApplication } from "@tab/contracts";
 import { countAcceptedWords } from "@tab/billing";
 import type { InsertionOutcome, InsertionStrategy } from "./application-compatibility.ts";
 import type { TextSessionSnapshot } from "./typing-context.ts";
+import { detectSensitiveData } from "@tab/redaction";
 
 export type InsertionDependencies = {
   getCurrentSuggestion(): Suggestion | null;
@@ -26,7 +27,7 @@ export type AcceptanceCandidate = {
   readonly provenance: SuggestionProvenance;
 };
 
-export type SuggestionAcceptanceResult = InsertionResult | "allowance_exhausted";
+export type SuggestionAcceptanceResult = InsertionResult | "allowance_exhausted" | "stale_target";
 
 export type SuggestionAcceptanceDependencies = {
   readonly canAcceptLocalSuggestion?: () => boolean;
@@ -55,6 +56,57 @@ function rangeKey(range: TextSessionSnapshot["selectedRange"]): string {
 
 function activeApplicationKey(app: ActiveApplication | null): string {
   return `${app?.bundleId ?? "app-unknown"}:${app?.windowId ?? "window-unknown"}`;
+}
+
+function hasConcreteRewriteIdentity(snapshot: TextSessionSnapshot): boolean {
+  const windowId = snapshot.activeApplication?.windowId;
+  if (!windowId || windowId.startsWith("app:")) return false;
+  for (const elementId of [snapshot.focusedElementId, snapshot.textElementId]) {
+    if (!elementId) return false;
+    if (elementId.startsWith("ax:") && !elementId.includes(":identifier:")) return false;
+  }
+  return true;
+}
+
+function exactRewriteTargetMatches(
+  targetApp: ActiveApplication | null,
+  visible: TextSessionSnapshot | null,
+  current: TextSessionSnapshot | null,
+): boolean {
+  if (!targetApp || !visible || !current) return false;
+  if (!hasConcreteRewriteIdentity(visible) || !hasConcreteRewriteIdentity(current)) return false;
+  if (visible.accessibilityReliability !== "reliable" || current.accessibilityReliability !== "reliable") return false;
+  if (visible.secureLike || current.secureLike) return false;
+  if (!visible.activeApplication?.windowId || !current.activeApplication?.windowId) return false;
+  if (!visible.focusedElementId || !current.focusedElementId || !visible.textElementId || !current.textElementId) return false;
+  if (!visible.selectedRange || !current.selectedRange) return false;
+  if (visible.selectedRange.length === 0 || current.selectedRange.length === 0) return false;
+  if (visible.selectedText === undefined || current.selectedText === undefined) return false;
+  if (visible.selectedText.length !== visible.selectedRange.length || current.selectedText.length !== current.selectedRange.length) return false;
+  if (
+    visible.surroundingContext?.beforeCaret === undefined ||
+    visible.surroundingContext.afterCaret === undefined ||
+    current.surroundingContext?.beforeCaret === undefined ||
+    current.surroundingContext.afterCaret === undefined
+  ) return false;
+  if (activeApplicationKey(targetApp) !== activeApplicationKey(current.activeApplication)) return false;
+
+  const exact =
+    activeApplicationKey(visible.activeApplication) === activeApplicationKey(current.activeApplication) &&
+    visible.focusedElementId === current.focusedElementId &&
+    visible.textElementId === current.textElementId &&
+    rangeKey(visible.selectedRange) === rangeKey(current.selectedRange) &&
+    visible.caretIdentity === current.caretIdentity &&
+    visible.selectedText === current.selectedText &&
+    visible.surroundingContext.beforeCaret === current.surroundingContext.beforeCaret &&
+    visible.surroundingContext.afterCaret === current.surroundingContext.afterCaret;
+  if (!exact) return false;
+
+  return !detectSensitiveData([
+    current.selectedText,
+    current.surroundingContext.beforeCaret,
+    current.surroundingContext.afterCaret,
+  ].join("\n")).hasSensitiveData;
 }
 
 function isSemanticInsertionCandidate(target: TextSessionSnapshot | null): target is TextSessionSnapshot {
@@ -89,20 +141,14 @@ function canUseSemanticInsertion(
 
 async function insertWithClipboardFallback(deps: InsertionDependencies, text: string): Promise<void> {
   const previousClipboard = await deps.setClipboard(text);
-  let insertionFailed = false;
 
   try {
     await deps.sendPaste();
     await deps.waitForPaste?.();
-  } catch (error) {
-    insertionFailed = true;
-    throw error;
   } finally {
     try {
       await deps.restoreClipboard(previousClipboard);
-    } catch (error) {
-      if (!insertionFailed) throw error;
-    }
+    } catch {}
   }
 }
 
@@ -161,6 +207,7 @@ export function createSuggestionAcceptance(
       readonly insertion: InsertionDependencies;
     }): Promise<SuggestionAcceptanceResult> {
       const { candidate } = input;
+      let insertion = input.insertion;
       if (
         candidate?.provenance === "automatic" &&
         deps.canAcceptLocalSuggestion &&
@@ -170,7 +217,22 @@ export function createSuggestionAcceptance(
         return "allowance_exhausted";
       }
 
-      const result = await acceptAndInsertSuggestion(input.insertion);
+      if (candidate?.provenance === "rewrite") {
+        const targetApp = insertion.getPreviouslyActiveApplication();
+        const visibleTarget = insertion.getVisibleTextSessionTarget?.() ?? null;
+        const currentTarget = insertion.getCurrentTextSessionTarget?.() ?? null;
+        if (!exactRewriteTargetMatches(targetApp, visibleTarget, currentTarget)) {
+          return "stale_target";
+        }
+        insertion = {
+          ...insertion,
+          getCurrentSuggestion: () => candidate.suggestion,
+          getCurrentTextSessionTarget: () => currentTarget,
+          insertSemantically: undefined,
+        };
+      }
+
+      const result = await acceptAndInsertSuggestion(insertion);
       if (result !== "inserted") return result;
 
       const acceptanceId = deps.createAcceptanceId?.() ?? crypto.randomUUID();

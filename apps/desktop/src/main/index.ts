@@ -29,12 +29,13 @@ import {
 } from "./accepted-word-ledger.ts";
 import { createLocalAcceptanceUsageClient } from "./usage-client.ts";
 import { createNativeAutocompleteApp, type SuggestionProvenance } from "./native-autocomplete-app.ts";
+import { createSuggestionAcceptanceTriggers } from "./suggestion-acceptance-triggers.ts";
 import {
   type AppContextSnapshot,
 } from "./app-context.ts";
 import { createAppContextExtractor, type AppContextAccessibilityTree } from "./app-context-extractor.ts";
 import { createDesktopEventIngress } from "./desktop-event-ingress.ts";
-import { createMacOSInputTap } from "./macos-input-tap.ts";
+import { createMacOSInputTap, readCurrentMacOSTextSession } from "./macos-input-tap.ts";
 import {
   createDesktopAuthClient,
   createDesktopAuthSession,
@@ -478,6 +479,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
       clipboard.writeText(previous);
     },
   }),
+  refreshTextSessionTarget: () => readCurrentMacOSTextSession(INPUT_TAP_PATH),
   debounceMs: 100,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,
@@ -1011,6 +1013,8 @@ async function acceptCurrentSuggestion(): Promise<void> {
   await nativeAutocompleteApp.acceptCurrentSuggestion();
 }
 
+const suggestionAcceptanceTriggers = createSuggestionAcceptanceTriggers(acceptCurrentSuggestion);
+
 async function requestSuggestionNow(): Promise<void> {
   await nativeAutocompleteApp.requestSuggestionNow();
 }
@@ -1075,7 +1079,7 @@ async function bootstrap(): Promise<void> {
       controlWindowManager.sendOptionTab();
       return;
     }
-    acceptCurrentSuggestion().catch((error) => {
+    suggestionAcceptanceTriggers.keyboard().catch((error) => {
       console.error("Failed to accept suggestion:", error);
     });
   });
@@ -1086,7 +1090,7 @@ async function bootstrap(): Promise<void> {
 
   ipcMain.on("accept-suggestion", (event) => {
     if (!isUsableWebContents(overlayWindow) || event.sender !== overlayWindow.webContents) return;
-    acceptCurrentSuggestion().catch((error) => {
+    suggestionAcceptanceTriggers.click().catch((error) => {
       console.error("Failed to accept suggestion via overlay click:", error);
     });
   });

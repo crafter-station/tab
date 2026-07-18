@@ -755,6 +755,13 @@ func runExplicitActionContract(_ scenario: String) {
   }
 }
 
+if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--text-session-snapshot" {
+  if let snapshot = textSessionSnapshot() {
+    emit(["type": "text-session", "snapshot": snapshot])
+  }
+  exit(0)
+}
+
 if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--explicit-action-contract" {
   runExplicitActionContract(CommandLine.arguments[2])
   exit(0)

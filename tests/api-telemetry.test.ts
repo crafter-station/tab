@@ -153,6 +153,7 @@ describe("TelemetryService device ingestion", () => {
         if (event.eventType === "suggestion_generated") throw new Error("storage unavailable");
         recorded.push(event);
       },
+      async reconcileAcceptedSuggestion() {},
       async listEvents() {
         return recorded;
       },
@@ -201,6 +202,137 @@ describe("TelemetryService device ingestion", () => {
         suggestionLength: 12,
       }),
     ]);
+  });
+
+  const acceptedRewrite = (eventId: string) => ({
+    eventType: "suggestion_accepted" as const,
+    eventId,
+    requestId: "rewrite-request",
+    timestamp: new Date().toISOString(),
+    inferenceSource: "deep_complete" as const,
+    trigger: "explicit" as const,
+    suggestionLength: 17,
+    selectedTextLength: 5,
+    acceptedWordCount: 2,
+    acceptedCharacterCount: 17,
+    latencyMs: 12,
+    applicationCategory: "productivity" as const,
+  });
+
+  const recordRewriteGeneration = (telemetryService: TelemetryService) => telemetryService.record({
+    requestId: "rewrite-request",
+    userId: "user-1",
+    eventType: "suggestion_generated",
+    timestamp: new Date().toISOString(),
+    planId: "pro",
+    modelId: "rewrite-model",
+    suggestionMode: "rewrite",
+  });
+
+  function expectCompleteAcceptedRewrite(event: TelemetryEvent | undefined) {
+    expect(event).toMatchObject({
+      selectedTextLength: 5,
+      suggestionLength: 17,
+      acceptedWordCount: 2,
+      acceptedCharacterCount: 17,
+      latencyMs: 12,
+      applicationCategory: "productivity",
+      planId: "pro",
+      modelId: "rewrite-model",
+    });
+  }
+
+  it("converges accepted Rewrite metadata when generation persists first", async () => {
+    const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
+    await recordRewriteGeneration(telemetryService);
+    await telemetryService.recordDeviceEvents([acceptedRewrite("accepted-generation-first")], {
+      userId: "user-1",
+      deviceId: "device-1",
+    });
+
+    const accepted = (await telemetryService.listEvents()).find(
+      (event) => event.id === "accepted-generation-first",
+    );
+    expectCompleteAcceptedRewrite(accepted);
+  });
+
+  it("converges accepted Rewrite metadata when Acceptance persists first", async () => {
+    const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
+    await telemetryService.recordDeviceEvents([acceptedRewrite("accepted-acceptance-first")], {
+      userId: "user-1",
+      deviceId: "device-1",
+    });
+    await recordRewriteGeneration(telemetryService);
+
+    const accepted = (await telemetryService.listEvents()).find(
+      (event) => event.id === "accepted-acceptance-first",
+    );
+    expectCompleteAcceptedRewrite(accepted);
+  });
+
+  it("converges accepted Rewrite metadata while generation persistence is pending", async () => {
+    const delegate = new InMemoryTelemetryStorage();
+    let releaseGeneration!: () => void;
+    let generationStarted!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      releaseGeneration = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      generationStarted = resolve;
+    });
+    const storage: TelemetryStorage = {
+      async recordEvent(event) {
+        if (event.eventType === "suggestion_generated") {
+          generationStarted();
+          await gate;
+        }
+        await delegate.recordEvent(event);
+      },
+      reconcileAcceptedSuggestion: (userId, requestId) =>
+        delegate.reconcileAcceptedSuggestion(userId, requestId),
+      listEvents: () => delegate.listEvents(),
+      getLocalSuggestionActivity: (userId, since) =>
+        delegate.getLocalSuggestionActivity(userId, since),
+    };
+    const telemetryService = new TelemetryService({ storage });
+    const generation = recordRewriteGeneration(telemetryService);
+    await started;
+    await telemetryService.recordDeviceEvents([acceptedRewrite("accepted-concurrent")], {
+      userId: "user-1",
+      deviceId: "device-1",
+    });
+    releaseGeneration();
+    await generation;
+
+    const accepted = (await telemetryService.listEvents()).find(
+      (event) => event.id === "accepted-concurrent",
+    );
+    expectCompleteAcceptedRewrite(accepted);
+  });
+
+  it("excludes raw Rewrite text while converging accepted metadata", async () => {
+    const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
+    const event = {
+      ...acceptedRewrite("accepted-private"),
+      selectedText: "private selected marker",
+      surroundingText: "private surrounding marker",
+      replacementText: "private replacement marker",
+      finalInsertedText: "private final marker",
+    };
+    await telemetryService.recordDeviceEvents([event], { userId: "user-1", deviceId: "device-1" });
+    await recordRewriteGeneration(telemetryService);
+
+    const events = await telemetryService.listEvents();
+    const accepted = events.find((candidate) => candidate.id === "accepted-private");
+    expectCompleteAcceptedRewrite(accepted);
+    for (const marker of [
+      event.selectedText,
+      event.surroundingText,
+      event.replacementText,
+      event.finalInsertedText,
+    ]) {
+      assertNoRawText(events as readonly Record<string, unknown>[], marker);
+    }
   });
 });
 
