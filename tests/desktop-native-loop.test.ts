@@ -104,6 +104,26 @@ describe("desktop native suggestion loop", () => {
       );
     });
 
+    it("distinguishes supplementary Unicode text in Text Session identities", () => {
+      const target = rewriteTargetForFingerprint("😀");
+      expect(createSafeTextSessionSnapshot(target).contextHash).not.toBe(
+        createSafeTextSessionSnapshot(rewriteTargetForFingerprint("😃")).contextHash,
+      );
+    });
+
+    function rewriteTargetForFingerprint(selectedText: string): TextSessionSnapshot {
+      return {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 0, length: selectedText.length },
+        selectedText,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "", afterCaret: "" },
+      };
+    }
+
     it("ignores empty text input", () => {
       const buffer = createTypingContextBuffer();
       buffer.appendText("Hello");
@@ -1081,6 +1101,39 @@ describe("desktop native suggestion loop", () => {
       await session.requestSuggestionNow();
       expect(calls).toContainEqual({ type: "showGuidance", value: "Select up to 2,000 characters" });
       expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
+    });
+
+    it("requests and bounds a Rewrite selected at the start of a field", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "rewrite", text: "Improved" }),
+      });
+      session.applyTextSessionSnapshot(rewriteTarget({
+        selectedRange: { location: 0, length: 5 },
+        caretIdentity: "range:0:5",
+        surroundingContext: { beforeCaret: "", afterCaret: " after" },
+      }));
+
+      await session.requestSuggestionNow();
+
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+    });
+
+    it("briefly presents oversized Rewrite guidance", async () => {
+      const { calls, session } = makeSession({ maxVisibleMs: 5, getLocalSuggestion: async () => null });
+      const selectedText = "x".repeat(2_001);
+      session.applyTextSessionSnapshot(rewriteTarget({
+        selectedRange: { location: 0, length: selectedText.length },
+        selectedText,
+        caretIdentity: `range:0:${selectedText.length}`,
+        surroundingContext: { beforeCaret: "", afterCaret: "" },
+      }));
+
+      await session.requestSuggestionNow();
+      expect(calls).toContainEqual({ type: "showGuidance", value: "Select up to 2,000 characters" });
+      await wait(10);
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
     });
 
     for (const [name, invalidate] of rewriteInvalidations) {

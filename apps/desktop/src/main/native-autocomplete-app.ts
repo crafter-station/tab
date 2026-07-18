@@ -168,6 +168,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   let visibleTextSessionTarget: TextSessionSnapshot | null = null;
   let lastContextHash: string | null = null;
   let appContextGraceTimer: ReturnType<typeof setTimeout> | null = null;
+  let guidanceTimer: ReturnType<typeof setTimeout> | null = null;
   let explicitRequestInFlight = false;
   let appContextChangedDuringExplicitRequest = false;
   let acceptanceInFlight = false;
@@ -322,6 +323,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     provenance: SuggestionProvenance,
     expiresAtMs: number,
   ): void {
+    clearGuidanceTimer();
     const previousTelemetry = visibleSuggestionTelemetry;
     visibleSuggestion = { suggestion, provenance, expiresAtMs };
     visibleTextSessionTarget = currentSafeSnapshot().textSession ?? null;
@@ -421,6 +423,12 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     appContextGraceTimer = null;
   }
 
+  function clearGuidanceTimer(): void {
+    if (!guidanceTimer) return;
+    clearTimeout(guidanceTimer);
+    guidanceTimer = null;
+  }
+
   function contextChanged(options: {
     suppressUnchangedTextSession?: boolean;
     forceClearVisibleSuggestion?: boolean;
@@ -490,19 +498,21 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     const snapshot = textSession ? createSafeTextSessionSnapshot(textSession) : null;
     const range = textSession?.selectedRange;
     if (
-      observationPaused || !snapshot?.requestable || !textSession ||
+      observationPaused || !snapshot || !textSession ||
       textSession.accessibilityReliability !== "reliable" || textSession.secureLike ||
       !textSession.activeApplication?.windowId || !textSession.focusedElementId ||
       !textSession.textElementId || !range
     ) return "none";
-    if (range.length === 0) return "deep_complete";
+    if (range.length === 0) return snapshot.requestable ? "deep_complete" : "none";
+    if (!snapshot.requestable && snapshot.suppressionReason !== "empty") return "none";
     if (textSession.selectedText === undefined || textSession.selectedText.length !== range.length) return "none";
+    if (range.length > 2_000) return "oversized";
     if (detectSensitiveData([
       textSession.selectedText,
       textSession.surroundingContext?.beforeCaret ?? "",
       textSession.surroundingContext?.afterCaret ?? "",
     ].join("\n")).hasSensitiveData) return "none";
-    return range.length > 2_000 ? "oversized" : "rewrite";
+    return "rewrite";
   }
 
   function holdVisibleSuggestionUntilTextSessionRefresh(): void {
@@ -555,9 +565,12 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
 
   function currentContextState(): { snapshot: SafeTypingContextSnapshot; pending: boolean; revision: number } {
     const requestTarget = explicitRequestTarget ?? textSessionSnapshot;
-    const snapshot = requestTarget
+    const baseSnapshot = requestTarget
       ? createSafeTextSessionSnapshot(requestTarget)
       : deps.typingContext.getSnapshot();
+    const snapshot = requestTarget && explicitRequestAction === "rewrite" && baseSnapshot.suppressionReason === "empty"
+      ? { ...baseSnapshot, requestable: true as const, suppressionReason: null }
+      : baseSnapshot;
 
     return withAppContext(snapshot);
   }
@@ -572,11 +585,14 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     }
     lastContextHash = null;
     clearAppContextGraceTimer();
+    clearGuidanceTimer();
     clearTextSessionSnapshot();
     deps.clearAppContext?.();
     deps.typingContext.clear();
     outputs.resetDebugApiState();
     clearVisibleSuggestion();
+    outputs.clearSuggestion();
+    outputs.hideOverlay();
     automaticSuggestion.invalidate();
     deepComplete.invalidate();
   }
@@ -754,8 +770,13 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       const action = explicitAction();
       if (action === "none") return;
       if (action === "oversized") {
+        clearGuidanceTimer();
         clearVisibleSuggestion();
         outputs.showGuidance?.("Select up to 2,000 characters");
+        guidanceTimer = setTimeout(() => {
+          guidanceTimer = null;
+          outputs.hideOverlay();
+        }, deps.maxVisibleMs ?? 4_000);
         return;
       }
       const requestTarget = latestTextSessionSnapshot;

@@ -123,11 +123,12 @@ function rangeKey(range: TextSessionRange | null): string {
 function textSessionIdentityKey(snapshot: TextSessionSnapshot): string {
   const textFingerprint = (text: string | undefined): string => {
     let hash = 2166136261;
-    for (const character of text ?? "") {
-      hash ^= character.charCodeAt(0);
+    const value = text ?? "";
+    for (let index = 0; index < value.length; index += 1) {
+      hash ^= value.charCodeAt(index);
       hash = Math.imul(hash, 16777619);
     }
-    return `${(text ?? "").length}:${(hash >>> 0).toString(16)}`;
+    return `${value.length}:${(hash >>> 0).toString(16)}`;
   };
   return [
     snapshot.activeApplication?.bundleId ?? "app-unknown",
