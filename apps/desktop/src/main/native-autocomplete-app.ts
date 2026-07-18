@@ -490,7 +490,10 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
 
   function hasUsableTextSessionContext(snapshot: TextSessionSnapshot): boolean {
     return snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID
-      && (snapshot.surroundingContext?.beforeCaret?.length ?? 0) > 0;
+      && (
+        (snapshot.surroundingContext?.beforeCaret?.length ?? 0) > 0
+        || (snapshot.selectedRange?.length ?? 0) > 0
+      );
   }
 
   function explicitAction(): "deep_complete" | "rewrite" | "oversized" | "none" {

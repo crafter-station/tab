@@ -104,10 +104,13 @@ describe("desktop native suggestion loop", () => {
       );
     });
 
-    it("distinguishes supplementary Unicode text in Text Session identities", () => {
+    it("uses collision-resistant Text Session text identities", () => {
       const target = rewriteTargetForFingerprint("😀");
       expect(createSafeTextSessionSnapshot(target).contextHash).not.toBe(
         createSafeTextSessionSnapshot(rewriteTargetForFingerprint("😃")).contextHash,
+      );
+      expect(createSafeTextSessionSnapshot(rewriteTargetForFingerprint("00009pf8")).contextHash).not.toBe(
+        createSafeTextSessionSnapshot(rewriteTargetForFingerprint("0000arj6")).contextHash,
       );
     });
 
@@ -1118,6 +1121,58 @@ describe("desktop native suggestion loop", () => {
 
       expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
       expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+    });
+
+    it("invalidates a pending Rewrite selected at the start of a field", async () => {
+      let resolveRequest!: (suggestion: Suggestion | null) => void;
+      let requestSignal: AbortSignal | undefined;
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async (_snapshot, options) => {
+          requestSignal = options?.signal;
+          return await new Promise<Suggestion | null>((resolve) => {
+            resolveRequest = resolve;
+          });
+        },
+      });
+      const target = rewriteTarget({
+        selectedRange: { location: 0, length: 5 },
+        caretIdentity: "range:0:5",
+        surroundingContext: { beforeCaret: "", afterCaret: " after" },
+      });
+
+      session.applyTextSessionSnapshot(target);
+      const request = session.requestSuggestionNow();
+      await wait(1);
+      session.applyTextSessionSnapshot({ ...target, selectedText: "Other" });
+
+      expect(requestSignal?.aborted).toBe(true);
+      resolveRequest({ id: "late-rewrite", text: "Late replacement" });
+      await request;
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls).not.toContainEqual({ type: "showSuggestion", value: { id: "late-rewrite", text: "Late replacement" } });
+    });
+
+    it("invalidates a visible Rewrite selected at the start of a field", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "visible-rewrite", text: "Clear replacement" }),
+      });
+      const target = rewriteTarget({
+        selectedRange: { location: 0, length: 5 },
+        caretIdentity: "range:0:5",
+        surroundingContext: { beforeCaret: "", afterCaret: " after" },
+      });
+
+      session.applyTextSessionSnapshot(target);
+      await session.requestSuggestionNow();
+      expect(session.getCurrentSuggestion()).toEqual({ id: "visible-rewrite", text: "Clear replacement" });
+      calls.length = 0;
+
+      session.applyTextSessionSnapshot({ ...target, selectedText: "Other" });
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).toContain("clearSuggestion");
     });
 
     it("briefly presents oversized Rewrite guidance", async () => {
