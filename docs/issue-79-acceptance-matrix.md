@@ -31,7 +31,7 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 | Slack | 4.48.100, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Account/workspace state may limit automation |
 | Discord | 0.0.399, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Account/server state may limit automation |
 | Messages | 26.0, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Sending a message is outside validation |
-| VS Code | Not installed | Unavailable | Not observed | Not observed | Not observed | Not observed | Not observed | Not observed | Required safety cannot be observed without the app | Zed 1.11.3 is installed but is not a substitute for this required surface |
+| VS Code | Portable stable arm64 build downloaded to a temporary directory | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Launched with isolated temporary user-data and extensions directories; no global installation was made |
 | Obsidian | 1.12.7, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Vault/workspace state may limit automation |
 | Google Chrome editor | Chrome 150.0.7871.115 installed; Chrome for Testing exercised | Unsupported in exercised Chrome for Testing contenteditable; installed Chrome not observed | Production helper emitted unreliable state with `selectedRange: null` | No request/no replacement by explicit-action contract | No request/no replacement by explicit-action contract | No replacement | Not observed | No clipboard mutation | Uncertain AX surface failed closed | `agent-browser` drove the contenteditable surface; connection to separately launched installed Chrome on port 9333 was unavailable |
 
@@ -54,6 +54,15 @@ Checks and observed evidence are added as they run.
 - `bun run lint`: passed.
 - `bun run test`: 28 Node tests and 670 Bun tests passed. Expected error-path stack traces were printed by passing tests.
 
+## Recovery Probes
+
+- `security find-generic-password -s tab -a device-token` initially reported no candidate desktop credential. The unrelated legacy `tabb` service was not read.
+- `/Applications/Tab.app` 0.1.10 opened its settings renderer at `#sign-in`; `agent-browser` observed `Continue in browser` and the explicit "Connect this Mac" state.
+- Continuing in the browser reused the existing web session, returned to the loopback callback, and created the candidate `tab` / `device-token` Keychain entry. No credential value was printed or persisted.
+- The installed app was dated before this issue branch and therefore was not used to claim a Rewrite journey pass. The current worktree desktop still needs to be launched against the configured API.
+- A current arm64 VS Code stable archive was downloaded and unpacked under `/tmp`, then launched with isolated temporary user-data and extensions directories. `agent-browser` connected on its temporary CDP port and observed the editor surface.
+- Local development variable names include the API base URL and configured provider credentials. Values were neither printed nor copied into the repository.
+
 ## External Evidence Gaps
 
-No authenticated generated Rewrite was available during this automated pass. Therefore Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior are not claimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, Obsidian, or Chrome. VS Code was not installed. The driver or a macOS validation owner with authenticated Tab generation must collect these required end-to-end observations; until then, uncertain surfaces retain the required no-request/no-replacement safety result.
+An authenticated device credential is now available, but the current candidate desktop was not launched before this checkpoint. Therefore Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior are still not claimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or Chrome. The next implementer must run the current worktree build and collect these required end-to-end observations; until then, uncertain surfaces retain the required no-request/no-replacement safety result.
