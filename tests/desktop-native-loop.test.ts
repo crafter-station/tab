@@ -928,6 +928,61 @@ describe("desktop native suggestion loop", () => {
       });
     }
 
+    function rewriteTarget(overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot {
+      return {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 7, length: 5 },
+        selectedText: "Draft",
+        caretIdentity: "range:7:5",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
+        ...overrides,
+      };
+    }
+
+    type SuggestionSession = ReturnType<typeof makeSession>["session"];
+    type RewriteInvalidation = readonly [
+      name: string,
+      invalidate: (session: SuggestionSession, target: TextSessionSnapshot) => void,
+    ];
+    const rewriteInvalidations: RewriteInvalidation[] = [
+      ["application changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        activeApplication: { bundleId: "com.apple.Notes", windowId: "window:1" },
+      })],
+      ["window changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:2" },
+      })],
+      ["focus identity changes", (session, target) => session.applyTextSessionSnapshot({ ...target, focusedElementId: "focus:2" })],
+      ["text element identity changes", (session, target) => session.applyTextSessionSnapshot({ ...target, textElementId: "text:2" })],
+      ["selected range changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        selectedRange: { location: 8, length: 5 },
+      })],
+      ["selected text changes", (session, target) => session.applyTextSessionSnapshot({ ...target, selectedText: "Other" })],
+      ["context before the selection changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        surroundingContext: { beforeCaret: "Changed ", afterCaret: " after" },
+      })],
+      ["context after the selection changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        surroundingContext: { beforeCaret: "Before ", afterCaret: " changed" },
+      })],
+      ["the target becomes secure", (session, target) => session.applyTextSessionSnapshot({ ...target, secureLike: true })],
+      ["the target becomes secret-like", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        surroundingContext: { beforeCaret: "api_key=abcdefghijklmnop", afterCaret: " after" },
+      })],
+      ["observation pauses", (session) => session.setPaused(true)],
+      ["suspend clears context", (session) => session.clearContext()],
+      ["lock-screen clears context", (session) => session.clearContext()],
+      ["context is explicitly cleared", (session) => session.clearContext()],
+    ];
+
     it("owns context changes and current suggestion state behind one session seam", async () => {
       const { buffer, calls, session } = makeSession();
 
@@ -1011,47 +1066,54 @@ describe("desktop native suggestion loop", () => {
       expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
     });
 
-    it("invalidates a pending Rewrite when its frozen selection target changes", async () => {
-      let resolveRequest!: (suggestion: Suggestion | null) => void;
-      let requestSignal: AbortSignal | undefined;
-      const { calls, session } = makeSession({
-        getLocalSuggestion: async () => null,
-        requestSuggestion: async (_snapshot, options) => {
-          requestSignal = options?.signal;
-          return await new Promise<Suggestion | null>((resolve) => {
-            resolveRequest = resolve;
-          });
-        },
-      });
-      const target: TextSessionSnapshot = {
-        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
-        focusedElementId: "focus:1",
-        textElementId: "text:1",
-        selectedRange: { location: 7, length: 5 },
-        selectedText: "Draft",
-        caretIdentity: "range:7:5",
-        secureLike: false,
-        accessibilityReliability: "reliable",
-        surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
-      };
+    for (const [name, invalidate] of rewriteInvalidations) {
+      it(`invalidates a pending Rewrite when ${name}`, async () => {
+        let resolveRequest!: (suggestion: Suggestion | null) => void;
+        let requestSignal: AbortSignal | undefined;
+        const { calls, session } = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async (_snapshot, options) => {
+            requestSignal = options?.signal;
+            return await new Promise<Suggestion | null>((resolve) => {
+              resolveRequest = resolve;
+            });
+          },
+        });
+        const target = rewriteTarget();
 
-      session.applyTextSessionSnapshot(target);
-      const request = session.requestSuggestionNow();
-      await wait(1);
-      session.applyTextSessionSnapshot({
-        ...target,
-        selectedRange: { location: 7, length: 6 },
-        selectedText: "Draft!",
-        caretIdentity: "range:7:6",
+        session.applyTextSessionSnapshot(target);
+        const request = session.requestSuggestionNow();
+        await wait(1);
+        invalidate(session, target);
+
+        expect(requestSignal?.aborted).toBe(true);
+        resolveRequest({ id: "late-rewrite", text: "Late replacement" });
+        await request;
+
+        expect(session.getCurrentSuggestion()).toBeNull();
+        expect(calls).not.toContainEqual({ type: "showSuggestion", value: { id: "late-rewrite", text: "Late replacement" } });
       });
 
-      expect(requestSignal?.aborted).toBe(true);
-      resolveRequest({ id: "late-rewrite", text: "Late replacement" });
-      await request;
+      it(`invalidates a visible Rewrite when ${name}`, async () => {
+        const { calls, session } = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async () => ({ id: "visible-rewrite", text: "Clear replacement" }),
+        });
+        const target = rewriteTarget();
+        session.applyTextSessionSnapshot(target);
+        await session.requestSuggestionNow();
+        expect(session.getCurrentSuggestion()).toEqual({ id: "visible-rewrite", text: "Clear replacement" });
+        expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+        calls.length = 0;
 
-      expect(session.getCurrentSuggestion()).toBeNull();
-      expect(calls).not.toContainEqual({ type: "showSuggestion", value: { id: "late-rewrite", text: "Late replacement" } });
-    });
+        invalidate(session, target);
+        await session.acceptCurrentSuggestion();
+
+        expect(session.getCurrentSuggestion()).toBeNull();
+        expect(calls.map((call) => call.type)).not.toContain("setClipboard");
+        expect(calls.map((call) => call.type)).not.toContain("sendPaste");
+      });
+    }
 
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
       const { calls, session } = makeSession({

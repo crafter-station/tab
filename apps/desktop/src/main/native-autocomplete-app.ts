@@ -433,7 +433,8 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     deepComplete.invalidate();
     lastContextHash = snapshot.contextHash;
 
-    const preserveVisibleSuggestion = !options.forceClearVisibleSuggestion
+    const preserveVisibleSuggestion = visibleSuggestion?.provenance !== "rewrite"
+      && !options.forceClearVisibleSuggestion
       && canRefreshVisibleSuggestionInPlace(snapshot);
     if (visibleSuggestion && !replacingSuggestion) {
       recordDismissal(snapshot);
