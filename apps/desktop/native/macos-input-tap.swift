@@ -14,11 +14,18 @@ struct ActiveWindowSnapshot: Equatable {
   let windowId: String
 }
 
-func activeWindowSnapshot() -> ActiveWindowSnapshot? {
-  guard let app = NSWorkspace.shared.frontmostApplication,
-        let bundleId = app.bundleIdentifier else {
-    return nil
-  }
+struct FrontmostApplicationIdentity: Equatable {
+  let processIdentifier: pid_t
+  let bundleId: String
+}
+
+struct FrontmostApplicationObservation {
+  let app: NSRunningApplication
+  let identity: FrontmostApplicationIdentity
+  let activeWindow: ActiveWindowSnapshot
+}
+
+func activeWindowSnapshot(for app: NSRunningApplication, bundleId: String) -> ActiveWindowSnapshot {
 
   let options: CGWindowListOption = [.optionOnScreenOnly, .excludeDesktopElements]
   guard let windowInfoList = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] else {
@@ -37,6 +44,30 @@ func activeWindowSnapshot() -> ActiveWindowSnapshot? {
   }
 
   return ActiveWindowSnapshot(bundleId: bundleId, windowId: "app:\(app.processIdentifier)")
+}
+
+func frontmostApplicationObservation() -> FrontmostApplicationObservation? {
+  guard let app = NSWorkspace.shared.frontmostApplication,
+        let bundleId = app.bundleIdentifier else {
+    return nil
+  }
+  return FrontmostApplicationObservation(
+    app: app,
+    identity: FrontmostApplicationIdentity(processIdentifier: app.processIdentifier, bundleId: bundleId),
+    activeWindow: activeWindowSnapshot(for: app, bundleId: bundleId)
+  )
+}
+
+func frontmostApplicationIdentity() -> FrontmostApplicationIdentity? {
+  guard let app = NSWorkspace.shared.frontmostApplication,
+        let bundleId = app.bundleIdentifier else {
+    return nil
+  }
+  return FrontmostApplicationIdentity(processIdentifier: app.processIdentifier, bundleId: bundleId)
+}
+
+func activeWindowSnapshot() -> ActiveWindowSnapshot? {
+  return frontmostApplicationObservation()?.activeWindow
 }
 
 var lastActiveWindowSnapshot: ActiveWindowSnapshot?
@@ -279,10 +310,12 @@ func caretIdentity(from range: CFRange?) -> String? {
   return range.map { "range:\($0.location):\($0.length)" }
 }
 
-func textSessionSnapshot(activeWindow: ActiveWindowSnapshot? = activeWindowSnapshot()) -> TextSessionPayload? {
-  guard AXIsProcessTrusted(),
-        let app = NSWorkspace.shared.frontmostApplication,
-        let bundleId = app.bundleIdentifier else {
+func textSessionSnapshot(
+  app: NSRunningApplication,
+  bundleId: String,
+  activeWindow: ActiveWindowSnapshot
+) -> TextSessionPayload? {
+  guard AXIsProcessTrusted() else {
     return fallbackTextSessionSnapshot(activeWindow: activeWindow, reliability: "unavailable")
   }
 
@@ -332,6 +365,23 @@ func textSessionSnapshot(activeWindow: ActiveWindowSnapshot? = activeWindowSnaps
   return snapshot
 }
 
+func textSessionSnapshot(activeWindow: ActiveWindowSnapshot? = activeWindowSnapshot()) -> TextSessionPayload? {
+  guard let app = NSWorkspace.shared.frontmostApplication,
+        let bundleId = app.bundleIdentifier,
+        let activeWindow = activeWindow else {
+    return fallbackTextSessionSnapshot(activeWindow: activeWindow, reliability: "unavailable")
+  }
+  return textSessionSnapshot(app: app, bundleId: bundleId, activeWindow: activeWindow)
+}
+
+func textSessionSnapshot(observation: FrontmostApplicationObservation) -> TextSessionPayload? {
+  return textSessionSnapshot(
+    app: observation.app,
+    bundleId: observation.identity.bundleId,
+    activeWindow: observation.activeWindow
+  )
+}
+
 func textSessionSnapshotKey(_ snapshot: [String: Any]) -> String? {
   guard JSONSerialization.isValidJSONObject(snapshot),
         let data = try? JSONSerialization.data(withJSONObject: snapshot, options: [.sortedKeys]) else {
@@ -362,9 +412,17 @@ func isReliableExplicitActionSnapshot(_ snapshot: TextSessionPayload) -> Bool {
   return selectedText?.utf16.count == length
 }
 
-func refreshTextSessionForExplicitAction() -> Bool {
-  let activeWindow = activeWindowSnapshot()
-  guard let snapshot = textSessionSnapshot(activeWindow: activeWindow),
+func publishExplicitActionSnapshot(
+  _ snapshot: TextSessionPayload?,
+  capturedIdentity: FrontmostApplicationIdentity?,
+  currentIdentity: FrontmostApplicationIdentity?
+) -> Bool {
+  guard let snapshot = snapshot,
+        let capturedIdentity = capturedIdentity,
+        currentIdentity == capturedIdentity,
+        let activeApplication = snapshot["activeApplication"] as? [String: String],
+        activeApplication["bundleId"] == capturedIdentity.bundleId,
+        isReliableExplicitActionSnapshot(snapshot),
         let key = textSessionSnapshotKey(snapshot) else {
     return false
   }
@@ -372,7 +430,17 @@ func refreshTextSessionForExplicitAction() -> Bool {
   // Explicit actions must publish even when the periodic poll saw the same key.
   lastTextSessionSnapshotKey = key
   emit(["type": "text-session", "snapshot": snapshot])
-  return isReliableExplicitActionSnapshot(snapshot)
+  return true
+}
+
+func refreshTextSessionForExplicitAction() -> Bool {
+  guard let observation = frontmostApplicationObservation() else { return false }
+  let snapshot = textSessionSnapshot(observation: observation)
+  return publishExplicitActionSnapshot(
+    snapshot,
+    capturedIdentity: observation.identity,
+    currentIdentity: frontmostApplicationIdentity()
+  )
 }
 
 func isWhatsAppBundleId(_ bundleId: String) -> Bool {
@@ -647,6 +715,50 @@ let leftMouseDownMask = CGEventMask(1) << CGEventType.leftMouseDown.rawValue
 let rightMouseDownMask = CGEventMask(1) << CGEventType.rightMouseDown.rawValue
 let otherMouseDownMask = CGEventMask(1) << CGEventType.otherMouseDown.rawValue
 let eventMask = keyDownMask | flagsChangedMask | leftMouseDownMask | rightMouseDownMask | otherMouseDownMask
+
+func runExplicitActionContract(_ scenario: String) {
+  let captured = FrontmostApplicationIdentity(processIdentifier: 101, bundleId: "com.example.editor")
+  let current = scenario == "identity-disagreement"
+    ? FrontmostApplicationIdentity(processIdentifier: 202, bundleId: "com.example.other")
+    : captured
+  var snapshot: TextSessionPayload = [
+    "activeApplication": ["bundleId": captured.bundleId, "windowId": "window:7"],
+    "focusedElementId": "ax:com.example.editor:identifier:body",
+    "textElementId": "ax:com.example.editor:identifier:body",
+    "selectedRange": ["location": 4, "length": 5],
+    "selectedText": "hello",
+    "caretIdentity": "range:4:5",
+    "secureLike": false,
+    "accessibilityReliability": "reliable",
+  ]
+
+  switch scenario {
+  case "unavailable":
+    snapshot["accessibilityReliability"] = "unavailable"
+  case "unreliable":
+    snapshot["accessibilityReliability"] = "unreliable"
+  case "inconsistent":
+    snapshot["selectedText"] = "bad"
+  case "missing-identity":
+    if publishExplicitActionSnapshot(snapshot, capturedIdentity: nil, currentIdentity: current) {
+      emit(["type": "suggest-now"])
+    }
+    return
+  case "reliable", "identity-disagreement":
+    break
+  default:
+    exit(2)
+  }
+
+  if publishExplicitActionSnapshot(snapshot, capturedIdentity: captured, currentIdentity: current) {
+    emit(["type": "suggest-now"])
+  }
+}
+
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--explicit-action-contract" {
+  runExplicitActionContract(CommandLine.arguments[2])
+  exit(0)
+}
 
 guard let eventTap = CGEvent.tapCreate(
   tap: .cgSessionEventTap,

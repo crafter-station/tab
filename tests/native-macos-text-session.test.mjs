@@ -1,10 +1,24 @@
-import { readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
 const nativeHelper = readFileSync(new URL("../apps/desktop/native/macos-input-tap.swift", import.meta.url), "utf8");
 const typingContext = readFileSync(new URL("../apps/desktop/src/main/typing-context.ts", import.meta.url), "utf8");
 const desktopEventIngress = readFileSync(new URL("../apps/desktop/src/main/desktop-event-ingress.ts", import.meta.url), "utf8");
+const nativeHelperPath = new URL("../apps/desktop/native/macos-input-tap.swift", import.meta.url);
+const nativeContractDirectory = mkdtempSync(join(tmpdir(), "tab-native-contract-"));
+const nativeContractExecutable = join(nativeContractDirectory, "macos-input-tap");
+
+execFileSync("swiftc", [nativeHelperPath.pathname, "-o", nativeContractExecutable]);
+process.on("exit", () => rmSync(nativeContractDirectory, { recursive: true, force: true }));
+
+function runExplicitActionContract(scenario) {
+  const output = execFileSync(nativeContractExecutable, ["--explicit-action-contract", scenario], { encoding: "utf8" });
+  return output.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
 
 function functionBody(source, signature) {
   const start = source.indexOf(signature);
@@ -41,35 +55,21 @@ test("macOS helper emits Accessibility Text Session snapshots accepted by deskto
   assert.match(desktopEventIngress, /snapshot\.selectedText === undefined \|\| typeof snapshot\.selectedText === "string"/);
 });
 
-test("macOS explicit actions publish a fresh consistent Text Session before suggest-now", () => {
-  const refreshBody = functionBody(nativeHelper, "func refreshTextSessionForExplicitAction()");
-  const callbackStart = nativeHelper.indexOf("let callback: CGEventTapCallBack");
-  const callbackEnd = nativeHelper.indexOf("guard let eventTap", callbackStart);
-  const callbackBody = nativeHelper.slice(callbackStart, callbackEnd);
-
-  assert.match(refreshBody, /textSessionSnapshot\(activeWindow: activeWindow\)/);
-  assert.match(refreshBody, /emit\(\["type": "text-session", "snapshot": snapshot\]\)/);
-  assert.match(refreshBody, /return isReliableExplicitActionSnapshot\(snapshot\)/);
-  assert.ok(
-    refreshBody.indexOf('emit(["type": "text-session", "snapshot": snapshot])')
-      < refreshBody.indexOf("return isReliableExplicitActionSnapshot(snapshot)"),
-    "the refreshed snapshot must be published before its reliability result is returned",
-  );
-  assert.match(
-    callbackBody,
-    /guard refreshTextSessionForExplicitAction\(\) else \{\s+return Unmanaged\.passUnretained\(event\)\s+\}\s+emit\(\["type": "suggest-now"\]\)/,
-  );
+test("macOS explicit actions publish a fresh reliable Text Session before suggest-now", () => {
+  const events = runExplicitActionContract("reliable");
+  assert.deepEqual(events.map((event) => event.type), ["text-session", "suggest-now"]);
+  assert.equal(events[0].snapshot.accessibilityReliability, "reliable");
+  assert.deepEqual(events[0].snapshot.activeApplication, {
+    bundleId: "com.example.editor",
+    windowId: "window:7",
+  });
 });
 
-test("macOS explicit actions fail closed for unreliable or inconsistent selections", () => {
-  const reliabilityBody = functionBody(nativeHelper, "func isReliableExplicitActionSnapshot");
-
-  assert.match(reliabilityBody, /"accessibilityReliability"\] as\? String == "reliable"/);
-  assert.match(reliabilityBody, /let range = snapshot\["selectedRange"\] as\? \[String: Int\]/);
-  assert.match(reliabilityBody, /let location = range\["location"\], location >= 0/);
-  assert.match(reliabilityBody, /let length = range\["length"\], length >= 0/);
-  assert.match(reliabilityBody, /if length == 0 \{\s+return selectedText\?\.isEmpty \?\? true\s+\}/);
-  assert.match(reliabilityBody, /return selectedText\?\.utf16\.count == length/);
+test("macOS explicit actions fail closed at the process boundary", () => {
+  for (const scenario of ["unavailable", "unreliable", "inconsistent", "identity-disagreement", "missing-identity"]) {
+    const events = runExplicitActionContract(scenario);
+    assert.equal(events.some((event) => event.type === "suggest-now"), false, scenario);
+  }
 });
 
 test("macOS helper captures terminal paste and invalidates uncertain edits", () => {
