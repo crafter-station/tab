@@ -1132,6 +1132,60 @@ describe("desktop native suggestion loop", () => {
       });
     }
 
+    it("does not present a Rewrite when a reliable selection returns empty", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => null,
+      });
+
+      session.applyTextSessionSnapshot(rewriteTarget());
+      await session.requestSuggestionNow();
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).not.toContain("showSuggestion");
+    });
+
+    it("records metadata-only telemetry for a dismissed Rewrite", async () => {
+      const telemetry: RecordTelemetryEventRequest[] = [];
+      const target = rewriteTarget({
+        selectedText: "rewrite-selected-private-source",
+        selectedRange: { location: 7, length: 31 },
+        caretIdentity: "range:7:31",
+        surroundingContext: {
+          beforeCaret: "rewrite-before-private-context",
+          afterCaret: "rewrite-after-private-context",
+        },
+      });
+      const replacement = "rewrite-private-replacement";
+      const { session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "sg-rewrite-request-1", text: replacement }),
+        recordInteractionTelemetry: (event) => telemetry.push(event),
+      });
+
+      session.applyTextSessionSnapshot(target);
+      await session.requestSuggestionNow();
+      session.clearContext();
+
+      expect(telemetry).toHaveLength(1);
+      expect(telemetry[0]).toMatchObject({
+        eventType: "suggestion_dismissed",
+        requestId: "rewrite-request-1",
+        inferenceSource: "deep_complete",
+        trigger: "explicit",
+        suggestionLength: replacement.length,
+      });
+      const serialized = JSON.stringify(telemetry);
+      for (const privateText of [
+        target.selectedText,
+        target.surroundingContext?.beforeCaret,
+        target.surroundingContext?.afterCaret,
+        replacement,
+      ]) {
+        expect(serialized).not.toContain(privateText!);
+      }
+    });
+
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
       const { calls, session } = makeSession({
         getLocalSuggestion: async (snapshot) => snapshot.sanitizedContext === "hello"

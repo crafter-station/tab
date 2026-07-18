@@ -365,6 +365,26 @@ describe("desktop API suggestion client", () => {
     expect(suggestion).toBeNull();
   });
 
+  it("does not return a Rewrite for empty, invalid, or malformed API responses", async () => {
+    const responses = [
+      () => new Response(JSON.stringify({ status: "ok", data: { suggestions: [] } }), { status: 200 }),
+      () => new Response(JSON.stringify({ status: "ok", data: { suggestions: [{ id: 42, text: null }] } }), { status: 200 }),
+      () => new Response("not-json", { status: 200 }),
+    ];
+
+    for (const response of responses) {
+      const requestSuggestion = createApiSuggestionClient({
+        apiBaseUrl: "http://localhost:8787",
+        deviceId: "device-1",
+        appVersion: "0.0.1",
+        platform: "darwin",
+        fetch: async () => response(),
+      });
+
+      expect(await requestSuggestion(makeRewriteSnapshot("Reliable selection"))).toBeNull();
+    }
+  });
+
   it("fails silently when the API returns an error", async () => {
     const fetch = async () =>
       new Response(
