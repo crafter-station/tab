@@ -5,6 +5,8 @@ import { DebugContextCard, type DebugContext } from "../components/DebugContextC
 type OverlayMode = "hidden" | "suggestion" | "debug";
 type PresentedSuggestion = Suggestion & {
   source: "local" | "cloud";
+  provenance?: "automatic" | "deep_complete" | "rewrite";
+  acceptable?: boolean;
   presentation?: "floating" | "inline";
   inlineMetrics?: { fontSize: number; lineHeight: number };
 };
@@ -69,6 +71,8 @@ export function OverlaySurface() {
         <FloatingSuggestionBar
           suggestion={mode === "suggestion" ? suggestion : null}
           source={suggestion?.source}
+          label={suggestion?.provenance === "rewrite" ? "Rewrite" : undefined}
+          acceptable={suggestion?.acceptable !== false}
           refreshing={suggestionRefreshing}
           onAccept={() => window.tab?.acceptSuggestion()}
           onPointerInteractionChange={(interactive) => window.tab?.setOverlayPointerInteraction(interactive)}

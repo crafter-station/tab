@@ -864,7 +864,11 @@ describe("desktop native suggestion loop", () => {
         },
         getContextSource: () => "typed_text",
         outputs: {
-          showSuggestion: (suggestion) => calls.push({ type: "showSuggestion", value: suggestion }),
+          showSuggestion: (suggestion, provenance) => {
+            calls.push({ type: "showSuggestion", value: suggestion });
+            calls.push({ type: "showSuggestionProvenance", value: provenance });
+          },
+          showGuidance: (message) => calls.push({ type: "showGuidance", value: message }),
           clearSuggestion: () => calls.push({ type: "clearSuggestion" }),
           hideOverlay: () => calls.push({ type: "hideOverlay" }),
           showDebugContext: () => calls.push({ type: "showDebugContext" }),
@@ -908,6 +912,20 @@ describe("desktop native suggestion loop", () => {
         session,
         publishAppContextChange: () => appContextListener?.(),
       };
+    }
+
+    function applyReliableCaret(session: ReturnType<typeof makeSession>["session"], text = "hello"): void {
+      session.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: text.length, length: 0 },
+        selectedText: "",
+        caretIdentity: `range:${text.length}:0`,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: text, afterCaret: "" },
+      });
     }
 
     it("owns context changes and current suggestion state behind one session seam", async () => {
@@ -954,6 +972,45 @@ describe("desktop native suggestion loop", () => {
       }
     });
 
+    it("routes only reliable exact explicit targets and gives non-acceptable oversized guidance", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "rewrite", text: "Improved text" }),
+      });
+      const selection = (selectedText: string | undefined, length = selectedText?.length ?? 0, reliability: TextSessionSnapshot["accessibilityReliability"] = "reliable"): TextSessionSnapshot => ({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 7, length },
+        selectedText,
+        caretIdentity: `range:7:${length}`,
+        secureLike: false,
+        accessibilityReliability: reliability,
+        surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
+      });
+
+      await session.requestSuggestionNow();
+      session.applyTextSessionSnapshot(selection(undefined, 3));
+      await session.requestSuggestionNow();
+      session.applyTextSessionSnapshot(selection("bad", 3, "unreliable"));
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
+
+      session.applyTextSessionSnapshot(selection("x"));
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+
+      session.applyTextSessionSnapshot(selection("word ".repeat(400)));
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
+
+      session.applyTextSessionSnapshot(selection(`${"word ".repeat(400)}x`));
+      await session.requestSuggestionNow();
+      expect(calls).toContainEqual({ type: "showGuidance", value: "Select up to 2,000 characters" });
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
+    });
+
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
       const { calls, session } = makeSession({
         getLocalSuggestion: async (snapshot) => snapshot.sanitizedContext === "hello"
@@ -989,8 +1046,7 @@ describe("desktop native suggestion loop", () => {
         requestSuggestion: async () => ({ id: "cloud-thank", text: " you very much" }),
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("thank");
+      applyReliableCaret(session, "thank");
       await wait(10);
       expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-thank", text: " you" });
       calls.length = 0;
@@ -1012,8 +1068,7 @@ describe("desktop native suggestion loop", () => {
         requestSuggestion: async () => null,
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("thank");
+      applyReliableCaret(session, "thank");
       await wait(10);
       calls.length = 0;
 
@@ -1033,8 +1088,7 @@ describe("desktop native suggestion loop", () => {
         maxVisibleMs: 200,
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("hello");
+      applyReliableCaret(session);
       await wait(10);
       await session.requestSuggestionNow();
       expect(session.getCurrentSuggestion()).toEqual({ id: "automatic", text: " retained" });
@@ -1061,6 +1115,7 @@ describe("desktop native suggestion loop", () => {
       session.setActiveApplication("com.apple.TextEdit", "window:1");
       session.appendText("hello");
       await wait(10);
+      applyReliableCaret(session);
       await session.requestSuggestionNow();
       expect(session.getCurrentSuggestion()).toEqual({ id: "deep", text: " prior deep" });
       calls.length = 0;
@@ -1095,6 +1150,7 @@ describe("desktop native suggestion loop", () => {
       session.appendText(" again");
       await wait(10);
 
+      applyReliableCaret(session, "hello again");
       await session.requestSuggestionNow();
       resolveAutomatic?.({ id: "late-automatic", text: " stale" });
       await wait(1);
@@ -1111,8 +1167,7 @@ describe("desktop native suggestion loop", () => {
         },
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("hello");
+      applyReliableCaret(session);
       await wait(10);
       calls.length = 0;
 
@@ -1137,6 +1192,7 @@ describe("desktop native suggestion loop", () => {
       session.setActiveApplication("com.apple.TextEdit", "window:1");
       session.appendText("hello");
       await wait(10);
+      applyReliableCaret(session);
       await session.requestSuggestionNow();
       await session.acceptCurrentSuggestion();
 
@@ -1725,6 +1781,17 @@ describe("desktop native suggestion loop", () => {
       });
       session.setActiveApplication("com.mitchellh.ghostty", "window:1");
       session.appendText("Explain this");
+      session.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.mitchellh.ghostty", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 12, length: 0 },
+        selectedText: "",
+        caretIdentity: "range:12:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "Explain this", afterCaret: "" },
+      });
       const request = session.requestSuggestionNow();
       await wait(1);
 

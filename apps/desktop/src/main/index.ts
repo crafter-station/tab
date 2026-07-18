@@ -435,6 +435,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
   requestDeepComplete,
   outputs: {
     showSuggestion: showOverlay,
+    showGuidance: showOverlayGuidance,
     clearSuggestion: clearSuggestionOverlay,
     hideOverlay,
     showDebugContext: showDebugTypingOverlay,
@@ -864,6 +865,8 @@ function showOverlay(suggestion: Suggestion, provenance: SuggestionProvenance): 
   overlayWindow.webContents.send("suggestion", {
     ...suggestion,
     source: provenance === "automatic" ? "local" : "cloud",
+    provenance,
+    acceptable: true,
     presentation: inline ? "inline" : "floating",
     ...(inline ? {
       inlineMetrics: {
@@ -875,6 +878,22 @@ function showOverlay(suggestion: Suggestion, provenance: SuggestionProvenance): 
   if (!overlayWindow.isVisible()) {
     overlayWindow.showInactive();
   }
+}
+
+function showOverlayGuidance(message: string): void {
+  if (controlWindowManager.isRoute("onboarding")) return;
+  if (!overlayRendererReady || !isUsableWebContents(overlayWindow)) return;
+  unregisterObsidianTabAcceptance();
+  resizeOverlayWindow(OVERLAY_SUGGESTION_HEIGHT);
+  overlayWindow.webContents.send("suggestion", {
+    id: "rewrite-guidance",
+    text: message,
+    source: "cloud",
+    provenance: "rewrite",
+    acceptable: false,
+    presentation: "floating",
+  });
+  overlayWindow.showInactive();
 }
 
 function clearSuggestionOverlay(): void {

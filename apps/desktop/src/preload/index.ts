@@ -42,6 +42,8 @@ export type TabPreloadApi = {
     id: string;
     text: string;
     source: "local" | "cloud";
+    provenance?: "automatic" | "deep_complete" | "rewrite";
+    acceptable?: boolean;
     presentation?: "floating" | "inline";
     inlineMetrics?: { fontSize: number; lineHeight: number };
   }) => void) => () => void;
@@ -100,6 +102,8 @@ contextBridge.exposeInMainWorld("tab", {
       id: string;
       text: string;
       source: "local" | "cloud";
+      provenance?: "automatic" | "deep_complete" | "rewrite";
+      acceptable?: boolean;
       presentation?: "floating" | "inline";
       inlineMetrics?: { fontSize: number; lineHeight: number };
     }) => callback(suggestion);

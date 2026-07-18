@@ -13,6 +13,7 @@ import {
 } from "./acceptance.ts";
 import type { AppContextSnapshot } from "./app-context.ts";
 import { createHash } from "node:crypto";
+import { detectSensitiveData } from "@tab/redaction";
 import type { AppContextSnapshotState } from "./app-context-extractor.ts";
 import type {
   AppContextAccessibilityTree,
@@ -49,6 +50,7 @@ export type NativeSuggestionSessionOutputs = {
   readonly onRequestStarted?: (context: string) => void;
   readonly onRequestFinished?: (suggestion: Suggestion | null) => void;
   readonly onSecretLikeContextDetected?: () => void;
+  readonly showGuidance?: (message: string) => void;
 };
 
 type RecordInteractionTelemetry = (event: RecordTelemetryEventRequest) => void | Promise<void>;
@@ -159,6 +161,9 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   let previouslyActiveApplication: ActiveApplication | null = null;
   let observationPaused = false;
   let textSessionSnapshot: TextSessionSnapshot | null = null;
+  let latestTextSessionSnapshot: TextSessionSnapshot | null = null;
+  let explicitRequestTarget: TextSessionSnapshot | null = null;
+  let explicitRequestAction: "deep_complete" | "rewrite" | null = null;
   let ambientTerminalSnapshot: TextSessionSnapshot | null = null;
   let visibleTextSessionTarget: TextSessionSnapshot | null = null;
   let lastContextHash: string | null = null;
@@ -387,9 +392,11 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   const deepComplete = createDeepComplete({
     getContext: () => currentSafeSnapshot(),
     requestCloudSuggestion: deps.requestDeepComplete,
-    onShowSuggestion: (suggestion, expiresAtMs) => presentSuggestion(suggestion, "deep_complete", expiresAtMs),
+    onShowSuggestion: (suggestion, expiresAtMs) => {
+      presentSuggestion(suggestion, explicitRequestAction ?? "deep_complete", expiresAtMs);
+    },
     onHideSuggestion: () => {
-      if (visibleSuggestion?.provenance === "deep_complete") clearVisibleSuggestion();
+      if (visibleSuggestion?.provenance !== "automatic") clearVisibleSuggestion();
       outputs.hideOverlay();
     },
     onSuggestionStale: () => {
@@ -468,12 +475,33 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
 
   function clearTextSessionSnapshot(): void {
     textSessionSnapshot = null;
+    latestTextSessionSnapshot = null;
     ambientTerminalSnapshot = null;
   }
 
   function hasUsableTextSessionContext(snapshot: TextSessionSnapshot): boolean {
     return snapshot.activeApplication?.bundleId !== GHOSTTY_BUNDLE_ID
       && (snapshot.surroundingContext?.beforeCaret?.length ?? 0) > 0;
+  }
+
+  function explicitAction(): "deep_complete" | "rewrite" | "oversized" | "none" {
+    const textSession = latestTextSessionSnapshot;
+    const snapshot = textSession ? createSafeTextSessionSnapshot(textSession) : null;
+    const range = textSession?.selectedRange;
+    if (
+      observationPaused || !snapshot?.requestable || !textSession ||
+      textSession.accessibilityReliability !== "reliable" || textSession.secureLike ||
+      !textSession.activeApplication?.windowId || !textSession.focusedElementId ||
+      !textSession.textElementId || !range
+    ) return "none";
+    if (range.length === 0) return "deep_complete";
+    if (textSession.selectedText === undefined || textSession.selectedText.length !== range.length) return "none";
+    if (detectSensitiveData([
+      textSession.selectedText,
+      textSession.surroundingContext?.beforeCaret ?? "",
+      textSession.surroundingContext?.afterCaret ?? "",
+    ].join("\n")).hasSensitiveData) return "none";
+    return range.length > 2_000 ? "oversized" : "rewrite";
   }
 
   function holdVisibleSuggestionUntilTextSessionRefresh(): void {
@@ -525,8 +553,9 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   }
 
   function currentContextState(): { snapshot: SafeTypingContextSnapshot; pending: boolean; revision: number } {
-    const snapshot = textSessionSnapshot
-      ? createSafeTextSessionSnapshot(textSessionSnapshot)
+    const requestTarget = explicitRequestTarget ?? textSessionSnapshot;
+    const snapshot = requestTarget
+      ? createSafeTextSessionSnapshot(requestTarget)
       : deps.typingContext.getSnapshot();
 
     return withAppContext(snapshot);
@@ -640,6 +669,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
       if (observationPaused) return;
       compatibilityStore.recordTextSessionSnapshot(snapshot);
+      latestTextSessionSnapshot = snapshot;
       ambientTerminalSnapshot = snapshot.activeApplication?.bundleId === GHOSTTY_BUNDLE_ID
         && isReliableTextSessionSnapshot(snapshot)
         && !snapshot.secureLike
@@ -714,11 +744,19 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       }
     },
     async requestSuggestionNow(): Promise<void> {
-      if (observationPaused) {
+      const action = explicitAction();
+      if (action === "none") return;
+      if (action === "oversized") {
+        clearVisibleSuggestion();
+        outputs.showGuidance?.("Select up to 2,000 characters");
         return;
       }
+      const requestTarget = latestTextSessionSnapshot;
+      if (!requestTarget) return;
       const previousVisibleSuggestion = visibleSuggestion;
       const previousContextHash = currentSafeSnapshot().contextHash;
+      explicitRequestTarget = requestTarget;
+      explicitRequestAction = action;
       replacingSuggestion = true;
       automaticSuggestion.suspend();
       outputs.setSuggestionRefreshing?.(true);
@@ -757,6 +795,8 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
         }
       } finally {
         explicitRequestInFlight = false;
+        explicitRequestTarget = null;
+        explicitRequestAction = null;
         appContextChangedDuringExplicitRequest = false;
         replacingSuggestion = false;
         automaticSuggestion.resume();

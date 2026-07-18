@@ -10,6 +10,8 @@ export type Suggestion = {
 type FloatingSuggestionBarProps = {
   suggestion: Suggestion | null;
   source?: "local" | "cloud";
+  label?: string;
+  acceptable?: boolean;
   refreshing?: boolean;
   onAccept: () => void;
   onPointerInteractionChange?: (interactive: boolean) => void;
@@ -67,7 +69,7 @@ export function SuggestionCommand({
   );
 }
 
-export function FloatingSuggestionBar({ suggestion, source, refreshing, onAccept, onPointerInteractionChange, className }: FloatingSuggestionBarProps) {
+export function FloatingSuggestionBar({ suggestion, source, label, acceptable = true, refreshing, onAccept, onPointerInteractionChange, className }: FloatingSuggestionBarProps) {
   return (
     <section
       className={cn(shellClassName, suggestion ? visibleShellClassName : hiddenShellClassName, className)}
@@ -75,16 +77,20 @@ export function FloatingSuggestionBar({ suggestion, source, refreshing, onAccept
     >
       <SuggestionCommand
         className="w-[min(100%,536px)]"
-        onClick={onAccept}
+        onClick={acceptable ? onAccept : undefined}
         onPointerEnter={() => onPointerInteractionChange?.(true)}
         onPointerLeave={() => onPointerInteractionChange?.(false)}
-        disabled={!suggestion || refreshing}
+        disabled={!suggestion || refreshing || !acceptable}
         aria-label={suggestion
-          ? `Accept ${source === "cloud" ? "Deep Complete " : ""}suggestion: ${suggestion.text}`
+          ? acceptable
+            ? `Accept ${label ?? (source === "cloud" ? "Deep Complete" : "")} suggestion: ${suggestion.text}`
+            : suggestion.text
           : "No suggestion available"}
-        suggestion={suggestion?.text ?? ""}
+        suggestion={suggestion ? <>{label ? <strong>{label}: </strong> : null}{suggestion.text}</> : ""}
         source={source}
         refreshing={refreshing}
+        shortcut={acceptable ? undefined : ""}
+        shortcutLabel={acceptable ? undefined : "No acceptance action"}
       />
     </section>
   );
