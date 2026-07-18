@@ -63,6 +63,14 @@ Checks and observed evidence are added as they run.
 - A current arm64 VS Code stable archive was downloaded and unpacked under `/tmp`, then launched with isolated temporary user-data and extensions directories. `agent-browser` connected on its temporary CDP port and observed the editor surface.
 - Local development variable names include the API base URL and configured provider credentials. Values were neither printed nor copied into the repository.
 
+## Candidate Launch Probe
+
+- The older `/Applications/Tab.app` process was quit before candidate startup so its helper and renderer could not be mistaken for branch evidence.
+- The candidate was launched from this worktree with `bun --env-file=/Users/cuevaio/projects/tabbb/.dev.vars apps/desktop/scripts/dev.ts`; no variable values were printed.
+- Process inspection resolved Electron, its renderers, the native helper, and the local inference runtime to this issue-79 worktree. The candidate log reported `macOS input tap ready.`
+- The `tab` / `device-token` Keychain item remained present, and candidate startup emitted no status-refresh or bootstrap error. A direct renderer observation of `signed_in` was not obtained, so successful candidate authorization is not claimed yet.
+- No Rewrite was triggered during this launch probe. No application-matrix Acceptance result changed.
+
 ## External Evidence Gaps
 
-An authenticated device credential is now available, but the current candidate desktop was not launched before this checkpoint. Therefore Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior are still not claimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or Chrome. The next implementer must run the current worktree build and collect these required end-to-end observations; until then, uncertain surfaces retain the required no-request/no-replacement safety result.
+An authenticated device credential is available and the current candidate desktop launches successfully, but its signed-in renderer state and an authenticated Rewrite response still require direct observation. Therefore Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior are still not claimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or Chrome. The next implementer must continue from the running worktree candidate and collect these required end-to-end observations; until then, uncertain surfaces retain the required no-request/no-replacement safety result.
