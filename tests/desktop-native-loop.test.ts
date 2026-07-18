@@ -493,6 +493,21 @@ describe("desktop native suggestion loop", () => {
       await expect(insertion).rejects.toThrow("paste failed");
     });
 
+    it("treats clipboard restoration as best-effort after successful insertion", async () => {
+      const result = acceptAndInsertSuggestion({
+        getCurrentSuggestion: () => ({ id: "s-1", text: " world" }),
+        getPreviouslyActiveApplication: () => ({ bundleId: "com.apple.TextEdit" }),
+        setClipboard: async () => "previous-clipboard",
+        sendPaste: async () => {},
+        waitForPaste: async () => {},
+        restoreClipboard: async () => {
+          throw new Error("restore failed");
+        },
+      });
+
+      await expect(result).resolves.toBe("inserted");
+    });
+
     it("prefers semantic insertion when the visible Text Session target is still compatible", async () => {
       const calls: Array<{ type: string; value?: unknown }> = [];
       const result = await acceptAndInsertSuggestion({

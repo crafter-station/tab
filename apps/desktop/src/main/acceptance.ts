@@ -130,20 +130,14 @@ function canUseSemanticInsertion(
 
 async function insertWithClipboardFallback(deps: InsertionDependencies, text: string): Promise<void> {
   const previousClipboard = await deps.setClipboard(text);
-  let insertionFailed = false;
 
   try {
     await deps.sendPaste();
     await deps.waitForPaste?.();
-  } catch (error) {
-    insertionFailed = true;
-    throw error;
   } finally {
     try {
       await deps.restoreClipboard(previousClipboard);
-    } catch (error) {
-      if (!insertionFailed) throw error;
-    }
+    } catch {}
   }
 }
 
