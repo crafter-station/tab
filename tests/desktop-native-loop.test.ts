@@ -104,6 +104,29 @@ describe("desktop native suggestion loop", () => {
       );
     });
 
+    it("uses collision-resistant Text Session text identities", () => {
+      const target = rewriteTargetForFingerprint("😀");
+      expect(createSafeTextSessionSnapshot(target).contextHash).not.toBe(
+        createSafeTextSessionSnapshot(rewriteTargetForFingerprint("😃")).contextHash,
+      );
+      expect(createSafeTextSessionSnapshot(rewriteTargetForFingerprint("00009pf8")).contextHash).not.toBe(
+        createSafeTextSessionSnapshot(rewriteTargetForFingerprint("0000arj6")).contextHash,
+      );
+    });
+
+    function rewriteTargetForFingerprint(selectedText: string): TextSessionSnapshot {
+      return {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 0, length: selectedText.length },
+        selectedText,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "", afterCaret: "" },
+      };
+    }
+
     it("ignores empty text input", () => {
       const buffer = createTypingContextBuffer();
       buffer.appendText("Hello");
@@ -864,7 +887,11 @@ describe("desktop native suggestion loop", () => {
         },
         getContextSource: () => "typed_text",
         outputs: {
-          showSuggestion: (suggestion) => calls.push({ type: "showSuggestion", value: suggestion }),
+          showSuggestion: (suggestion, provenance) => {
+            calls.push({ type: "showSuggestion", value: suggestion });
+            calls.push({ type: "showSuggestionProvenance", value: provenance });
+          },
+          showGuidance: (message) => calls.push({ type: "showGuidance", value: message }),
           clearSuggestion: () => calls.push({ type: "clearSuggestion" }),
           hideOverlay: () => calls.push({ type: "hideOverlay" }),
           showDebugContext: () => calls.push({ type: "showDebugContext" }),
@@ -910,6 +937,75 @@ describe("desktop native suggestion loop", () => {
       };
     }
 
+    function applyReliableCaret(session: ReturnType<typeof makeSession>["session"], text = "hello"): void {
+      session.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: text.length, length: 0 },
+        selectedText: "",
+        caretIdentity: `range:${text.length}:0`,
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: text, afterCaret: "" },
+      });
+    }
+
+    function rewriteTarget(overrides: Partial<TextSessionSnapshot> = {}): TextSessionSnapshot {
+      return {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 7, length: 5 },
+        selectedText: "Draft",
+        caretIdentity: "range:7:5",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
+        ...overrides,
+      };
+    }
+
+    type SuggestionSession = ReturnType<typeof makeSession>["session"];
+    type RewriteInvalidation = readonly [
+      name: string,
+      invalidate: (session: SuggestionSession, target: TextSessionSnapshot) => void,
+    ];
+    const rewriteInvalidations: RewriteInvalidation[] = [
+      ["application changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        activeApplication: { bundleId: "com.apple.Notes", windowId: "window:1" },
+      })],
+      ["window changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:2" },
+      })],
+      ["focus identity changes", (session, target) => session.applyTextSessionSnapshot({ ...target, focusedElementId: "focus:2" })],
+      ["text element identity changes", (session, target) => session.applyTextSessionSnapshot({ ...target, textElementId: "text:2" })],
+      ["selected range changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        selectedRange: { location: 8, length: 5 },
+      })],
+      ["selected text changes", (session, target) => session.applyTextSessionSnapshot({ ...target, selectedText: "Other" })],
+      ["context before the selection changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        surroundingContext: { beforeCaret: "Changed ", afterCaret: " after" },
+      })],
+      ["context after the selection changes", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        surroundingContext: { beforeCaret: "Before ", afterCaret: " changed" },
+      })],
+      ["the target becomes secure", (session, target) => session.applyTextSessionSnapshot({ ...target, secureLike: true })],
+      ["the target becomes secret-like", (session, target) => session.applyTextSessionSnapshot({
+        ...target,
+        surroundingContext: { beforeCaret: "api_key=abcdefghijklmnop", afterCaret: " after" },
+      })],
+      ["observation pauses", (session) => session.setPaused(true)],
+      ["suspend clears context", (session) => session.clearContext()],
+      ["lock-screen clears context", (session) => session.clearContext()],
+      ["context is explicitly cleared", (session) => session.clearContext()],
+    ];
+
     it("owns context changes and current suggestion state behind one session seam", async () => {
       const { buffer, calls, session } = makeSession();
 
@@ -954,6 +1050,274 @@ describe("desktop native suggestion loop", () => {
       }
     });
 
+    it("routes only selection states consistent with their selected range", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "explicit", text: "Improved text" }),
+      });
+
+      session.applyTextSessionSnapshot(rewriteTarget({
+        selectedRange: { location: 7, length: 0 },
+        caretIdentity: "range:7:0",
+      }));
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
+
+      applyReliableCaret(session);
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "deep_complete" });
+
+      session.applyTextSessionSnapshot(rewriteTarget());
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+    });
+
+    it("routes only reliable exact explicit targets and gives non-acceptable oversized guidance", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "rewrite", text: "Improved text" }),
+      });
+      const selection = (selectedText: string | undefined, length = selectedText?.length ?? 0, reliability: TextSessionSnapshot["accessibilityReliability"] = "reliable"): TextSessionSnapshot => ({
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 7, length },
+        selectedText,
+        caretIdentity: `range:7:${length}`,
+        secureLike: false,
+        accessibilityReliability: reliability,
+        surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
+      });
+
+      await session.requestSuggestionNow();
+      session.applyTextSessionSnapshot(selection(undefined, 3));
+      await session.requestSuggestionNow();
+      session.applyTextSessionSnapshot(selection("bad", 3, "unreliable"));
+      await session.requestSuggestionNow();
+      const validTarget = selection("Draft");
+      const secret = "api_key=abcdefghijklmnop";
+      for (const target of [
+        { ...validTarget, activeApplication: null },
+        { ...validTarget, activeApplication: { bundleId: "com.apple.TextEdit" } },
+        { ...validTarget, focusedElementId: null },
+        { ...validTarget, textElementId: null },
+        { ...validTarget, selectedRange: null },
+        { ...validTarget, secureLike: true },
+        { ...validTarget, activeApplication: { bundleId: "com.1password.1password", windowId: "window:1" } },
+        selection(secret),
+        { ...validTarget, surroundingContext: { beforeCaret: secret, afterCaret: " after" } },
+        { ...validTarget, surroundingContext: { beforeCaret: "Before ", afterCaret: secret } },
+      ] satisfies TextSessionSnapshot[]) {
+        session.applyTextSessionSnapshot(target);
+        await session.requestSuggestionNow();
+      }
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
+
+      session.applyTextSessionSnapshot(selection("x"));
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+
+      session.applyTextSessionSnapshot(selection("word ".repeat(400)));
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
+
+      session.applyTextSessionSnapshot(selection(`${"word ".repeat(400)}x`));
+      await session.requestSuggestionNow();
+      expect(calls).toContainEqual({ type: "showGuidance", value: "Select up to 2,000 characters" });
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
+    });
+
+    it("requests and bounds a Rewrite selected at the start of a field", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "rewrite", text: "Improved" }),
+      });
+      session.applyTextSessionSnapshot(rewriteTarget({
+        selectedRange: { location: 0, length: 5 },
+        caretIdentity: "range:0:5",
+        surroundingContext: { beforeCaret: "", afterCaret: " after" },
+      }));
+
+      await session.requestSuggestionNow();
+
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+    });
+
+    it("invalidates a pending Rewrite selected at the start of a field", async () => {
+      let resolveRequest!: (suggestion: Suggestion | null) => void;
+      let requestSignal: AbortSignal | undefined;
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async (_snapshot, options) => {
+          requestSignal = options?.signal;
+          return await new Promise<Suggestion | null>((resolve) => {
+            resolveRequest = resolve;
+          });
+        },
+      });
+      const target = rewriteTarget({
+        selectedRange: { location: 0, length: 5 },
+        caretIdentity: "range:0:5",
+        surroundingContext: { beforeCaret: "", afterCaret: " after" },
+      });
+
+      session.applyTextSessionSnapshot(target);
+      const request = session.requestSuggestionNow();
+      await wait(1);
+      session.applyTextSessionSnapshot({ ...target, selectedText: "Other" });
+
+      expect(requestSignal?.aborted).toBe(true);
+      resolveRequest({ id: "late-rewrite", text: "Late replacement" });
+      await request;
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls).not.toContainEqual({ type: "showSuggestion", value: { id: "late-rewrite", text: "Late replacement" } });
+    });
+
+    it("invalidates a visible Rewrite selected at the start of a field", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "visible-rewrite", text: "Clear replacement" }),
+      });
+      const target = rewriteTarget({
+        selectedRange: { location: 0, length: 5 },
+        caretIdentity: "range:0:5",
+        surroundingContext: { beforeCaret: "", afterCaret: " after" },
+      });
+
+      session.applyTextSessionSnapshot(target);
+      await session.requestSuggestionNow();
+      expect(session.getCurrentSuggestion()).toEqual({ id: "visible-rewrite", text: "Clear replacement" });
+      calls.length = 0;
+
+      session.applyTextSessionSnapshot({ ...target, selectedText: "Other" });
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).toContain("clearSuggestion");
+    });
+
+    it("briefly presents oversized Rewrite guidance", async () => {
+      const { calls, session } = makeSession({ maxVisibleMs: 5, getLocalSuggestion: async () => null });
+      const selectedText = "x".repeat(2_001);
+      session.applyTextSessionSnapshot(rewriteTarget({
+        selectedRange: { location: 0, length: selectedText.length },
+        selectedText,
+        caretIdentity: `range:0:${selectedText.length}`,
+        surroundingContext: { beforeCaret: "", afterCaret: "" },
+      }));
+
+      await session.requestSuggestionNow();
+      expect(calls).toContainEqual({ type: "showGuidance", value: "Select up to 2,000 characters" });
+      await wait(10);
+      expect(calls.map((call) => call.type)).toContain("hideOverlay");
+    });
+
+    for (const [name, invalidate] of rewriteInvalidations) {
+      it(`invalidates a pending Rewrite when ${name}`, async () => {
+        let resolveRequest!: (suggestion: Suggestion | null) => void;
+        let requestSignal: AbortSignal | undefined;
+        const { calls, session } = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async (_snapshot, options) => {
+            requestSignal = options?.signal;
+            return await new Promise<Suggestion | null>((resolve) => {
+              resolveRequest = resolve;
+            });
+          },
+        });
+        const target = rewriteTarget();
+
+        session.applyTextSessionSnapshot(target);
+        const request = session.requestSuggestionNow();
+        await wait(1);
+        invalidate(session, target);
+
+        expect(requestSignal?.aborted).toBe(true);
+        resolveRequest({ id: "late-rewrite", text: "Late replacement" });
+        await request;
+
+        expect(session.getCurrentSuggestion()).toBeNull();
+        expect(calls).not.toContainEqual({ type: "showSuggestion", value: { id: "late-rewrite", text: "Late replacement" } });
+      });
+
+      it(`invalidates a visible Rewrite when ${name}`, async () => {
+        const { calls, session } = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async () => ({ id: "visible-rewrite", text: "Clear replacement" }),
+        });
+        const target = rewriteTarget();
+        session.applyTextSessionSnapshot(target);
+        await session.requestSuggestionNow();
+        expect(session.getCurrentSuggestion()).toEqual({ id: "visible-rewrite", text: "Clear replacement" });
+        expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+        calls.length = 0;
+
+        invalidate(session, target);
+        await session.acceptCurrentSuggestion();
+
+        expect(session.getCurrentSuggestion()).toBeNull();
+        expect(calls.map((call) => call.type)).not.toContain("setClipboard");
+        expect(calls.map((call) => call.type)).not.toContain("sendPaste");
+      });
+    }
+
+    it("does not present a Rewrite when a reliable selection returns empty", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => null,
+      });
+
+      session.applyTextSessionSnapshot(rewriteTarget());
+      await session.requestSuggestionNow();
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls.map((call) => call.type)).not.toContain("showSuggestion");
+    });
+
+    it("records metadata-only telemetry for a dismissed Rewrite", async () => {
+      const telemetry: RecordTelemetryEventRequest[] = [];
+      const target = rewriteTarget({
+        selectedText: "rewrite-selected-private-source",
+        selectedRange: { location: 7, length: 31 },
+        caretIdentity: "range:7:31",
+        surroundingContext: {
+          beforeCaret: "rewrite-before-private-context",
+          afterCaret: "rewrite-after-private-context",
+        },
+      });
+      const replacement = "rewrite-private-replacement";
+      const { session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "sg-rewrite-request-1", text: replacement }),
+        recordInteractionTelemetry: (event) => telemetry.push(event),
+      });
+
+      session.applyTextSessionSnapshot(target);
+      await session.requestSuggestionNow();
+      session.clearContext();
+
+      expect(telemetry).toHaveLength(1);
+      expect(telemetry[0]).toMatchObject({
+        eventType: "suggestion_dismissed",
+        requestId: "rewrite-request-1",
+        inferenceSource: "deep_complete",
+        trigger: "explicit",
+        suggestionLength: replacement.length,
+      });
+      const serialized = JSON.stringify(telemetry);
+      for (const privateText of [
+        target.selectedText,
+        target.surroundingContext?.beforeCaret,
+        target.surroundingContext?.afterCaret,
+        replacement,
+      ]) {
+        expect(serialized).not.toContain(privateText!);
+      }
+    });
+
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
       const { calls, session } = makeSession({
         getLocalSuggestion: async (snapshot) => snapshot.sanitizedContext === "hello"
@@ -989,8 +1353,7 @@ describe("desktop native suggestion loop", () => {
         requestSuggestion: async () => ({ id: "cloud-thank", text: " you very much" }),
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("thank");
+      applyReliableCaret(session, "thank");
       await wait(10);
       expect(session.getCurrentSuggestion()).toEqual({ id: "sg-local-thank", text: " you" });
       calls.length = 0;
@@ -1012,8 +1375,7 @@ describe("desktop native suggestion loop", () => {
         requestSuggestion: async () => null,
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("thank");
+      applyReliableCaret(session, "thank");
       await wait(10);
       calls.length = 0;
 
@@ -1033,8 +1395,7 @@ describe("desktop native suggestion loop", () => {
         maxVisibleMs: 200,
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("hello");
+      applyReliableCaret(session);
       await wait(10);
       await session.requestSuggestionNow();
       expect(session.getCurrentSuggestion()).toEqual({ id: "automatic", text: " retained" });
@@ -1061,6 +1422,7 @@ describe("desktop native suggestion loop", () => {
       session.setActiveApplication("com.apple.TextEdit", "window:1");
       session.appendText("hello");
       await wait(10);
+      applyReliableCaret(session);
       await session.requestSuggestionNow();
       expect(session.getCurrentSuggestion()).toEqual({ id: "deep", text: " prior deep" });
       calls.length = 0;
@@ -1095,6 +1457,7 @@ describe("desktop native suggestion loop", () => {
       session.appendText(" again");
       await wait(10);
 
+      applyReliableCaret(session, "hello again");
       await session.requestSuggestionNow();
       resolveAutomatic?.({ id: "late-automatic", text: " stale" });
       await wait(1);
@@ -1111,8 +1474,7 @@ describe("desktop native suggestion loop", () => {
         },
       });
 
-      session.setActiveApplication("com.apple.TextEdit", "window:1");
-      session.appendText("hello");
+      applyReliableCaret(session);
       await wait(10);
       calls.length = 0;
 
@@ -1137,6 +1499,7 @@ describe("desktop native suggestion loop", () => {
       session.setActiveApplication("com.apple.TextEdit", "window:1");
       session.appendText("hello");
       await wait(10);
+      applyReliableCaret(session);
       await session.requestSuggestionNow();
       await session.acceptCurrentSuggestion();
 
@@ -1725,6 +2088,17 @@ describe("desktop native suggestion loop", () => {
       });
       session.setActiveApplication("com.mitchellh.ghostty", "window:1");
       session.appendText("Explain this");
+      session.applyTextSessionSnapshot({
+        activeApplication: { bundleId: "com.mitchellh.ghostty", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 12, length: 0 },
+        selectedText: "",
+        caretIdentity: "range:12:0",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "Explain this", afterCaret: "" },
+      });
       const request = session.requestSuggestionNow();
       await wait(1);
 

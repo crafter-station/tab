@@ -19,7 +19,7 @@ export type InsertionDependencies = {
 
 export type InsertionResult = "inserted" | "no_suggestion" | "no_target_app";
 
-export type SuggestionProvenance = "automatic" | "deep_complete";
+export type SuggestionProvenance = "automatic" | "deep_complete" | "rewrite";
 
 export type AcceptanceCandidate = {
   readonly suggestion: Suggestion;

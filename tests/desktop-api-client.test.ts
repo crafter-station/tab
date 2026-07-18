@@ -8,6 +8,7 @@ import { createDeviceApiClient } from "../apps/desktop/src/main/device-api-clien
 import {
   createSafeTypingContextSnapshot,
   type RequestableTypingContextSnapshot,
+  type TextSessionSnapshot,
   type TypingContextState,
 } from "../apps/desktop/src/main/typing-context.ts";
 import type { AppContextSnapshot } from "../apps/desktop/src/main/app-context.ts";
@@ -53,7 +54,96 @@ function makeSnapshot(
   return snapshot as RequestableTypingContextSnapshot;
 }
 
+function makeRewriteSnapshot(selectedText: string, overrides: Partial<TextSessionSnapshot> = {}): RequestableTypingContextSnapshot {
+  return {
+    ...makeSnapshot({ activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" } }),
+    textSession: {
+      activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+      focusedElementId: "focus:1",
+      textElementId: "text:1",
+      selectedRange: { location: 7, length: selectedText.length },
+      selectedText,
+      caretIdentity: `range:7:${selectedText.length}`,
+      secureLike: false,
+      accessibilityReliability: "reliable",
+      surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
+      ...overrides,
+    },
+  };
+}
+
 describe("desktop API suggestion client", () => {
+  it("constructs only the bounded protected Rewrite request and suppresses secret-like selections", async () => {
+    const boundaryText = "word ".repeat(400);
+    const oversizedText = `${boundaryText}x`;
+    const bodies: Record<string, unknown>[] = [];
+    const clipboardReads: string[] = [];
+    const clipboardWrites: string[] = [];
+    const clipboard = {
+      readText: () => {
+        clipboardReads.push("read");
+        return "clipboard-private-value";
+      },
+      writeText: (text: string) => clipboardWrites.push(text),
+    };
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
+      return new Response(JSON.stringify({ status: "ok", data: { suggestions: [] } }), { status: 200 });
+    };
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787", deviceId: "device-1", appVersion: "0.0.1", platform: "darwin", fetch,
+      getCustomWritingInstructions: () => "Be concise.",
+    });
+    const protectedSnapshot = makeRewriteSnapshot("x");
+    Object.assign(protectedSnapshot, { fullFieldContents: "fullFieldContents-private-value" });
+    Object.assign(protectedSnapshot.textSession!, {
+      accessibilityTree: "accessibilityTree-private-value",
+      rawKeyEvents: "rawKeyEvents-private-value",
+      windowTitle: "windowTitle-private-value",
+      pageUrl: "pageUrl-private-value",
+      clipboard: "clipboard-private-value",
+      screenshot: "screenshot-private-value",
+      documents: "documents-private-value",
+    });
+
+    await requestSuggestion(protectedSnapshot);
+    await requestSuggestion(makeRewriteSnapshot(boundaryText, {
+      surroundingContext: { beforeCaret: `discard${boundaryText}`, afterCaret: `${boundaryText}discard` },
+    }));
+    await requestSuggestion(makeRewriteSnapshot("api_key=abcdefghijklmnop"));
+    await requestSuggestion(makeRewriteSnapshot(oversizedText));
+
+    expect(bodies).toHaveLength(2);
+    const request = SuggestionRequestSchema.parse(bodies[0]);
+    expect(request.mode).toBe("rewrite");
+    if (request.mode !== "rewrite") throw new Error("Expected Rewrite request");
+    expect(request.selectedText).toBe("x");
+    expect(Object.keys(request).sort()).toEqual([
+      "activeApplication", "clientMetadata", "contextHash", "contextIdentity", "contextSource",
+      "customWritingInstructions", "deviceId", "focusedElementId", "memoryEnabled", "mode", "redaction",
+      "requestId", "selectedRange", "selectedText", "textAfterSelection", "textBeforeSelection", "textElementId",
+    ].sort());
+    const boundary = SuggestionRequestSchema.parse(bodies[1]);
+    expect(boundary.mode === "rewrite" && boundary.selectedText.length).toBe(2_000);
+    expect(boundary.mode === "rewrite" && boundary.textBeforeSelection.length).toBe(2_000);
+    expect(boundary.mode === "rewrite" && boundary.textAfterSelection.length).toBe(2_000);
+    expect(clipboardReads).toEqual([]);
+    expect(clipboardWrites).toEqual([]);
+    expect(clipboard.readText).toBeDefined();
+    const serialized = JSON.stringify(bodies);
+    for (const forbidden of [
+      "fullFieldContents-private-value",
+      "accessibilityTree-private-value",
+      "rawKeyEvents-private-value",
+      "windowTitle-private-value",
+      "pageUrl-private-value",
+      "clipboard-private-value",
+      "screenshot-private-value",
+      "documents-private-value",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
   it("returns the first suggestion from a successful API response", async () => {
     const captured: { url?: string; body?: unknown } = {};
     const fetch = async (url: string | URL | Request, init?: RequestInit) => {
@@ -273,6 +363,26 @@ describe("desktop API suggestion client", () => {
 
     const suggestion = await requestSuggestion(makeSnapshot());
     expect(suggestion).toBeNull();
+  });
+
+  it("does not return a Rewrite for empty, invalid, or malformed API responses", async () => {
+    const responses = [
+      () => new Response(JSON.stringify({ status: "ok", data: { suggestions: [] } }), { status: 200 }),
+      () => new Response(JSON.stringify({ status: "ok", data: { suggestions: [{ id: 42, text: null }] } }), { status: 200 }),
+      () => new Response("not-json", { status: 200 }),
+    ];
+
+    for (const response of responses) {
+      const requestSuggestion = createApiSuggestionClient({
+        apiBaseUrl: "http://localhost:8787",
+        deviceId: "device-1",
+        appVersion: "0.0.1",
+        platform: "darwin",
+        fetch: async () => response(),
+      });
+
+      expect(await requestSuggestion(makeRewriteSnapshot("Reliable selection"))).toBeNull();
+    }
   });
 
   it("fails silently when the API returns an error", async () => {

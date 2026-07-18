@@ -1,4 +1,5 @@
 import type { ActiveApplication, RedactionSummary, SuggestionContextSource } from "@tab/contracts";
+import { createHash } from "node:crypto";
 import type { AppContextSnapshot } from "./app-context.ts";
 import {
   activeApplicationKey,
@@ -121,6 +122,10 @@ function rangeKey(range: TextSessionRange | null): string {
 }
 
 function textSessionIdentityKey(snapshot: TextSessionSnapshot): string {
+  const textFingerprint = (text: string | undefined): string => {
+    const value = text ?? "";
+    return `${value.length}:${createHash("sha256").update(value, "utf8").digest("hex")}`;
+  };
   return [
     snapshot.activeApplication?.bundleId ?? "app-unknown",
     snapshot.activeApplication?.windowId ?? "window-unknown",
@@ -129,6 +134,10 @@ function textSessionIdentityKey(snapshot: TextSessionSnapshot): string {
     rangeKey(snapshot.selectedRange),
     snapshot.caretIdentity ?? "caret-unknown",
     snapshot.secureLike ? "secure" : "not-secure",
+    snapshot.accessibilityReliability,
+    textFingerprint(snapshot.selectedText),
+    textFingerprint(snapshot.surroundingContext?.beforeCaret),
+    textFingerprint(snapshot.surroundingContext?.afterCaret),
   ].join(":");
 }
 
