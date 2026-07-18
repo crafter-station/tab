@@ -388,11 +388,9 @@ export const DesktopStatusResponseSchema = z.object({
   data: DesktopStatusSchema,
 });
 
-export const SuggestionRequestSchema = z.object({
+const SuggestionRequestBaseSchema = z.object({
   requestId: z.string().min(1),
   deviceId: z.string().min(1),
-  mode: z.literal("deep_complete"),
-  typingContext: z.string().min(1),
   contextSource: SuggestionContextSourceSchema,
   redaction: RedactionSummarySchema,
   activeApplication: ActiveApplicationSchema,
@@ -402,6 +400,37 @@ export const SuggestionRequestSchema = z.object({
   customWritingInstructions: z.string().trim().min(1).max(1_000).optional(),
   clientMetadata: ClientMetadataSchema.optional(),
 });
+
+const DeepCompleteSuggestionRequestSchema = SuggestionRequestBaseSchema.extend({
+  mode: z.literal("deep_complete"),
+  typingContext: z.string().min(1),
+});
+
+const RewriteSuggestionRequestSchema = SuggestionRequestBaseSchema.extend({
+  mode: z.literal("rewrite"),
+  selectedText: z.string().min(1).max(2_000),
+  textBeforeSelection: z.string().max(2_000),
+  textAfterSelection: z.string().max(2_000),
+  selectedRange: z.object({
+    location: z.number().int().nonnegative(),
+    length: z.number().int().positive(),
+  }),
+  focusedElementId: z.string().min(1),
+  textElementId: z.string().min(1),
+  contextIdentity: z.string().min(1),
+}).superRefine((request, context) => {
+  if (request.selectedRange.length !== request.selectedText.length) {
+    context.addIssue({ code: "custom", path: ["selectedRange", "length"], message: "Selected range length must match selected text length." });
+  }
+  if (!request.activeApplication.windowId) {
+    context.addIssue({ code: "custom", path: ["activeApplication", "windowId"], message: "Rewrite requires a reliable target window." });
+  }
+});
+
+export const SuggestionRequestSchema = z.discriminatedUnion("mode", [
+  DeepCompleteSuggestionRequestSchema,
+  RewriteSuggestionRequestSchema,
+]);
 
 export const MemoryJobSchema = z.object({
   requestId: z.string().min(1),
@@ -428,6 +457,7 @@ export const TelemetryEventTypeSchema = z.enum([
 ]);
 
 export const SuggestionInferenceSourceSchema = z.enum(["local", "deep_complete"]);
+export const SuggestionModeSchema = z.enum(["automatic", "deep_complete", "rewrite"]);
 export const SuggestionTriggerSchema = z.enum(["automatic", "explicit"]);
 export const ApplicationCategorySchema = z.enum([
   "communication",
@@ -470,6 +500,9 @@ export const TelemetryEventSchema = z.object({
   memoryCount: z.number().int().nonnegative().optional(),
   providerId: z.string().min(1).optional(),
   cloudCostUsdMicros: z.number().int().nonnegative().optional(),
+  suggestionMode: SuggestionModeSchema.optional(),
+  selectedTextLength: z.number().int().nonnegative().optional(),
+  surroundingTextLength: z.number().int().nonnegative().optional(),
 });
 
 export const RecordTelemetryEventRequestSchema = z

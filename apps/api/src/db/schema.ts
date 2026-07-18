@@ -310,6 +310,9 @@ export const telemetryEvents = sqliteTable(
     memoryCount: integer("memory_count"),
     providerId: text("provider_id"),
     cloudCostUsdMicros: integer("cloud_cost_usd_micros"),
+    suggestionMode: text("suggestion_mode"),
+    selectedTextLength: integer("selected_text_length"),
+    surroundingTextLength: integer("surrounding_text_length"),
   },
   (table) => [
     index("idx_telemetry_events_user").on(table.userId),

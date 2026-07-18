@@ -174,6 +174,9 @@ function rowToTelemetryEvent(
     memoryCount: optionalNumber(row.memoryCount),
     providerId: row.providerId ?? undefined,
     cloudCostUsdMicros: optionalNumber(row.cloudCostUsdMicros),
+    suggestionMode: row.suggestionMode ?? undefined,
+    selectedTextLength: optionalNumber(row.selectedTextLength),
+    surroundingTextLength: optionalNumber(row.surroundingTextLength),
   });
 }
 
@@ -217,6 +220,9 @@ export class D1TelemetryStorage implements TelemetryStorage {
       memoryCount: event.memoryCount ?? null,
       providerId: event.providerId ?? null,
       cloudCostUsdMicros: event.cloudCostUsdMicros ?? null,
+      suggestionMode: event.suggestionMode ?? null,
+      selectedTextLength: event.selectedTextLength ?? null,
+      surroundingTextLength: event.surroundingTextLength ?? null,
     });
   }
 
