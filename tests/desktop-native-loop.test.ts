@@ -1050,6 +1050,30 @@ describe("desktop native suggestion loop", () => {
       }
     });
 
+    it("routes only selection states consistent with their selected range", async () => {
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "explicit", text: "Improved text" }),
+      });
+
+      session.applyTextSessionSnapshot(rewriteTarget({
+        selectedRange: { location: 7, length: 0 },
+        caretIdentity: "range:7:0",
+      }));
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
+
+      applyReliableCaret(session);
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "deep_complete" });
+
+      session.applyTextSessionSnapshot(rewriteTarget());
+      await session.requestSuggestionNow();
+      expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
+      expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+    });
+
     it("routes only reliable exact explicit targets and gives non-acceptable oversized guidance", async () => {
       const { calls, session } = makeSession({
         getLocalSuggestion: async () => null,
