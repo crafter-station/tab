@@ -25,7 +25,7 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 
 | Application | Version or availability | Reliable or unsupported | Trigger behavior | Keyboard result | Click result | Exact replacement | Multiline | Clipboard | Stale/safety cases | Known limitation |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TextEdit | 1.20, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | No result inferred from availability |
+| TextEdit | 1.20, installed | Reliable native selection target | Production helper emitted exact selected text and range | Not observed end to end | Not observed end to end | Not observed end to end | Exact 2,000-character selection emitted without truncation | Not observed end to end | First probe switched to another app and safely emitted an unreliable null-range snapshot; stable retry was reliable | Rich-text document selection was exercised, but generated plain-text replacement was not |
 | Notes | 4.13, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | No result inferred from availability |
 | Mail | 16.0, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | No result inferred from availability |
 | Slack | 4.48.100, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Account/workspace state may limit automation |
@@ -33,7 +33,7 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 | Messages | 26.0, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Sending a message is outside validation |
 | VS Code | Not installed | Unavailable | Not observed | Not observed | Not observed | Not observed | Not observed | Not observed | Required safety cannot be observed without the app | Zed 1.11.3 is installed but is not a substitute for this required surface |
 | Obsidian | 1.12.7, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Vault/workspace state may limit automation |
-| Google Chrome editor | Chrome 150.0.7871.115, installed | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Pending | Editor surface must be identified in the observation |
+| Google Chrome editor | Chrome 150.0.7871.115 installed; Chrome for Testing exercised | Unsupported in exercised Chrome for Testing contenteditable; installed Chrome not observed | Production helper emitted unreliable state with `selectedRange: null` | No request/no replacement by explicit-action contract | No request/no replacement by explicit-action contract | No replacement | Not observed | No clipboard mutation | Uncertain AX surface failed closed | `agent-browser` drove the contenteditable surface; connection to separately launched installed Chrome on port 9333 was unavailable |
 
 ## Commit Milestones
 
@@ -44,3 +44,16 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 ## Checks
 
 Checks and observed evidence are added as they run.
+
+- `node --test tests/native-macos-text-session.test.mjs`: 11 passed.
+- `swiftc -typecheck apps/desktop/native/macos-input-tap.swift`: passed.
+- Direct compiled helper: reliable selection and explicit-action scenarios emitted the expected snapshot/action; unavailable and inconsistent scenarios emitted no action.
+- `bun test tests/desktop-native-loop.test.ts tests/desktop-acceptance.test.ts tests/desktop-api-client.test.ts tests/api-suggestion.test.ts`: 221 passed.
+- `bun run typecheck`: passed.
+- `bun run worker:types:check`: passed.
+- `bun run lint`: passed.
+- `bun run test`: 28 Node tests and 670 Bun tests passed. Expected error-path stack traces were printed by passing tests.
+
+## External Evidence Gaps
+
+No authenticated generated Rewrite was available during this automated pass. Therefore Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior are not claimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, Obsidian, or Chrome. VS Code was not installed. The driver or a macOS validation owner with authenticated Tab generation must collect these required end-to-end observations; until then, uncertain surfaces retain the required no-request/no-replacement safety result.
