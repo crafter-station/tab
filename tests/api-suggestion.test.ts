@@ -251,6 +251,11 @@ describe("Hono suggestion API", () => {
       "'This sentence is clear.'",
       "‘This sentence is clear.’",
       "«This sentence is clear.»",
+      "„This sentence is clear.“",
+      "‚This sentence is clear.‘",
+      "「This sentence is clear.」",
+      "『This sentence is clear.』",
+      "〝This sentence is clear.〞",
       " ",
       "x".repeat(2_001),
     ].entries()) {

@@ -64,7 +64,7 @@ export function normalizeGeneratedRewrite(selectedText: string, generatedText: s
   if (!text || text === selectedText.trim() || Array.from(text).length > MAX_REWRITE_LENGTH) return "";
   if (/^(?:```|(?:here(?:['’]s| is)|sure\b|i\s+(?:rewrote|have rewritten|['’]ve rewritten)\b|rewritten(?: text)?\s*:|rewrite\s*:|replacement\s*:))/iu.test(text)) return "";
   if (/^[^:\n]{1,80}:\s+\S/u.test(text)) return "";
-  if (/^["'\p{Pi}\p{Pf}].*["'\p{Pi}\p{Pf}]$/su.test(text)) return "";
+  if (/^["'\p{Pi}\p{Pf}\p{Ps}].*["'\p{Pi}\p{Pf}\p{Pe}]$/su.test(text)) return "";
   return text;
 }
 
