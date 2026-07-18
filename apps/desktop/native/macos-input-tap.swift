@@ -347,6 +347,34 @@ func emitTextSessionSnapshotIfChanged(activeWindow: ActiveWindowSnapshot? = acti
   emit(["type": "text-session", "snapshot": snapshot])
 }
 
+func isReliableExplicitActionSnapshot(_ snapshot: TextSessionPayload) -> Bool {
+  guard snapshot["accessibilityReliability"] as? String == "reliable",
+        let range = snapshot["selectedRange"] as? [String: Int],
+        let location = range["location"], location >= 0,
+        let length = range["length"], length >= 0 else {
+    return false
+  }
+
+  let selectedText = snapshot["selectedText"] as? String
+  if length == 0 {
+    return selectedText?.isEmpty ?? true
+  }
+  return selectedText?.utf16.count == length
+}
+
+func refreshTextSessionForExplicitAction() -> Bool {
+  let activeWindow = activeWindowSnapshot()
+  guard let snapshot = textSessionSnapshot(activeWindow: activeWindow),
+        let key = textSessionSnapshotKey(snapshot) else {
+    return false
+  }
+
+  // Explicit actions must publish even when the periodic poll saw the same key.
+  lastTextSessionSnapshotKey = key
+  emit(["type": "text-session", "snapshot": snapshot])
+  return isReliableExplicitActionSnapshot(snapshot)
+}
+
 func isWhatsAppBundleId(_ bundleId: String) -> Bool {
   return bundleId == "net.whatsapp.WhatsApp" || bundleId == "net.whatsapp.WhatsAppDesktop" || bundleId == "desktop.WhatsApp"
 }
@@ -514,6 +542,9 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
       let timestamp = event.timestamp
       if lastOptionKeyUpTimestamp > 0 && timestamp - lastOptionKeyUpTimestamp <= doubleOptionPressNanoseconds {
         lastOptionKeyUpTimestamp = 0
+        guard refreshTextSessionForExplicitAction() else {
+          return Unmanaged.passUnretained(event)
+        }
         emit(["type": "suggest-now"])
       } else {
         lastOptionKeyUpTimestamp = timestamp

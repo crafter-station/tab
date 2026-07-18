@@ -41,6 +41,37 @@ test("macOS helper emits Accessibility Text Session snapshots accepted by deskto
   assert.match(desktopEventIngress, /snapshot\.selectedText === undefined \|\| typeof snapshot\.selectedText === "string"/);
 });
 
+test("macOS explicit actions publish a fresh consistent Text Session before suggest-now", () => {
+  const refreshBody = functionBody(nativeHelper, "func refreshTextSessionForExplicitAction()");
+  const callbackStart = nativeHelper.indexOf("let callback: CGEventTapCallBack");
+  const callbackEnd = nativeHelper.indexOf("guard let eventTap", callbackStart);
+  const callbackBody = nativeHelper.slice(callbackStart, callbackEnd);
+
+  assert.match(refreshBody, /textSessionSnapshot\(activeWindow: activeWindow\)/);
+  assert.match(refreshBody, /emit\(\["type": "text-session", "snapshot": snapshot\]\)/);
+  assert.match(refreshBody, /return isReliableExplicitActionSnapshot\(snapshot\)/);
+  assert.ok(
+    refreshBody.indexOf('emit(["type": "text-session", "snapshot": snapshot])')
+      < refreshBody.indexOf("return isReliableExplicitActionSnapshot(snapshot)"),
+    "the refreshed snapshot must be published before its reliability result is returned",
+  );
+  assert.match(
+    callbackBody,
+    /guard refreshTextSessionForExplicitAction\(\) else \{\s+return Unmanaged\.passUnretained\(event\)\s+\}\s+emit\(\["type": "suggest-now"\]\)/,
+  );
+});
+
+test("macOS explicit actions fail closed for unreliable or inconsistent selections", () => {
+  const reliabilityBody = functionBody(nativeHelper, "func isReliableExplicitActionSnapshot");
+
+  assert.match(reliabilityBody, /"accessibilityReliability"\] as\? String == "reliable"/);
+  assert.match(reliabilityBody, /let range = snapshot\["selectedRange"\] as\? \[String: Int\]/);
+  assert.match(reliabilityBody, /let location = range\["location"\], location >= 0/);
+  assert.match(reliabilityBody, /let length = range\["length"\], length >= 0/);
+  assert.match(reliabilityBody, /if length == 0 \{\s+return selectedText\?\.isEmpty \?\? true\s+\}/);
+  assert.match(reliabilityBody, /return selectedText\?\.utf16\.count == length/);
+});
+
 test("macOS helper captures terminal paste and invalidates uncertain edits", () => {
   assert.match(nativeHelper, /CGEventType\.flagsChanged/);
   assert.match(nativeHelper, /"type": "paste", "text": text/);
