@@ -202,6 +202,47 @@ describe("TelemetryService device ingestion", () => {
       }),
     ]);
   });
+
+  it("persists complete accepted Rewrite metadata from correlated generation telemetry", async () => {
+    const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
+    const timestamp = new Date().toISOString();
+    await telemetryService.record({
+      requestId: "rewrite-request",
+      userId: "user-1",
+      eventType: "suggestion_generated",
+      timestamp,
+      planId: "pro",
+      modelId: "rewrite-model",
+      suggestionMode: "rewrite",
+    });
+    await telemetryService.recordDeviceEvents([{
+      eventType: "suggestion_accepted",
+      eventId: "accepted-1",
+      requestId: "rewrite-request",
+      timestamp,
+      inferenceSource: "deep_complete",
+      trigger: "explicit",
+      suggestionLength: 17,
+      selectedTextLength: 5,
+      acceptedWordCount: 2,
+      acceptedCharacterCount: 17,
+      latencyMs: 12,
+      applicationCategory: "productivity",
+    }], { userId: "user-1", deviceId: "device-1" });
+
+    const accepted = (await telemetryService.listEvents()).find((event) => event.id === "accepted-1");
+    expect(accepted).toMatchObject({
+      selectedTextLength: 5,
+      suggestionLength: 17,
+      acceptedWordCount: 2,
+      acceptedCharacterCount: 17,
+      latencyMs: 12,
+      applicationCategory: "productivity",
+      planId: "pro",
+      modelId: "rewrite-model",
+    });
+    assertNoRawText([accepted!], "private Rewrite text");
+  });
 });
 
 describe("Metadata-only suggestion telemetry", () => {

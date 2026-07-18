@@ -185,6 +185,9 @@ describe("Suggestion Acceptance", () => {
     ["before context", { ...rewriteTarget, surroundingContext: { beforeCaret: "Changed ", afterCaret: " after" } }],
     ["after context", { ...rewriteTarget, surroundingContext: { beforeCaret: "Before ", afterCaret: " changed" } }],
     ["missing context", { ...rewriteTarget, surroundingContext: undefined }],
+    ["application window fallback", { ...rewriteTarget, activeApplication: { bundleId: "com.apple.TextEdit", windowId: "app:123" } }],
+    ["focused element fallback", { ...rewriteTarget, focusedElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" }],
+    ["text element fallback", { ...rewriteTarget, textElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" }],
   ];
 
   for (const [dimension, currentTarget] of staleRewriteTargets) {
@@ -207,6 +210,27 @@ describe("Suggestion Acceptance", () => {
       });
 
       expect(result).toBe("stale_target");
+      expect(calls).toEqual([]);
+    });
+  }
+
+  for (const [dimension, fallbackTarget] of [
+    ["window", { ...rewriteTarget, activeApplication: { bundleId: "com.apple.TextEdit", windowId: "app:123" } }],
+    ["focused element", { ...rewriteTarget, focusedElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" }],
+    ["text element", { ...rewriteTarget, textElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" }],
+  ] as const) {
+    it(`rejects matching ambiguous ${dimension} identities before clipboard mutation`, async () => {
+      const calls: string[] = [];
+      const acceptance = createSuggestionAcceptance({});
+      expect(await acceptance.accept({
+        candidate: { suggestion: { id: "sg-rewrite-1", text: "Clear copy" }, provenance: "rewrite" },
+        insertion: insertion({
+          getPreviouslyActiveApplication: () => fallbackTarget.activeApplication,
+          getVisibleTextSessionTarget: () => fallbackTarget,
+          getCurrentTextSessionTarget: () => fallbackTarget,
+          setClipboard: async () => { calls.push("clipboard"); return "previous"; },
+        }),
+      })).toBe("stale_target");
       expect(calls).toEqual([]);
     });
   }

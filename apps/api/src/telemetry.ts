@@ -57,6 +57,13 @@ export class TelemetryService {
   ): Promise<void> {
     for (const event of events) {
       try {
+        const generation = event.eventType === "suggestion_accepted"
+          ? [...await this.storage.listEvents()].reverse().find((candidate) =>
+            candidate.userId === identity.userId &&
+            candidate.requestId === event.requestId &&
+            candidate.eventType === "suggestion_generated"
+          )
+          : undefined;
         await this.record({
           id: event.eventId,
           eventType: event.eventType,
@@ -67,12 +74,14 @@ export class TelemetryService {
           suggestionLength: event.suggestionLength,
           latencyMs: event.latencyMs,
           errorCode: event.errorCode,
-          modelId: event.modelId,
+          planId: generation?.planId,
+          modelId: event.modelId ?? generation?.modelId,
           inferenceSource: event.inferenceSource,
           trigger: event.trigger,
           acceptedWordCount: event.acceptedWordCount,
           acceptedCharacterCount: event.acceptedCharacterCount,
           applicationCategory: event.applicationCategory,
+          selectedTextLength: event.selectedTextLength,
           memoryUsed: event.memoryUsed,
           memoryCount: event.memoryCount,
         });

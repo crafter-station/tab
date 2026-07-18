@@ -58,12 +58,23 @@ function activeApplicationKey(app: ActiveApplication | null): string {
   return `${app?.bundleId ?? "app-unknown"}:${app?.windowId ?? "window-unknown"}`;
 }
 
+function hasConcreteRewriteIdentity(snapshot: TextSessionSnapshot): boolean {
+  const windowId = snapshot.activeApplication?.windowId;
+  if (!windowId || windowId.startsWith("app:")) return false;
+  for (const elementId of [snapshot.focusedElementId, snapshot.textElementId]) {
+    if (!elementId) return false;
+    if (elementId.startsWith("ax:") && !elementId.includes(":identifier:")) return false;
+  }
+  return true;
+}
+
 function exactRewriteTargetMatches(
   targetApp: ActiveApplication | null,
   visible: TextSessionSnapshot | null,
   current: TextSessionSnapshot | null,
 ): boolean {
   if (!targetApp || !visible || !current) return false;
+  if (!hasConcreteRewriteIdentity(visible) || !hasConcreteRewriteIdentity(current)) return false;
   if (visible.accessibilityReliability !== "reliable" || current.accessibilityReliability !== "reliable") return false;
   if (visible.secureLike || current.secureLike) return false;
   if (!visible.activeApplication?.windowId || !current.activeApplication?.windowId) return false;

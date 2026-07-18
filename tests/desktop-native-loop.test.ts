@@ -27,6 +27,7 @@ import { createApplicationCompatibilityStore } from "../apps/desktop/src/main/ap
 import {
   createNativeAutocompleteApp,
 } from "../apps/desktop/src/main/native-autocomplete-app.ts";
+import { createSuggestionAcceptanceTriggers } from "../apps/desktop/src/main/suggestion-acceptance-triggers.ts";
 import { createAppContextExtractor, type AppContextSnapshotState } from "../apps/desktop/src/main/app-context-extractor.ts";
 import { createOpenCodeConversationContext, type OpenCodeContextRow } from "../apps/desktop/src/main/opencode-session-context.ts";
 import { redactSensitiveText } from "../packages/redaction/src/index.ts";
@@ -851,6 +852,9 @@ describe("desktop native suggestion loop", () => {
       }) => void | Promise<void>;
       onLocalSuggestionAccepted?: (suggestionId: string) => void;
       sendPaste?: () => Promise<void>;
+      setClipboard?: (text: string) => Promise<string>;
+      waitForPaste?: () => Promise<void>;
+      restoreClipboard?: (previous: string) => Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
       insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
       refreshTextSessionTarget?: () => TextSessionSnapshot | null;
@@ -919,13 +923,22 @@ describe("desktop native suggestion loop", () => {
           getPreviouslyActiveApplication,
           setClipboard: async (text) => {
             calls.push({ type: "setClipboard", value: text });
-            return "previous-clipboard";
+            return overrides.setClipboard?.(text) ?? "previous-clipboard";
           },
           sendPaste: async () => {
             calls.push({ type: "sendPaste" });
             await overrides.sendPaste?.();
           },
-          restoreClipboard: async (previous) => calls.push({ type: "restoreClipboard", value: previous }),
+          waitForPaste: overrides.waitForPaste
+            ? async () => {
+              calls.push({ type: "waitForPaste" });
+              await overrides.waitForPaste?.();
+            }
+            : undefined,
+          restoreClipboard: async (previous) => {
+            calls.push({ type: "restoreClipboard", value: previous });
+            await overrides.restoreClipboard?.(previous);
+          },
           insertSemantically: overrides.insertSemantically
             ? async (text, target) => {
               calls.push({ type: "insertSemantically", value: text });
@@ -1355,7 +1368,7 @@ describe("desktop native suggestion loop", () => {
       await session.requestSuggestionNow();
       calls.length = 0;
 
-      await session.acceptCurrentSuggestion();
+      await createSuggestionAcceptanceTriggers(() => session.acceptCurrentSuggestion()).keyboard();
 
       expect(refreshes).toEqual(["refresh"]);
       expect(calls.filter((call) => call.type === "setClipboard")).toEqual([
@@ -1380,12 +1393,100 @@ describe("desktop native suggestion loop", () => {
       }
     });
 
-    it("routes Option+Tab and overlay click through the same Acceptance function", async () => {
-      const source = await Bun.file("apps/desktop/src/main/index.ts").text();
-      expect(source).toMatch(/globalShortcut\.register\("Alt\+Tab",[\s\S]*?acceptCurrentSuggestion\(\)/);
-      expect(source).toMatch(/ipcMain\.on\("accept-suggestion",[\s\S]*?acceptCurrentSuggestion\(\)/);
-      expect(source.match(/async function acceptCurrentSuggestion\(\)/g)).toHaveLength(1);
+    it("keyboard and click invoke the same public Acceptance behavior", async () => {
+      for (const triggerName of ["keyboard", "click"] as const) {
+        const target = rewriteTarget();
+        const { calls, session } = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async () => ({ id: `sg-${triggerName}`, text: "Clear replacement" }),
+          refreshTextSessionTarget: () => target,
+        });
+        session.applyTextSessionSnapshot(target);
+        await session.requestSuggestionNow();
+        calls.length = 0;
+        await createSuggestionAcceptanceTriggers(() => session.acceptCurrentSuggestion())[triggerName]();
+        expect(calls.filter((call) => call.type === "setClipboard")).toHaveLength(1);
+        expect(calls.filter((call) => call.type === "sendPaste")).toHaveLength(1);
+        expect(calls.filter((call) => call.type === "restoreClipboard")).toHaveLength(1);
+      }
     });
+
+    for (const triggerName of ["keyboard", "click"] as const) {
+      it(`${triggerName} Acceptance refreshes every stale target through the public trigger path`, async () => {
+        const target = rewriteTarget();
+        const secret = "api_key=abcdefghijklmnop";
+        const staleTargets: Array<TextSessionSnapshot | null> = [
+          null,
+          { ...target, activeApplication: { bundleId: "com.apple.Notes", windowId: "window:1" } },
+          { ...target, activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:2" } },
+          { ...target, focusedElementId: "focus:2" },
+          { ...target, textElementId: "text:2" },
+          { ...target, selectedRange: { location: 8, length: 5 } },
+          { ...target, selectedText: "Other" },
+          { ...target, surroundingContext: { beforeCaret: "Changed ", afterCaret: " after" } },
+          { ...target, surroundingContext: { beforeCaret: "Before ", afterCaret: " changed" } },
+          { ...target, accessibilityReliability: "unreliable" },
+          { ...target, secureLike: true },
+          { ...target, selectedText: secret, selectedRange: { location: 7, length: secret.length } },
+          { ...target, focusedElementId: null },
+          { ...target, textElementId: null },
+          { ...target, selectedRange: null },
+          { ...target, selectedText: undefined },
+          { ...target, surroundingContext: undefined },
+          { ...target, caretIdentity: "range:8:5" },
+          { ...target, activeApplication: { bundleId: "com.apple.TextEdit", windowId: "app:123" } },
+          { ...target, focusedElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" },
+          { ...target, textElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" },
+        ];
+        for (const staleTarget of staleTargets) {
+          let refreshes = 0;
+          const { calls, session } = makeSession({
+            getLocalSuggestion: async () => null,
+            requestSuggestion: async () => ({ id: "sg-rewrite-stale", text: "Clear replacement" }),
+            refreshTextSessionTarget: () => { refreshes += 1; return staleTarget; },
+          });
+          session.applyTextSessionSnapshot(target);
+          await session.requestSuggestionNow();
+          calls.length = 0;
+          const triggers = createSuggestionAcceptanceTriggers(() => session.acceptCurrentSuggestion());
+          await triggers[triggerName]();
+          expect(refreshes).toBe(1);
+          expect(calls.map((call) => call.type)).not.toContain("setClipboard");
+          expect(calls.map((call) => call.type)).not.toContain("sendPaste");
+        }
+      });
+    }
+
+    for (const failure of ["clipboard", "dispatch", "wait", "restore"] as const) {
+      it(`public Acceptance trigger covers ${failure} behavior and usage/privacy separation`, async () => {
+        const target = rewriteTarget();
+        const telemetry: RecordTelemetryEventRequest[] = [];
+        const usage: unknown[] = [];
+        const { calls, session } = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async () => ({ id: "sg-rewrite-failure", text: "Clear replacement" }),
+          refreshTextSessionTarget: () => target,
+          recordInteractionTelemetry: (event) => telemetry.push(event),
+          recordAcceptedUsage: (event) => usage.push(event),
+          insertSemantically: async () => true,
+          setClipboard: failure === "clipboard" ? async () => { throw new Error("clipboard failed"); } : undefined,
+          sendPaste: failure === "dispatch" ? async () => { throw new Error("dispatch failed"); } : undefined,
+          waitForPaste: failure === "wait" ? async () => { throw new Error("wait failed"); } : async () => {},
+          restoreClipboard: failure === "restore" ? async () => { throw new Error("restore failed"); } : undefined,
+        });
+        session.applyTextSessionSnapshot(target);
+        await session.requestSuggestionNow();
+        calls.length = 0;
+        const triggers = createSuggestionAcceptanceTriggers(() => session.acceptCurrentSuggestion());
+        if (failure === "restore") await expect(triggers.click()).resolves.toBeUndefined();
+        else await expect(triggers.keyboard()).rejects.toThrow();
+        expect(calls.map((call) => call.type)).not.toContain("insertSemantically");
+        expect(usage).toEqual([]);
+        expect(telemetry.some((event) => event.eventType === "suggestion_accepted")).toBe(failure === "restore");
+        expect(JSON.stringify(telemetry)).not.toContain(target.selectedText!);
+        if (failure !== "clipboard") expect(calls.map((call) => call.type)).toContain("restoreClipboard");
+      });
+    }
 
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
       const { calls, session } = makeSession({
