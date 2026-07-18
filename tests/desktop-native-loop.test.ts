@@ -1011,6 +1011,48 @@ describe("desktop native suggestion loop", () => {
       expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
     });
 
+    it("invalidates a pending Rewrite when its frozen selection target changes", async () => {
+      let resolveRequest!: (suggestion: Suggestion | null) => void;
+      let requestSignal: AbortSignal | undefined;
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async (_snapshot, options) => {
+          requestSignal = options?.signal;
+          return await new Promise<Suggestion | null>((resolve) => {
+            resolveRequest = resolve;
+          });
+        },
+      });
+      const target: TextSessionSnapshot = {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+        focusedElementId: "focus:1",
+        textElementId: "text:1",
+        selectedRange: { location: 7, length: 5 },
+        selectedText: "Draft",
+        caretIdentity: "range:7:5",
+        secureLike: false,
+        accessibilityReliability: "reliable",
+        surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
+      };
+
+      session.applyTextSessionSnapshot(target);
+      const request = session.requestSuggestionNow();
+      await wait(1);
+      session.applyTextSessionSnapshot({
+        ...target,
+        selectedRange: { location: 7, length: 6 },
+        selectedText: "Draft!",
+        caretIdentity: "range:7:6",
+      });
+
+      expect(requestSignal?.aborted).toBe(true);
+      resolveRequest({ id: "late-rewrite", text: "Late replacement" });
+      await request;
+
+      expect(session.getCurrentSuggestion()).toBeNull();
+      expect(calls).not.toContainEqual({ type: "showSuggestion", value: { id: "late-rewrite", text: "Late replacement" } });
+    });
+
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
       const { calls, session } = makeSession({
         getLocalSuggestion: async (snapshot) => snapshot.sanitizedContext === "hello"

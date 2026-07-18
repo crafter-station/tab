@@ -669,6 +669,12 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     applyTextSessionSnapshot(snapshot: TextSessionSnapshot): void {
       if (observationPaused) return;
       compatibilityStore.recordTextSessionSnapshot(snapshot);
+      if (
+        explicitRequestTarget &&
+        createSafeTextSessionSnapshot(explicitRequestTarget).contextHash !== createSafeTextSessionSnapshot(snapshot).contextHash
+      ) {
+        explicitRequestTarget = null;
+      }
       latestTextSessionSnapshot = snapshot;
       ambientTerminalSnapshot = snapshot.activeApplication?.bundleId === GHOSTTY_BUNDLE_ID
         && isReliableTextSessionSnapshot(snapshot)
