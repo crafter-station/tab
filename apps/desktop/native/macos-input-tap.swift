@@ -755,6 +755,39 @@ func runExplicitActionContract(_ scenario: String) {
   }
 }
 
+func runSelectionContract(_ scenario: String) {
+  var snapshot: TextSessionPayload = [
+    "selectedRange": ["location": 2, "length": 5],
+    "selectedText": "hello",
+    "accessibilityReliability": "reliable",
+  ]
+
+  switch scenario {
+  case "selection":
+    break
+  case "caret":
+    snapshot["selectedRange"] = ["location": 7, "length": 0]
+    snapshot["selectedText"] = ""
+  case "unavailable":
+    snapshot["selectedRange"] = NSNull()
+    snapshot.removeValue(forKey: "selectedText")
+    snapshot["accessibilityReliability"] = "unavailable"
+  case "text-without-range":
+    snapshot["selectedRange"] = NSNull()
+  case "range-without-text":
+    snapshot.removeValue(forKey: "selectedText")
+  case "inconsistent":
+    snapshot["selectedText"] = "bad"
+  default:
+    exit(2)
+  }
+
+  emit([
+    "snapshot": snapshot,
+    "reliableExplicitTarget": isReliableExplicitActionSnapshot(snapshot),
+  ])
+}
+
 if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--text-session-snapshot" {
   if let snapshot = textSessionSnapshot() {
     emit(["type": "text-session", "snapshot": snapshot])
@@ -764,6 +797,11 @@ if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--text-sessi
 
 if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--explicit-action-contract" {
   runExplicitActionContract(CommandLine.arguments[2])
+  exit(0)
+}
+
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--selection-contract" {
+  runSelectionContract(CommandLine.arguments[2])
   exit(0)
 }
 

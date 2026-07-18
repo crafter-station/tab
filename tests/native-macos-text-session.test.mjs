@@ -24,6 +24,10 @@ function runExplicitActionContract(scenario) {
   return output.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
+function runSelectionContract(scenario) {
+  return JSON.parse(execFileSync(nativeContractExecutable, ["--selection-contract", scenario], { encoding: "utf8" }));
+}
+
 function functionBody(source, signature) {
   const start = source.indexOf(signature);
   assert.notEqual(start, -1, `Missing ${signature}`);
@@ -73,6 +77,32 @@ test("macOS explicit actions fail closed at the process boundary", { skip: !isMa
   for (const scenario of ["unavailable", "unreliable", "inconsistent", "identity-disagreement", "missing-identity"]) {
     const events = runExplicitActionContract(scenario);
     assert.equal(events.some((event) => event.type === "suggest-now"), false, scenario);
+  }
+});
+
+test("macOS helper executable proves selected text and range consistency without clipboard reads", { skip: !isMacOS }, () => {
+  const selection = runSelectionContract("selection");
+  assert.deepEqual(selection.snapshot.selectedRange, { location: 2, length: 5 });
+  assert.equal(selection.snapshot.selectedText, "hello");
+  assert.equal(selection.reliableExplicitTarget, true);
+
+  const caret = runSelectionContract("caret");
+  assert.deepEqual(caret.snapshot.selectedRange, { location: 7, length: 0 });
+  assert.equal(caret.snapshot.selectedText, "");
+  assert.equal(caret.reliableExplicitTarget, true);
+
+  const contractBody = functionBody(nativeHelper, "func runSelectionContract");
+  assert.doesNotMatch(contractBody, /NSPasteboard|clipboard/i);
+});
+
+test("macOS helper executable keeps missing or inconsistent selection state unsafe", { skip: !isMacOS }, () => {
+  const unavailable = runSelectionContract("unavailable");
+  assert.equal(unavailable.snapshot.selectedRange, null);
+  assert.equal("selectedText" in unavailable.snapshot, false);
+  assert.equal(unavailable.reliableExplicitTarget, false);
+
+  for (const scenario of ["text-without-range", "range-without-text", "inconsistent"]) {
+    assert.equal(runSelectionContract(scenario).reliableExplicitTarget, false, scenario);
   }
 });
 
