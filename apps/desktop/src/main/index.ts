@@ -34,7 +34,7 @@ import {
 } from "./app-context.ts";
 import { createAppContextExtractor, type AppContextAccessibilityTree } from "./app-context-extractor.ts";
 import { createDesktopEventIngress } from "./desktop-event-ingress.ts";
-import { createMacOSInputTap } from "./macos-input-tap.ts";
+import { createMacOSInputTap, readCurrentMacOSTextSession } from "./macos-input-tap.ts";
 import {
   createDesktopAuthClient,
   createDesktopAuthSession,
@@ -478,6 +478,7 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
       clipboard.writeText(previous);
     },
   }),
+  refreshTextSessionTarget: () => readCurrentMacOSTextSession(INPUT_TAP_PATH),
   debounceMs: 100,
   maxVisibleMs: SUGGESTION_VISIBLE_MS,
   recordInteractionTelemetry,

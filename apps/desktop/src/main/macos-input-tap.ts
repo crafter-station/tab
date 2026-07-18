@@ -1,5 +1,23 @@
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
+import { isTextSessionSnapshot } from "./desktop-event-ingress.ts";
+import type { TextSessionSnapshot } from "./typing-context.ts";
+
+export function readCurrentMacOSTextSession(executablePath: string): TextSessionSnapshot | null {
+  if (process.platform !== "darwin" || !existsSync(executablePath)) return null;
+  try {
+    const output = execFileSync(executablePath, ["--text-session-snapshot"], {
+      encoding: "utf8",
+      timeout: 1_000,
+    });
+    const message = JSON.parse(output.trim()) as { type?: unknown; snapshot?: unknown };
+    return message.type === "text-session" && isTextSessionSnapshot(message.snapshot)
+      ? message.snapshot
+      : null;
+  } catch {
+    return null;
+  }
+}
 
 type InputTapProcess = {
   readonly stdout: {

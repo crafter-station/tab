@@ -3,6 +3,7 @@ import {
   createSuggestionAcceptance,
   type InsertionDependencies,
 } from "../apps/desktop/src/main/acceptance.ts";
+import type { TextSessionSnapshot } from "../apps/desktop/src/main/typing-context.ts";
 
 function insertion(overrides: Partial<InsertionDependencies> = {}): InsertionDependencies {
   return {
@@ -16,6 +17,18 @@ function insertion(overrides: Partial<InsertionDependencies> = {}): InsertionDep
 }
 
 describe("Suggestion Acceptance", () => {
+  const rewriteTarget: TextSessionSnapshot = {
+    activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:1" },
+    focusedElementId: "focus:1",
+    textElementId: "text:1",
+    selectedRange: { location: 7, length: 5 },
+    selectedText: "Draft",
+    caretIdentity: "range:7:5",
+    secureLike: false,
+    accessibilityReliability: "reliable",
+    surroundingContext: { beforeCaret: "Before ", afterCaret: " after" },
+  };
+
   it("blocks only local Acceptance when its allowance is exhausted", async () => {
     const events: string[] = [];
     const acceptance = createSuggestionAcceptance({
@@ -122,4 +135,79 @@ describe("Suggestion Acceptance", () => {
       insertion: insertion(),
     })).resolves.toBe("inserted");
   });
+
+  it("refreshes and exactly validates a Rewrite target before clipboard mutation", async () => {
+    const calls: string[] = [];
+    const acceptance = createSuggestionAcceptance({
+      canAcceptLocalSuggestion: () => false,
+      recordAcceptedUsage: () => calls.push("usage"),
+      onLocalSuggestionAccepted: () => calls.push("history"),
+    });
+
+    await expect(acceptance.accept({
+      candidate: { suggestion: { id: "sg-rewrite-1", text: "Clear copy" }, provenance: "rewrite" },
+      insertion: insertion({
+        getCurrentSuggestion: () => ({ id: "sg-rewrite-1", text: "Clear copy" }),
+        getPreviouslyActiveApplication: () => rewriteTarget.activeApplication,
+        getVisibleTextSessionTarget: () => rewriteTarget,
+        getCurrentTextSessionTarget: () => {
+          calls.push("refresh");
+          return rewriteTarget;
+        },
+        insertSemantically: async () => {
+          calls.push("semantic");
+          return true;
+        },
+        setClipboard: async (text) => {
+          calls.push(`clipboard:${text}`);
+          return "previous";
+        },
+        sendPaste: async () => calls.push("paste"),
+        waitForPaste: async () => calls.push("wait"),
+        restoreClipboard: async () => calls.push("restore"),
+      }),
+    })).resolves.toBe("inserted");
+
+    expect(calls).toEqual(["refresh", "clipboard:Clear copy", "paste", "wait", "restore"]);
+  });
+
+  const staleRewriteTargets: Array<[string, TextSessionSnapshot | null]> = [
+    ["missing", null],
+    ["unreliable", { ...rewriteTarget, accessibilityReliability: "unreliable" }],
+    ["secure", { ...rewriteTarget, secureLike: true }],
+    ["secret-like", { ...rewriteTarget, selectedText: "api_key=abcdefghijklmnop", selectedRange: { location: 7, length: 24 } }],
+    ["application", { ...rewriteTarget, activeApplication: { bundleId: "com.apple.Notes", windowId: "window:1" } }],
+    ["window", { ...rewriteTarget, activeApplication: { bundleId: "com.apple.TextEdit", windowId: "window:2" } }],
+    ["focus", { ...rewriteTarget, focusedElementId: "focus:2" }],
+    ["text element", { ...rewriteTarget, textElementId: "text:2" }],
+    ["range", { ...rewriteTarget, selectedRange: { location: 8, length: 5 } }],
+    ["selected text", { ...rewriteTarget, selectedText: "Other" }],
+    ["before context", { ...rewriteTarget, surroundingContext: { beforeCaret: "Changed ", afterCaret: " after" } }],
+    ["after context", { ...rewriteTarget, surroundingContext: { beforeCaret: "Before ", afterCaret: " changed" } }],
+    ["missing context", { ...rewriteTarget, surroundingContext: undefined }],
+  ];
+
+  for (const [dimension, currentTarget] of staleRewriteTargets) {
+    it(`makes stale or uncertain Rewrite ${dimension} a pre-clipboard no-op`, async () => {
+      const calls: string[] = [];
+      const acceptance = createSuggestionAcceptance({ recordAcceptance: () => calls.push("accepted") });
+      const result = await acceptance.accept({
+        candidate: { suggestion: { id: "sg-rewrite-1", text: "Clear copy" }, provenance: "rewrite" },
+        insertion: insertion({
+          getCurrentSuggestion: () => ({ id: "sg-rewrite-1", text: "Clear copy" }),
+          getPreviouslyActiveApplication: () => rewriteTarget.activeApplication,
+          getVisibleTextSessionTarget: () => rewriteTarget,
+          getCurrentTextSessionTarget: () => currentTarget,
+          setClipboard: async () => {
+            calls.push("clipboard");
+            return "previous";
+          },
+          sendPaste: async () => calls.push("paste"),
+        }),
+      });
+
+      expect(result).toBe("stale_target");
+      expect(calls).toEqual([]);
+    });
+  }
 });

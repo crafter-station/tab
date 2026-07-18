@@ -123,7 +123,7 @@ function isAccessibilityBounds(value: unknown): value is NonNullable<AppContextA
   );
 }
 
-function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
+export function isTextSessionSnapshot(value: unknown): value is TextSessionSnapshot {
   if (!value || typeof value !== "object") return false;
   const snapshot = value as Partial<TextSessionSnapshot>;
 

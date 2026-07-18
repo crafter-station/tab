@@ -65,6 +65,7 @@ type NativeSuggestionSessionDependencies = {
     getCurrentSuggestion: () => Suggestion | null,
     getPreviouslyActiveApplication: () => ActiveApplication | null,
   ) => InsertionDependencies;
+  readonly refreshTextSessionTarget?: () => TextSessionSnapshot | null;
   readonly debounceMs: number;
   readonly maxVisibleMs?: number;
   readonly recordInteractionTelemetry?: RecordInteractionTelemetry;
@@ -107,6 +108,7 @@ type VisibleSuggestionTelemetry = {
   readonly inferenceSource: "local" | "deep_complete";
   readonly trigger: "automatic" | "explicit";
   readonly applicationCategory: ApplicationCategory;
+  readonly selectedTextLength?: number;
 };
 
 export type SuggestionProvenance = AcceptanceSuggestionProvenance;
@@ -186,7 +188,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
   }
 
   function buildTelemetry(suggestion: Suggestion, provenance: SuggestionProvenance): VisibleSuggestionTelemetry {
-    const activeApplication = deps.typingContext.getState().activeApplication;
+    const activeApplication = textSessionSnapshot?.activeApplication ?? deps.typingContext.getState().activeApplication;
     const local = provenance === "automatic";
     const localSuggestionModelId = deps.getLocalSuggestionModelId?.() ?? deps.localSuggestionModelId;
     return {
@@ -197,6 +199,9 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       inferenceSource: local ? "local" : "deep_complete",
       trigger: local ? "automatic" : "explicit",
       applicationCategory: applicationCategory(activeApplication?.bundleId),
+      ...(provenance === "rewrite" && visibleTextSessionTarget?.selectedText !== undefined
+        ? { selectedTextLength: visibleTextSessionTarget.selectedText.length }
+        : {}),
       ...(local && localSuggestionModelId
         ? { modelId: localSuggestionModelId }
         : {}),
@@ -219,6 +224,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       eventId?: string;
       acceptedWordCount?: number;
       acceptedCharacterCount?: number;
+      selectedTextLength?: number;
     } = {},
   ): RecordTelemetryEventRequest | null {
     if (!visibleSuggestionTelemetry) return null;
@@ -233,6 +239,9 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       inferenceSource: visibleSuggestionTelemetry.inferenceSource,
       trigger: visibleSuggestionTelemetry.trigger,
       applicationCategory: visibleSuggestionTelemetry.applicationCategory,
+      ...(visibleSuggestionTelemetry.selectedTextLength !== undefined
+        ? { selectedTextLength: visibleSuggestionTelemetry.selectedTextLength }
+        : {}),
     };
 
     if (options.acceptedWordCount !== undefined) {
@@ -255,6 +264,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       eventId?: string;
       acceptedWordCount?: number;
       acceptedCharacterCount?: number;
+      selectedTextLength?: number;
     },
   ): void {
     if (!deps.recordInteractionTelemetry) return;
@@ -742,7 +752,9 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
           insertion: {
             ...insertionDeps,
             getVisibleTextSessionTarget: () => visibleTextSessionTarget,
-            getCurrentTextSessionTarget: () => textSessionSnapshot,
+            getCurrentTextSessionTarget: acceptedVisibleSuggestion?.provenance === "rewrite"
+              ? () => deps.refreshTextSessionTarget?.() ?? null
+              : () => textSessionSnapshot,
             shouldPreferClipboardFallback: (targetApp) => compatibilityStore.shouldPreferClipboardInsertion(targetApp),
             recordInsertionOutcome: (strategy, outcome, targetApp) => {
               compatibilityStore.recordInsertionOutcome(targetApp, strategy, outcome);
@@ -754,6 +766,12 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       }
 
       if (result === "allowance_exhausted") {
+        clearVisibleSuggestion();
+        outputs.hideOverlay();
+        return;
+      }
+
+      if (result === "stale_target") {
         clearVisibleSuggestion();
         outputs.hideOverlay();
         return;

@@ -527,6 +527,7 @@ export const RecordTelemetryEventRequestSchema = z
     acceptedWordCount: z.number().int().nonnegative().optional(),
     acceptedCharacterCount: z.number().int().nonnegative().optional(),
     applicationCategory: ApplicationCategorySchema.optional(),
+    selectedTextLength: z.number().int().nonnegative().optional(),
     memoryUsed: z.boolean().optional(),
     memoryCount: z.number().int().nonnegative().optional(),
   })

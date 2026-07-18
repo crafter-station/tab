@@ -838,6 +838,7 @@ describe("desktop native suggestion loop", () => {
       sendPaste?: () => Promise<void>;
       triggerPolicy?: ReturnType<typeof createPoliteTriggerPolicy>;
       insertSemantically?: (text: string, target: TextSessionSnapshot) => Promise<boolean>;
+      refreshTextSessionTarget?: () => TextSessionSnapshot | null;
       compatibilityStore?: ReturnType<typeof createApplicationCompatibilityStore>;
       getAppContext?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshot;
       getAppContextState?: (snapshot: SafeTypingContextSnapshot) => AppContextSnapshotState;
@@ -917,6 +918,7 @@ describe("desktop native suggestion loop", () => {
             }
             : undefined,
         }),
+        refreshTextSessionTarget: overrides.refreshTextSessionTarget,
         debounceMs: 5,
         maxVisibleMs: overrides.maxVisibleMs,
         recordInteractionTelemetry: overrides.recordInteractionTelemetry,
@@ -1316,6 +1318,58 @@ describe("desktop native suggestion loop", () => {
       ]) {
         expect(serialized).not.toContain(privateText!);
       }
+    });
+
+    it("accepts Rewrite through one synchronous exact-target refresh without Local usage", async () => {
+      const target = rewriteTarget();
+      const telemetry: RecordTelemetryEventRequest[] = [];
+      const usage: unknown[] = [];
+      const refreshes: string[] = [];
+      const { calls, session } = makeSession({
+        getLocalSuggestion: async () => null,
+        requestSuggestion: async () => ({ id: "sg-rewrite-accept", text: "Clear replacement" }),
+        refreshTextSessionTarget: () => {
+          refreshes.push("refresh");
+          return target;
+        },
+        canAcceptLocalSuggestion: () => false,
+        recordAcceptedUsage: (event) => usage.push(event),
+        recordInteractionTelemetry: (event) => telemetry.push(event),
+      });
+      session.applyTextSessionSnapshot(target);
+      await session.requestSuggestionNow();
+      calls.length = 0;
+
+      await session.acceptCurrentSuggestion();
+
+      expect(refreshes).toEqual(["refresh"]);
+      expect(calls.filter((call) => call.type === "setClipboard")).toEqual([
+        { type: "setClipboard", value: "Clear replacement" },
+      ]);
+      expect(calls.filter((call) => call.type === "sendPaste")).toHaveLength(1);
+      expect(calls.map((call) => call.type)).not.toContain("insertSemantically");
+      expect(usage).toEqual([]);
+      expect(session.getCurrentSuggestion()).toBeNull();
+      const accepted = telemetry.find((event) => event.eventType === "suggestion_accepted");
+      expect(accepted).toMatchObject({
+        inferenceSource: "deep_complete",
+        trigger: "explicit",
+        acceptedWordCount: 2,
+        acceptedCharacterCount: 17,
+        applicationCategory: "productivity",
+        selectedTextLength: 5,
+      });
+      const serialized = JSON.stringify(telemetry);
+      for (const raw of [target.selectedText, target.surroundingContext?.beforeCaret, target.surroundingContext?.afterCaret, "Clear replacement"]) {
+        expect(serialized).not.toContain(raw!);
+      }
+    });
+
+    it("routes Option+Tab and overlay click through the same Acceptance function", async () => {
+      const source = await Bun.file("apps/desktop/src/main/index.ts").text();
+      expect(source).toMatch(/globalShortcut\.register\("Alt\+Tab",[\s\S]*?acceptCurrentSuggestion\(\)/);
+      expect(source).toMatch(/ipcMain\.on\("accept-suggestion",[\s\S]*?acceptCurrentSuggestion\(\)/);
+      expect(source.match(/async function acceptCurrentSuggestion\(\)/g)).toHaveLength(1);
     });
 
     it("keeps the overlay mounted while replacing a local suggestion after continued typing", async () => {
