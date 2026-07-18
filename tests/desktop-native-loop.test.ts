@@ -1049,6 +1049,23 @@ describe("desktop native suggestion loop", () => {
       await session.requestSuggestionNow();
       session.applyTextSessionSnapshot(selection("bad", 3, "unreliable"));
       await session.requestSuggestionNow();
+      const validTarget = selection("Draft");
+      const secret = "api_key=abcdefghijklmnop";
+      for (const target of [
+        { ...validTarget, activeApplication: null },
+        { ...validTarget, activeApplication: { bundleId: "com.apple.TextEdit" } },
+        { ...validTarget, focusedElementId: null },
+        { ...validTarget, textElementId: null },
+        { ...validTarget, selectedRange: null },
+        { ...validTarget, secureLike: true },
+        { ...validTarget, activeApplication: { bundleId: "com.1password.1password", windowId: "window:1" } },
+        selection(secret),
+        { ...validTarget, surroundingContext: { beforeCaret: secret, afterCaret: " after" } },
+        { ...validTarget, surroundingContext: { beforeCaret: "Before ", afterCaret: secret } },
+      ] satisfies TextSessionSnapshot[]) {
+        session.applyTextSessionSnapshot(target);
+        await session.requestSuggestionNow();
+      }
       expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
 
       session.applyTextSessionSnapshot(selection("x"));

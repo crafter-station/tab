@@ -75,7 +75,17 @@ function makeRewriteSnapshot(selectedText: string, overrides: Partial<TextSessio
 describe("desktop API suggestion client", () => {
   it("constructs only the bounded protected Rewrite request and suppresses secret-like selections", async () => {
     const boundaryText = "word ".repeat(400);
+    const oversizedText = `${boundaryText}x`;
     const bodies: Record<string, unknown>[] = [];
+    const clipboardReads: string[] = [];
+    const clipboardWrites: string[] = [];
+    const clipboard = {
+      readText: () => {
+        clipboardReads.push("read");
+        return "clipboard-private-value";
+      },
+      writeText: (text: string) => clipboardWrites.push(text),
+    };
     const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
       bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>);
       return new Response(JSON.stringify({ status: "ok", data: { suggestions: [] } }), { status: 200 });
@@ -84,12 +94,24 @@ describe("desktop API suggestion client", () => {
       apiBaseUrl: "http://localhost:8787", deviceId: "device-1", appVersion: "0.0.1", platform: "darwin", fetch,
       getCustomWritingInstructions: () => "Be concise.",
     });
+    const protectedSnapshot = makeRewriteSnapshot("x");
+    Object.assign(protectedSnapshot, { fullFieldContents: "fullFieldContents-private-value" });
+    Object.assign(protectedSnapshot.textSession!, {
+      accessibilityTree: "accessibilityTree-private-value",
+      rawKeyEvents: "rawKeyEvents-private-value",
+      windowTitle: "windowTitle-private-value",
+      pageUrl: "pageUrl-private-value",
+      clipboard: "clipboard-private-value",
+      screenshot: "screenshot-private-value",
+      documents: "documents-private-value",
+    });
 
-    await requestSuggestion(makeRewriteSnapshot("x"));
+    await requestSuggestion(protectedSnapshot);
     await requestSuggestion(makeRewriteSnapshot(boundaryText, {
       surroundingContext: { beforeCaret: `discard${boundaryText}`, afterCaret: `${boundaryText}discard` },
     }));
     await requestSuggestion(makeRewriteSnapshot("api_key=abcdefghijklmnop"));
+    await requestSuggestion(makeRewriteSnapshot(oversizedText));
 
     expect(bodies).toHaveLength(2);
     const request = SuggestionRequestSchema.parse(bodies[0]);
@@ -105,6 +127,22 @@ describe("desktop API suggestion client", () => {
     expect(boundary.mode === "rewrite" && boundary.selectedText.length).toBe(2_000);
     expect(boundary.mode === "rewrite" && boundary.textBeforeSelection.length).toBe(2_000);
     expect(boundary.mode === "rewrite" && boundary.textAfterSelection.length).toBe(2_000);
+    expect(clipboardReads).toEqual([]);
+    expect(clipboardWrites).toEqual([]);
+    expect(clipboard.readText).toBeDefined();
+    const serialized = JSON.stringify(bodies);
+    for (const forbidden of [
+      "fullFieldContents-private-value",
+      "accessibilityTree-private-value",
+      "rawKeyEvents-private-value",
+      "windowTitle-private-value",
+      "pageUrl-private-value",
+      "clipboard-private-value",
+      "screenshot-private-value",
+      "documents-private-value",
+    ]) {
+      expect(serialized).not.toContain(forbidden);
+    }
   });
   it("returns the first suggestion from a successful API response", async () => {
     const captured: { url?: string; body?: unknown } = {};
