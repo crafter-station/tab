@@ -13,6 +13,7 @@ import { BillingService, InMemoryBillingStorage, InMemoryUsageMeterClient, Usage
 import { createAuthInstance, migrateAuth } from "../apps/api/src/auth.ts";
 import { DeviceTokenService, InMemoryDeviceTokenStorage } from "../apps/api/src/device-tokens.ts";
 import { InMemoryPersonalMemoryStorage, PersonalMemoryService } from "../apps/api/src/personal-memory.ts";
+import { InMemoryMemoryExtractionStorage } from "../apps/api/src/personal-memory-extraction.ts";
 import { InMemoryTelemetryStorage, TelemetryService } from "../apps/api/src/telemetry.ts";
 import { SuggestionUseCase } from "../apps/api/src/suggestion-use-case.ts";
 import type { SuggestionGenerator, SuggestionInput } from "../apps/api/src/index.ts";
@@ -26,7 +27,17 @@ async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerato
   const billingStorage = new InMemoryBillingStorage();
   const billingService = new BillingService({ storage: billingStorage });
   const telemetryService = new TelemetryService({ storage: new InMemoryTelemetryStorage() });
-  const app = createApp({ generateSuggestion, auth, deviceTokenService, billingService, telemetryService, personalMemoryStorage: new InMemoryPersonalMemoryStorage() });
+  const personalMemoryStorage = new InMemoryPersonalMemoryStorage();
+  const memoryExtractionStorage = new InMemoryMemoryExtractionStorage((input) =>
+    personalMemoryStorage.applyExtractionOperationAtomically(input),
+  );
+  let memoryExtractionClaims = 0;
+  const claimMemoryExtraction = memoryExtractionStorage.claim.bind(memoryExtractionStorage);
+  memoryExtractionStorage.claim = async (input) => {
+    memoryExtractionClaims += 1;
+    return claimMemoryExtraction(input);
+  };
+  const app = createApp({ generateSuggestion, auth, deviceTokenService, billingService, telemetryService, personalMemoryStorage, memoryExtractionStorage });
   const { token } = await deviceTokenService.createDeviceToken("user-1", {
     deviceId: "device-1",
     platform: "darwin",
@@ -40,7 +51,7 @@ async function createAuthenticatedTestApp(generateSuggestion: SuggestionGenerato
     status: "active",
     cachedAt: new Date(),
   });
-  return { app, token, billingService, telemetryService };
+  return { app, token, billingService, telemetryService, getMemoryExtractionClaims: () => memoryExtractionClaims };
 }
 
 async function parseApiResponse(response: Response) {
@@ -275,6 +286,21 @@ describe("Hono suggestion API", () => {
     });
   });
 
+  it("does not enqueue Rewrite text for Memory Extraction", async () => {
+    const { app, token, getMemoryExtractionClaims } = await createAuthenticatedTestApp(async () => ({
+      text: "This sentence is clear.",
+    }));
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRewriteRequest, requestId: "rewrite-memory-exclusion" }),
+    });
+
+    expect(response.status).toBe(200);
+    expect(getMemoryExtractionClaims()).toBe(0);
+  });
+
   it("rate limits Rewrite before provider generation or allowance consumption", async () => {
     let generations = 0;
     const { app, token, billingService } = await createAuthenticatedTestApp(async () => {
@@ -340,6 +366,45 @@ describe("Hono suggestion API", () => {
     if (body.status !== "error") throw new Error("Expected error response");
     expect(body.error.code).toBe("provider_failure");
     expect(body.error.message).toContain("model timeout");
+  });
+
+  it("returns provider_failure for Rewrite without consuming allowance", async () => {
+    const { app, token, billingService } = await createAuthenticatedTestApp(async () => {
+      throw new Error("rewrite model timeout");
+    });
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRewriteRequest, requestId: "rewrite-provider-failure" }),
+    });
+
+    expect(response.status).toBe(503);
+    const body = await parseApiResponse(response);
+    expect(body.status === "error" && body.error.code).toBe("provider_failure");
+    expect((await billingService.checkDeepComplete("user-1")).usage).toBe(0);
+  });
+
+  it("returns the existing allowance exhaustion error for Rewrite", async () => {
+    let generated = false;
+    const { app, token, billingService } = await createAuthenticatedTestApp(async () => {
+      generated = true;
+      return { text: "This sentence is clear." };
+    });
+    for (let index = 0; index < 10; index += 1) {
+      await billingService.consumeDeepComplete("user-1", `rewrite-seed-${index}`);
+    }
+
+    const response = await app.request("/suggestions", {
+      method: "POST",
+      headers: authHeaders(token),
+      body: JSON.stringify({ ...validRewriteRequest, requestId: "rewrite-quota-exhausted" }),
+    });
+
+    expect(response.status).toBe(402);
+    const body = await parseApiResponse(response);
+    expect(body.status === "error" && body.error.code).toBe("quota_exhausted");
+    expect(generated).toBe(false);
   });
 
   it("accepts context hash and client metadata", async () => {
@@ -428,17 +493,20 @@ describe("Hono suggestion API", () => {
     });
     await deviceTokenService.revokeDevice("user-1", device.deviceId);
 
-    const response = await app.request("/suggestions", {
-      method: "POST",
-      headers: authHeaders(token),
-      body: JSON.stringify(validRequest),
-    });
+    for (const request of [
+      { ...validRequest, deviceId: "device-revoked" },
+      { ...validRewriteRequest, requestId: "rewrite-revoked", deviceId: "device-revoked" },
+    ]) {
+      const response = await app.request("/suggestions", {
+        method: "POST",
+        headers: authHeaders(token),
+        body: JSON.stringify(request),
+      });
 
-    expect(response.status).toBe(401);
-    const body = await parseApiResponse(response);
-    expect(body.status).toBe("error");
-    if (body.status !== "error") throw new Error("Expected error response");
-    expect(body.error.code).toBe("revoked_device");
+      expect(response.status).toBe(401);
+      const body = await parseApiResponse(response);
+      expect(body.status === "error" && body.error.code).toBe("revoked_device");
+    }
   });
 });
 
