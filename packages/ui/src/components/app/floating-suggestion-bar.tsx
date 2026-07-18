@@ -63,7 +63,7 @@ export function SuggestionCommand({
       <span className="tab-suggestion-content line-clamp-2 min-w-0 text-left text-[13px] font-medium leading-snug">{suggestion}</span>
       <kbd aria-label={shortcutLabel} className={shortcutClassName}>
         <span aria-hidden="true">{shortcut}</span>
-        <span className="sr-only">Option+Tab</span>
+        {shortcut ? <span className="sr-only">Option+Tab</span> : null}
       </kbd>
     </button>
   );

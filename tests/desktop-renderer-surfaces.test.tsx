@@ -1,7 +1,34 @@
 import { describe, expect, it } from "bun:test";
 import { readFileSync } from "node:fs";
+import { renderToStaticMarkup } from "react-dom/server";
+import { FloatingSuggestionBar } from "../packages/ui/src/components/app/floating-suggestion-bar.tsx";
 
 describe("desktop renderer setup surfaces", () => {
+  it("labels Rewrite previews and renders oversized guidance without Acceptance", () => {
+    const rewrite = renderToStaticMarkup(
+      <FloatingSuggestionBar
+        suggestion={{ id: "rewrite", text: "Improved text" }}
+        source="cloud"
+        label="Rewrite"
+        onAccept={() => {}}
+      />,
+    );
+    const guidance = renderToStaticMarkup(
+      <FloatingSuggestionBar
+        suggestion={{ id: "guidance", text: "Select up to 2,000 characters" }}
+        source="local"
+        acceptable={false}
+        onAccept={() => {}}
+      />,
+    );
+
+    expect(rewrite).toContain("Rewrite: </strong>Improved text");
+    expect(rewrite).toContain("Accept Rewrite suggestion");
+    expect(guidance).toContain("disabled");
+    expect(guidance).toContain("Select up to 2,000 characters");
+    expect(guidance).not.toContain("Option+Tab");
+  });
+
   it("renders sign-in and onboarding around the shared Tab setup story", () => {
     const signInSource = readFileSync("apps/desktop/src/renderer/src/surfaces/SignInSurface.tsx", "utf8");
     const onboardingSource = readFileSync("apps/desktop/src/renderer/src/surfaces/OnboardingSurface.tsx", "utf8");
