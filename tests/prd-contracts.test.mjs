@@ -61,6 +61,36 @@ const contextSourceExpectations = [
   { schemaValue: "terminal_input", prdPhrase: "terminal input" },
 ];
 
+const rewriteRequestInventoryFields = [
+  "requestId",
+  "deviceId",
+  "mode",
+  "selectedText",
+  "textBeforeSelection",
+  "textAfterSelection",
+  "selectedRange",
+  "location",
+  "length",
+  "activeApplication",
+  "bundleId",
+  "name",
+  "windowId",
+  "focusedElementId",
+  "textElementId",
+  "contextIdentity",
+  "contextSource",
+  "contextHash",
+  "redaction",
+  "applied",
+  "redactionCount",
+  "kinds",
+  "memoryEnabled",
+  "customWritingInstructions",
+  "clientMetadata",
+  "appVersion",
+  "platform",
+];
+
 function readText(path) {
   return readFileSync(join(root, path), "utf8");
 }
@@ -131,6 +161,20 @@ describe("Tab MVP PRD contracts", () => {
         new RegExp(expectation.prdPhrase, "i"),
         `PRD discusses ${expectation.schemaValue}`,
       );
+    }
+  });
+
+  it("keeps the Rewrite request inventory aligned across the schema, PRD, and privacy ADR", () => {
+    const contracts = readText("packages/contracts/src/index.ts");
+    const prd = readText(prdPath);
+    const privacyAdr = readText("docs/adr/0006-minimal-server-context-boundary.md");
+
+    for (const field of rewriteRequestInventoryFields) {
+      const schemaField = new RegExp(`${escapeRegExp(field)}:`);
+      const documentedField = new RegExp(`\`${escapeRegExp(field)}\``);
+      assert.match(contracts, schemaField, `shared request schema includes ${field}`);
+      assert.match(prd, documentedField, `PRD Rewrite inventory includes ${field}`);
+      assert.match(privacyAdr, documentedField, `ADR 0006 Rewrite inventory includes ${field}`);
     }
   });
 
