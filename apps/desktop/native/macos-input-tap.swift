@@ -615,22 +615,42 @@ func cancelOptionGesture() {
   lastOptionKeyUpTimestamp = 0
 }
 
+func emitInputPathDiagnostic(
+  _ stage: String,
+  key: String? = nil,
+  phase: String? = nil,
+  outcome: String? = nil
+) {
+  var diagnostic: [String: Any] = ["type": "input-path-diagnostic", "stage": stage]
+  if let key = key { diagnostic["key"] = key }
+  if let phase = phase { diagnostic["phase"] = phase }
+  if let outcome = outcome { diagnostic["outcome"] = outcome }
+  emit(diagnostic)
+}
+
 let callback: CGEventTapCallBack = { _, type, event, _ in
   let flags = event.flags
   let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
 
   if type == .flagsChanged {
     if keyCode == 58 || keyCode == 61 {
+      let key = keyCode == 58 ? "left-option" : "right-option"
       if flags.contains(.maskAlternate) {
+        emitInputPathDiagnostic("option-transition", key: key, phase: "down")
         return Unmanaged.passUnretained(event)
       }
 
+      emitInputPathDiagnostic("option-transition", key: key, phase: "up")
       let timestamp = event.timestamp
       if registerOptionKeyUp(at: timestamp) {
+        emitInputPathDiagnostic("double-option-recognized")
         guard refreshTextSessionForExplicitAction() else {
+          emitInputPathDiagnostic("explicit-refresh", outcome: "rejected")
           return Unmanaged.passUnretained(event)
         }
+        emitInputPathDiagnostic("explicit-refresh", outcome: "ready")
         emit(["type": "suggest-now"])
+        emitInputPathDiagnostic("suggest-now-emitted")
       }
     }
     return Unmanaged.passUnretained(event)

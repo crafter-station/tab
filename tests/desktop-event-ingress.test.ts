@@ -16,6 +16,7 @@ function makeHandlers() {
       onContextInvalidated: (reason: string) => events.push(["context-invalidated", reason]),
       onDeleteBackward: (unit: TypingDeletionUnit) => events.push(["delete", unit]),
       onSuggestNow: () => events.push(["suggest-now"]),
+      onInputPathDiagnostic: (diagnostic: unknown) => events.push(["input-path-diagnostic", diagnostic]),
       onTextSessionSnapshot: (snapshot: TextSessionSnapshot) => events.push(["text-session", snapshot]),
       onAppContextTree: (accessibilityTree: unknown) => events.push(["app-context-tree", accessibilityTree]),
     },
@@ -56,6 +57,12 @@ describe("desktop event ingress", () => {
     ingress.handleMessage({ type: "context-invalidated", message: "navigation_or_unknown_key" });
     ingress.handleMessage({ type: "delete", unit: "token" });
     ingress.handleMessage({ type: "suggest-now" });
+    ingress.handleMessage({
+      type: "input-path-diagnostic",
+      stage: "option-transition",
+      key: "left-option",
+      phase: "up",
+    });
     ingress.handleMessage({ type: "text-session", snapshot });
     ingress.handleMessage({ type: "app-context-tree", tree });
 
@@ -68,6 +75,12 @@ describe("desktop event ingress", () => {
       ["context-invalidated", "navigation_or_unknown_key"],
       ["delete", "token"],
       ["suggest-now"],
+      ["input-path-diagnostic", {
+        type: "input-path-diagnostic",
+        stage: "option-transition",
+        key: "left-option",
+        phase: "up",
+      }],
       ["text-session", snapshot],
       ["app-context-tree", tree],
     ]);
@@ -82,6 +95,7 @@ describe("desktop event ingress", () => {
     ingress.handleMessage({ type: "text", text: 123 });
     ingress.handleMessage({ type: "paste", text: 123 });
     ingress.handleMessage({ type: "context-invalidated", message: 123 });
+    ingress.handleMessage({ type: "input-path-diagnostic", stage: "option-transition", key: "unknown" });
     ingress.handleMessage({ type: "text-session", snapshot: { selectedText: 123 } });
     ingress.handleMessage({ type: "app-context-tree", tree: { bounds: { x: 1, y: 2, width: "wide", height: 4 } } });
 

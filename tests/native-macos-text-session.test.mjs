@@ -90,6 +90,18 @@ test("macOS helper recognizes double Option at the system double-click interval"
   assert.equal(runOptionGestureContract("interrupted").triggered, false);
 });
 
+test("macOS helper exposes bounded metadata-only Option path diagnostics", () => {
+  const diagnosticBody = functionBody(nativeHelper, "func emitInputPathDiagnostic");
+  assert.match(diagnosticBody, /"type": "input-path-diagnostic"/);
+  assert.match(diagnosticBody, /"stage"/);
+  assert.doesNotMatch(diagnosticBody, /selectedText|surrounding|clipboard|NSPasteboard|credential|environment/i);
+  assert.match(nativeHelper, /emitInputPathDiagnostic\("option-transition"/);
+  assert.match(nativeHelper, /emitInputPathDiagnostic\("double-option-recognized"\)/);
+  assert.match(nativeHelper, /emitInputPathDiagnostic\("explicit-refresh", outcome: "rejected"\)/);
+  assert.match(nativeHelper, /emitInputPathDiagnostic\("explicit-refresh", outcome: "ready"\)/);
+  assert.match(nativeHelper, /emitInputPathDiagnostic\("suggest-now-emitted"\)/);
+});
+
 test("macOS helper executable proves selected text and range consistency without clipboard reads", { skip: !isMacOS }, () => {
   const selection = runSelectionContract("selection");
   assert.deepEqual(selection.snapshot.selectedRange, { location: 2, length: 5 });

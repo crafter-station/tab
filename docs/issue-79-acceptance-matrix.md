@@ -41,9 +41,10 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 2. Add executable public-native-helper selection proof with its focused tests, keeping uncertain state explicit.
 3. Record observed real-application results and required command evidence without promoting unobserved surfaces to passes.
 4. Record the recovered unlocked-session application matrix, including both Acceptance paths for reliable targets and fail-closed evidence for unsupported targets.
-5. Correct the reproduced generic double-Option timing gap using the macOS system interval and prove the event detector through the public helper executable.
-6. Complete the reliable-surface keyboard/click, exact replacement, multiline/plain-text, clipboard, stale, safety, and lifecycle observations.
-7. Complete implementer self-review, the required CI sequence, and the final evidence handoff.
+5. Diagnose the production event path with bounded metadata-only stages after physical evidence disproved the timing-only correction.
+6. Correct only a reproduced generic compatibility gap and prove it at the native and desktop public boundaries.
+7. Relaunch a provenance-confirmed current-worktree candidate and complete the reliable-surface keyboard/click, exact replacement, multiline/plain-text, clipboard, stale, safety, and lifecycle observations.
+8. Complete implementer self-review, the required CI sequence, and the final evidence handoff.
 
 ## Checks
 
@@ -88,4 +89,4 @@ Checks and observed evidence are added as they run.
 
 ## External Evidence Gaps
 
-The current candidate is directly observed signed in, and the unlocked session permits reliable TextEdit focus and selection. The maintainer then physically double-tapped Option with that selection active and observed no Rewrite overlay or visible action. The production helper used a fixed 400 ms release interval while this Mac reports a 500 ms `NSEvent.doubleClickInterval`, so a system-valid double tap could expire before explicit-action refresh. The helper now honors the system interval, with public executable regression coverage for accepted, expired, and interrupted sequences. A rebuilt candidate was launched after the fix, but the physical TextEdit path has not yet been re-observed. Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior remain unclaimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or a supported browser editor. Continue with the rebuilt candidate; the earlier loginwindow and Chrome for Testing observations retain their required no-request/no-replacement results.
+The unlocked session permits reliable TextEdit focus and selection. The maintainer physically double-tapped Option with that selection active on rebuilt candidate `c666eee` and observed no Rewrite overlay or visible action, disproving the timing-only hypothesis. At recovery, the candidate log ended with its helper receiving `SIGTERM`, and the only live helper had a working directory outside this issue worktree, so the failed observation does not yet localize the worktree production path. Bounded metadata-only diagnostics now distinguish physical Option transitions, double-tap recognition, explicit-target refresh outcome, and `suggest-now` emission without text, clipboard contents, credentials, environment values, or raw payloads. A provenance-confirmed rebuilt candidate still requires physical re-observation before any downstream request or overlay claim. Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior remain unclaimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or a supported browser editor. The earlier loginwindow and Chrome for Testing observations retain their required no-request/no-replacement results.

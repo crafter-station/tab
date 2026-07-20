@@ -509,6 +509,7 @@ const desktopEventIngress = createDesktopEventIngress({
   onContextInvalidated: handleContextInvalidated,
   onDeleteBackward: handleDeleteBackward,
   onSuggestNow: handleSuggestNow,
+  onInputPathDiagnostic: (diagnostic) => console.info("macOS input path:", diagnostic),
   onTextSessionSnapshot: handleTextSessionSnapshot,
   onAppContextTree: handleAppContextTree,
 });
