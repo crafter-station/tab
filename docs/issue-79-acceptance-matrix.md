@@ -9,7 +9,7 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 | Selected text and range agree without clipboard reads | Public Swift helper executable and Accessibility snapshot builder | A non-empty selection emits its exact UTF-16 range and text | Missing, malformed, or inconsistent Accessibility selection remains explicit | Native selection contract and `tests/native-macos-text-session.test.mjs` | The helper never reads the clipboard to discover a selection |
 | Uncertain selection is not a caret | Swift fallback snapshot and explicit-action gate | A genuine zero-length range remains an explicit caret | Inaccessible range remains `null`; unreliable or inconsistent snapshots publish no explicit action | Native selection and explicit-action contracts | Do not infer a zero-length range from absent data |
 | Representative application compatibility | Actual installed application text surfaces through macOS Accessibility and Tab's public desktop seams | Reliable targets trigger Rewrite and replace exactly once | Unsupported or uncertain targets send no request and perform no replacement | Per-application observations below | Installed does not mean validated |
-| Both Acceptance paths | Native Option+Tab event-tap ingress, Electron shortcut fallback, and clickable Floating Suggestion Overlay | Native ingress and keyboard/click triggers converge on the same public Acceptance function | Duplicate callbacks are rejected in flight; missing/stale targets remain pre-clipboard no-ops | Native executable contract, desktop ingress test, and desktop Acceptance suite | No app-specific click or keyboard adapter; post-fix physical observation is deferred |
+| Both Acceptance paths | Suppressing native Option+Tab event-tap ingress, Electron shortcut fallback, and clickable Floating Suggestion Overlay | The executable helper proves Option+Tab is consumed by the production `.defaultTap` while ordinary Tab passes through; native ingress and keyboard/click triggers converge on the same public Acceptance function | Duplicate callbacks are rejected in flight; missing/stale targets remain pre-clipboard no-ops | Native executable contract, desktop ingress test, and desktop Acceptance suite | No app-specific click or keyboard adapter; post-fix physical observation is deferred |
 | Exact replacement and clipboard restoration | Exact-target refresh followed by clipboard paste | Selected passage is replaced once and prior clipboard is restored best-effort | Changed target fails before clipboard mutation; restoration failure does not duplicate insertion | `tests/desktop-acceptance.test.ts` and real-app observations | Clipboard paste remains the sole first-version insertion path |
 | Multiline through 2,000 characters | Rewrite request schema, native range capture, and real text surface | Exact 2,000-character multiline selection is not truncated | 2,001 characters sends no request and performs no replacement | Rewrite API/client suites and real-app observations | Oversized input is rejected, never truncated |
 | Rich text remains plain text | Accessibility selected text and clipboard paste | Text content is replaced with the generated plain text | Formatting is not reconstructed | Rich-text TextEdit, Notes, or Mail observation | First version is plain text |
@@ -59,8 +59,7 @@ Checks and observed evidence are added as they run.
 - `bun run worker:types:check`: passed.
 - `bun run lint`: passed.
 - `bun run test`: 28 Node tests and 670 Bun tests passed. Expected error-path stack traces were printed by passing tests.
-- `swiftc -typecheck apps/desktop/native/macos-input-tap.swift`: passed after the double-Option timing correction.
-- `node --test tests/native-macos-text-session.test.mjs`: 12 passed after the correction, including system-interval, expired, and interrupted Option gesture sequences.
+- Historical checkpoint: Swift typecheck and 12 native tests passed for the temporary system-interval implementation; final behavior restores ADR-0003's fixed 400 ms contract below.
 - Focused explicit/Option/selection desktop routing tests: 13 passed.
 - `swiftc -typecheck apps/desktop/native/macos-input-tap.swift`: passed with bounded production-path diagnostics.
 - `node --test tests/native-macos-text-session.test.mjs`: 13 passed, including the metadata-only diagnostic contract.
@@ -78,12 +77,15 @@ Checks and observed evidence are added as they run.
 - Final `bun run worker:types:check`: passed; generated Worker types are current.
 - Final `bun run lint`: passed.
 - Final `bun run test`: 30 Node tests and 673 Bun tests passed; printed stacks are expected exercised error paths.
+- Final remediation `swiftc -typecheck apps/desktop/native/macos-input-tap.swift`: passed.
+- Final remediation `node --test tests/native-macos-text-session.test.mjs`: 13 passed, proving the fixed 400 ms boundary, metadata-only Option+Tab events, suppressing production tap capability, Acceptance emission, and ordinary Tab passthrough through the executable helper.
+- Final remediation focused desktop ingress/Acceptance suites: 177 passed.
 
 ## Option+Tab Defect And Fix
 
 - Reproduced on the provenance-confirmed isolated candidate at `0bef23b`: Rewrite generation and presentation completed, but physical Option+Tab produced only Option transition evidence, no Electron shortcut callback, no Acceptance entry, and no replacement.
 - Root cause: the native event tap received Option and Tab but reserved Option+Tab by returning the event unchanged; the actual Acceptance path depended solely on Electron's `Alt+Tab` global shortcut, whose callback did not run in the reproduced environment.
-- Fix `95b9948`: the production helper detects Option+Tab, emits fixed-enum observation/emission diagnostics, sends `accept-suggestion` through validated desktop ingress, and consumes the key event. The Electron global shortcut remains a fallback.
+- Fixes `95b9948` and `3bfa078`: the production helper detects Option+Tab, emits fixed-enum observation/emission diagnostics, sends `accept-suggestion` through validated desktop ingress, and consumes the key event from a suppressing `.defaultTap`. Ordinary Tab passes through unchanged. The Electron global shortcut remains a fallback.
 - Both native and Electron callbacks use the same keyboard Acceptance trigger. The existing synchronous `acceptanceInFlight` guard prevents duplicate insertion if two callbacks overlap, and a later callback finds no visible Suggestion after successful Acceptance.
 - Metadata-only diagnostics now cover callback source, Acceptance entry/provenance, replacing/in-flight guards, exact Rewrite target revalidation, clipboard write, paste dispatch, paste wait, clipboard restoration, final insertion result, and errors. They contain no selected text, replacement text, clipboard contents, credentials, identifiers, hashes, or payloads.
 
@@ -132,9 +134,6 @@ The unlocked session permits reliable TextEdit focus and selection. Earlier fail
 - The maintainer subsequently stopped the obsolete main-checkout runtime, launched only isolated candidate `82ea299`, and supplied the successful physical TextEdit Rewrite observation in issue comment `5018637740`.
 - At the start of the following rollover, a `/Users/cuevaio/projects/tabbb` tree was reported active and was treated as user-owned. A bounded executable/cwd recheck found no matching Tab runtime by the time validation resumed, so no process was terminated and no concurrent candidate observation was claimed.
 
-## Current Physical Gate Provenance
+## Locked Deferred Residuals
 
-- Process group `68258` remains live. Its Bun launcher, Electron process tree, production `macos-input-tap` helper, and local model runtime all resolve to this issue-79 worktree; a bounded executable/cwd scan found no competing main-checkout Tab runtime.
-- The candidate is configured for a local API. The sole listener on that configured port has this issue-79 worktree as its working directory, and the worktree descends from integration base `ee0238e`; no endpoint URL, process arguments, environment values, request/response content, or payload was inspected or recorded.
-- Safe TextEdit preparation was deferred because Ghostty was frontmost and physical input was active at the preparation check. The workflow did not steal focus, replace the clipboard, or alter an active document.
-- The immediate remaining gate is therefore physical maintainer input: prepare harmless unsaved rich text in TextEdit with a short multiline selection and a non-secret clipboard sentinel; produce a Rewrite with physical double Option; accept once with physical Option+Tab; report only whether exact one-time replacement and clipboard restoration succeeded; then reset and repeat with one physical overlay click.
+Decision `79-unattended-manual-validation-disposition` forbids further interactive requests and accepts unautomatable real-application rows as deferred residual validation. No post-fix physical keyboard, click, exact replacement, multiline/plain-text, or clipboard-restoration result is claimed. The executable helper contract instead proves that Option+Tab emits only fixed-enum diagnostics plus `accept-suggestion`, reports the event consumed, and runs through the same `.defaultTap` configuration used by production so ordinary target Tab delivery cannot race Acceptance. Any later hands-on incompatibility should be filed as a focused follow-up issue.
