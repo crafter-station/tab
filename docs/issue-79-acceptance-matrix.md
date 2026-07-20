@@ -113,3 +113,10 @@ The unlocked session permits reliable TextEdit focus and selection. Earlier fail
 - Focused executable tests prove suggestion, empty, and failed cloud outcomes plus presented/suppressed overlay disposition. The existing native-loop routing test proves Rewrite classification at the public app boundary.
 - The maintainer subsequently stopped the obsolete main-checkout runtime, launched only isolated candidate `82ea299`, and supplied the successful physical TextEdit Rewrite observation in issue comment `5018637740`.
 - At the start of the following rollover, a `/Users/cuevaio/projects/tabbb` tree was reported active and was treated as user-owned. A bounded executable/cwd recheck found no matching Tab runtime by the time validation resumed, so no process was terminated and no concurrent candidate observation was claimed.
+
+## Current Physical Gate Provenance
+
+- Process group `68258` remains live. Its Bun launcher, Electron process tree, production `macos-input-tap` helper, and local model runtime all resolve to this issue-79 worktree; a bounded executable/cwd scan found no competing main-checkout Tab runtime.
+- The candidate is configured for a local API. The sole listener on that configured port has this issue-79 worktree as its working directory, and the worktree descends from integration base `ee0238e`; no endpoint URL, process arguments, environment values, request/response content, or payload was inspected or recorded.
+- Safe TextEdit preparation was deferred because Ghostty was frontmost and physical input was active at the preparation check. The workflow did not steal focus, replace the clipboard, or alter an active document.
+- The immediate remaining gate is therefore physical maintainer input: prepare harmless unsaved rich text in TextEdit with a short multiline selection and a non-secret clipboard sentinel; produce a Rewrite with physical double Option; accept once with physical Option+Tab; report only whether exact one-time replacement and clipboard restoration succeeded; then reset and repeat with one physical overlay click.
