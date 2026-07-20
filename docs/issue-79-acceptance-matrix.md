@@ -61,6 +61,11 @@ Checks and observed evidence are added as they run.
 - `swiftc -typecheck apps/desktop/native/macos-input-tap.swift`: passed after the double-Option timing correction.
 - `node --test tests/native-macos-text-session.test.mjs`: 12 passed after the correction, including system-interval, expired, and interrupted Option gesture sequences.
 - Focused explicit/Option/selection desktop routing tests: 13 passed.
+- `swiftc -typecheck apps/desktop/native/macos-input-tap.swift`: passed with bounded production-path diagnostics.
+- `node --test tests/native-macos-text-session.test.mjs`: 13 passed, including the metadata-only diagnostic contract.
+- `bun test tests/desktop-event-ingress.test.ts tests/desktop-macos-input-tap.test.ts`: 6 passed.
+- `bun run typecheck`: passed after adding the diagnostic ingress boundary.
+- `bun test tests/desktop-native-loop.test.ts tests/desktop-acceptance.test.ts tests/desktop-api-client.test.ts tests/api-suggestion.test.ts`: 221 passed after the diagnostic change.
 
 ## Recovery Probes
 
@@ -89,4 +94,11 @@ Checks and observed evidence are added as they run.
 
 ## External Evidence Gaps
 
-The unlocked session permits reliable TextEdit focus and selection. The maintainer physically double-tapped Option with that selection active on rebuilt candidate `c666eee` and observed no Rewrite overlay or visible action, disproving the timing-only hypothesis. At recovery, the candidate log ended with its helper receiving `SIGTERM`, and the only live helper had a working directory outside this issue worktree, so the failed observation does not yet localize the worktree production path. Bounded metadata-only diagnostics now distinguish physical Option transitions, double-tap recognition, explicit-target refresh outcome, and `suggest-now` emission without text, clipboard contents, credentials, environment values, or raw payloads. A provenance-confirmed rebuilt candidate still requires physical re-observation before any downstream request or overlay claim. Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior remain unclaimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or a supported browser editor. The earlier loginwindow and Chrome for Testing observations retain their required no-request/no-replacement results.
+The unlocked session permits reliable TextEdit focus and selection. The maintainer physically double-tapped Option with that selection active on rebuilt candidate `c666eee` and observed no Rewrite overlay or visible action, disproving the timing-only hypothesis. At recovery, the candidate log ended with its helper receiving `SIGTERM`, and the only live helper had a working directory outside this issue worktree, so that failed observation did not localize the worktree production path. Bounded metadata-only diagnostics now distinguish physical Option transitions, double-tap recognition, explicit-target refresh outcome, and `suggest-now` emission without text, clipboard contents, credentials, environment values, or raw payloads. On the diagnostic candidate, left-Option down/up transitions were observed, double Option was recognized, explicit refresh returned `ready`, `suggest-now` was emitted, and the post-emission diagnostic reached desktop ingress. This rules out the native transition, recognizer, refresh, helper emission, and stdout parsing boundaries. Downstream `Deep Complete` currently collapses request errors and empty responses to the same no-Suggestion result, so request completion and overlay presentation remain the next diagnostic boundary. Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior remain unclaimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or a supported browser editor. The earlier loginwindow and Chrome for Testing observations retain their required no-request/no-replacement results.
+
+## Diagnostic Candidate
+
+- Commit `9bfc700` adds fixed-enum metadata stages at the native Option transition, recognizer, explicit refresh, helper emission, and validated desktop ingress boundaries.
+- The candidate was rebuilt and launched through the approved external environment-file mechanism. Its helper executable and working directory both resolved to this issue-79 worktree, and a sanitized bounded log reported `macOS input tap ready.`
+- A separately path-verified stale helper under `/Users/cuevaio/projects/tabbb` was terminated so the observation was not ambiguous.
+- The diagnostic candidate observed complete left-Option sequences through `explicit-refresh: ready` and `suggest-now-emitted`, then exited with its helper receiving `SIGTERM`. It is not currently running and must be relaunched after adding bounded downstream request/presentation stages.
