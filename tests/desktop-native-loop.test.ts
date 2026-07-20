@@ -1143,7 +1143,9 @@ describe("desktop native suggestion loop", () => {
       for (const target of [
         { ...validTarget, activeApplication: null },
         { ...validTarget, activeApplication: { bundleId: "com.apple.TextEdit" } },
+        { ...validTarget, activeApplication: { bundleId: "com.apple.TextEdit", windowId: "app:123" } },
         { ...validTarget, focusedElementId: null },
+        { ...validTarget, focusedElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" },
         { ...validTarget, textElementId: null },
         { ...validTarget, selectedRange: null },
         { ...validTarget, secureLike: true },

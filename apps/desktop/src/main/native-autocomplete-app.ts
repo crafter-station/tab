@@ -32,6 +32,7 @@ import type { SuggestionSource } from "./suggestion-source.ts";
 import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
 import {
   createSafeTextSessionSnapshot,
+  hasConcreteRewriteIdentity,
   isPrivateTextSessionSnapshot,
   isReliableTextSessionSnapshot,
   type RequestableTypingContextSnapshot,
@@ -527,8 +528,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     if (
       observationPaused || !snapshot || !textSession ||
       textSession.accessibilityReliability !== "reliable" || textSession.secureLike ||
-      !textSession.activeApplication?.windowId || !textSession.focusedElementId ||
-      !textSession.textElementId || !range
+      !hasConcreteRewriteIdentity(textSession) || !range
     ) return "none";
     if (range.length === 0) {
       if ((textSession.selectedText?.length ?? 0) > 0) return "none";

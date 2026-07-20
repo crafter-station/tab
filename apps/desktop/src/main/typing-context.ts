@@ -112,6 +112,16 @@ export function isReliableTextSessionSnapshot(snapshot: TextSessionSnapshot): bo
   return snapshot.accessibilityReliability === "reliable";
 }
 
+export function hasConcreteRewriteIdentity(snapshot: TextSessionSnapshot): boolean {
+  const windowId = snapshot.activeApplication?.windowId;
+  if (!windowId || windowId.startsWith("app:")) return false;
+  for (const elementId of [snapshot.focusedElementId, snapshot.textElementId]) {
+    if (!elementId) return false;
+    if (elementId.startsWith("ax:") && !elementId.includes(":identifier:")) return false;
+  }
+  return true;
+}
+
 export function isPrivateTextSessionSnapshot(snapshot: TextSessionSnapshot): boolean {
   return snapshot.secureLike || isPrivateActiveApplication(snapshot.activeApplication);
 }

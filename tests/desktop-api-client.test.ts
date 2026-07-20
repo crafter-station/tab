@@ -144,6 +144,29 @@ describe("desktop API suggestion client", () => {
       expect(serialized).not.toContain(forbidden);
     }
   });
+  it("does not dispatch selected Rewrite text for fallback target identities", async () => {
+    const bodies: string[] = [];
+    const fetch = async (_url: string | URL | Request, init?: RequestInit) => {
+      bodies.push(String(init?.body));
+      return new Response(JSON.stringify({ status: "ok", data: { suggestions: [] } }), { status: 200 });
+    };
+    const requestSuggestion = createApiSuggestionClient({
+      apiBaseUrl: "http://localhost:8787", deviceId: "device-1", appVersion: "0.0.1", platform: "darwin", fetch,
+    });
+    const selectedText = "private selected draft";
+
+    const results = await Promise.all([
+      requestSuggestion(makeRewriteSnapshot(selectedText, {
+        activeApplication: { bundleId: "com.apple.TextEdit", windowId: "app:123" },
+      })),
+      requestSuggestion(makeRewriteSnapshot(selectedText, {
+        focusedElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole",
+      })),
+    ]);
+
+    expect(results).toEqual([null, null]);
+    expect(bodies).toEqual([]);
+  });
   it("returns the first suggestion from a successful API response", async () => {
     const captured: { url?: string; body?: unknown } = {};
     const fetch = async (url: string | URL | Request, init?: RequestInit) => {

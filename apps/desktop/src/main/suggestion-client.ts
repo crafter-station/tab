@@ -4,7 +4,7 @@ import {
   type Suggestion,
   type SuggestionRequest,
 } from "@tab/contracts";
-import type { RequestableTypingContextSnapshot } from "./typing-context.ts";
+import { hasConcreteRewriteIdentity, type RequestableTypingContextSnapshot } from "./typing-context.ts";
 import type { DeviceApiClient } from "./device-api-client.ts";
 import { redactSensitiveText } from "@tab/redaction";
 
@@ -36,6 +36,9 @@ function buildSuggestionRequest(
 ): SuggestionRequest | null {
   const textSession = snapshot.textSession;
   const range = textSession?.selectedRange;
+  if (textSession && range && range.length > 0 && !hasConcreteRewriteIdentity(textSession)) {
+    return null;
+  }
   if (
     textSession?.accessibilityReliability === "reliable" &&
     !textSession.secureLike &&
@@ -44,7 +47,8 @@ function buildSuggestionRequest(
     textSession.selectedText.length === range.length &&
     textSession.activeApplication?.windowId &&
     textSession.focusedElementId &&
-    textSession.textElementId
+    textSession.textElementId &&
+    hasConcreteRewriteIdentity(textSession)
   ) {
     const selected = redactSensitiveText(textSession.selectedText);
     const before = redactSensitiveText((textSession.surroundingContext?.beforeCaret ?? "").slice(-2_000));
