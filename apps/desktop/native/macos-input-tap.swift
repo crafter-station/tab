@@ -629,7 +629,12 @@ func emitInputPathDiagnostic(
 }
 
 func handleOptionTab(keyCode: Int64, flags: CGEventFlags) -> Bool {
-  guard keyCode == 48, flags.contains(.maskAlternate) else { return false }
+  guard keyCode == 48,
+        flags.contains(.maskAlternate),
+        !flags.contains(.maskShift),
+        !flags.contains(.maskCommand),
+        !flags.contains(.maskControl),
+        !flags.contains(.maskHelp) else { return false }
   emitInputPathDiagnostic("option-tab-observed")
   emit(["type": "accept-suggestion"])
   emitInputPathDiagnostic("accept-suggestion-emitted")
@@ -864,6 +869,8 @@ func runInputPathContract(_ scenario: String) {
     consumed = handleOptionTab(keyCode: 48, flags: [.maskAlternate])
   case "ordinary-tab":
     consumed = handleOptionTab(keyCode: 48, flags: [])
+  case "modified-option-tab":
+    consumed = handleOptionTab(keyCode: 48, flags: [.maskAlternate, .maskShift])
   default:
     exit(2)
   }

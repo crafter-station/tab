@@ -187,4 +187,9 @@ test("macOS helper executable reserves only Option+Tab for suppressing suggestio
   assert.deepEqual(ordinaryTab, [
     { type: "input-path-contract", consumed: false, suppressionCapable: true },
   ]);
+
+  const modifiedOptionTab = runInputPathContract("modified-option-tab");
+  assert.deepEqual(modifiedOptionTab, [
+    { type: "input-path-contract", consumed: false, suppressionCapable: true },
+  ]);
 });
