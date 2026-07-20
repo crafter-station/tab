@@ -174,6 +174,6 @@ test("macOS helper reuses active-window discovery within each input event", () =
 test("macOS helper reserves Option+Tab for suggestion acceptance", () => {
   assert.match(
     nativeHelper,
-    /if keyCode == 48 \{\s+if isGhostty && !flags\.contains\(\.maskAlternate\) \{\s+emit\(\["type": "context-invalidated", "message": "tab"\]\)/,
+    /if keyCode == 48 \{\s+if flags\.contains\(\.maskAlternate\) \{\s+emitInputPathDiagnostic\("option-tab-observed"\)\s+emit\(\["type": "accept-suggestion"\]\)\s+emitInputPathDiagnostic\("accept-suggestion-emitted"\)\s+return nil/,
   );
 });

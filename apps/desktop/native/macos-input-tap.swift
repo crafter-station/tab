@@ -717,6 +717,12 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   }
 
   if keyCode == 48 {
+    if flags.contains(.maskAlternate) {
+      emitInputPathDiagnostic("option-tab-observed")
+      emit(["type": "accept-suggestion"])
+      emitInputPathDiagnostic("accept-suggestion-emitted")
+      return nil
+    }
     if isGhostty && !flags.contains(.maskAlternate) {
       emit(["type": "context-invalidated", "message": "tab"])
     }

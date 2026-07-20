@@ -8,6 +8,7 @@ import type {
 import { classifyTypingContextSource } from "@tab/memory-policy";
 import {
   createSuggestionAcceptance,
+  type AcceptanceDiagnostic,
   type InsertionDependencies,
   type SuggestionProvenance as AcceptanceSuggestionProvenance,
 } from "./acceptance.ts";
@@ -52,6 +53,12 @@ export type NativeSuggestionSessionOutputs = {
   readonly onSecretLikeContextDetected?: () => void;
   readonly showGuidance?: (message: string) => void;
   readonly onExplicitActionDiagnostic?: (diagnostic: ExplicitActionDiagnostic) => void;
+  readonly onAcceptanceDiagnostic?: (diagnostic: AcceptancePathDiagnostic) => void;
+};
+
+export type AcceptancePathDiagnostic = AcceptanceDiagnostic | {
+  readonly stage: "acceptance-entry" | "acceptance-guard" | "acceptance-result";
+  readonly outcome: "automatic" | "deep-complete" | "rewrite" | "none" | "ready" | "replacing" | "in-flight" | "inserted" | "no-suggestion" | "no-target-app" | "allowance-exhausted" | "stale-target";
 };
 
 export type ExplicitActionDiagnostic = DeepCompleteDiagnostic | {
@@ -743,7 +750,19 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
       outputs.showDebugContext();
     },
     async acceptCurrentSuggestion(): Promise<void> {
-      if (replacingSuggestion || acceptanceInFlight) return;
+      outputs.onAcceptanceDiagnostic?.({
+        stage: "acceptance-entry",
+        outcome: visibleSuggestion?.provenance === "deep_complete" ? "deep-complete" : visibleSuggestion?.provenance ?? "none",
+      });
+      if (replacingSuggestion) {
+        outputs.onAcceptanceDiagnostic?.({ stage: "acceptance-guard", outcome: "replacing" });
+        return;
+      }
+      if (acceptanceInFlight) {
+        outputs.onAcceptanceDiagnostic?.({ stage: "acceptance-guard", outcome: "in-flight" });
+        return;
+      }
+      outputs.onAcceptanceDiagnostic?.({ stage: "acceptance-guard", outcome: "ready" });
       const acceptedVisibleSuggestion = visibleSuggestion;
       const acceptedSuggestion = acceptedVisibleSuggestion?.suggestion ?? null;
       acceptanceInFlight = true;
@@ -766,11 +785,20 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
             recordInsertionOutcome: (strategy, outcome, targetApp) => {
               compatibilityStore.recordInsertionOutcome(targetApp, strategy, outcome);
             },
+            onDiagnostic: outputs.onAcceptanceDiagnostic,
           },
         });
+      } catch (error) {
+        outputs.onAcceptanceDiagnostic?.({ stage: "acceptance-error", outcome: "failed" });
+        throw error;
       } finally {
         acceptanceInFlight = false;
       }
+
+      outputs.onAcceptanceDiagnostic?.({
+        stage: "acceptance-result",
+        outcome: result.replaceAll("_", "-") as "inserted" | "no-suggestion" | "no-target-app" | "allowance-exhausted" | "stale-target",
+      });
 
       if (result === "allowance_exhausted") {
         clearVisibleSuggestion();

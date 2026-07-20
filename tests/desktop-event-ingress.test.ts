@@ -16,6 +16,7 @@ function makeHandlers() {
       onContextInvalidated: (reason: string) => events.push(["context-invalidated", reason]),
       onDeleteBackward: (unit: TypingDeletionUnit) => events.push(["delete", unit]),
       onSuggestNow: () => events.push(["suggest-now"]),
+      onAcceptSuggestion: () => events.push(["accept-suggestion"]),
       onInputPathDiagnostic: (diagnostic: unknown) => events.push(["input-path-diagnostic", diagnostic]),
       onTextSessionSnapshot: (snapshot: TextSessionSnapshot) => events.push(["text-session", snapshot]),
       onAppContextTree: (accessibilityTree: unknown) => events.push(["app-context-tree", accessibilityTree]),
@@ -57,6 +58,7 @@ describe("desktop event ingress", () => {
     ingress.handleMessage({ type: "context-invalidated", message: "navigation_or_unknown_key" });
     ingress.handleMessage({ type: "delete", unit: "token" });
     ingress.handleMessage({ type: "suggest-now" });
+    ingress.handleMessage({ type: "accept-suggestion" });
     ingress.handleMessage({
       type: "input-path-diagnostic",
       stage: "option-transition",
@@ -75,6 +77,7 @@ describe("desktop event ingress", () => {
       ["context-invalidated", "navigation_or_unknown_key"],
       ["delete", "token"],
       ["suggest-now"],
+      ["accept-suggestion"],
       ["input-path-diagnostic", {
         type: "input-path-diagnostic",
         stage: "option-transition",

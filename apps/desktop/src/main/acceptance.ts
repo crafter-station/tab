@@ -16,6 +16,12 @@ export type InsertionDependencies = {
   sendPaste(): Promise<void>;
   waitForPaste?(): Promise<void>;
   restoreClipboard(previous: string): Promise<void>;
+  onDiagnostic?(diagnostic: AcceptanceDiagnostic): void;
+};
+
+export type AcceptanceDiagnostic = {
+  readonly stage: "target-revalidation" | "clipboard-write" | "paste-dispatch" | "paste-wait" | "clipboard-restoration" | "insertion-outcome" | "acceptance-error";
+  readonly outcome: "started" | "matched" | "stale" | "succeeded" | "failed";
 };
 
 export type InsertionResult = "inserted" | "no_suggestion" | "no_target_app";
@@ -140,15 +146,41 @@ function canUseSemanticInsertion(
 }
 
 async function insertWithClipboardFallback(deps: InsertionDependencies, text: string): Promise<void> {
-  const previousClipboard = await deps.setClipboard(text);
+  deps.onDiagnostic?.({ stage: "clipboard-write", outcome: "started" });
+  let previousClipboard: string;
+  try {
+    previousClipboard = await deps.setClipboard(text);
+    deps.onDiagnostic?.({ stage: "clipboard-write", outcome: "succeeded" });
+  } catch (error) {
+    deps.onDiagnostic?.({ stage: "clipboard-write", outcome: "failed" });
+    throw error;
+  }
 
   try {
-    await deps.sendPaste();
-    await deps.waitForPaste?.();
+    deps.onDiagnostic?.({ stage: "paste-dispatch", outcome: "started" });
+    try {
+      await deps.sendPaste();
+      deps.onDiagnostic?.({ stage: "paste-dispatch", outcome: "succeeded" });
+    } catch (error) {
+      deps.onDiagnostic?.({ stage: "paste-dispatch", outcome: "failed" });
+      throw error;
+    }
+    deps.onDiagnostic?.({ stage: "paste-wait", outcome: "started" });
+    try {
+      await deps.waitForPaste?.();
+      deps.onDiagnostic?.({ stage: "paste-wait", outcome: "succeeded" });
+    } catch (error) {
+      deps.onDiagnostic?.({ stage: "paste-wait", outcome: "failed" });
+      throw error;
+    }
   } finally {
+    deps.onDiagnostic?.({ stage: "clipboard-restoration", outcome: "started" });
     try {
       await deps.restoreClipboard(previousClipboard);
-    } catch {}
+      deps.onDiagnostic?.({ stage: "clipboard-restoration", outcome: "succeeded" });
+    } catch {
+      deps.onDiagnostic?.({ stage: "clipboard-restoration", outcome: "failed" });
+    }
   }
 }
 
@@ -190,8 +222,10 @@ export async function acceptAndInsertSuggestion(deps: InsertionDependencies): Pr
   try {
     await insertWithClipboardFallback(deps, suggestion.text);
     recordInsertionOutcome(deps, "clipboard", "success", targetApp);
+    deps.onDiagnostic?.({ stage: "insertion-outcome", outcome: "succeeded" });
   } catch (error) {
     recordInsertionOutcome(deps, "clipboard", "failure", targetApp);
+    deps.onDiagnostic?.({ stage: "insertion-outcome", outcome: "failed" });
     throw error;
   }
 
@@ -221,7 +255,12 @@ export function createSuggestionAcceptance(
         const targetApp = insertion.getPreviouslyActiveApplication();
         const visibleTarget = insertion.getVisibleTextSessionTarget?.() ?? null;
         const currentTarget = insertion.getCurrentTextSessionTarget?.() ?? null;
-        if (!exactRewriteTargetMatches(targetApp, visibleTarget, currentTarget)) {
+        const targetMatches = exactRewriteTargetMatches(targetApp, visibleTarget, currentTarget);
+        insertion.onDiagnostic?.({
+          stage: "target-revalidation",
+          outcome: targetMatches ? "matched" : "stale",
+        });
+        if (!targetMatches) {
           return "stale_target";
         }
         insertion = {
