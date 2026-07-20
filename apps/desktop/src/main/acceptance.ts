@@ -1,7 +1,7 @@
 import type { Suggestion, ActiveApplication } from "@tab/contracts";
 import { countAcceptedWords } from "@tab/billing";
 import type { InsertionOutcome, InsertionStrategy } from "./application-compatibility.ts";
-import type { TextSessionSnapshot } from "./typing-context.ts";
+import { hasConcreteRewriteIdentity, type TextSessionSnapshot } from "./typing-context.ts";
 import { detectSensitiveData } from "@tab/redaction";
 
 export type InsertionDependencies = {
@@ -62,16 +62,6 @@ function rangeKey(range: TextSessionSnapshot["selectedRange"]): string {
 
 function activeApplicationKey(app: ActiveApplication | null): string {
   return `${app?.bundleId ?? "app-unknown"}:${app?.windowId ?? "window-unknown"}`;
-}
-
-function hasConcreteRewriteIdentity(snapshot: TextSessionSnapshot): boolean {
-  const windowId = snapshot.activeApplication?.windowId;
-  if (!windowId || windowId.startsWith("app:")) return false;
-  for (const elementId of [snapshot.focusedElementId, snapshot.textElementId]) {
-    if (!elementId) return false;
-    if (elementId.startsWith("ax:") && !elementId.includes(":identifier:")) return false;
-  }
-  return true;
 }
 
 function exactRewriteTargetMatches(

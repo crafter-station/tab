@@ -32,6 +32,7 @@ import type { SuggestionSource } from "./suggestion-source.ts";
 import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
 import {
   createSafeTextSessionSnapshot,
+  hasConcreteRewriteIdentity,
   isPrivateTextSessionSnapshot,
   isReliableTextSessionSnapshot,
   type RequestableTypingContextSnapshot,
@@ -527,13 +528,13 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     if (
       observationPaused || !snapshot || !textSession ||
       textSession.accessibilityReliability !== "reliable" || textSession.secureLike ||
-      !textSession.activeApplication?.windowId || !textSession.focusedElementId ||
-      !textSession.textElementId || !range
+      !range
     ) return "none";
     if (range.length === 0) {
       if ((textSession.selectedText?.length ?? 0) > 0) return "none";
       return snapshot.requestable ? "deep_complete" : "none";
     }
+    if (!hasConcreteRewriteIdentity(textSession)) return "none";
     if (!snapshot.requestable && snapshot.suppressionReason !== "empty") return "none";
     if (textSession.selectedText === undefined || textSession.selectedText.length !== range.length) return "none";
     if (range.length > 2_000) return "oversized";
