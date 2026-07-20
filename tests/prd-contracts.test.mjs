@@ -25,6 +25,7 @@ const canonicalGlossaryTerms = [
   "Automatic Suggestion",
   "Local Suggestion",
   "Deep Complete",
+  "Rewrite",
   "Acceptance",
   "Accepted Word",
   "Active Application",

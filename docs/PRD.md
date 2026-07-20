@@ -12,7 +12,9 @@ Build a macOS-first Native Autocomplete App with an Electron desktop app, a TanS
 
 The Electron app observes text-bearing Typing Context in memory, suppresses secure or secret-like contexts, generates Automatic Suggestions through a local inference runtime, and displays one short Suggestion in a semitransparent Floating Suggestion Overlay. The user accepts with Option+Tab or by clicking the overlay, and the Electron app inserts the Suggestion into the previously active application using clipboard paste.
 
-Double-tapping Option explicitly invokes Deep Complete. For that action only, the desktop sends bounded, redacted context to the authenticated Hono API. The API checks the user's Deep Complete entitlement, fetches relevant Personal Memory, generates a non-streaming Suggestion through the configured cloud model provider, and returns either one Suggestion or an empty suggestions array. A successful returned Deep Complete consumes one monthly Deep Complete allowance; empty responses and failures do not consume allowance. Local inference never silently falls back to this path.
+Double-tapping Option at a reliably observed caret explicitly invokes Deep Complete. For that action only, the desktop sends bounded, redacted context to the authenticated Hono API. The API checks the user's Deep Complete entitlement, fetches relevant Personal Memory, generates a non-streaming Suggestion through the configured cloud model provider, and returns either one Suggestion or an empty suggestions array. A successful returned Deep Complete consumes one monthly Deep Complete allowance; empty responses and failures do not consume allowance. Local inference never silently falls back to this path.
+
+When double-tapping Option with a reliable non-empty text selection, the same explicit cloud path invokes Rewrite instead of Deep Complete. Rewrite sends locally screened selected text with bounded text before and after it, active application identity, and eligible personalization. It returns replacement text that preserves meaning and language while improving clarity and correctness and matching the surrounding tone. Option+Tab or overlay click replaces the exact still-selected text through validated clipboard paste. Unknown, changed, oversized, secure, or secret-like selections are never sent or replaced.
 
 A separate background memory workflow runs through Cloudflare Queues and may use a slower AI tool loop to read, create, update, or delete system-created Personal Memory after passing deterministic sensitive-data guardrails. Continuous Memory Extraction is a paid-plan service. Every user retains the ability to view, edit, export, and delete existing Personal Memory after trial expiration, downgrade, or cancellation.
 
@@ -75,6 +77,12 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 53. As a developer, I want shared schemas and policies, so that Electron, web, and API agree on request contracts, redaction, memory, and entitlement behavior.
 54. As a developer, I want Effect for typed services and errors, so that cross-runtime workflows are explicit and testable.
 55. As a developer, I want the Hono API to own auth, Deep Complete generation, memory APIs, Polar webhooks, and device tokens, so that backend authority is centralized.
+56. As a writer, I want to select text and double-tap Option, so that Tab proposes a clearer replacement without requiring a separate prompt.
+57. As a writer, I want Rewrite to preserve my meaning and language while matching the surrounding tone, so that the replacement remains mine.
+58. As a writer, I want to accept a Rewrite with Option+Tab or by clicking the overlay, so that the exact selected text is replaced through the same familiar interaction.
+59. As a writer, I want Tab to cancel a Rewrite when the app, window, focused text field, selection, selected text, or surrounding context changes, so that it never replaces the wrong passage.
+60. As a privacy-conscious user, I want secret-like selected text suppressed locally and Rewrite text excluded from Personal Memory and raw telemetry, so that an explicit rewrite does not weaken Tab's data boundaries.
+61. As a user, I want a successful Rewrite to use my existing Deep Complete allowance, so that cloud writing actions share one understandable quota.
 
 ## Implementation Decisions
 
@@ -93,7 +101,19 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Do not use R2 for raw typing or suggestion storage by default.
 - Use a local inference runtime for Automatic Suggestions and the AI SDK through the configured cloud provider for Deep Complete and Memory Extraction.
 - Never silently fall back from local inference to Deep Complete.
-- Use one explicit cloud model call for Deep Complete and a separate slower background Memory Extraction workflow.
+- Use one explicit cloud model call for Deep Complete or Rewrite and a separate slower background Memory Extraction workflow.
+- Route double-tap Option by reliable selection state: invoke Deep Complete for a zero-length selection, Rewrite for a non-empty selection, and neither action when selection state is unknown.
+- Model Rewrite as a distinct `rewrite` request mode while retaining the existing one-Suggestion response shape and non-streaming cloud path.
+- Limit Rewrite selections and replacement Suggestions to 2,000 characters. Never truncate an oversized selection; briefly show `Select up to 2,000 characters` with no Acceptance action.
+- Build Rewrite requests from the selected text, bounded text before and after it, active application identity, and eligible Personal Memory and custom writing instructions after local suppression and redaction. Do not send full field contents or accessibility tree data.
+- Suppress Rewrite entirely when the focused text field is secure or the selected or surrounding text contains detected secrets or high-risk identifiers. Redaction with placeholder restoration is not an allowed fallback.
+- Require the active application and window, focused and text element identities, caret and selection range, selected text, and bounded surrounding context to match the original Rewrite target while the request is in flight, while the Suggestion is visible, and immediately before insertion.
+- Show Rewrite replacement text in the bottom-of-screen Floating Suggestion Overlay with a `Rewrite` label. Do not add a diff view or selection-relative overlay for the first version.
+- Accept Rewrite with Option+Tab or overlay click and replace the still-active selection through clipboard paste with best-effort clipboard restoration.
+- Treat Rewrite as plain text. Internal rich-text formatting in the selected passage is not preserved.
+- Count a successful returned Rewrite against the existing monthly Deep Complete allowance. Invalid, suppressed, or oversized selections dispatch no request, and empty or failed responses do not count. If the target becomes stale after dispatch, Tab never inserts the result, but a replacement already returned by the API has consumed allowance.
+- Allow eligible Personal Memory and custom writing instructions to personalize Rewrite, but never make selected or replacement text eligible for Memory Extraction by default.
+- Exclude raw selected text, replacement text, surrounding context, and final inserted text from durable telemetry. Record only metadata such as explicit/cloud Rewrite mode, generated/shown/accepted/dismissed/stale/failed outcome, selected/replacement and accepted word/character counts, latency, app category, memory-used flag/count, plan, model, cloud cost, and timestamp.
 - Fetch relevant active Personal Memory before suggestion generation rather than using a model tool call to read memory in the hot path.
 - Return non-streaming suggestions for MVP.
 - Return `200 OK` with `suggestions: []` when no confident suggestion should be shown.
@@ -113,7 +133,7 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Do not use Personal Memory record count as the primary pricing metric. Keep a generous technical abuse ceiling and gate continuous learning rather than access to user data.
 - Preserve view, edit, export, and delete controls for Personal Memory after trial expiration, downgrade, or cancellation.
 - Use exact cached Polar subscription period boundaries for every Deep Complete allowance; never substitute a fixed 30-day or UTC calendar month.
-- Durably meter successful Deep Completes and Local Accepted Words to Polar for reporting. Local Accepted Words remain Mac-local daily allowances enforced by Tab, not Polar credits.
+- Durably meter successful Deep Completes, successful Rewrites, and Local Accepted Words to Polar for reporting. Local Accepted Words remain Mac-local daily allowances enforced by Tab, not Polar credits.
 - Do not call Polar synchronously on every Suggestion or Acceptance.
 - Keep the native rolling typing context buffer in process memory only.
 - Clear the local typing context buffer on app switch, pause, secure input, sleep/lock, secret-like context detection, app quit, and explicit user action.
@@ -147,6 +167,11 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Native spike testing should cover TextEdit, Notes, Mail, Slack, Ghostty, and at least one secure input/password scenario.
 - Native tests should validate external behavior rather than internal implementation details: overlay appears, overlay hides, suggestion inserts, shortcuts are ignored, app switch clears state, secure input suppresses requests.
 - Deep Complete API contract tests should cover a successful Suggestion, empty Suggestions, invalid request, unauthenticated request, revoked device, allowance exhausted, and provider failure.
+- Rewrite API contract tests should cover a successful meaning-preserving replacement, no meaningful improvement, the 2,000-character request and response boundaries, secret-like suppression before transmission, allowance exhaustion, and provider failure.
+- Desktop Rewrite tests should cover conditional routing from double-tap Option, unknown selection state, oversized selection guidance, bottom-overlay presentation, Option+Tab and click Acceptance, plain-text clipboard replacement, and best-effort clipboard restoration.
+- Rewrite stale-target tests should change the active app/window, focused and text element identities, selection range, selected text, and surrounding content independently while generation is pending and while a result is visible, asserting that Tab hides the result and never pastes.
+- Rewrite privacy tests should assert that selected and replacement text never enter Memory Extraction jobs or durable telemetry and that full field contents and accessibility tree data never enter the request.
+- Rewrite metering tests should assert that one returned replacement consumes one Deep Complete allowance, duplicate request IDs do not double-count, and invalid, suppressed, oversized, empty, and failed requests consume none. Desktop stale-target tests should separately assert that a changed target never inserts a returned replacement.
 - API tests should assert that `suggestions: []` is a successful no-Suggestion result and that Deep Complete allowance exhaustion is an entitlement error.
 - Local allowance tests should cover Accepted Word counting, word boundaries, daily reset, offline use, restart persistence, and multi-device reconciliation without counting ignored, dismissed, stale, empty, or failed Suggestions.
 - Deep Complete allowance tests should assert that one successful returned Suggestion consumes one allowance, internal retries do not double-count, and empty or failed requests do not count.
@@ -168,6 +193,13 @@ The TanStack Start web app provides marketing, download, pricing, account manage
 - Streaming token-by-token suggestions.
 - Multiple suggestions in the MVP overlay.
 - Regenerate-suggestion command.
+- Rewrite instructions, tone menus, and multiple Rewrite variants.
+- Rewrite diff or before-and-after comparison UI.
+- Selection-relative Rewrite positioning.
+- Rich-text formatting preservation within rewritten selections.
+- Rewriting selections longer than 2,000 characters or silently truncating them.
+- Bypassing secure-input or sensitive-data suppression for an explicit Rewrite.
+- Learning Personal Memory from selected or replacement text.
 - Per-application allow/deny controls for MVP.
 - Raw typing log storage.
 - Full document scraping.
