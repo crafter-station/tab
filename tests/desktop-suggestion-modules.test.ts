@@ -179,4 +179,32 @@ describe("Deep Complete", () => {
     expect(cloudContexts).toEqual(["hard writing moment"]);
     expect(shown).toEqual([{ id: "arbitrary-cloud-id", text: " resolved" }]);
   });
+
+  it("reports bounded cloud outcomes and overlay disposition", async () => {
+    for (const [requestCloudSuggestion, expectedOutcome] of [
+      [async () => ({ id: "cloud", text: " result" }), "suggestion"],
+      [async () => null, "empty"],
+      [async () => { throw new Error("unavailable"); }, "failed"],
+    ] as const) {
+      const diagnostics: unknown[] = [];
+      const deepComplete = createDeepComplete({
+        getContext: () => snapshot("bounded diagnostic"),
+        requestCloudSuggestion,
+        onShowSuggestion: () => {},
+        onHideSuggestion: () => {},
+        onDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+      });
+
+      await deepComplete.requestNow();
+
+      expect(diagnostics).toEqual([
+        { stage: "cloud-request-started" },
+        { stage: "cloud-request-outcome", outcome: expectedOutcome },
+        {
+          stage: "overlay-presentation",
+          outcome: expectedOutcome === "suggestion" ? "presented" : "suppressed",
+        },
+      ]);
+    }
+  });
 });

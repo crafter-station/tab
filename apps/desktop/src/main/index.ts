@@ -451,6 +451,12 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
     onRequestFinished: (suggestion) => {
       updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
     },
+    onExplicitActionDiagnostic: DEVELOPMENT_LOGGING
+      ? (diagnostic) => console.info("Rewrite action path:", diagnostic)
+      : undefined,
+    onAcceptanceDiagnostic: DEVELOPMENT_LOGGING
+      ? (diagnostic) => console.info("Rewrite acceptance path:", diagnostic)
+      : undefined,
   },
   createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
     getCurrentSuggestion,
@@ -509,6 +515,8 @@ const desktopEventIngress = createDesktopEventIngress({
   onContextInvalidated: handleContextInvalidated,
   onDeleteBackward: handleDeleteBackward,
   onSuggestNow: handleSuggestNow,
+  onAcceptSuggestion: () => handleKeyboardAcceptance("native"),
+  onInputPathDiagnostic: (diagnostic) => console.info("macOS input path:", diagnostic),
   onTextSessionSnapshot: handleTextSessionSnapshot,
   onAppContextTree: handleAppContextTree,
 });
@@ -1015,6 +1023,17 @@ async function acceptCurrentSuggestion(): Promise<void> {
 
 const suggestionAcceptanceTriggers = createSuggestionAcceptanceTriggers(acceptCurrentSuggestion);
 
+function handleKeyboardAcceptance(source: "native" | "electron"): void {
+  if (DEVELOPMENT_LOGGING) console.info("Rewrite acceptance path:", { stage: "keyboard-callback", source });
+  if (controlWindowManager.isRoute("onboarding") && controlWindowManager.isFocused()) {
+    controlWindowManager.sendOptionTab();
+    return;
+  }
+  suggestionAcceptanceTriggers.keyboard().catch((error) => {
+    console.error("Failed to accept suggestion:", error);
+  });
+}
+
 async function requestSuggestionNow(): Promise<void> {
   await nativeAutocompleteApp.requestSuggestionNow();
 }
@@ -1075,13 +1094,7 @@ async function bootstrap(): Promise<void> {
   packagedAuthCallback.activate(process.argv);
 
   const registered = globalShortcut.register("Alt+Tab", () => {
-    if (controlWindowManager.isRoute("onboarding") && controlWindowManager.isFocused()) {
-      controlWindowManager.sendOptionTab();
-      return;
-    }
-    suggestionAcceptanceTriggers.keyboard().catch((error) => {
-      console.error("Failed to accept suggestion:", error);
-    });
+    handleKeyboardAcceptance("electron");
   });
 
   if (!registered) {

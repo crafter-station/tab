@@ -17,8 +17,17 @@ export type DesktopEventIngressHandlers = {
   readonly onContextInvalidated: (reason: string) => void;
   readonly onDeleteBackward: (unit: TypingDeletionUnit) => void;
   readonly onSuggestNow: () => void;
+  readonly onAcceptSuggestion: () => void;
+  readonly onInputPathDiagnostic: (diagnostic: InputPathDiagnostic) => void;
   readonly onTextSessionSnapshot: (snapshot: TextSessionSnapshot) => void;
   readonly onAppContextTree: (accessibilityTree: AppContextAccessibilityTree) => void;
+};
+
+export type InputPathDiagnostic = {
+  readonly stage: "option-transition" | "double-option-recognized" | "explicit-refresh" | "suggest-now-emitted" | "option-tab-observed" | "accept-suggestion-emitted";
+  readonly key?: "left-option" | "right-option";
+  readonly phase?: "down" | "up";
+  readonly outcome?: "ready" | "rejected";
 };
 
 export type DesktopEventIngress = {
@@ -40,6 +49,8 @@ export function createDesktopEventIngress(handlers: DesktopEventIngressHandlers)
         message?: unknown;
         snapshot?: unknown;
         tree?: unknown;
+        stage?: unknown;
+        outcome?: unknown;
       };
 
       if (payload.type === "ready") {
@@ -77,6 +88,14 @@ export function createDesktopEventIngress(handlers: DesktopEventIngressHandlers)
         handlers.onSuggestNow();
         return;
       }
+      if (payload.type === "accept-suggestion") {
+        handlers.onAcceptSuggestion();
+        return;
+      }
+      if (payload.type === "input-path-diagnostic" && isInputPathDiagnostic(payload)) {
+        handlers.onInputPathDiagnostic(payload);
+        return;
+      }
       if (payload.type === "text-session" && isTextSessionSnapshot(payload.snapshot)) {
         handlers.onTextSessionSnapshot(payload.snapshot);
         return;
@@ -86,6 +105,16 @@ export function createDesktopEventIngress(handlers: DesktopEventIngressHandlers)
       }
     },
   };
+}
+
+function isInputPathDiagnostic(value: Record<string, unknown>): value is InputPathDiagnostic {
+  const stages = ["option-transition", "double-option-recognized", "explicit-refresh", "suggest-now-emitted", "option-tab-observed", "accept-suggestion-emitted"];
+  return (
+    typeof value.stage === "string" && stages.includes(value.stage) &&
+    (value.key === undefined || value.key === "left-option" || value.key === "right-option") &&
+    (value.phase === undefined || value.phase === "down" || value.phase === "up") &&
+    (value.outcome === undefined || value.outcome === "ready" || value.outcome === "rejected")
+  );
 }
 
 function isAccessibilityNode(value: unknown): value is AppContextAccessibilityTree {

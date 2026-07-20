@@ -917,6 +917,14 @@ describe("desktop native suggestion loop", () => {
           showDebugContext: () => calls.push({ type: "showDebugContext" }),
           resetDebugApiState: () => calls.push({ type: "resetDebugApiState" }),
           setSuggestionRefreshing: (refreshing) => calls.push({ type: "setSuggestionRefreshing", value: refreshing }),
+          onExplicitActionDiagnostic: (diagnostic) => calls.push({
+            type: "explicitActionDiagnostic",
+            value: diagnostic,
+          }),
+          onAcceptanceDiagnostic: (diagnostic) => calls.push({
+            type: "acceptanceDiagnostic",
+            value: diagnostic,
+          }),
         },
         createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
           getCurrentSuggestion,
@@ -1102,6 +1110,10 @@ describe("desktop native suggestion loop", () => {
       await session.requestSuggestionNow();
       expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
       expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+      expect(calls).toContainEqual({
+        type: "explicitActionDiagnostic",
+        value: { stage: "explicit-action-classified", outcome: "rewrite" },
+      });
     });
 
     it("routes only reliable exact explicit targets and gives non-acceptable oversized guidance", async () => {
@@ -1376,6 +1388,21 @@ describe("desktop native suggestion loop", () => {
       ]);
       expect(calls.filter((call) => call.type === "sendPaste")).toHaveLength(1);
       expect(calls.map((call) => call.type)).not.toContain("insertSemantically");
+      expect(calls.filter((call) => call.type === "acceptanceDiagnostic").map((call) => call.value)).toEqual([
+        { stage: "acceptance-entry", outcome: "rewrite" },
+        { stage: "acceptance-guard", outcome: "ready" },
+        { stage: "target-revalidation", outcome: "matched" },
+        { stage: "clipboard-write", outcome: "started" },
+        { stage: "clipboard-write", outcome: "succeeded" },
+        { stage: "paste-dispatch", outcome: "started" },
+        { stage: "paste-dispatch", outcome: "succeeded" },
+        { stage: "paste-wait", outcome: "started" },
+        { stage: "paste-wait", outcome: "succeeded" },
+        { stage: "clipboard-restoration", outcome: "started" },
+        { stage: "clipboard-restoration", outcome: "succeeded" },
+        { stage: "insertion-outcome", outcome: "succeeded" },
+        { stage: "acceptance-result", outcome: "inserted" },
+      ]);
       expect(usage).toEqual([]);
       expect(session.getCurrentSuggestion()).toBeNull();
       const accepted = telemetry.find((event) => event.eventType === "suggestion_accepted");

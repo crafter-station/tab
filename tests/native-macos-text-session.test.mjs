@@ -24,6 +24,19 @@ function runExplicitActionContract(scenario) {
   return output.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
 }
 
+function runSelectionContract(scenario) {
+  return JSON.parse(execFileSync(nativeContractExecutable, ["--selection-contract", scenario], { encoding: "utf8" }));
+}
+
+function runOptionGestureContract(scenario) {
+  return JSON.parse(execFileSync(nativeContractExecutable, ["--option-gesture-contract", scenario], { encoding: "utf8" }));
+}
+
+function runInputPathContract(scenario) {
+  const output = execFileSync(nativeContractExecutable, ["--input-path-contract", scenario], { encoding: "utf8" });
+  return output.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
+
 function functionBody(source, signature) {
   const start = source.indexOf(signature);
   assert.notEqual(start, -1, `Missing ${signature}`);
@@ -76,6 +89,51 @@ test("macOS explicit actions fail closed at the process boundary", { skip: !isMa
   }
 });
 
+test("macOS helper recognizes double Option within the fixed 400 ms product interval", { skip: !isMacOS }, () => {
+  const within = runOptionGestureContract("within-fixed-interval");
+  assert.equal(within.intervalNanoseconds, 400_000_000);
+  assert.equal(within.triggered, true);
+  assert.equal(runOptionGestureContract("outside-fixed-interval").triggered, false);
+  assert.equal(runOptionGestureContract("interrupted").triggered, false);
+});
+
+test("macOS helper executable emits bounded Option+Tab diagnostics and acceptance", { skip: !isMacOS }, () => {
+  const events = runInputPathContract("option-tab");
+  assert.deepEqual(events, [
+    { type: "input-path-diagnostic", stage: "option-tab-observed" },
+    { type: "accept-suggestion" },
+    { type: "input-path-diagnostic", stage: "accept-suggestion-emitted" },
+    { type: "input-path-contract", consumed: true, suppressionCapable: true },
+  ]);
+  assert.doesNotMatch(JSON.stringify(events), /selectedText|surrounding|clipboard|credential|environment/i);
+});
+
+test("macOS helper executable proves selected text and range consistency without clipboard reads", { skip: !isMacOS }, () => {
+  const selection = runSelectionContract("selection");
+  assert.deepEqual(selection.snapshot.selectedRange, { location: 2, length: 5 });
+  assert.equal(selection.snapshot.selectedText, "hello");
+  assert.equal(selection.reliableExplicitTarget, true);
+
+  const caret = runSelectionContract("caret");
+  assert.deepEqual(caret.snapshot.selectedRange, { location: 7, length: 0 });
+  assert.equal(caret.snapshot.selectedText, "");
+  assert.equal(caret.reliableExplicitTarget, true);
+
+  const contractBody = functionBody(nativeHelper, "func runSelectionContract");
+  assert.doesNotMatch(contractBody, /NSPasteboard|clipboard/i);
+});
+
+test("macOS helper executable keeps missing or inconsistent selection state unsafe", { skip: !isMacOS }, () => {
+  const unavailable = runSelectionContract("unavailable");
+  assert.equal(unavailable.snapshot.selectedRange, null);
+  assert.equal("selectedText" in unavailable.snapshot, false);
+  assert.equal(unavailable.reliableExplicitTarget, false);
+
+  for (const scenario of ["text-without-range", "range-without-text", "inconsistent"]) {
+    assert.equal(runSelectionContract(scenario).reliableExplicitTarget, false, scenario);
+  }
+});
+
 test("macOS helper captures terminal paste and invalidates uncertain edits", () => {
   assert.match(nativeHelper, /CGEventType\.flagsChanged/);
   assert.match(nativeHelper, /"type": "paste", "text": text/);
@@ -119,9 +177,24 @@ test("macOS helper reuses active-window discovery within each input event", () =
   assert.doesNotMatch(callbackBody, /emitTextSessionSnapshotIfChanged\(\)/);
 });
 
-test("macOS helper reserves Option+Tab for suggestion acceptance", () => {
-  assert.match(
-    nativeHelper,
-    /if keyCode == 48 \{\s+if isGhostty && !flags\.contains\(\.maskAlternate\) \{\s+emit\(\["type": "context-invalidated", "message": "tab"\]\)/,
-  );
+test("macOS helper executable reserves only Option+Tab for suppressing suggestion acceptance", { skip: !isMacOS }, () => {
+  const optionTab = runInputPathContract("option-tab");
+  assert.equal(optionTab.at(-1).consumed, true);
+  assert.equal(optionTab.at(-1).suppressionCapable, true);
+  assert.equal(optionTab.some((event) => event.type === "accept-suggestion"), true);
+
+  const ordinaryTab = runInputPathContract("ordinary-tab");
+  assert.deepEqual(ordinaryTab, [
+    { type: "input-path-contract", consumed: false, suppressionCapable: true },
+  ]);
+
+  const modifiedOptionTab = runInputPathContract("modified-option-tab");
+  assert.deepEqual(modifiedOptionTab, [
+    { type: "input-path-contract", consumed: false, suppressionCapable: true },
+  ]);
+
+  const fnOptionTab = runInputPathContract("fn-option-tab");
+  assert.deepEqual(fnOptionTab, [
+    { type: "input-path-contract", consumed: false, suppressionCapable: true },
+  ]);
 });

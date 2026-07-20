@@ -597,25 +597,74 @@ func normalizedText(from event: CGEvent) -> String? {
 let doubleOptionPressNanoseconds: CGEventTimestamp = 400_000_000
 var lastOptionKeyUpTimestamp: CGEventTimestamp = 0
 
+func registerOptionKeyUp(
+  at timestamp: CGEventTimestamp,
+  interval: CGEventTimestamp = doubleOptionPressNanoseconds
+) -> Bool {
+  if lastOptionKeyUpTimestamp > 0,
+     timestamp >= lastOptionKeyUpTimestamp,
+     timestamp - lastOptionKeyUpTimestamp <= interval {
+    lastOptionKeyUpTimestamp = 0
+    return true
+  }
+  lastOptionKeyUpTimestamp = timestamp
+  return false
+}
+
+func cancelOptionGesture() {
+  lastOptionKeyUpTimestamp = 0
+}
+
+func emitInputPathDiagnostic(
+  _ stage: String,
+  key: String? = nil,
+  phase: String? = nil,
+  outcome: String? = nil
+) {
+  var diagnostic: [String: Any] = ["type": "input-path-diagnostic", "stage": stage]
+  if let key = key { diagnostic["key"] = key }
+  if let phase = phase { diagnostic["phase"] = phase }
+  if let outcome = outcome { diagnostic["outcome"] = outcome }
+  emit(diagnostic)
+}
+
+func handleOptionTab(keyCode: Int64, flags: CGEventFlags) -> Bool {
+  guard keyCode == 48,
+        flags.contains(.maskAlternate),
+        !flags.contains(.maskShift),
+        !flags.contains(.maskCommand),
+        !flags.contains(.maskControl),
+        !flags.contains(.maskHelp),
+        !flags.contains(.maskSecondaryFn) else { return false }
+  emitInputPathDiagnostic("option-tab-observed")
+  emit(["type": "accept-suggestion"])
+  emitInputPathDiagnostic("accept-suggestion-emitted")
+  return true
+}
+
 let callback: CGEventTapCallBack = { _, type, event, _ in
   let flags = event.flags
   let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
 
   if type == .flagsChanged {
     if keyCode == 58 || keyCode == 61 {
+      let key = keyCode == 58 ? "left-option" : "right-option"
       if flags.contains(.maskAlternate) {
+        emitInputPathDiagnostic("option-transition", key: key, phase: "down")
         return Unmanaged.passUnretained(event)
       }
 
+      emitInputPathDiagnostic("option-transition", key: key, phase: "up")
       let timestamp = event.timestamp
-      if lastOptionKeyUpTimestamp > 0 && timestamp - lastOptionKeyUpTimestamp <= doubleOptionPressNanoseconds {
-        lastOptionKeyUpTimestamp = 0
+      if registerOptionKeyUp(at: timestamp) {
+        emitInputPathDiagnostic("double-option-recognized")
         guard refreshTextSessionForExplicitAction() else {
+          emitInputPathDiagnostic("explicit-refresh", outcome: "rejected")
           return Unmanaged.passUnretained(event)
         }
+        emitInputPathDiagnostic("explicit-refresh", outcome: "ready")
         emit(["type": "suggest-now"])
-      } else {
-        lastOptionKeyUpTimestamp = timestamp
+        emitInputPathDiagnostic("suggest-now-emitted")
       }
     }
     return Unmanaged.passUnretained(event)
@@ -630,7 +679,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   }
 
   guard type == .keyDown else { return Unmanaged.passUnretained(event) }
-  lastOptionKeyUpTimestamp = 0
+  cancelOptionGesture()
 
   let activeWindow = activeWindowSnapshot()
   let activeBundleId = activeWindow?.bundleId
@@ -679,6 +728,10 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   if isPlainReturn && isGhostty {
     emit(["type": "context-invalidated", "message": "submission"])
     return Unmanaged.passUnretained(event)
+  }
+
+  if handleOptionTab(keyCode: keyCode, flags: flags) {
+    return nil
   }
 
   if keyCode == 48 {
@@ -755,6 +808,82 @@ func runExplicitActionContract(_ scenario: String) {
   }
 }
 
+func runSelectionContract(_ scenario: String) {
+  var snapshot: TextSessionPayload = [
+    "selectedRange": ["location": 2, "length": 5],
+    "selectedText": "hello",
+    "accessibilityReliability": "reliable",
+  ]
+
+  switch scenario {
+  case "selection":
+    break
+  case "caret":
+    snapshot["selectedRange"] = ["location": 7, "length": 0]
+    snapshot["selectedText"] = ""
+  case "unavailable":
+    snapshot["selectedRange"] = NSNull()
+    snapshot.removeValue(forKey: "selectedText")
+    snapshot["accessibilityReliability"] = "unavailable"
+  case "text-without-range":
+    snapshot["selectedRange"] = NSNull()
+  case "range-without-text":
+    snapshot.removeValue(forKey: "selectedText")
+  case "inconsistent":
+    snapshot["selectedText"] = "bad"
+  default:
+    exit(2)
+  }
+
+  emit([
+    "snapshot": snapshot,
+    "reliableExplicitTarget": isReliableExplicitActionSnapshot(snapshot),
+  ])
+}
+
+func runOptionGestureContract(_ scenario: String) {
+  cancelOptionGesture()
+  _ = registerOptionKeyUp(at: 1_000_000_000)
+
+  let triggered: Bool
+  switch scenario {
+  case "within-fixed-interval":
+    triggered = registerOptionKeyUp(at: 1_400_000_000)
+  case "outside-fixed-interval":
+    triggered = registerOptionKeyUp(at: 1_400_000_001)
+  case "interrupted":
+    cancelOptionGesture()
+    triggered = registerOptionKeyUp(at: 1_200_000_000)
+  default:
+    exit(2)
+  }
+
+  emit(["intervalNanoseconds": doubleOptionPressNanoseconds, "triggered": triggered])
+}
+
+let eventTapOptions: CGEventTapOptions = .defaultTap
+
+func runInputPathContract(_ scenario: String) {
+  let consumed: Bool
+  switch scenario {
+  case "option-tab":
+    consumed = handleOptionTab(keyCode: 48, flags: [.maskAlternate])
+  case "ordinary-tab":
+    consumed = handleOptionTab(keyCode: 48, flags: [])
+  case "modified-option-tab":
+    consumed = handleOptionTab(keyCode: 48, flags: [.maskAlternate, .maskShift])
+  case "fn-option-tab":
+    consumed = handleOptionTab(keyCode: 48, flags: [.maskAlternate, .maskSecondaryFn])
+  default:
+    exit(2)
+  }
+  emit([
+    "type": "input-path-contract",
+    "consumed": consumed,
+    "suppressionCapable": eventTapOptions == .defaultTap,
+  ])
+}
+
 if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--text-session-snapshot" {
   if let snapshot = textSessionSnapshot() {
     emit(["type": "text-session", "snapshot": snapshot])
@@ -767,10 +896,25 @@ if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--explicit-a
   exit(0)
 }
 
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--selection-contract" {
+  runSelectionContract(CommandLine.arguments[2])
+  exit(0)
+}
+
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--option-gesture-contract" {
+  runOptionGestureContract(CommandLine.arguments[2])
+  exit(0)
+}
+
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--input-path-contract" {
+  runInputPathContract(CommandLine.arguments[2])
+  exit(0)
+}
+
 guard let eventTap = CGEvent.tapCreate(
   tap: .cgSessionEventTap,
   place: .headInsertEventTap,
-  options: .listenOnly,
+  options: eventTapOptions,
   eventsOfInterest: eventMask,
   callback: callback,
   userInfo: nil
