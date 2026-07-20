@@ -1116,6 +1116,45 @@ describe("desktop native suggestion loop", () => {
       });
     });
 
+    it("routes fallback-identity carets to Deep Complete but never dispatches fallback selections", async () => {
+      const fallbackIdentities: Partial<TextSessionSnapshot>[] = [
+        { activeApplication: { bundleId: "com.apple.TextEdit", windowId: "app:123" } },
+        { focusedElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" },
+        { textElementId: "ax:com.apple.TextEdit:AXTextArea:unknown-subrole" },
+      ];
+
+      for (const identity of fallbackIdentities) {
+        const caret = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async () => ({ id: "caret", text: " completion" }),
+        });
+        caret.session.applyTextSessionSnapshot(rewriteTarget({
+          ...identity,
+          selectedRange: { location: 14, length: 0 },
+          selectedText: "",
+          caretIdentity: "range:14:0",
+          surroundingContext: { beforeCaret: "Caret context", afterCaret: "" },
+        }));
+        await caret.session.requestSuggestionNow();
+
+        expect(caret.calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(1);
+        expect(caret.calls).toContainEqual({ type: "showSuggestionProvenance", value: "deep_complete" });
+
+        const selection = makeSession({
+          getLocalSuggestion: async () => null,
+          requestSuggestion: async () => ({ id: "rewrite", text: "Improved text" }),
+        });
+        selection.session.applyTextSessionSnapshot(rewriteTarget(identity));
+        await selection.session.requestSuggestionNow();
+
+        expect(selection.calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(0);
+        expect(selection.calls).toContainEqual({
+          type: "explicitActionDiagnostic",
+          value: { stage: "explicit-action-classified", outcome: "none" },
+        });
+      }
+    });
+
     it("routes only reliable exact explicit targets and gives non-acceptable oversized guidance", async () => {
       const { calls, session } = makeSession({
         getLocalSuggestion: async () => null,
