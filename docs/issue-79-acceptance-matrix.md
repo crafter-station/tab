@@ -57,6 +57,9 @@ Checks and observed evidence are added as they run.
 - `bun run worker:types:check`: passed.
 - `bun run lint`: passed.
 - `bun run test`: 28 Node tests and 670 Bun tests passed. Expected error-path stack traces were printed by passing tests.
+- `swiftc -typecheck apps/desktop/native/macos-input-tap.swift`: passed after the double-Option timing correction.
+- `node --test tests/native-macos-text-session.test.mjs`: 12 passed after the correction, including system-interval, expired, and interrupted Option gesture sequences.
+- Focused explicit/Option/selection desktop routing tests: 13 passed.
 
 ## Recovery Probes
 
@@ -85,4 +88,4 @@ Checks and observed evidence are added as they run.
 
 ## External Evidence Gaps
 
-The current candidate is directly observed signed in, and the unlocked session permits reliable TextEdit focus and selection. The maintainer then physically double-tapped Option with that selection active and observed no Rewrite overlay or visible action. The production helper used a fixed 400 ms release interval while this Mac reports a 500 ms `NSEvent.doubleClickInterval`, so a system-valid double tap could expire before explicit-action refresh. This is a reproduced generic trigger defect, not an automation limitation. Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior remain unclaimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or a supported browser editor. Rebuild the candidate after the generic timing correction before continuing the matrix; the earlier loginwindow and Chrome for Testing observations retain their required no-request/no-replacement results.
+The current candidate is directly observed signed in, and the unlocked session permits reliable TextEdit focus and selection. The maintainer then physically double-tapped Option with that selection active and observed no Rewrite overlay or visible action. The production helper used a fixed 400 ms release interval while this Mac reports a 500 ms `NSEvent.doubleClickInterval`, so a system-valid double tap could expire before explicit-action refresh. The helper now honors the system interval, with public executable regression coverage for accepted, expired, and interrupted sequences. A rebuilt candidate was launched after the fix, but the physical TextEdit path has not yet been re-observed. Option+Tab, overlay click, exact replacement, clipboard restoration, rich-text replacement, and stale-generation behavior remain unclaimed as real-app passes for TextEdit, Notes, Mail, Slack, Discord, Messages, VS Code, Obsidian, or a supported browser editor. Continue with the rebuilt candidate; the earlier loginwindow and Chrome for Testing observations retain their required no-request/no-replacement results.
