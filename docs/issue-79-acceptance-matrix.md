@@ -42,7 +42,7 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 3. Record observed real-application results and required command evidence without promoting unobserved surfaces to passes.
 4. Record the recovered unlocked-session application matrix, including both Acceptance paths for reliable targets and fail-closed evidence for unsupported targets.
 5. Diagnose the production event path with bounded metadata-only stages after physical evidence disproved the timing-only correction.
-6. Correct only a reproduced generic compatibility gap and prove it at the native and desktop public boundaries.
+6. Distinguish explicit classification, cloud request start/outcome, and overlay presentation/suppression at the public native-app and Deep Complete boundaries.
 7. Relaunch a provenance-confirmed current-worktree candidate and complete the reliable-surface keyboard/click, exact replacement, multiline/plain-text, clipboard, stale, safety, and lifecycle observations.
 8. Complete implementer self-review, the required CI sequence, and the final evidence handoff.
 
@@ -66,6 +66,8 @@ Checks and observed evidence are added as they run.
 - `bun test tests/desktop-event-ingress.test.ts tests/desktop-macos-input-tap.test.ts`: 6 passed.
 - `bun run typecheck`: passed after adding the diagnostic ingress boundary.
 - `bun test tests/desktop-native-loop.test.ts tests/desktop-acceptance.test.ts tests/desktop-api-client.test.ts tests/api-suggestion.test.ts`: 221 passed after the diagnostic change.
+- `bun test tests/desktop-suggestion-modules.test.ts tests/desktop-native-loop.test.ts`: 159 passed with fixed-enum downstream Rewrite diagnostics.
+- `bun run typecheck`: passed after the downstream Rewrite diagnostic milestone.
 
 ## Recovery Probes
 
@@ -102,3 +104,11 @@ The unlocked session permits reliable TextEdit focus and selection. The maintain
 - The candidate was rebuilt and launched through the approved external environment-file mechanism. Its helper executable and working directory both resolved to this issue-79 worktree, and a sanitized bounded log reported `macOS input tap ready.`
 - A separately path-verified stale helper under `/Users/cuevaio/projects/tabbb` was terminated so the observation was not ambiguous.
 - The diagnostic candidate observed complete left-Option sequences through `explicit-refresh: ready` and `suggest-now-emitted`, then exited with its helper receiving `SIGTERM`. It is not currently running and must be relaunched after adding bounded downstream request/presentation stages.
+
+## Downstream Diagnostic Milestone
+
+- The public Native Autocomplete App boundary now reports explicit-action classification as one of `deep-complete`, `rewrite`, `oversized`, or `none`.
+- The public Deep Complete boundary reports cloud request start, request outcome as `suggestion`, `empty`, or `failed`, and overlay disposition as `presented` or `suppressed`.
+- Diagnostics contain fixed enums only. They contain no selected or surrounding text, clipboard data, credentials, environment values, context hashes, request/response bodies, or raw payloads.
+- Focused executable tests prove suggestion, empty, and failed cloud outcomes plus presented/suppressed overlay disposition. The existing native-loop routing test proves Rewrite classification at the public app boundary.
+- A competing desktop dev tree currently resolves to `/Users/cuevaio/projects/tabbb`; it was not terminated and no current-worktree candidate was launched concurrently. Physical TextEdit observation remains pending a provenance-safe relaunch.

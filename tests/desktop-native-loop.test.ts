@@ -917,6 +917,10 @@ describe("desktop native suggestion loop", () => {
           showDebugContext: () => calls.push({ type: "showDebugContext" }),
           resetDebugApiState: () => calls.push({ type: "resetDebugApiState" }),
           setSuggestionRefreshing: (refreshing) => calls.push({ type: "setSuggestionRefreshing", value: refreshing }),
+          onExplicitActionDiagnostic: (diagnostic) => calls.push({
+            type: "explicitActionDiagnostic",
+            value: diagnostic,
+          }),
         },
         createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
           getCurrentSuggestion,
@@ -1102,6 +1106,10 @@ describe("desktop native suggestion loop", () => {
       await session.requestSuggestionNow();
       expect(calls.filter((call) => call.type === "requestDeepComplete")).toHaveLength(2);
       expect(calls).toContainEqual({ type: "showSuggestionProvenance", value: "rewrite" });
+      expect(calls).toContainEqual({
+        type: "explicitActionDiagnostic",
+        value: { stage: "explicit-action-classified", outcome: "rewrite" },
+      });
     });
 
     it("routes only reliable exact explicit targets and gives non-acceptable oversized guidance", async () => {

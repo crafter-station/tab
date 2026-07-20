@@ -26,7 +26,7 @@ import {
 } from "./application-compatibility.ts";
 import { generateLocalSuggestion } from "./suggestion-engine.ts";
 import { createAutomaticSuggestion } from "./automatic-suggestion.ts";
-import { createDeepComplete } from "./deep-complete.ts";
+import { createDeepComplete, type DeepCompleteDiagnostic } from "./deep-complete.ts";
 import type { SuggestionSource } from "./suggestion-source.ts";
 import { createPoliteTriggerPolicy, type TriggerPolicy } from "./trigger-policy.ts";
 import {
@@ -51,6 +51,12 @@ export type NativeSuggestionSessionOutputs = {
   readonly onRequestFinished?: (suggestion: Suggestion | null) => void;
   readonly onSecretLikeContextDetected?: () => void;
   readonly showGuidance?: (message: string) => void;
+  readonly onExplicitActionDiagnostic?: (diagnostic: ExplicitActionDiagnostic) => void;
+};
+
+export type ExplicitActionDiagnostic = DeepCompleteDiagnostic | {
+  readonly stage: "explicit-action-classified";
+  readonly outcome: "deep-complete" | "rewrite" | "oversized" | "none";
 };
 
 type RecordInteractionTelemetry = (event: RecordTelemetryEventRequest) => void | Promise<void>;
@@ -425,6 +431,7 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     },
     triggerPolicy,
     maxVisibleMs: deps.maxVisibleMs,
+    onDiagnostic: outputs.onExplicitActionDiagnostic,
   });
 
   function clearAppContextGraceTimer(): void {
@@ -792,6 +799,10 @@ function createNativeSuggestionSession(deps: NativeSuggestionSessionDependencies
     },
     async requestSuggestionNow(): Promise<void> {
       const action = explicitAction();
+      outputs.onExplicitActionDiagnostic?.({
+        stage: "explicit-action-classified",
+        outcome: action === "deep_complete" ? "deep-complete" : action,
+      });
       if (action === "none") return;
       if (action === "oversized") {
         clearGuidanceTimer();

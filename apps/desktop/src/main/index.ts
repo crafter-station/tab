@@ -451,6 +451,9 @@ const nativeAutocompleteApp = createNativeAutocompleteApp({
     onRequestFinished: (suggestion) => {
       updateDebugApiState(suggestion ? { status: "suggestion", text: suggestion.text } : { status: "empty" });
     },
+    onExplicitActionDiagnostic: DEVELOPMENT_LOGGING
+      ? (diagnostic) => console.info("Rewrite action path:", diagnostic)
+      : undefined,
   },
   createAcceptanceDependencies: (getCurrentSuggestion, getPreviouslyActiveApplication) => ({
     getCurrentSuggestion,
