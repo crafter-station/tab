@@ -40,6 +40,9 @@ This record distinguishes deterministic contract evidence from observed macOS ap
 1. Establish the acceptance and application evidence boundaries before compatibility changes.
 2. Add executable public-native-helper selection proof with its focused tests, keeping uncertain state explicit.
 3. Record observed real-application results and required command evidence without promoting unobserved surfaces to passes.
+4. Record the recovered unlocked-session application matrix, including both Acceptance paths for reliable targets and fail-closed evidence for unsupported targets.
+5. If and only if a generic compatibility gap is reproduced, harden that shared boundary with focused regression coverage.
+6. Complete implementer self-review, the required CI sequence, and the final evidence handoff.
 
 ## Checks
 
