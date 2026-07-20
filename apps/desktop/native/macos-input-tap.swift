@@ -594,8 +594,26 @@ func normalizedText(from event: CGEvent) -> String? {
   return text
 }
 
-let doubleOptionPressNanoseconds: CGEventTimestamp = 400_000_000
+let doubleOptionPressNanoseconds = CGEventTimestamp(NSEvent.doubleClickInterval * 1_000_000_000)
 var lastOptionKeyUpTimestamp: CGEventTimestamp = 0
+
+func registerOptionKeyUp(
+  at timestamp: CGEventTimestamp,
+  interval: CGEventTimestamp = doubleOptionPressNanoseconds
+) -> Bool {
+  if lastOptionKeyUpTimestamp > 0,
+     timestamp >= lastOptionKeyUpTimestamp,
+     timestamp - lastOptionKeyUpTimestamp <= interval {
+    lastOptionKeyUpTimestamp = 0
+    return true
+  }
+  lastOptionKeyUpTimestamp = timestamp
+  return false
+}
+
+func cancelOptionGesture() {
+  lastOptionKeyUpTimestamp = 0
+}
 
 let callback: CGEventTapCallBack = { _, type, event, _ in
   let flags = event.flags
@@ -608,14 +626,11 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
       }
 
       let timestamp = event.timestamp
-      if lastOptionKeyUpTimestamp > 0 && timestamp - lastOptionKeyUpTimestamp <= doubleOptionPressNanoseconds {
-        lastOptionKeyUpTimestamp = 0
+      if registerOptionKeyUp(at: timestamp) {
         guard refreshTextSessionForExplicitAction() else {
           return Unmanaged.passUnretained(event)
         }
         emit(["type": "suggest-now"])
-      } else {
-        lastOptionKeyUpTimestamp = timestamp
       }
     }
     return Unmanaged.passUnretained(event)
@@ -630,7 +645,7 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
   }
 
   guard type == .keyDown else { return Unmanaged.passUnretained(event) }
-  lastOptionKeyUpTimestamp = 0
+  cancelOptionGesture()
 
   let activeWindow = activeWindowSnapshot()
   let activeBundleId = activeWindow?.bundleId
@@ -788,6 +803,27 @@ func runSelectionContract(_ scenario: String) {
   ])
 }
 
+func runOptionGestureContract(_ scenario: String) {
+  let interval: CGEventTimestamp = 500_000_000
+  cancelOptionGesture()
+  _ = registerOptionKeyUp(at: 1_000_000_000, interval: interval)
+
+  let triggered: Bool
+  switch scenario {
+  case "within-system-interval":
+    triggered = registerOptionKeyUp(at: 1_450_000_000, interval: interval)
+  case "outside-system-interval":
+    triggered = registerOptionKeyUp(at: 1_500_000_001, interval: interval)
+  case "interrupted":
+    cancelOptionGesture()
+    triggered = registerOptionKeyUp(at: 1_200_000_000, interval: interval)
+  default:
+    exit(2)
+  }
+
+  emit(["triggered": triggered])
+}
+
 if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--text-session-snapshot" {
   if let snapshot = textSessionSnapshot() {
     emit(["type": "text-session", "snapshot": snapshot])
@@ -802,6 +838,11 @@ if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--explicit-a
 
 if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--selection-contract" {
   runSelectionContract(CommandLine.arguments[2])
+  exit(0)
+}
+
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--option-gesture-contract" {
+  runOptionGestureContract(CommandLine.arguments[2])
   exit(0)
 }
 

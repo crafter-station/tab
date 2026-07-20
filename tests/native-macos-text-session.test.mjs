@@ -28,6 +28,10 @@ function runSelectionContract(scenario) {
   return JSON.parse(execFileSync(nativeContractExecutable, ["--selection-contract", scenario], { encoding: "utf8" }));
 }
 
+function runOptionGestureContract(scenario) {
+  return JSON.parse(execFileSync(nativeContractExecutable, ["--option-gesture-contract", scenario], { encoding: "utf8" }));
+}
+
 function functionBody(source, signature) {
   const start = source.indexOf(signature);
   assert.notEqual(start, -1, `Missing ${signature}`);
@@ -78,6 +82,12 @@ test("macOS explicit actions fail closed at the process boundary", { skip: !isMa
     const events = runExplicitActionContract(scenario);
     assert.equal(events.some((event) => event.type === "suggest-now"), false, scenario);
   }
+});
+
+test("macOS helper recognizes double Option at the system double-click interval", { skip: !isMacOS }, () => {
+  assert.equal(runOptionGestureContract("within-system-interval").triggered, true);
+  assert.equal(runOptionGestureContract("outside-system-interval").triggered, false);
+  assert.equal(runOptionGestureContract("interrupted").triggered, false);
 });
 
 test("macOS helper executable proves selected text and range consistency without clipboard reads", { skip: !isMacOS }, () => {
