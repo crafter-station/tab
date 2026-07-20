@@ -594,7 +594,7 @@ func normalizedText(from event: CGEvent) -> String? {
   return text
 }
 
-let doubleOptionPressNanoseconds = CGEventTimestamp(NSEvent.doubleClickInterval * 1_000_000_000)
+let doubleOptionPressNanoseconds: CGEventTimestamp = 400_000_000
 var lastOptionKeyUpTimestamp: CGEventTimestamp = 0
 
 func registerOptionKeyUp(
@@ -626,6 +626,14 @@ func emitInputPathDiagnostic(
   if let phase = phase { diagnostic["phase"] = phase }
   if let outcome = outcome { diagnostic["outcome"] = outcome }
   emit(diagnostic)
+}
+
+func handleOptionTab(keyCode: Int64, flags: CGEventFlags) -> Bool {
+  guard keyCode == 48, flags.contains(.maskAlternate) else { return false }
+  emitInputPathDiagnostic("option-tab-observed")
+  emit(["type": "accept-suggestion"])
+  emitInputPathDiagnostic("accept-suggestion-emitted")
+  return true
 }
 
 let callback: CGEventTapCallBack = { _, type, event, _ in
@@ -716,13 +724,11 @@ let callback: CGEventTapCallBack = { _, type, event, _ in
     return Unmanaged.passUnretained(event)
   }
 
+  if handleOptionTab(keyCode: keyCode, flags: flags) {
+    return nil
+  }
+
   if keyCode == 48 {
-    if flags.contains(.maskAlternate) {
-      emitInputPathDiagnostic("option-tab-observed")
-      emit(["type": "accept-suggestion"])
-      emitInputPathDiagnostic("accept-suggestion-emitted")
-      return nil
-    }
     if isGhostty && !flags.contains(.maskAlternate) {
       emit(["type": "context-invalidated", "message": "tab"])
     }
@@ -830,24 +836,42 @@ func runSelectionContract(_ scenario: String) {
 }
 
 func runOptionGestureContract(_ scenario: String) {
-  let interval: CGEventTimestamp = 500_000_000
   cancelOptionGesture()
-  _ = registerOptionKeyUp(at: 1_000_000_000, interval: interval)
+  _ = registerOptionKeyUp(at: 1_000_000_000)
 
   let triggered: Bool
   switch scenario {
-  case "within-system-interval":
-    triggered = registerOptionKeyUp(at: 1_450_000_000, interval: interval)
-  case "outside-system-interval":
-    triggered = registerOptionKeyUp(at: 1_500_000_001, interval: interval)
+  case "within-fixed-interval":
+    triggered = registerOptionKeyUp(at: 1_400_000_000)
+  case "outside-fixed-interval":
+    triggered = registerOptionKeyUp(at: 1_400_000_001)
   case "interrupted":
     cancelOptionGesture()
-    triggered = registerOptionKeyUp(at: 1_200_000_000, interval: interval)
+    triggered = registerOptionKeyUp(at: 1_200_000_000)
   default:
     exit(2)
   }
 
-  emit(["triggered": triggered])
+  emit(["intervalNanoseconds": doubleOptionPressNanoseconds, "triggered": triggered])
+}
+
+let eventTapOptions: CGEventTapOptions = .defaultTap
+
+func runInputPathContract(_ scenario: String) {
+  let consumed: Bool
+  switch scenario {
+  case "option-tab":
+    consumed = handleOptionTab(keyCode: 48, flags: [.maskAlternate])
+  case "ordinary-tab":
+    consumed = handleOptionTab(keyCode: 48, flags: [])
+  default:
+    exit(2)
+  }
+  emit([
+    "type": "input-path-contract",
+    "consumed": consumed,
+    "suppressionCapable": eventTapOptions == .defaultTap,
+  ])
 }
 
 if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--text-session-snapshot" {
@@ -872,10 +896,15 @@ if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--option-ges
   exit(0)
 }
 
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--input-path-contract" {
+  runInputPathContract(CommandLine.arguments[2])
+  exit(0)
+}
+
 guard let eventTap = CGEvent.tapCreate(
   tap: .cgSessionEventTap,
   place: .headInsertEventTap,
-  options: .listenOnly,
+  options: eventTapOptions,
   eventsOfInterest: eventMask,
   callback: callback,
   userInfo: nil

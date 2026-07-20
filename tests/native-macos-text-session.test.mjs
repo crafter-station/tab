@@ -32,6 +32,11 @@ function runOptionGestureContract(scenario) {
   return JSON.parse(execFileSync(nativeContractExecutable, ["--option-gesture-contract", scenario], { encoding: "utf8" }));
 }
 
+function runInputPathContract(scenario) {
+  const output = execFileSync(nativeContractExecutable, ["--input-path-contract", scenario], { encoding: "utf8" });
+  return output.trim().split("\n").filter(Boolean).map((line) => JSON.parse(line));
+}
+
 function functionBody(source, signature) {
   const start = source.indexOf(signature);
   assert.notEqual(start, -1, `Missing ${signature}`);
@@ -84,22 +89,23 @@ test("macOS explicit actions fail closed at the process boundary", { skip: !isMa
   }
 });
 
-test("macOS helper recognizes double Option at the system double-click interval", { skip: !isMacOS }, () => {
-  assert.equal(runOptionGestureContract("within-system-interval").triggered, true);
-  assert.equal(runOptionGestureContract("outside-system-interval").triggered, false);
+test("macOS helper recognizes double Option within the fixed 400 ms product interval", { skip: !isMacOS }, () => {
+  const within = runOptionGestureContract("within-fixed-interval");
+  assert.equal(within.intervalNanoseconds, 400_000_000);
+  assert.equal(within.triggered, true);
+  assert.equal(runOptionGestureContract("outside-fixed-interval").triggered, false);
   assert.equal(runOptionGestureContract("interrupted").triggered, false);
 });
 
-test("macOS helper exposes bounded metadata-only Option path diagnostics", () => {
-  const diagnosticBody = functionBody(nativeHelper, "func emitInputPathDiagnostic");
-  assert.match(diagnosticBody, /"type": "input-path-diagnostic"/);
-  assert.match(diagnosticBody, /"stage"/);
-  assert.doesNotMatch(diagnosticBody, /selectedText|surrounding|clipboard|NSPasteboard|credential|environment/i);
-  assert.match(nativeHelper, /emitInputPathDiagnostic\("option-transition"/);
-  assert.match(nativeHelper, /emitInputPathDiagnostic\("double-option-recognized"\)/);
-  assert.match(nativeHelper, /emitInputPathDiagnostic\("explicit-refresh", outcome: "rejected"\)/);
-  assert.match(nativeHelper, /emitInputPathDiagnostic\("explicit-refresh", outcome: "ready"\)/);
-  assert.match(nativeHelper, /emitInputPathDiagnostic\("suggest-now-emitted"\)/);
+test("macOS helper executable emits bounded Option+Tab diagnostics and acceptance", { skip: !isMacOS }, () => {
+  const events = runInputPathContract("option-tab");
+  assert.deepEqual(events, [
+    { type: "input-path-diagnostic", stage: "option-tab-observed" },
+    { type: "accept-suggestion" },
+    { type: "input-path-diagnostic", stage: "accept-suggestion-emitted" },
+    { type: "input-path-contract", consumed: true, suppressionCapable: true },
+  ]);
+  assert.doesNotMatch(JSON.stringify(events), /selectedText|surrounding|clipboard|credential|environment/i);
 });
 
 test("macOS helper executable proves selected text and range consistency without clipboard reads", { skip: !isMacOS }, () => {
@@ -171,9 +177,14 @@ test("macOS helper reuses active-window discovery within each input event", () =
   assert.doesNotMatch(callbackBody, /emitTextSessionSnapshotIfChanged\(\)/);
 });
 
-test("macOS helper reserves Option+Tab for suggestion acceptance", () => {
-  assert.match(
-    nativeHelper,
-    /if keyCode == 48 \{\s+if flags\.contains\(\.maskAlternate\) \{\s+emitInputPathDiagnostic\("option-tab-observed"\)\s+emit\(\["type": "accept-suggestion"\]\)\s+emitInputPathDiagnostic\("accept-suggestion-emitted"\)\s+return nil/,
-  );
+test("macOS helper executable reserves only Option+Tab for suppressing suggestion acceptance", { skip: !isMacOS }, () => {
+  const optionTab = runInputPathContract("option-tab");
+  assert.equal(optionTab.at(-1).consumed, true);
+  assert.equal(optionTab.at(-1).suppressionCapable, true);
+  assert.equal(optionTab.some((event) => event.type === "accept-suggestion"), true);
+
+  const ordinaryTab = runInputPathContract("ordinary-tab");
+  assert.deepEqual(ordinaryTab, [
+    { type: "input-path-contract", consumed: false, suppressionCapable: true },
+  ]);
 });
